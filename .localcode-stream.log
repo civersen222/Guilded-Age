@@ -7706,3 +7706,86 @@ The files aren't tracked yet so git add to a tracked version doesn't work. Let m
 
 --- Iteration 59 | tokens=0 reasoning=55 stop=tool_use ---
 
+
+--- Iteration 60 | tokens=22 reasoning=29 stop=end_turn ---
+The commit went through. Now let me verify the river code actually works by checking if the imports are valid:
+
+--- Iteration 61 | tokens=0 reasoning=19 stop=tool_use ---
+
+
+--- Iteration 62 | tokens=24 reasoning=49 stop=tool_use ---
+There's a NameError - `ResourceType` is referenced before it's defined. Let me check the file order:
+
+--- Iteration 63 | tokens=0 reasoning=104 stop=tool_use ---
+
+
+--- Iteration 64 | tokens=79 reasoning=132 stop=tool_use ---
+The problem is that `RESOURCE_YIELDS` and `RESOURCE_REQUIREMENTS` are defined at module load time (lines 70+) but `ResourceType` is defined at line 332. These dicts reference `ResourceType.X` which doesn't exist yet.
+
+The fix is to move the `ResourceType` enum definition before these dicts. Let me check what comes before line 43:
+
+--- Iteration 65 | tokens=30 reasoning=29 stop=end_turn ---
+I need to move the `ResourceType` enum to before the `RESOURCE_YIELDS` dict. Let me find where it is and cut it:
+
+--- Iteration 66 | tokens=0 reasoning=30 stop=tool_use ---
+
+
+--- Iteration 67 | tokens=36 reasoning=50 stop=end_turn ---
+I need to move `ResourceType` from line 332 to before line 70 where `RESOURCE_YIELDS` references it. Let me cut it from its current location:
+
+--- Iteration 68 | tokens=44 reasoning=52 stop=tool_use ---
+I need to move `ResourceType` from line 332 to before line 70 where `RESOURCE_YIELDS` references it. Let me cut the enum from its current location and paste it after the terrain section.
+
+--- Iteration 69 | tokens=14 reasoning=58 stop=end_turn ---
+Now I need to remove the duplicate ResourceType from line 332:
+
+--- Iteration 70 | tokens=0 reasoning=17 stop=tool_use ---
+
+
+--- Iteration 71 | tokens=13 reasoning=13 stop=tool_use ---
+The duplicate is still there. Let me find its exact location.
+
+--- Iteration 72 | tokens=40 reasoning=40 stop=end_turn ---
+I see - the ResourceType enum is now at both line 48 and line 351. I need to remove the duplicate at line 351. Let me read that section and remove it.
+
+--- Iteration 73 | tokens=0 reasoning=26 stop=tool_use ---
+
+
+--- Iteration 74 | tokens=40 reasoning=40 stop=end_turn ---
+I need to remove the duplicate ResourceType enum at lines 349-365. The first one is now at line 48 (moved there by my edit). Let me remove the duplicate.
+
+--- Iteration 75 | tokens=0 reasoning=18 stop=tool_use ---
+
+
+--- Iteration 76 | tokens=13 reasoning=0 stop=end_turn ---
+Good, duplicate removed. Now let me verify the import works:
+
+--- Iteration 77 | tokens=0 reasoning=29 stop=tool_use ---
+
+
+--- Iteration 78 | tokens=13 reasoning=19 stop=end_turn ---
+Imports work. Now let me verify the river system actually runs:
+
+--- Iteration 79 | tokens=9 reasoning=30 stop=end_turn ---
+Let me verify the river system actually runs:
+
+--- Iteration 80 | tokens=0 reasoning=12 stop=tool_use ---
+
+
+--- Iteration 81 | tokens=12 reasoning=21 stop=tool_use ---
+`random` module not imported in `game_data.py`:
+
+--- Iteration 82 | tokens=6 reasoning=0 stop=end_turn ---
+Now let me verify again:
+
+--- Iteration 83 | tokens=0 reasoning=9 stop=tool_use ---
+
+
+--- Iteration 84 | tokens=11 reasoning=17 stop=end_turn ---
+River system is working. Let me commit the fix:
+
+--- Iteration 85 | tokens=0 reasoning=41 stop=tool_use ---
+
+
+--- Iteration 86 | tokens=0 reasoning=16 stop=tool_use ---
+

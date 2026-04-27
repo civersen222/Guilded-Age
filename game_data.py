@@ -1,8 +1,9 @@
 """All static game data: terrain, units, buildings, tech, traits, events, civilizations."""
 
+import random
 from enum import Enum, auto
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Set
 
 
 # ── Terrain ──────────────────────────────────────────────────────────────────
@@ -41,6 +42,25 @@ TERRAIN_DEFENSE_BONUS = {
     TerrainType.FOREST: 15, TerrainType.MOUNTAIN: 50, TerrainType.DESERT: 0,
     TerrainType.TUNDRA: 0, TerrainType.WATER_COAST: 0, TerrainType.OCEAN: 0,
 }
+
+
+# ── Resources ────────────────────────────────────────────────────────────────
+
+class ResourceType(Enum):
+    BONUS_WHEAT = ("Bonus", "Wheat", 2)
+    BONUS_FISH = ("Bonus", "Fish", 2)
+    BONUS_GAME = ("Bonus", "Game", 1)
+    LUXURY_SILK = ("Luxury", "Silk", 2)
+    LUXURY_SPICES = ("Luxury", "Spices", 3)
+    LUXURY_IVORY = ("Luxury", "Ivory", 2)
+    STRATEGIC_IRON = ("Strategic", "Iron", 3)
+    STRATEGIC_HORSES = ("Strategic", "Horses", 3)
+    STRATEGIC_OIL = ("Strategic", "Oil", 5)
+
+    def __init__(self, category: str, display_name: str, quantity: int):
+        self.category = category
+        self.display_name = display_name
+        self.quantity = quantity
 
 
 # ── Phase 1.1: Map Resources & Terrain Depth ──────────────────────────────────
@@ -325,25 +345,6 @@ LANDMARKS = {
     LandmarkType.ANCIENT_RUINS: Landmark("Ancient Ruins", LandmarkType.ANCIENT_RUINS, science_bonus=3, faith_bonus=2),
     LandmarkType.BATTLEFIELD: Landmark("Ancient Battlefield", LandmarkType.BATTLEFIELD, production_bonus=2, happiness_bonus=-1),
 }
-
-
-# ── Resources ────────────────────────────────────────────────────────────────
-
-class ResourceType(Enum):
-    BONUS_WHEAT = ("Bonus", "Wheat", 2)
-    BONUS_FISH = ("Bonus", "Fish", 2)
-    BONUS_GAME = ("Bonus", "Game", 1)
-    LUXURY_SILK = ("Luxury", "Silk", 2)
-    LUXURY_SPICES = ("Luxury", "Spices", 3)
-    LUXURY_IVORY = ("Luxury", "Ivory", 2)
-    STRATEGIC_IRON = ("Strategic", "Iron", 3)
-    STRATEGIC_HORSES = ("Strategic", "Horses", 3)
-    STRATEGIC_OIL = ("Strategic", "Oil", 5)
-
-    def __init__(self, category: str, display_name: str, quantity: int):
-        self.category = category
-        self.display_name = display_name
-        self.quantity = quantity
 
 
 # ── Districts ────────────────────────────────────────────────────────────────
