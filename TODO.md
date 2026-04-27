@@ -48,7 +48,7 @@
 
 #### 1. Map & Terrain Depth
 - [ ] **Resource nodes** — Iron, horses, gold, spices, wheat, cattle, fish on the map
-- [ ] **Rivers & hills** — Special terrain features with adjacency bonuses
+- [x] **Rivers & hills** — Rivers flow from mountains to water, adjacency bonuses for tiles
 - [ ] **Climate zones** — Affect crop yields, movement, happiness
 - [ ] **Coastline bonuses** — Naval production and trade bonuses
 - [ ] **Landmarks/ruins** — Discoverable tiles that grant bonuses
