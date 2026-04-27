@@ -1,0 +1,2 @@
+# CivKings - Dynasty & Conquest
+# No external dependencies required - pure Python
