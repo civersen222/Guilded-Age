@@ -3,6 +3,7 @@
 from typing import Dict, List, Optional, Tuple
 import random
 from game_data import TECHNOLOGIES, TechBranch, Era, CIVILIZATIONS, UnitCategory
+from court import Court, CourtPosition
 
 
 class AIPlayer:
@@ -82,6 +83,40 @@ class AIPlayer:
     def _choose_military_unit(self) -> str:
         units = ["Swordsman", "Archer", "Knight", "Siege Tower"]
         return random.choice(units)
+
+    def decide_court_appointments(self, court: Court, candidates: List[Character], turn: int) -> List[str]:
+        """AI decides which court positions to fill based on its priorities."""
+        appointed = []
+
+        # Marshal is always valuable for aggressive AIs
+        if self.priorities["military"] > 0.3:
+            best = court.get_best_candidate(candidates, CourtPosition.MARSHAL)
+            if best and court.positions[CourtPosition.MARSHAL] is None:
+                court.appoint(CourtPosition.MARSHAL, best, turn)
+                appointed.append("Marshal")
+
+        # Steward for economy-focused AIs
+        if self.priorities["economy"] > 0.2:
+            best = court.get_best_candidate(candidates, CourtPosition.STEWARD)
+            if best and court.positions[CourtPosition.STEWARD] is None:
+                court.appoint(CourtPosition.STEWARD, best, turn)
+                appointed.append("Steward")
+
+        # Spymaster for intrigue-focused AIs
+        if self.aggression > 0.5:
+            best = court.get_best_candidate(candidates, CourtPosition.SPYMASTER)
+            if best and court.positions[CourtPosition.SPYMASTER] is None:
+                court.appoint(CourtPosition.SPYMASTER, best, turn)
+                appointed.append("Spymaster")
+
+        # Chancellor for diplomatic AIs
+        if self.aggression < 0.6:
+            best = court.get_best_candidate(candidates, CourtPosition.CHANCELLOR)
+            if best and court.positions[CourtPosition.CHANCELLOR] is None:
+                court.appoint(CourtPosition.CHANCELLOR, best, turn)
+                appointed.append("Chancellor")
+
+        return appointed
 
     def get_opinion_on_player(self) -> float:
         """Simulate AI's opinion of the player. -100 to 100."""

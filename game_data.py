@@ -295,13 +295,64 @@ class ClimateZone(Enum):
     POLAR = "Polar"
 
 
+@dataclass
+class ClimateModifier:
+    """Effects applied by a climate zone."""
+    food_multiplier: float = 1.0
+    production_multiplier: float = 1.0
+    gold_multiplier: float = 1.0
+    science_multiplier: float = 1.0
+    faith_multiplier: float = 1.0
+    happiness_modifier: float = 0.0
+    movement_modifier: float = 0.0  # percentage added to movement cost
+    defense_bonus: float = 0.0
+    disease_chance: float = 0.0
+    water_penalty: float = 0.0
+
+
 CLIMATE_MODIFIERS = {
-    ClimateZone.TEMPERATE: {"food": 1.0, "production": 1.0, "gold": 1.0, "happiness": 1.0},
-    ClimateZone.TROPICAL: {"food": 1.2, "production": 0.9, "gold": 1.1, "happiness": 0.8, "disease_chance": 0.1},
-    ClimateZone.ARID: {"food": 0.7, "production": 1.1, "gold": 1.0, "happiness": 0.9, "water_penalty": 0.3},
-    ClimateZone.COLD: {"food": 0.8, "production": 1.2, "gold": 0.9, "happiness": 0.85, "movement_penalty": 1.5},
-    ClimateZone.POLAR: {"food": 0.5, "production": 1.3, "gold": 0.8, "happiness": 0.7, "movement_penalty": 2.0},
+    ClimateZone.TEMPERATE: ClimateModifier(
+        food_multiplier=1.0, production_multiplier=1.0, gold_multiplier=1.0,
+        science_multiplier=1.0, faith_multiplier=1.0, happiness_modifier=0.0,
+        movement_modifier=0.0, defense_bonus=0.0, disease_chance=0.0, water_penalty=0.0,
+    ),
+    ClimateZone.TROPICAL: ClimateModifier(
+        food_multiplier=1.2, production_multiplier=0.9, gold_multiplier=1.1,
+        science_multiplier=1.0, faith_multiplier=1.0, happiness_modifier=-0.2,
+        movement_modifier=0.0, defense_bonus=0.0, disease_chance=0.1, water_penalty=0.0,
+    ),
+    ClimateZone.ARID: ClimateModifier(
+        food_multiplier=0.7, production_multiplier=1.1, gold_multiplier=1.0,
+        science_multiplier=1.0, faith_multiplier=1.0, happiness_modifier=-0.1,
+        movement_modifier=0.0, defense_bonus=0.0, disease_chance=0.0, water_penalty=0.3,
+    ),
+    ClimateZone.COLD: ClimateModifier(
+        food_multiplier=0.8, production_multiplier=1.2, gold_multiplier=0.9,
+        science_multiplier=1.0, faith_multiplier=1.0, happiness_modifier=-0.15,
+        movement_modifier=0.5, defense_bonus=0.2, disease_chance=0.0, water_penalty=0.0,
+    ),
+    ClimateZone.POLAR: ClimateModifier(
+        food_multiplier=0.5, production_multiplier=0.8, gold_multiplier=0.8,
+        science_multiplier=1.0, faith_multiplier=1.0, happiness_modifier=-2.0,
+        movement_modifier=0.5, defense_bonus=0.0, disease_chance=0.0, water_penalty=0.0,
+    ),
 }
+
+
+def get_climate_for_row(row: int, map_height: int) -> ClimateZone:
+    """Determine climate zone based on latitude (row position on map)."""
+    latitude = row / map_height  # 0.0 (top/pole) to 1.0 (bottom/pole)
+    if latitude < 0.15:
+        return ClimateZone.POLAR
+    elif latitude < 0.3:
+        return ClimateZone.COLD
+    elif latitude < 0.7:
+        return ClimateZone.TEMPERATE
+    elif latitude < 0.85:
+        return ClimateZone.TROPICAL
+    else:
+        return ClimateZone.ARID
+
 
 # Coastline bonus definitions
 COASTLINE_BONUSES = {

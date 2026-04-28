@@ -14,6 +14,7 @@ from hex_map import HexMap, HexTile
 from city import City
 from military import Unit
 from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager
+from court import Court, CourtPosition
 from city import CityManager
 from military import MilitaryManager
 from economy import EconomyManager
@@ -75,8 +76,9 @@ class Game:
         self.event_manager = EventManager()
         self.plot_manager = PlotManager()
         self.dynasty_manager = DynastyManager()
-        self.city_manager = CityManager([])  # will be updated after cities created
-        self.military_manager = MilitaryManager([])  # will be updated after units created
+        self.city_manager = CityManager([])
+        self.military_manager = MilitaryManager([])
+        self.court: Optional[Court] = None
         
         # Initialize game
         self._initialize_game()
@@ -126,6 +128,9 @@ class Game:
         self.characters.append(root_char)
         self.dynasty = Dynasty(root_char, {root_char.id: root_char})
         self.dynasty_manager.root = root_char
+        
+        # Initialize court
+        self.court = Court(root_char)
         
         # Initialize per-player data
         self.players[self.player_civ.name] = self.player_civ

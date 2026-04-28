@@ -6,7 +6,7 @@ import random
 import math
 from typing import List, Tuple, Dict, Set, Optional
 from dataclasses import dataclass
-from game_data import TerrainType, TERRAIN_YIELDS, TERRAIN_MOVEMENT_COST, ResourceType, TERRAIN_RESOURCE_COMPATIBILITY, RESOURCE_YIELDS, RiverNetwork
+from game_data import TerrainType, TERRAIN_YIELDS, TERRAIN_MOVEMENT_COST, ResourceType, TERRAIN_RESOURCE_COMPATIBILITY, RESOURCE_YIELDS, RiverNetwork, ClimateZone, CLIMATE_MODIFIERS, get_climate_for_row
 
 
 class HexTile:

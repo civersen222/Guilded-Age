@@ -110,8 +110,8 @@
 - [ ] **Marriage events** — Random proposals, arranged marriages, ceremonies
 
 #### 8. Court & Factions
-- [ ] **Court positions** — Marshal, Spymaster, Chancellor, Steward, Chaplain
-- [ ] **Position holders** — Characters fill positions, provide bonuses
+- [x] **Court positions** — Marshal, Spymaster, Chancellor, Steward, Chaplain
+- [x] **Position holders** — Characters fill positions, provide bonuses
 - [ ] **Faction system** — Nobles, Religious, Popular factions
 - [ ] **Faction pressure** — Affects stability, succession
 - [ ] **Faction support** — Support claimants during succession
