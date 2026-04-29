@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from game_data import (
     TerrainType, VICTORY_CONDITIONS,
     TECHNOLOGIES, Technology, Era, TechBranch,
-    TRAIT_DATABASE, CIVILIZATIONS, Civilization
+    TRAIT_DATABASE, CIVILIZATIONS, Civilization,
+    COASTLINE_BONUSES, LANDMARKS, LandmarkType, ClimateZone, get_climate_for_row
 )
 from hex_map import HexMap, HexTile
 from city import City
@@ -67,7 +68,6 @@ class Game:
         self.players: Dict[str, Civilization] = {}
         self.gold: Dict[str, int] = {}
         self.research: Dict[str, TechManager] = {}
-        self.fog: Dict[Tuple[int, int], bool] = {}
         
         # Shared managers (created after cities/units exist)
         self.diplomacy_manager = DiplomacyManager()
@@ -91,12 +91,17 @@ class Game:
         """Set up initial game state"""
         # Create player starting city
         start_tile = self.map.get_starting_tile()
+        start_tile_obj = self.map.tiles[start_tile]
+        is_coastal = start_tile_obj.terrain in (TerrainType.WATER_COAST, TerrainType.OCEAN)
+        climate = get_climate_for_row(start_tile[1], self.map.height)
         starting_city = City(
             name=f"{self.player_civ.name} City",
             owner=self.player_civ.name,
             position=start_tile,
             population=5,
-            gold=100
+            gold=100,
+            climate_zone=climate,
+            is_coastal=is_coastal
         )
         self.cities[starting_city.name] = starting_city
         self.map.add_city(starting_city)

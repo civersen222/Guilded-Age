@@ -199,59 +199,127 @@
 
 ### Phase 8: Victory Conditions
 
-- [ ] **Domination**: Control X% of cities
-- [ ] **Science**: Research all techs
-- [ ] **Culture**: Generate X culture per turn
-- [ ] **Diplomacy**: Win World Congress
-- [ ] **Dynasty**: Survive X generations
-- [ ] **Religious**: Have all cities follow your religion
+#### 8A: Win Conditions
+- [ ] Domination victory (control X cities/Y% of map)
+- [ ] Science victory (reach modern era + space race milestone)
+- [ ] Culture victory (accumulate X culture, publish all philosophies)
+- [ ] Diplomacy victory (win World Congress / gain X diplomatic points)
+- [ ] Conquest victory (annex all starting capitals)
+- [ ] Dynasty victory (survive X generations)
+
+#### 8B: End Game
+- [ ] Victory/defeat screen with statistics
+- [ ] Dynasty tree display
+- [ ] Post-game summary (turns, achievements, stats)
 
 ---
 
-### Phase 9: Save/Load System
+### Phase 9: Save/Load & Scenarios
 
-- [ ] Implement full game serialization (all systems)
+#### 9A: Save System
+- [ ] JSON save files (full game state)
 - [ ] Multiple save slots
 - [ ] Auto-save on turn end
-- [ ] Save game compression
-- [ ] Load game validation
+- [ ] Save validation on load
+
+#### 9B: Scenarios
+- [ ] Classic scenario (random map)
+- [ ] Historical scenarios (set date, specific civs, specific locations)
+- [ ] Custom scenario editor (optional)
 
 ---
 
-### Phase 10: Polish
+### Phase 10: Polish & Depth
 
-- [ ] Sound effects (combat, events, victory)
-- [ ] Music (era-specific themes)
-- [ ] Tutorial mode
-- [ ] Game speed options (1x, 2x, 5x)
-- [ ] Undo/redo system
-- [ ] Game log (full history)
-- [ ] Statistics panel (KPIs)
-- [ ] Achievements
+#### 10A: Happiness & Stability
+- [ ] Happiness system (luxury resources, entertainment buildings, overextension penalty)
+- [ ] Stability system (decreases with wars, succession, conquest)
+- [ ] Happiness effects (production loss, rebellion risk, growth slowdown)
+- [ ] Stability effects (growth speed, rebellion chance, tax efficiency)
 
----
+#### 10B: Events & Narrative
+- [ ] Event chains (multi-part storylines)
+- [ ] Event choices (player decisions with consequences)
+- [ ] Historical scenarios (pre-set events for different eras)
+- [ ] Narrative log (chronological event history with filtering)
+- [ ] Character events (birth, death, marriage, scandal)
+- [ ] City events (famine, plague, golden age, rebellion)
+- [ ] World events (natural disasters, migrations, discoveries)
 
-## Estimated Effort
-
-| Phase | Effort | Priority |
-|-------|--------|----------|
-| Phase 1: Core Game Loop | Medium | **High** |
-| Phase 2: Map & Exploration | Medium | High |
-| Phase 3: City & Districts | High | High |
-| Phase 4: Military | Medium | High |
-| Phase 5: Diplomacy | High | Medium |
-| Phase 6: AI | High | Medium |
-| Phase 7: CK Elements | Very High | Medium |
-| Phase 8: Victory Conditions | Low | High |
-| Phase 9: Save/Load | Medium | High |
-| Phase 10: Polish | Medium | Low |
+#### 10C: Civilizations (12 Total)
+- [ ] 8-12 unique civs with bonuses, unique units, unique buildings
+- [ ] Preferred governments per civ
+- [ ] Starting terrain preferences per civ
 
 ---
 
-## Next Immediate Steps
+## Estimated Remaining Work
 
-1. **Fix `ImprovedFogOfWar.update_visibility()`** — line 37 in `map.py` has a bug (`if (nq, nr) in set()` does nothing)
-2. **Implement typed command parser** in `ui.py` for better UX
-3. **Add resource display** to map rendering
-4. **Add district types** to `game_data.py`
-5. **Implement district adjacency bonuses** in `city.py`
+| Category | Estimated New Lines | Priority |
+|------|------|------|
+| Map & Terrain | ~400 lines | 🔴 High |
+| City & Districts | ~800 lines | 🔴 High |
+| Military System | ~700 lines | 🔴 High |
+| Technology & Civics | ~500 lines | 🔴 High |
+| Economy & Resources | ~400 lines | 🔴 High |
+| Character Deepening | ~300 lines | 🟡 Medium |
+| Marriage & Dynasties | ~250 lines | 🟡 Medium |
+| Court & Factions | ~300 lines | 🟡 Medium |
+| Plots & Intrigue | ~200 lines | 🟡 Medium |
+| Happiness & Stability | ~200 lines | 🟢 Lower |
+| Events & Narrative | ~300 lines | 🟢 Lower |
+| AI Improvements | ~400 lines | 🟢 Lower |
+| Civilizations & Scenarios | ~300 lines | 🟢 Lower |
+| Win Conditions & End Game | ~200 lines | 🟢 Lower |
+| Save/Load | ~100 lines | 🟢 Lower |
+| **Total** | **~4,850 lines** | |
+
+---
+
+## Implementation Recommendations
+
+### Suggested Order:
+1. **Map resources & terrain** (quick win, enables everything else)
+2. **District & building system** (core Civ gameplay)
+3. **Unit movement & combat** (core military gameplay)
+4. **Trade routes & economy** (core economy gameplay)
+5. **Character & dynasty** (core CK gameplay)
+6. **AI improvements** (playability)
+7. **Win conditions & end game** (game completion)
+8. **Save/load** (persistence)
+9. **Polish & narrative** (depth)
+
+---
+
+## Key Design Decisions
+
+1. **Keep it pure Python** — no external dependencies required
+2. **Modular architecture** — each system in its own file, minimal cross-imports
+3. **JSON save format** — human-readable, easy to debug
+4. **CLI-first** — ASCII map, keyboard input, no GUI required
+5. **Configurable difficulty** — AI bonuses/penalties via game settings
+6. **Pluggable civs** — new civs added via data files, not code changes
+
+---
+
+## Known Bugs
+
+- [ ] `ImprovedFogOfWar.update_visibility()` line 37: `if (nq, nr) in set():` does nothing useful
+- [ ] Resources not displayed on map
+- [ ] No confirmation dialogs for dangerous actions
+- [ ] No undo for commands
+
+---
+
+## Future Ideas (Out of Scope)
+
+- Multiplayer (networked turns)
+- GUI with Pygame/Tkinter
+- Mod support via JSON data files
+- Map editor
+- AI-generated scenarios
+- Leaderboard system
+
+---
+
+*Last updated: 2025-01-15*

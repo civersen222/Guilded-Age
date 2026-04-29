@@ -6,7 +6,7 @@ import random
 import math
 from typing import List, Tuple, Dict, Set, Optional
 from dataclasses import dataclass
-from game_data import TerrainType, TERRAIN_YIELDS, TERRAIN_MOVEMENT_COST, ResourceType, TERRAIN_RESOURCE_COMPATIBILITY, RESOURCE_YIELDS, RiverNetwork, ClimateZone, CLIMATE_MODIFIERS, get_climate_for_row
+from game_data import TerrainType, TERRAIN_YIELDS, TERRAIN_MOVEMENT_COST, ResourceType, TERRAIN_RESOURCE_COMPATIBILITY, RESOURCE_YIELDS, RiverNetwork, ClimateZone, CLIMATE_MODIFIERS, get_climate_for_row, LandmarkType, LANDMARKS
 
 
 class HexTile:
@@ -16,6 +16,7 @@ class HexTile:
         self.x = x
         self.y = y
         self.terrain = terrain
+        self.climate_zone: ClimateZone = ClimateZone.TEMPERATE
         self.resource: Optional[ResourceType] = None
         self.resource_yield: Dict[str, float] = {}
         self.has_river: bool = False
@@ -23,6 +24,8 @@ class HexTile:
         self.unit: Optional[str] = None  # name of unit if present
         self.visited: bool = False
         self.explored: bool = False
+        self.landmark: Optional[LandmarkType] = None
+        self.landmark_discovered: bool = False
         
     def get_yields(self) -> Dict[str, float]:
         """Get base yields for this tile"""
@@ -55,6 +58,134 @@ class HexTile:
         return f"HexTile({self.x},{self.y})={char}"
 
 
+class ExponentialFogOfWar:
+    """Manages fog of war with exponential visibility decay.
+    
+    Visibility decays exponentially with distance from cities/units:
+    - Tiles within a city's vision radius are fully visible
+    - Beyond that, visibility decreases with distance
+    - Mountains can block line of sight
+    - 'Explored' tiles show terrain even when not currently visible
+    """
+    
+    def __init__(self, decay_rate: float = 2.0):
+        self.explored: Set[Tuple[int, int]] = set()      # Tiles ever seen
+        self.visible: Set[Tuple[int, int]] = set()        # Tiles currently visible
+        self.visibility: Dict[Tuple[int, int], float] = {}  # Intensity 0.0-1.0
+        self.decay_rate = decay_rate
+        self.city_vision_radius: int = 3
+        self.unit_vision_radius: int = 2
+        self.tiles: Dict[Tuple[int, int], 'HexTile'] = {}
+    
+    def set_tiles(self, tiles: Dict[Tuple[int, int], 'HexTile']):
+        """Set the tile grid for terrain checks."""
+        self.tiles = tiles
+    
+    def calculate_visibility_from_city(self, city_x: int, city_y: int, radius: int = None) -> Set[Tuple[int, int]]:
+        """Calculate visibility from a city center."""
+        radius = radius or self.city_vision_radius
+        visible = set()
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                dist = max(abs(dx), abs(dy), abs(dx + dy))
+                if dist <= radius:
+                    tx, ty = city_x + dx, city_y + dy
+                    if self._is_visible_from(tx, ty, city_x, city_y, dist, radius):
+                        visible.add((tx, ty))
+        return visible
+    
+    def calculate_visibility_from_unit(self, unit_x: int, unit_y: int, radius: int = None) -> Set[Tuple[int, int]]:
+        """Calculate visibility from a unit."""
+        radius = radius or self.unit_vision_radius
+        visible = set()
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                dist = max(abs(dx), abs(dy), abs(dx + dy))
+                if dist <= radius:
+                    tx, ty = unit_x + dx, unit_y + dy
+                    if self._is_visible_from(tx, ty, unit_x, unit_y, dist, radius):
+                        visible.add((tx, ty))
+        return visible
+    
+    def _is_visible_from(self, target_x: int, target_y: int, source_x: int, source_y: int, dist: int, radius: int) -> bool:
+        """Check if a tile is visible from a source, considering terrain."""
+        tile = self.tiles.get((target_x, target_y))
+        if not tile:
+            return False
+        
+        # Check line of sight - mountains can block vision
+        if dist > 1:
+            if self._is_line_of_sight_blocked(target_x, target_y, source_x, source_y):
+                return False
+        
+        # Exponential decay of visibility
+        visibility = 1.0 / (1.0 + (dist ** 2) / (2 * self.decay_rate))
+        return visibility > 0.1
+    
+    def _is_line_of_sight_blocked(self, target_x: int, target_y: int, source_x: int, source_y: int) -> bool:
+        """Check if line of sight is blocked by mountains."""
+        dx, dy = target_x - source_x, target_y - source_y
+        dist = max(abs(dx), abs(dy), abs(dx + dy))
+        
+        # Check intermediate tiles for mountains
+        for d in range(1, dist):
+            check_x = source_x + int(dx * d / dist)
+            check_y = source_y + int(dy * d / dist)
+            check_tile = self.tiles.get((check_x, check_y))
+            if check_tile and check_tile.terrain == TerrainType.MOUNTAIN:
+                return True
+        return False
+    
+    def update_visibility(self, sources: List[Tuple[int, int, int]]) -> None:
+        """Update visibility from multiple sources.
+        
+        sources: list of (x, y, radius) tuples for cities/units
+        """
+        self.visible.clear()
+        self.visibility.clear()
+        
+        for sx, sy, radius in sources:
+            for dx in range(-radius, radius + 1):
+                for dy in range(-radius, radius + 1):
+                    dist = max(abs(dx), abs(dy), abs(dx + dy))
+                    if dist > radius:
+                        continue
+                    
+                    tx, ty = sx + dx, sy + dy
+                    if (tx, ty) not in self.tiles:
+                        continue
+                    
+                    if self._is_visible_from(tx, ty, sx, sy, dist, radius):
+                        self.visible.add((tx, ty))
+                        # Exponential decay
+                        intensity = 1.0 / (1.0 + (dist ** 2) / self.decay_rate)
+                        self.visibility[(tx, ty)] = intensity
+                        self.explored.add((tx, ty))
+    
+    def is_visible(self, x: int, y: int) -> bool:
+        """Check if a tile is currently visible."""
+        return (x, y) in self.visible
+    
+    def is_explored(self, x: int, y: int) -> bool:
+        """Check if a tile has been explored (seen before)."""
+        return (x, y) in self.explored
+    
+    def get_visibility_intensity(self, x: int, y: int) -> float:
+        """Get visibility intensity for a tile (0.0 to 1.0)."""
+        return self.visibility.get((x, y), 0.0)
+    
+    def clear(self):
+        """Clear current visibility (keep explored)."""
+        self.visible.clear()
+        self.visibility.clear()
+    
+    def reset_fog(self):
+        """Reset all fog (start fresh)."""
+        self.explored.clear()
+        self.visible.clear()
+        self.visibility.clear()
+
+
 class FogOfWar:
     """Manages fog of war (discovered vs visible tiles)."""
 
@@ -82,25 +213,51 @@ class WorldMap:
         self.width = width
         self.height = height
         self.tiles: Dict[Tuple[int, int], HexTile] = {}
-        self.fog = FogOfWar()
+        self.fog = ExponentialFogOfWar()
 
     def generate(self):
-        """Generate the map with random terrain."""
+        """Generate the map with random terrain, climate-aware."""
         for x in range(self.width):
             for y in range(self.height):
-                terrain = self._random_terrain(x, y)
+                climate = get_climate_for_row(y, self.height)
+                terrain = self._random_terrain(x, y, climate)
                 tile = HexTile(x, y, terrain)
+                tile.climate_zone = climate
                 self.tiles[(x, y)] = tile
-                self.fog.tiles[(x, y)] = tile
+        self.fog.set_tiles(self.tiles)
         self._place_resources()
+        self._place_landmarks()
         self._generate_rivers()
+
+    def _place_landmarks(self):
+        """Place discoverable landmarks on the map."""
+        suitable_tiles = [t for t in self.tiles.values() 
+                         if t.terrain not in (TerrainType.MOUNTAIN, TerrainType.OCEAN) 
+                         and not t.city]
+        for landmark_type in LandmarkType:
+            if random.random() < 0.3 and suitable_tiles:
+                tile = random.choice(suitable_tiles)
+                tile.landmark = landmark_type
+                suitable_tiles.remove(tile)
 
     def _generate_rivers(self):
         """Generate rivers using RiverNetwork."""
         river_net = RiverNetwork(self.width, self.height)
         self.rivers = river_net.generate_rivers(self.tiles, num_rivers=4)
 
-    def _random_terrain(self, x: int, y: int) -> TerrainType:
+    def _terrain_weights_for_climate(self, climate: ClimateZone) -> List[float]:
+        """Return terrain weights biased by climate zone."""
+        weights = {
+            ClimateZone.TEMPERATE: [0.30, 0.25, 0.15, 0.10, 0.05, 0.05, 0.03, 0.04, 0.03],
+            ClimateZone.TROPICAL:   [0.35, 0.35, 0.20, 0.02, 0.00, 0.00, 0.00, 0.05, 0.03],
+            ClimateZone.ARID:       [0.10, 0.05, 0.02, 0.00, 0.00, 0.00, 0.70, 0.04, 0.09],
+            ClimateZone.COLD:       [0.15, 0.10, 0.20, 0.15, 0.05, 0.00, 0.00, 0.05, 0.30],
+            ClimateZone.POLAR:      [0.02, 0.02, 0.01, 0.02, 0.03, 0.00, 0.00, 0.01, 0.89],
+        }
+        key = list(weights.keys())[list(ClimateZone).index(climate)]
+        return weights[key]
+
+    def _random_terrain(self, x: int, y: int, climate: ClimateZone) -> TerrainType:
         neighbors = []
         for dx in [-1, 0, 1]:
             for dy in [-1, 0, 1]:
@@ -112,7 +269,7 @@ class WorldMap:
         if neighbors and random.random() < 0.6:
             return random.choice(neighbors)
         terrains = list(TERRAIN_YIELDS.keys())
-        weights = [0.3, 0.25, 0.15, 0.1, 0.05, 0.05, 0.03, 0.04, 0.03]
+        weights = self._terrain_weights_for_climate(climate)
         return random.choices(terrains, weights=weights, k=1)[0]
 
     def _place_resources(self):
@@ -160,13 +317,15 @@ class WorldMap:
             for dx in range(-radius, radius + 1):
                 tx, ty = center_x + dx, center_y + dy
                 tile = self.tiles.get((tx, ty))
-                if tile and (tx, ty) in self.fog.discovered:
+                if tile and self.fog.is_explored(tx, ty):
                     if tile.city:
-                        row.append("C")
-                    elif tile.unit:
+                        row.append("C" if self.fog.is_visible(tx, ty) else "c")
+                    elif tile.unit and self.fog.is_visible(tx, ty):
                         row.append("U")
+                    elif tile.resource:
+                        row.append("R" if self.fog.is_visible(tx, ty) else "?")
                     else:
-                        row.append(terrain_chars.get(tile.terrain, "."))
+                        row.append(terrain_chars.get(tile.terrain, ".") if self.fog.is_visible(tx, ty) else "?")
                 else:
                     row.append("?")
             lines.append(" ".join(row))

@@ -49,10 +49,10 @@
 #### 1. Map & Terrain Depth
 - [x] **Resource nodes** — Iron, horses, gold, spices, wheat, cattle, fish on the map
 - [x] **Rivers & hills** — Rivers flow from mountains to water, adjacency bonuses for tiles
-- [ ] **Climate zones** — Affect crop yields, movement, happiness
-- [ ] **Coastline bonuses** — Naval production and trade bonuses
-- [ ] **Landmarks/ruins** — Discoverable tiles that grant bonuses
-- [ ] **Exponential fog** — Fog that expands with distance from cities/units
+- [x] **Climate zones** — Affect crop yields, movement, happiness
+- [x] **Coastline bonuses** — Naval production and trade bonuses
+- [x] **Landmarks/ruins** — Discoverable tiles that grant bonuses
+- [x] **Exponential fog** — Fog that expands with distance from cities/units
 
 #### 2. City & District System (Major Work)
 - [ ] **Full district types** — Campus, Commercial Hub, Holy Site, Encampment, Harbor, Entertainment, Fortress

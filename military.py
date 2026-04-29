@@ -80,6 +80,18 @@ class MilitaryManager:
         if distance <= unit.moves_left:
             unit.position = new_position
             unit.moves_left -= distance
+            
+            # Check for landmark discovery
+            if hasattr(self, 'map') and new_position in self.map.tiles:
+                tile = self.map.tiles[new_position]
+                if tile.landmark and not tile.landmark_discovered:
+                    tile.landmark_discovered = True
+                    landmark = LANDMARKS[tile.landmark]
+                    # Apply landmark bonuses to the owner's resources
+                    if hasattr(self, 'owner') and self.owner:
+                        # Return discovery message
+                        return f"Discovered {landmark.name}! +{landmark.gold_bonus} gold, +{landmark.food_bonus} food"
+            
             return True
         return False
     

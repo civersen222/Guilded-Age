@@ -1,43 +1,26 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
+dist/
+build/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-*~
 
-# OS
-.DS_Store
-Thumbs.db
+# Environment
+venv/
+env/
 
 # Game saves
 saves/
 *.json
+
+# Local code engine
+.localcode*/
+.claude/
+.cynco*/

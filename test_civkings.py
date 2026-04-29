@@ -113,11 +113,11 @@ class TestMapAndFogOfWar(unittest.TestCase):
         self.assertGreater(len(wm.tiles), 0)
 
     def test_fog_of_war(self):
-        from hex_map import FogOfWar
-        fog = FogOfWar()
+        from hex_map import ExponentialFogOfWar
+        fog = ExponentialFogOfWar()
         self.assertFalse(fog.is_visible(0, 0))
-        fog.discover(0, 0)
-        self.assertTrue(fog.is_visible(0, 0))
+        fog.explored.add((0, 0))
+        self.assertTrue(fog.is_explored(0, 0))
 
 
 class TestCityManager(unittest.TestCase):

@@ -1,6 +1,16 @@
 from typing import Dict, List, Tuple, Set, Optional
 import random
 import uuid
+from character_deepening import (
+    LifestyleProgression,
+    AgeProgress,
+    LifeStage,
+    TRAIT_DATABASE as EXTENDED_TRAIT_DATABASE,
+    generate_traits,
+    get_trait_description,
+    get_available_traits,
+    apply_traits_to_stats,
+)
 
 # Trait Database: Maps traits to stat bonuses
 TRAIT_DATABASE = {
@@ -15,7 +25,7 @@ TRAIT_DATABASE = {
 }
 
 class Character:
-    def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None):
+    def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18):
         self.id = str(uuid.uuid4())[:8]
         self.name = name
         self.base_stats = stats  # {'diplomacy', 'martial', 'stewardship', 'intrigue'}
@@ -24,13 +34,33 @@ class Character:
         self.children_ids: List[str] = []
         self.is_alive = True
         self.gold_reserve = 0.0
-        self.age = 18
-
+        self.age = age
+        
+        # Section 6: Character deepening
+        self.age_progress = AgeProgress(current_age=age, is_alive=True)
+        self.lifestyle = LifestyleProgression()
+    
+    def age_up(self) -> Optional[str]:
+        """Age character by one turn. Returns event message if significant."""
+        if not self.is_alive:
+            return None
+        event = self.age_progress.age_up()
+        self.age = self.age_progress.current_age
+        return event
+    
+    def train_skill(self, skill_type, amount: int = 1) -> Optional[str]:
+        """Train a skill. Returns new level name if leveled up."""
+        new_level = self.lifestyle.train_skill(skill_type, amount)
+        if new_level:
+            return f"Leveled up {skill_type.value} to {new_level.value}"
+        return None
+    
     def get_effective_stat(self, stat_name: str) -> int:
+        skill_base = self.lifestyle.get_effective_stat(stat_name, self.base_stats.get(stat_name, 0))
         bonus = 0
         for trait in self.traits:
             bonus += TRAIT_DATABASE.get(trait, {}).get(stat_name, 0)
-        return self.base_stats.get(stat_name, 0) + bonus
+        return skill_base + bonus
 
     def __repr__(self):
         return f"Character({self.name}, ID: {self.id}, Pop: {self.is_alive})"
@@ -176,3 +206,102 @@ if __name__ == "__main__":
     modify_opinion(root, c1, -5, "Disappointment in lifestyle")
     
     print(f"\n{c1.name} effective stewardship: {c1.get_effective_stat('stewardship')}")
+    
+    # Test Section 6: Character Deepening
+    print("\n--- Character Deepening Test ---")
+    
+    # Test trait generation
+    new_traits = generate_traits(age=25, num_traits=3)
+    print(f"Generated traits for age 25: {new_traits}")
+    
+    # Test age progression
+    root.age_up()
+    print(f"Founder age: {root.age}, Stage: {root.age_progress.life_stage.value}, Alive: {root.age_progress.is_alive}")
+    
+    # Test skill training
+    from character_deepening import SkillType
+    level = root.lifestyle.train_skill(SkillType.MARTIAL, 15)
+    print(f"Martial skill level: {root.lifestyle.skills[SkillType.MARTIAL].current_level.value}")
+    
+    # Test effective stat with skill multiplier
+    print(f"Founder effective martial (with skill): {root.get_effective_stat('martial')}")
+    
+    # Test extended trait database
+    print(f"\nExtended traits available (age 30): {len(get_available_traits(30))} traits")
+    print(f"'Brave' description: {get_trait_description('Brave')}")
+    
+    # Test applying traits to stats
+    test_stats = {"diplomacy": 5, "martial": 5, "stewardship": 5, "intrigue": 5}
+    modified = apply_traits_to_stats(test_stats, ["Brave", "Charismatic", "Scholar"])
+    print(f"Base stats {test_stats} -> With traits: {modified}")
+    
+    # Test aging to elder
+    for _ in range(50):
+        root.age_up()
+    print(f"\nFounder after 50 turns: age={root.age}, stage={root.age_progress.life_stage.value}, alive={root.age_progress.is_alive}")
+    
+    # Test trait evolution
+    print("\n--- Trait Evolution Test ---")
+    from character_deepening import (
+        TraitEvolutionManager,
+        evolve_traits,
+        suggest_traits_for_event,
+        get_trait_change_probability,
+    )
+    
+    # Simulate events
+    manager = TraitEvolutionManager()
+    
+    # Battle events
+    manager.record_event("battle_victory", 22, "Victory at Battle of Red River", "win")
+    manager.record_event("battle_victory", 23, "Victory at Siege of Blackwood", "win")
+    manager.record_event("battle_victory", 24, "Victory at Battle of Stone Pass", "win")
+    manager.record_event("battle_wound", 25, "Wounded by arrow in battle", "injured")
+    manager.record_event("battle_command", 26, "Commanded army at Battle of the Plains", "victory")
+    
+    # Study events
+    manager.record_event("study_years", 28, "Years spent studying history", "")
+    manager.record_event("study_years", 29, "Years spent studying philosophy", "")
+    manager.record_event("study_years", 30, "Years spent studying theology", "")
+    manager.record_event("study_years", 31, "Years spent studying mathematics", "")
+    manager.record_event("study_years", 32, "Years spent studying law", "")
+    
+    # Court events
+    manager.record_event("coronation", 30, "Crowned king", "")
+    manager.record_event("scandal", 35, "Scandal over affair with noblewoman", "exposed")
+    manager.record_event("scandal_survived", 35, "Survived scandal and maintained power", "survived")
+    
+    # Initial traits
+    initial_traits = ["Young", "Ambitious"]
+    print(f"Initial traits: {initial_traits}")
+    
+    # Evolve traits at different ages
+    for test_age in [25, 30, 40, 50, 60]:
+        old_traits = initial_traits.copy()
+        new_traits, changes = evolve_traits(initial_traits, test_age, manager.event_log)
+        if changes:
+            print(f"\nAt age {test_age}:")
+            for old_t, new_t, event in changes:
+                old_str = old_t if old_t else "(none)"
+                print(f"  {old_str} -> {new_t} (triggered by: {event})")
+            print(f"  Current traits: {new_traits}")
+        
+        # Update initial traits for next iteration (in case traits persisted)
+        if new_traits != initial_traits:
+            initial_traits = new_traits
+    
+    # Test suggest_traits_for_event
+    print("\n--- Trait Suggestions ---")
+    suggestions = suggest_traits_for_event("battle_victory")
+    print(f"Possible traits from battle victory: {suggestions}")
+    
+    # Test get_trait_change_probability
+    prob = get_trait_change_probability("Young", "reached_prime")
+    print(f"Probability of 'Young' changing on 'reached_prime': {prob}")
+    
+    # Test condition functions
+    print("\n--- Condition Tests ---")
+    print(f"'multiple_battles' condition met: {any(e.event_type == 'battle_victory' for e in manager.event_log) and sum(1 for e in manager.event_log if e.event_type == 'battle_victory') >= 3}")
+    print(f"'decades_study' condition met: {sum(1 for e in manager.event_log if e.event_type == 'study_years') >= 5}")
+    
+    print("\nTrait evolution test complete!")
