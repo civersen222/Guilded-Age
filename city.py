@@ -240,11 +240,47 @@ class City:
         yields["food"] += self.population * 0.5
         yields["gold"] += self.population * 0.2
 
-        # Happiness affects production
+        # Happiness affects production and stability
         if self.happiness < 0:
             yields["production"] *= 0.8
         elif self.happiness > 10:
             yields["production"] *= 1.1
+
+        # Stability: city-wide metric based on happiness, buildings, districts
+        stability = 50  # base stability
+        for b_name in self.buildings:
+            if hasattr(b_name, 'name'):
+                if "Palace" in b_name.name:
+                    stability += 20
+                elif "Temple" in b_name.name:
+                    stability += 10
+                elif "Market" in b_name.name:
+                    stability += 5
+            else:
+                if "Palace" in str(b_name):
+                    stability += 20
+                elif "Temple" in str(b_name):
+                    stability += 10
+                elif "Market" in str(b_name):
+                    stability += 5
+        for d_name in self.districts:
+            if hasattr(d_name, 'name'):
+                if d_name.name == "Government":
+                    stability += 15
+            else:
+                if str(d_name) == "Government":
+                    stability += 15
+        stability += self.happiness  # happiness directly affects stability
+        stability = max(0, min(100, stability))
+        yields["stability"] = stability
+
+        # Low stability causes penalties
+        if stability < 20:
+            yields["production"] *= 0.7
+            yields["gold"] *= 0.5
+        elif stability < 40:
+            yields["production"] *= 0.9
+            yields["gold"] *= 0.8
 
         # Apply climate zone modifiers
         mod = CLIMATE_MODIFIERS[self.climate_zone]

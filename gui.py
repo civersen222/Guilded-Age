@@ -487,6 +487,8 @@ class CivKingsGUI:
             self.right_panel.update(self.selected_city)
         for msg in msgs:
             self.log_panel.add(msg)
+        # Check for victory after every turn
+        self._check_victory()
 
     def show_tech_tree(self) -> None:
         TechTreePopup(self.root, self.game.tech_manager)
@@ -512,11 +514,40 @@ class CivKingsGUI:
         messagebox.showinfo("Events", "".join(lines))
 
     def save_game(self) -> None:
-        self.game.save_game("savegame.json")
-        messagebox.showinfo("Saved", "Game saved to savegame.json")
+        result = self.game.save_game("savegame.json")
+        messagebox.showinfo("Saved", result)
 
     def quit(self) -> None:
-        self.root.destroy()
+        if self.game.state.game_over:
+            self.root.destroy()
+            return
+        if messagebox.askyesno("Quit", "Are you sure you want to quit?"):
+            self.root.destroy()
+
+    def _check_victory(self) -> None:
+        """Check and display victory/defeat screen."""
+        if self.game.state.game_over and self.game.state.victory:
+            self.root.destroy()
+            winner = self.game.state.victory
+            msg = f"🏆 VICTORY! 🏆\n\n{winner}\n\nTurn: {self.game.state.turn}"
+            messagebox.showinfo("Game Over", msg)
+
+    def _show_end_game_screen(self) -> None:
+        """Show end-of-game summary."""
+        if not self.game.state.game_over:
+            return
+        winner = self.game.state.victory or "No winner"
+        lines = [
+            "=" * 50,
+            "  GAME OVER",
+            "=" * 50,
+            f"  Winner: {winner}",
+            f"  Turns: {self.game.state.turn}",
+            f"  Cities: {len(self.game.cities)}",
+            f"  Units: {len(self.game.units)}",
+            "=" * 50,
+        ]
+        messagebox.showinfo("Game Over", "\n".join(lines))
 
 
 # ── Application entry point ─────────────────────────────────────
@@ -535,7 +566,7 @@ def main() -> None:
         return
 
     civ, difficulty = dlg.result
-    game = Game(civ, difficulty)
+    game = Game(civ)
 
     gui = CivKingsGUI(root, game)
     gui.render_map()

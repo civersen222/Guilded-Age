@@ -219,6 +219,73 @@ class Game:
         
         return None
 
+    def to_dict(self) -> dict:
+        """Serialize game state for saving."""
+        def _serialize(obj):
+            if obj is None:
+                return None
+            if hasattr(obj, 'to_dict'):
+                return obj.to_dict()
+            if hasattr(obj, '__dict__'):
+                return {k: _serialize(v) for k, v in obj.__dict__.items() if not k.startswith('_')}
+            if isinstance(obj, dict):
+                return {str(k): _serialize(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple)):
+                return [_serialize(i) for i in obj]
+            if isinstance(obj, (str, int, float, bool)):
+                return obj
+            if hasattr(obj, 'value'):
+                return obj.value
+            return str(obj)
+        return {
+            "version": "1.0",
+            "turn": self.state.turn,
+            "phase": self.state.phase,
+            "game_over": self.state.game_over,
+            "victory": self.state.victory,
+            "player_civ": self.player_civ.name,
+            "civilizations": {n: _serialize(c) for n, c in self.civilizations.items()},
+            "cities": {n: _serialize(c) for n, c in self.cities.items()},
+            "units": {n: _serialize(u) for n, u in self.units.items()},
+            "gold": {k: v for k, v in self.gold.items()},
+            "characters": [_serialize(c) for c in self.characters],
+            "dynasty": _serialize(self.dynasty),
+            "court": _serialize(self.court),
+            "map_data": {
+                "width": self.map.width,
+                "height": self.map.height,
+                "tiles": {str(p): _serialize(t) for p, t in self.map.tiles.items()},
+            },
+        }
+
+    @staticmethod
+    def from_dict(data: dict) -> 'Game':
+        """Deserialize game state from a dict."""
+        civ_name = data.get("player_civ", "Rome")
+        civ = CIVILIZATIONS.get(civ_name, list(CIVILIZATIONS.values())[0])
+        game = Game(civ, map_width=data.get("map_data", {}).get("width", 16), map_height=data.get("map_data", {}).get("height", 16))
+        game.state.turn = data.get("turn", 1)
+        game.state.phase = data.get("phase", "Player")
+        game.state.game_over = data.get("game_over", False)
+        game.state.victory = data.get("victory", None)
+        game.gold = data.get("gold", {civ_name: 0})
+        return game
+
+    def save_game(self, filename: Optional[str] = None) -> str:
+        """Save game to JSON file. Returns the file path."""
+        import save_system
+        path = save_system.save_game(self, filename)
+        return f"Game saved to {path}"
+
+    @staticmethod
+    def load_game(filepath: str) -> Optional['Game']:
+        """Load game from JSON file."""
+        import save_system
+        data = save_system.load_game(filepath)
+        if not data:
+            return None
+        return Game.from_dict(data)
+
     def get_game_status(self) -> str:
         """Get current game state as a formatted string"""
         player_gold = self.gold.get(self.player_civ.name, 0)
