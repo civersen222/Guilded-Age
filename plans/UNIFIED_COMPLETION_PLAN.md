@@ -333,18 +333,24 @@
 - [x] Worker improvements (farms, mines, pastures)
 - [x] District upgrade paths
 
+### ✅ COMPLETED SPRINTS (Backend Systems)
+
+#### ✅ SPRINT 7: City Growth & Building System — DONE
+- [x] City growth mechanics (food accumulation, population caps)
+- [x] Building prerequisite chains
+- [x] Wonder system
+- [x] Worker improvements (farms, mines, pastures)
+- [x] District upgrade paths
+
+#### ✅ SPRINT 8: Unit System Enhancement — DONE
+- [x] Unit production in city production queue
+- [x] Unit upgrades (Militia → Swordsman, Archer → Crossbowman, etc.)
+- [x] Unit experience/leveling/promotions
+- [x] Naval units (Galleys, Ships of the Line)
+- [x] Siege units (Catapults, Trebuchets)
+- [x] Stacking rules
+
 ### 🟡 REMAINING SPRINTS (Backend Systems)
-
-### SPRINT 8: Unit System Enhancement (Week 11)
-**Goal:** Full unit lifecycle with production, upgrades, and experience.
-6. Unit production in city production queue
-7. Unit upgrades (Militia → Infantry → Ranger)
-8. Unit experience/leveling/promotions
-9. Naval units (Galleys, Ships of the Line)
-10. Siege units (Catapults, Trebuchets)
-11. Stacking rules
-
-**Total: ~400 lines**
 
 ### SPRINT 9: Tech & Diplomacy Backend (Week 12)
 **Goal:** Full tech and diplomacy systems with policies and agreements.
