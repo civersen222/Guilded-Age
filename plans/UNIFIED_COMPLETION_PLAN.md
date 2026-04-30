@@ -139,25 +139,30 @@
 
 | Feature | Status | Implementation Details |
 |---------|-----|-------------|
-| Diplomatic relations display | ✅ | `DiplomacyPopup` class — all civ pairs with relationship status (Neutral/War/Friendly/Allied) |
+| Diplomatic relations display | ✅ | `DiplomacyPopup` class — all civ pairs with relationship status (Neutral/War/Friendly/Allied/Unfriendly/Hostile) |
 | Relationship status display | ✅ | Color-coded status text for each civ pair |
-| Trade route management | ❌ | Not implemented — no UI for managing trade routes |
-| Diplomatic messages/inbox | ❌ | Not implemented — no inbox system exists |
+| Trade route management | ✅ | Tab UI showing active trade routes (cargo, yield) + available partners for new routes + cancel button |
+| Diplomatic messages/inbox | ✅ | Tab UI showing all messages with icons (⚔️🕊️🤝📦📜), read/unread status (🔴🟢), subject, body, turn |
+| Message type icons | ✅ | `TYPE_ICONS` dict maps message types to emoji (declaration_war→⚔️, peace_offer→🕊️, etc.) |
+| Mark as read functionality | ✅ | `mark_as_read()` and `mark_all_as_read()` methods on DiplomacyManager |
+| Trade route create/cancel | ✅ | `create_trade_route()` and `cancel_trade_route()` methods on DiplomacyManager |
+| Trade income calculation | ✅ | `get_trade_income()` and `get_trade_routes_for()` methods on DiplomacyManager |
+| Tab-based navigation | ✅ | Relations / Trade Routes / Inbox tabs with button switching |
 
 #### ✅ 2.6 Dynasty/Family UI (gui_popups.py) — COMPLETE
-**File:** `gui_popups.py` — DynastyPopup showing dynasty members and stats
+**File:** `gui_popups.py` — DynastyPopup showing dynasty members, family tree, succession, court, and intrigue
 
 | Feature | Status | Implementation Details |
 |---------|-----|--|
-| Dynasty members display | ✅ | `DynastyPopup` class — shows all members with alive/dead status, diplomacy/martial/stewardship/intrigue stats |
+| Dynasty members display | ✅ | `DynastyPopup` class — shows all members with alive/dead status, diplomacy/martial/stewardship/intrigue stats, traits |
 | Dynasty prestige display | ✅ | Prestige calculated via `dynasty.calculate_dynastic_prestige()` |
-| Family tree visualization | ❌ | Not implemented — no tree visualization exists |
-| Character portrait/traits display | ❌ | Not implemented — no portraits or detailed traits in UI |
-| Succession law display | ❌ | Not implemented |
-| Marriage opportunity screen | ❌ | Not implemented |
-| Court position management UI | ❌ | Not implemented |
-| Intrigue/alerts panel | ❌ | Not implemented |
-| Heir apparent indicator | ❌ | Not implemented |
+| Family tree visualization | ✅ | Tree view with └──/├── connectors showing parent-child relationships, alive/dead color coding |
+| Character portrait/traits display | ✅ | Traits shown inline for each member (e.g., "Industrious, Charismatic") |
+| Succession law display | ✅ | Shows current succession law (agnatic male preference), heir apparent with stats, potential heirs list |
+| Court position management UI | ✅ | Shows all 5 court positions (Marshal, Spymaster, Chancellor, Steward, Chaplain), current occupants, bonuses, vacancies |
+| Intrigue/alerts panel | ✅ | Shows active alerts (plots, tax collection, border skirmishes, spy network, cultural events) |
+| Heir apparent indicator | ✅ | Heir found by highest martial stat among ruler's living children, displayed prominently |
+| Court candidate list | ✅ | Lists all available dynasty members as potential court candidates with their stats |
 
 #### ✅ 2.7 Victory Conditions (victory_ui.py) — COMPLETE (142 lines)
 **File:** `victory_ui.py` — VictoryPanel, VictoryScreen, VictoryManager
@@ -210,7 +215,7 @@
 
 ### 🔴 Remaining — Backend Systems
 
-#### 2.1 City & District System (~800 lines)
+#### 2.11 City & District System (~800 lines)
 **What exists:** `city.py` has basic City class with districts/buildings dicts, adjacency calculation, yield calculation.
 **What's missing:**
 - [ ] Building prerequisite chains (Granary before Food Market)
@@ -220,7 +225,7 @@
 - [ ] District upgrade paths (Market → Bank → Stock Exchange)
 - [ ] City specialization (e.g., military city, science city)
 
-#### 2.2 Unit Production Backend (~400 lines)
+#### 2.12 Unit Production Backend (~400 lines)
 **What exists:** `military.py` has Unit class and basic combat.
 **What's missing:**
 - [ ] Unit production in city production queue
@@ -230,23 +235,22 @@
 - [ ] Naval units (Galleys, Ships of the Line)
 - [ ] Siege units (Catapults, Trebuchets)
 
-#### 2.3 Technology Tree Backend (~150 lines)
+#### 2.13 Technology Tree Backend (~150 lines)
 **What exists:** `tech.py` has TechManager with researched/available techs.
 **What's missing:**
 - [ ] Tech policy/commitment system (policies that boost specific tech types)
 - [ ] Era bonuses
 - [ ] Research speed modifiers
 
-#### 2.4 Diplomacy Backend (~100 lines)
-**What exists:** `diplomacy.py` has relations, alliances, wars between civilizations.
+#### 2.14 Diplomacy Backend (~100 lines)
+**What exists:** `diplomacy.py` has relations, alliances, wars, trade agreements, message inbox between civilizations.
 **What's missing:**
 - [ ] Treaty types
 - [ ] Casus belli system
-- [ ] Trade agreement mechanics
 
 ### 🟡 Medium Priority — Quality of Life
 
-#### 2.5 AI Improvement (~300 lines)
+#### 2.15 AI Improvement (~300 lines)
 **What exists:** `ai.py` has basic AI player.
 **What's missing:**
 - [ ] AI city expansion strategy
@@ -257,7 +261,7 @@
 
 ### 🟢 Low Priority — Polish
 
-#### 2.6 Sound & Visual Polish
+#### 2.16 Sound & Visual Polish
 **What exists:** None.
 **What's missing:**
 - [ ] Sound effects (combat, building, events)
@@ -266,7 +270,7 @@
 - [ ] Particle effects
 - [ ] Map transitions
 
-#### 2.7 Multiplayer
+#### 2.17 Multiplayer
 **What exists:** None.
 **What's missing:**
 - [ ] Network protocol
