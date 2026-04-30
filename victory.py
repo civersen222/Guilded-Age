@@ -116,3 +116,20 @@ class VictoryConditionTracker:
         if victory_type in self.conditions:
             return self.conditions[victory_type].description
         return "Unknown victory condition"
+
+    def record_victory(self, player: str, victory_msg: str, turn: int) -> None:
+        """Record a victory event."""
+        self.victory_triggered = None
+        for vtype in self.conditions:
+            if vtype.value in victory_msg:
+                self.victory_triggered = vtype
+                break
+        self.victory_turn = turn
+
+    def get_victory_progress(self, player: str) -> str:
+        """Get formatted victory progress for player."""
+        lines = []
+        for vtype in VictoryType:
+            pct = self.get_percentage(vtype)
+            lines.append(f"  {vtype.value}: {pct:.1f}%")
+        return "\n".join(lines)

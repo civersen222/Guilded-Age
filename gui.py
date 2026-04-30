@@ -22,6 +22,9 @@ from events import EventManager
 from plots import PlotManager
 from simulation import Character, Dynasty
 from ai import AIPlayer
+from gui_map import HexGridRenderer, HoverTooltip, MapCanvas, TileHighlight
+from gui_popups import ProductionPopup, UnitInfoPopup, DiplomacyPopup, DynastyPopup, VictoryPanel, TechTreePopup
+
 
 
 # ── Colour palette ────────────────────────────────────────────────
@@ -76,7 +79,7 @@ class NewGameDialog:
         self.diff_var = tk.StringVar(value="medium")
         for label, val in [("Easy", "easy"), ("Medium", "medium"), ("Hard", "hard")]:
             tk.Radiobutton(diff_frame, label, variable=self.diff_var, value=val,
-                           bg=BG, fg=TEXT, selectcolor=BG).pack(side=tk.LEFT, padx=(2, 2))
+                  	       bg=BG, fg=TEXT, selectcolor=BG).pack(side=tk.LEFT, padx=(2, 2))
 
         # civ listbox
         tk.Label(self.win, text="Choose your civilization:", bg=BG, fg=TEXT, font=("Segoe UI", 11)).pack(pady=(0, 4))
@@ -88,8 +91,8 @@ class NewGameDialog:
         sb.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.civ_list = tk.Listbox(list_frame, yscrollcommand=sb.set, bg=PANEL_BG, fg=TEXT,
-                                    selectbackground=HIGHLIGHT, font=("Segoe UI", 10),
-                                    activestyle="none", highlightthickness=0)
+                  	      	   selectbackground=HIGHLIGHT, font=("Segoe UI", 10),
+                  	      	   activestyle="none", highlightthickness=0)
         for name in sorted(CIVILIZATIONS.keys()):
             civ = CIVILIZATIONS[name]
             self.civ_list.insert(tk.END, f"{civ.name:<14}  {civ.bonus[:50]}")
@@ -99,53 +102,53 @@ class NewGameDialog:
 
         # info label (shows civ details on selection)
         self.info_label = tk.Label(self.win, text="Select a civilization", bg=BG, fg=SUBTLE,
-                                    font=("Segoe UI", 9), wraplength=640, justify=tk.LEFT)
+                  	      	   font=("Segoe UI", 9), wraplength=640, justify=tk.LEFT)
         self.info_label.pack(pady=(0, 12))
 
         # buttons
         btn_frame = tk.Frame(self.win, bg=BG)
         btn_frame.pack(pady=(0, 20))
         tk.Button(btn_frame, text="Start Game", command=self._confirm, width=14,
-                  bg=HIGHLIGHT, fg="white", font=("Segoe UI", 11, "bold"),
-                  active_background=HIGHLIGHT, active_foreground="white").pack(side=tk.LEFT, padx=(10, 5))
+                  bg=HIGHLIGHT, fg="white", font=("Segoe UI", 11, "bold")).pack(side=tk.LEFT, padx=12)
         tk.Button(btn_frame, text="Cancel", command=self.win.destroy, width=14,
-                  bg=ACCENT, fg=TEXT, font=("Segoe UI", 11)).pack(side=tk.LEFT, padx=(5, 10))
+                  bg=ACCENT, fg=TEXT, font=("Segoe UI", 11)).pack(side=tk.LEFT, padx=12)
 
-        self.win.focus_set()
+        self.civ_list.selection_set(0)
+        self._on_select(None)
 
-    def _on_select(self, _event=None) -> None:
+    def _on_select(self, event) -> None:
         sel = self.civ_list.curselection()
         if not sel:
             return
-        idx = sel[0]
-        names = sorted(CIVILIZATIONS.keys())
-        name = names[idx]
+        name = list(CIVILIZATIONS.keys())[sel[0]]
         civ = CIVILIZATIONS[name]
         self.info_label.config(text=(
-            f"{civ.name}  —  Unique unit: {civ.unique_unit or 'None'}  |  "
-            f"Unique building: {civ.unique_building or 'None'}  |  "
-            f"Gov: {civ.preferred_gov}  |  "
-            f"Start techs: {', '.join(civ.starting_tech)}"
-        ), fg=TEXT)
+            f"{civ.name}\n"
+            f"  🌾 Food  : {civ.food_bonus}    ⚙ Prod : {civ.prod_bonus}\n"
+            f"  💰 Gold   : {civ.gold_bonus}    🔬 Sci  : {civ.science_bonus}\n"
+            f"  🛡️ Def   : {civ.defense_bonus}   🌍 Exp : {civ.expansion_bonus}\n"
+            f"  {civ.bonus}"
+        ))
 
     def _confirm(self) -> None:
         sel = self.civ_list.curselection()
         if not sel:
-            messagebox.showwarning("No selection", "Pick a civilization first.")
+            messagebox.showwarning("No selection", "Pick a civilization.")
             return
-        names = sorted(CIVILIZATIONS.keys())
-        civ = CIVILIZATIONS[names[sel[0]]]
+        name = list(CIVILIZATIONS.keys())[sel[0]]
+        civ = CIVILIZATIONS[name]
         self.result = (civ, self.diff_var.get())
         self.win.destroy()
 
 
-# ── Tech-tree popup ───────────────────────────────────────────────
+# ── Tech Tree Popup ────────────────────────────────────────────
 class TechTreePopup(tk.Toplevel):
     """Shows researched vs available technologies."""
 
-    def __init__(self, parent, tech_manager: TechManager) -> None:
+    def __init__(self, parent, tech_manager, civ_name: str = "Player") -> None:
         super().__init__(parent)
         self.tm = tech_manager
+        self.civ_name = civ_name
         self.title("Technology Tree")
         self.geometry("520x480")
         self.resizable(True, True)
@@ -153,7 +156,6 @@ class TechTreePopup(tk.Toplevel):
         self._build()
 
     def _build(self) -> None:
-        # search / filter
         top = tk.Frame(self, bg=BG)
         top.pack(fill=tk.X, padx=8, pady=(6, 0))
         tk.Label(top, text="Filter:", bg=BG, fg=SUBTLE).pack(side=tk.LEFT)
@@ -211,7 +213,7 @@ class TechTreePopup(tk.Toplevel):
                 self.scroll_frame.wframes.append(row)
 
 
-# ── City detail panel (right side) ────────────────────────────────
+# ── City detail panel (right side) ───────────────────────────
 class CityDetailPanel(tk.Frame):
     """Shows info about the selected / capital city."""
 
@@ -222,12 +224,12 @@ class CityDetailPanel(tk.Frame):
 
     def _build(self) -> None:
         self.title_lbl = tk.Label(self, text="City", font=("Segoe UI", 14, "bold"),
-                                   bg=PANEL_BG, fg=HIGHLIGHT, anchor=tk.W)
+                                  bg=PANEL_BG, fg=HIGHLIGHT, anchor=tk.W)
         self.title_lbl.pack(fill=tk.X, padx=8, pady=(8, 0))
 
         self.info_text = tk.Text(self, bg=PANEL_BG, fg=TEXT, font=("Consolas", 10),
-                                  padx=8, pady=4, relief=tk.FLAT, wrap=tk.NONE,
-                                  highlightthickness=0, state=tk.DISABLED)
+                                 padx=8, pady=4, relief=tk.FLAT, wrap=tk.NONE,
+                                 highlightthickness=0, state=tk.DISABLED)
         sb = tk.Scrollbar(self, orient=tk.VERTICAL, command=self.info_text.yview)
         self.info_text.configure(yscrollcommand=sb.set)
         self.info_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=4)
@@ -259,7 +261,7 @@ class CityDetailPanel(tk.Frame):
         self.info_text.configure(state=tk.DISABLED)
 
 
-# ── Action-log panel (bottom-right) ───────────────────────────────
+# ── Action-log panel (bottom-right) ──────────────────────────
 class ActionLogPanel(tk.Frame):
     """Scrollable event log."""
 
@@ -270,8 +272,8 @@ class ActionLogPanel(tk.Frame):
                  bg=PANEL_BG2, fg=HIGHLIGHT, anchor=tk.W).pack(fill=tk.X, padx=4, pady=(4, 0))
 
         self.log_text = tk.Text(self, bg=PANEL_BG2, fg=TEXT, font=("Consolas", 9),
-                                 padx=6, pady=2, relief=tk.FLAT, wrap=tk.NONE,
-                                 highlightthickness=0, state=tk.DISABLED)
+                                padx=6, pady=2, relief=tk.FLAT, wrap=tk.NONE,
+                                highlightthickness=0, state=tk.DISABLED)
         sb = tk.Scrollbar(self, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=sb.set)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(2, 0))
@@ -284,7 +286,7 @@ class ActionLogPanel(tk.Frame):
         self.log_text.configure(state=tk.DISABLED)
 
 
-# ── Main GUI controller ───────────────────────────────────────────
+# ── Main GUI controller ──────────────────────────────────────────────
 class CivKingsGUI:
     """Top-level controller wiring the Tkinter UI to the game engine."""
 
@@ -298,7 +300,7 @@ class CivKingsGUI:
         self.HEX_SIZE = 28  # hex radius / cell size
         self._build_ui()
 
-    # ── UI construction ────────────────────────────────────────
+    # ── UI construction ────────────────────────────────────────────
     def _build_ui(self) -> None:
         self.root.title("CivKings")
         self.root.configure(bg=BG)
@@ -344,14 +346,10 @@ class CivKingsGUI:
         self.map_frame = tk.Frame(frame, bg=ACCENT)
         self.map_frame.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
 
-        self.canvas = tk.Canvas(self.map_frame, bg="#0d1b2a",
-                                 width=700, height=600,
-                                 highlightthickness=0)
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-        self.canvas.bind("<Button-1>", self._on_map_click)
-        self.canvas.bind("<B1-Motion>", self._on_map_drag)
-        self.canvas.bind("<MouseWheel>", self._on_map_wheel)
-        self.canvas.bind("<Double-Button-1>", self._on_map_dclick)
+        self.map_canvas = MapCanvas(self.map_frame, game_state=self.game)
+        self.map_canvas.pack(fill=tk.BOTH, expand=True)
+        self.game.on_tile_selected = self._on_map_click
+        self.game.on_city_double_click = self._on_city_double_click
 
         # right panel
         self.right_panel = CityDetailPanel(frame)
@@ -379,6 +377,8 @@ class CivKingsGUI:
             ("Show Units", self.show_units),
             ("Show Cities", self.show_cities),
             ("Diplomacy", self.show_diplomacy),
+            ("Dynasty", self.show_dynasty),
+            ("Victory", self.show_victory_screen),
             ("Events", self.show_events),
             ("Save Game", self.save_game),
             ("Quit", self.quit),
@@ -388,90 +388,36 @@ class CivKingsGUI:
                       activebackground=HIGHLIGHT, activeforeground=TEXT,
                       command=cb, width=12).pack(side=tk.LEFT, padx=4, pady=(0, 10))
 
-    # ── map rendering ──────────────────────────────────────────
-    def _hex_points(self, cx: float, cy: float, r: float) -> List[Tuple[float, float]]:
-        pts = []
-        for i in range(6):
-            angle = math.radians(60 * i - 30)
-            pts.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
-        return pts
+    # ── map rendering ───────────────────────────────────────────
 
     def render_map(self) -> None:
-        self.canvas.delete("all")
-        self.hex_items.clear()
-        if not self.hex_map.tiles:
+        """Render the map using MapCanvas."""
+        self.map_canvas.render(
+            self.game.map.tiles,
+            zoom=self.map_canvas.zoom_pan.zoom_level
+        )
+
+    def _on_map_click(self, tile_coord) -> None:
+        """Callback from MapCanvas when a tile is clicked."""
+        tile = self.game.map.get_tile(tile_coord[0], tile_coord[1])
+        if not tile:
             return
+        if tile.city:
+            city = next((c for c in self.game.cities if c.position == tile.city), None)
+            if city:
+                self.selected_city = city
+                self.right_panel.update(city)
+        if tile.unit:
+            unit = next((u for u in self.game.units if u.position == tile.unit), None)
+            if unit:
+                self.selected_unit = unit
+                UnitInfoPopup(self.root, unit)
 
-        cx = self.canvas.winfo_width() / 2
-        cy = self.canvas.winfo_height() / 2
-
-        for tile in self.hex_map.tiles.values():
-            hx = cx + tile.q * self.HEX_SIZE * 1.5
-            hy = cy + tile.r * self.HEX_SIZE * math.sqrt(3)
-            pts = self._hex_points(hx, hy, self.HEX_SIZE - 1)
-
-            col = TERRAIN_COL.get(tile.terrain_type, "#333")
-            item = self.canvas.create_polygon(pts, fill=col, outline="#111", width=1,
-                                              tags=(str(tile.q), str(tile.r), "tile"))
-            self.hex_items[(tile.q, tile.r)] = item
-
-            # city marker
-            if tile.city:
-                txt = self.canvas.create_text(hx, hy, text="★", font=("Segoe UI", 18, "bold"),
-                                              fill="gold", tags=("city", str(tile.q), str(tile.r)))
-                self.hex_items[(tile.q, tile.r)] = txt
-
-            # unit marker
-            if tile.unit:
-                u = next((u for u in self.game.units if u.position == tile.unit), None)
-                if u:
-                    color = "red" if u.owner != self.game.player_civ.name else "lime"
-                    txt = self.canvas.create_text(hx, hy, text="●", font=("Segoe UI", 14, "bold"),
-                                                  fill=color, tags=("unit", str(tile.q), str(tile.r)))
-                    self.hex_items[(tile.q, tile.r)] = txt
-
-        # fog of war
-        if hasattr(self.hex_map, 'fog_of_war') and self.hex_map.fog_of_war:
-            for tile in self.hex_map.tiles.values():
-                if not self.hex_map.fog_of_war.is_visible(tile.q, tile.r):
-                    item = self.hex_items.get((tile.q, tile.r))
-                    if item:
-                        self.canvas.itemconfig(item, fill="#111", stipple="gray12")
-
-    def _on_map_click(self, event) -> None:
-        for (q, r), item in self.hex_items.items():
-            bbox = self.canvas.bbox(item)
-            if bbox and bbox[0] <= event.x <= bbox[2] and bbox[1] <= event.y <= bbox[3]:
-                tile = self.hex_map.get_tile(q, r)
-                if not tile:
-                    continue
-                if tile.city:
-                    city = next((c for c in self.game.cities if c.position == tile.city), None)
-                    if city:
-                        self.selected_city = city
-                        self.right_panel.update(city)
-                    return
-                if tile.unit:
-                    unit = next((u for u in self.game.units if u.position == tile.unit), None)
-                    if unit:
-                        self.selected_unit = unit
-                        UnitInfoPopup(self.root, unit)
-                    return
-
-    def _on_map_dclick(self, event) -> None:
-        for (q, r), item in self.hex_items.items():
-            bbox = self.canvas.bbox(item)
-            if bbox and bbox[0] <= event.x <= bbox[2] and bbox[1] <= event.y <= bbox[3]:
-                tile = self.hex_map.get_tile(q, r)
-                if not tile:
-                    continue
-                if tile.city:
-                    city = next((c for c in self.game.cities if c.position == tile.city), None)
-                    if city:
-                        self.selected_city = city
-                        self.right_panel.update(city)
-                        ProductionPopup(self.root, city, self.game)
-                    return
+    def _on_city_double_click(self, city) -> None:
+        """Callback from MapCanvas when a city tile is double-clicked."""
+        self.selected_city = city
+        self.right_panel.update(city)
+        ProductionPopup(self.root, city, self.game)
 
     def _on_map_drag(self, event) -> None:
         pass
@@ -479,7 +425,7 @@ class CivKingsGUI:
     def _on_map_wheel(self, event) -> None:
         pass
 
-    # ── actions ────────────────────────────────────────────────
+    # ── actions ──────────────────────────────────────────
     def next_turn(self) -> None:
         msgs = self.game.process_turn()
         self.render_map()
@@ -504,9 +450,13 @@ class CivKingsGUI:
         messagebox.showinfo("Your Cities", "".join(lines))
 
     def show_diplomacy(self) -> None:
-        rel = self.game.diplomacy_manager.get_all_relations()
-        lines = [f"  {civ}: {rel.get(civ, 'Neutral')}\n" for civ in self.game.diplomacy_manager.all_civs]
-        messagebox.showinfo("Diplomacy", "".join(lines))
+        DiplomacyPopup(self.root, self.game)
+
+    def show_dynasty(self) -> None:
+        DynastyPopup(self.root, self.game)
+
+    def show_victory_screen(self) -> None:
+        VictoryPanel(self.root, self.game)
 
     def show_events(self) -> None:
         evts = self.game.event_manager.events[-20:]

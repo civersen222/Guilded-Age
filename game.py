@@ -24,6 +24,7 @@ from religion import ReligionManager
 from tech import TechManager
 from events import EventManager
 from plots import PlotManager
+from victory import VictoryConditionTracker, VictoryType
 
 
 @dataclass
@@ -79,6 +80,7 @@ class Game:
         self.city_manager = CityManager([])
         self.military_manager = MilitaryManager([])
         self.court: Optional[Court] = None
+        self.victory_tracker = VictoryConditionTracker()
         
         # Initialize game
         self._initialize_game()
@@ -180,6 +182,7 @@ class Game:
         if victory_msg:
             self.state.game_over = True
             self.state.victory = victory_msg
+            self.victory_tracker.record_victory(self.player_civ.name, victory_msg, self.state.turn)
             msgs.append(f"\n{'='*60}")
             msgs.append(f"GAME OVER - {victory_msg}")
             msgs.append(f"{'='*60}")
@@ -297,11 +300,15 @@ class Game:
             except Exception:
                 prestige = 0
         
+        # Check victory progress
+        victory_progress = self.victory_tracker.get_victory_progress(self.player_civ.name)
+        
         return (
             f"\n--- Game State (Turn {self.state.turn}) ---\n"
             f"Cities: {len(self.cities)} | Units: {len(self.units)} | Technologies: {player_science}\n"
             f"Gold: {player_gold} | Science: {player_science}\n"
             f"Dynasty Prestige: {prestige}\n"
+            f"Victory Progress: {victory_progress}\n"
             f"Phase: {self.state.phase} | Over: {self.state.game_over}"
         )
 
