@@ -324,17 +324,16 @@
 - [x] Domination victory
 - [x] Victory screen with stats
 
+### ✅ COMPLETED SPRINTS (Backend Systems)
+
+#### ✅ SPRINT 7: City Growth & Building System — DONE
+- [x] City growth mechanics (food accumulation, population caps)
+- [x] Building prerequisite chains
+- [x] Wonder system
+- [x] Worker improvements (farms, mines, pastures)
+- [x] District upgrade paths
+
 ### 🟡 REMAINING SPRINTS (Backend Systems)
-
-### SPRINT 7: City Growth & Building System (Week 9-10)
-**Goal:** Cities can grow, buildings can be constructed with prerequisites.
-1. City growth mechanics (food accumulation, population caps)
-2. Building prerequisite chains
-3. Wonder system
-4. Worker improvements (farms, mines, pastures)
-5. District upgrade paths
-
-**Total: ~800 lines**
 
 ### SPRINT 8: Unit System Enhancement (Week 11)
 **Goal:** Full unit lifecycle with production, upgrades, and experience.
