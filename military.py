@@ -4,173 +4,246 @@ Handles units, combat, movement, and military organization
 """
 import random
 from typing import List, Dict, Optional, Tuple
-from game_data import UNIT_TYPES, UnitType
+from game_data import UNIT_TYPES, UnitType, TERRAIN_DEFENSE_BONUS, TerrainType
 
 
 class Unit:
     """Represents a military unit on the map"""
     
-    def __init__(self, unit_type: str, owner: str, position: tuple, moves_left: int = 1):
+    # Promotion levels: (XP threshold, label, bonuses)
+    PROMOTION_TIERS = [
+        (50, "Novice", {"attack": 5}),
+        (150, "Skilled", {"defense": 10}),
+        (300, "Veteran", {"movement": 1}),
+        (500, "Elite", {"attack": 15}),
+        (750, "Champion", {"defense": 20}),
+        (1000, "Grand Champion", {"attack": 10, "defense": 10}),
+    ]
+    
+    def __init__(self, unit_type: str, owner: str, position: tuple, moves_left: Optional[int] = None):
         self.unit_type = unit_type
         self.name = unit_type
         self.owner = owner
-        self.owner_id = owner
         self.position = position
-        self.moves_left = moves_left
-        self.max_moves = 1
         self.xp = 0
-        self.promotions: List[str] = []
-        self.promotion = self.promotions[0] if self.promotions else None
+        self.level = 1
+        self.promotions: List[int] = []  # XP thresholds we've unlocked
         self.is_fortified = False
         self.hp = 100
         self.max_hp = 100
         self.is_alive = True
-        stats = self.get_stats()
-        self.attack = stats["attack"]
-        self.defense = stats["defense"]
+        self.last_combat_result = None
+        self.kills = 0
+        self.moves_left = moves_left if moves_left is not None else self.base_move
+        
+        # Base stats from unit type
+        base = self.get_base_stats()
+        self.attack = base["attack"]
+        self.defense = base["defense"]
+        self.base_move = base["movement"]
+        self.max_moves = self.base_move
+        
+        # Check and apply promotions
+        self.check_promotions()
+        self._apply_promotion_bons()
+    
+    def _apply_promotion_bons(self) -> None:
+        """Recalculate attack/defense/moves from base + active promotions."""
+        base = self.get_base_stats()
+        self.attack = base["attack"]
+        self.defense = base["defense"]
+        self.max_moves = self.base_move
+        
+        for xp_thresh, _, bonuses in self.PROMOTION_TIERS:
+            if xp_thresh in self.promotions:
+                for stat, val in bonuses.items():
+                    if stat == "attack":
+                        self.attack += val
+                    elif stat == "defense":
+                        self.defense += val
+                    elif stat == "movement":
+                        self.max_moves += val
+    
+    def check_promotions(self) -> List[str]:
+        """Check if unit qualifies for new promotions based on accumulated XP.
+        Returns list of new promotion labels unlocked this call."""
+        new_labels = []
+        for xp_thresh, label, _ in self.PROMOTION_TIERS:
+            if xp_thresh <= self.xp and xp_thresh not in self.promotions:
+                self.promotions.append(xp_thresh)
+                new_labels.append(label)
+        if new_labels:
+            self._apply_promotion_bons()
+            self.level = len(self.promotions) + 1
+        return new_labels
+    
+    def get_base_stats(self) -> Dict[str, int]:
+        """Get base unit stats without promotions."""
+        if self.unit_type in UNIT_TYPES:
+            u = UNIT_TYPES[self.unit_type]
+            return {
+                "attack": u.attack,
+                "defense": u.defense,
+                "movement": u.movement,
+                "cost": u.production_cost,
+            }
+        return {"attack": 10, "defense": 10, "movement": 1, "cost": 50}
+    
+    def get_stats(self) -> Dict[str, int]:
+        """Get current combat stats including promotions."""
+        return {
+            "attack": self.attack,
+            "defense": self.defense,
+            "movement": self.max_moves,
+            "cost": self.get_base_stats()["cost"],
+        }
     
     def to_dict(self) -> dict:
         return {
             "unit_type": self.unit_type,
             "owner": self.owner,
             "position": self.position,
-            "moves_left": self.moves_left,
             "xp": self.xp,
+            "level": self.level,
             "promotions": self.promotions,
             "hp": self.hp,
-            "is_alive": self.is_alive
+            "max_hp": self.max_hp,
+            "is_alive": self.is_alive,
+            "attack": self.attack,
+            "defense": self.defense,
+            "max_moves": self.max_moves,
         }
     
-    def get_stats(self) -> Dict[str, int]:
-        """Get unit combat stats"""
-        if self.unit_type in UNIT_TYPES:
-            unit_data = UNIT_TYPES[self.unit_type]
-            return {
-                "attack": unit_data.attack,
-                "defense": unit_data.defense,
-                "movement": unit_data.movement,
-                "cost": unit_data.production_cost
-            }
-        return {"attack": 10, "defense": 10, "movement": 1, "cost": 50}
-
-
-class MilitaryManager:
-    """Manages all military units and combat"""
-    
-    def __init__(self, units):
-        if isinstance(units, dict):
-            self.units = list(units.values())
-        else:
-            self.units = units
-    
-    def get_units_by_owner(self, owner: str) -> List[Unit]:
-        """Get all units owned by a civilization"""
-        return [unit for unit in self.units if unit.owner == owner and unit.is_alive]
-    
-    def move_unit(self, unit: Unit, new_position: tuple) -> bool:
-        """Move a unit to a new position"""
-        if unit.moves_left <= 0:
-            return False
-        
-        # Check if position is valid (simplified)
-        dx = abs(new_position[0] - unit.position[0])
-        dy = abs(new_position[1] - unit.position[1])
-        distance = max(dx, dy)  # Hex distance approximation
-        
-        if distance <= unit.moves_left:
-            unit.position = new_position
-            unit.moves_left -= distance
-            
-            # Check for landmark discovery
-            if hasattr(self, 'map') and new_position in self.map.tiles:
-                tile = self.map.tiles[new_position]
-                if tile.landmark and not tile.landmark_discovered:
-                    tile.landmark_discovered = True
-                    landmark = LANDMARKS[tile.landmark]
-                    # Apply landmark bonuses to the owner's resources
-                    if hasattr(self, 'owner') and self.owner:
-                        # Return discovery message
-                        return f"Discovered {landmark.name}! +{landmark.gold_bonus} gold, +{landmark.food_bonus} food"
-            
+    def deal_damage(self, damage: int) -> bool:
+        """Deal damage. Returns True if killed."""
+        self.hp -= damage
+        if self.hp <= 0:
+            self.hp = 0
+            self.is_alive = False
             return True
         return False
     
-    def combat(self, attacker: Unit, defender: Unit) -> str:
-        """Execute combat between two units"""
+    def heal(self, amount: int) -> None:
+        """Heal unit, capped at max_hp."""
+        self.hp = min(self.max_hp, self.hp + amount)
+
+
+class MilitaryManager:
+    """Manages all military units and combat."""
+    
+    def __init__(self, units: Optional[List[Unit]] = None):
+        self.units: List[Unit] = units if units is not None else []
+        self.map = None  # Optional reference to hex_map for terrain lookups
+    
+    def get_units_by_owner(self, owner: str) -> List[Unit]:
+        """Get all living units owned by a civilization."""
+        return [u for u in self.units if u.owner == owner and u.is_alive]
+    
+    def get_units_at_position(self, position: tuple) -> List[Unit]:
+        """Get all living units at a position."""
+        return [u for u in self.units if u.position == position and u.is_alive]
+    
+    def move_unit(self, unit: Unit, new_position: tuple) -> bool:
+        """Move a unit. Returns True on success, False if can't move."""
+        if unit.moves_left <= 0:
+            return False
+        
+        dx = abs(new_position[0] - unit.position[0])
+        dy = abs(new_position[1] - unit.position[1])
+        distance = max(dx, dy)
+        
+        if distance > unit.moves_left:
+            return False
+        
+        # Check for enemy unit at destination
+        occupants = self.get_units_at_position(new_position)
+        for occ in occupants:
+            if occ.owner != unit.owner:
+                # Combat triggered by moving into enemy tile
+                result = self.combat(unit, occ)
+                return result is not None
+        
+        unit.position = new_position
+        unit.moves_left -= distance
+        return True
+    
+    def combat(self, attacker: Unit, defender: Unit) -> Optional[str]:
+        """Execute combat. Returns result string or None if invalid."""
         if not attacker.is_alive or not defender.is_alive:
             return "One or both units are dead"
         
-        # Get combat stats
-        atk_stats = attacker.get_stats()
-        def_stats = defender.get_stats()
+        # Base combat power
+        atk_power = attacker.attack
+        def_power = defender.defense
         
-        # Calculate combat power
-        atk_power = atk_stats["attack"] + random.randint(-3, 3)
-        def_power = def_stats["defense"] + random.randint(-3, 3)
+        # Randomness (±10)
+        rng = random.randint(-10, 10)
+        atk_power += rng
+        def_power += rng
         
-        # Apply terrain bonuses (simplified)
+        # Terrain defense bonus for defender
+        if self.map and hasattr(self.map, 'tiles'):
+            tile = self.map.tiles.get(defender.position)
+            if tile and hasattr(tile, 'terrain'):
+                terrain_bonus = TERRAIN_DEFENSE_BONUS.get(tile.terrain, 0)
+                def_power += terrain_bonus
+        
+        # Fortified bonus
         if defender.is_fortified:
-            def_power += 5
+            def_power += 10
         
-        # Apply XP bonuses
-        atk_power += attacker.xp // 10
-        def_power += defender.xp // 10
+        # XP bonus
+        atk_power += attacker.xp // 50
+        def_power += defender.xp // 50
         
-        # Determine winner
+        # Resolve
         if atk_power > def_power:
             damage = max(10, atk_power - def_power)
             defender.hp -= damage
-            attacker.xp += 5
+            attacker.xp += 10
+            
+            new_promos = attacker.check_promotions()
             
             if defender.hp <= 0:
-                defender.is_alive = False
-                defender.hp = 0
-                result = f"Attacker wins! {defender.unit_type} destroyed."
-                attacker.promotions.append("veteran")
+                defender.deal_damage(0)
+                result = f"Attacker wins! {defender.unit_type} destroyed. (+{damage} dmg)"
+                attacker.kills += 1
             else:
                 result = f"Attacker wins! Dealt {damage} damage."
         else:
             damage = max(5, def_power - atk_power)
             attacker.hp -= damage
-            defender.xp += 3
             
             if attacker.hp <= 0:
-                attacker.is_alive = False
-                attacker.hp = 0
-                result = f"Defender wins! {attacker.unit_type} destroyed."
+                attacker.deal_damage(0)
+                result = f"Defender wins! {attacker.unit_type} destroyed. (+{damage} dmg)"
+                defender.kills += 1
             else:
                 result = f"Defender wins! Dealt {damage} damage."
         
+        attacker.last_combat_result = result
+        defender.last_combat_result = result
         return result
     
     def process_turn(self):
-        """Process end of turn for all units"""
+        """Reset moves and un-fortify all living units."""
         for unit in self.units:
             if unit.is_alive:
                 unit.moves_left = unit.max_moves
                 unit.is_fortified = False
     
     def add_unit(self, unit: Unit):
-        """Add a unit to the manager"""
         self.units.append(unit)
     
     def remove_unit(self, unit: Unit):
-        """Remove a unit from the manager"""
         if unit in self.units:
             self.units.remove(unit)
     
     def get_army_strength(self, owner: str) -> Dict[str, int]:
-        """Get total army strength for a civilization"""
+        """Get total army strength for a civilization."""
         units = self.get_units_by_owner(owner)
-        total = {
-            "attack": 0,
-            "defense": 0,
-            "count": len(units)
+        return {
+            "attack": sum(u.attack for u in units),
+            "defense": sum(u.defense for u in units),
+            "count": len(units),
         }
-        
-        for unit in units:
-            stats = unit.get_stats()
-            total["attack"] += stats["attack"]
-            total["defense"] += stats["defense"]
-        
-        return total
