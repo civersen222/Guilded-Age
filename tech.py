@@ -158,3 +158,28 @@ class TechManager:
         if self.current_research:
             lines.append(f"Currently researching: {self.current_research}")
         return "\n".join(lines)
+    
+    # --- Additional attributes for tech_policies integration ---
+    _current_turn: int = 0
+    _districts: Dict[str, int] = {}
+    _policies: List = []
+    
+    def _get_district_count(self, district_type: str) -> int:
+        """Get count of a specific district type."""
+        return self._districts.get(district_type, 0)
+    
+    def _get_war_count(self) -> int:
+        """Get number of cities currently at war."""
+        return 0  # Placeholder - depends on diplomacy integration
+    
+    def _get_trade_route_count(self) -> int:
+        """Get number of active trade routes."""
+        return len(self._trade_routes) if hasattr(self, '_trade_routes') else 0
+    
+    def _get_total_culture(self) -> int:
+        """Get total culture points."""
+        return self._culture if hasattr(self, '_culture') else 0
+    
+    def _get_production_to_science_ratio(self) -> float:
+        """Get the ratio of production being converted to science."""
+        return self._prod_to_science_ratio if hasattr(self, '_prod_to_science_ratio') else 0.0
