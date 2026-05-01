@@ -30,7 +30,7 @@ from visual_effects import VisualEffects
 
 
 
-# ── Colour palette ────────────────────────────────────────────────
+# ── Colour palette ─────────────────────────────────────────────
 BG = "#1a1a2e"
 PANEL_BG = "#16213e"
 PANEL_BG2 = "#1c2a44"
@@ -51,7 +51,7 @@ TERRAIN_COL: Dict[TerrainType, str] = {
 }
 
 
-# ── New Game dialog ───────────────────────────────────────────────
+# ── New Game dialog ──────────────────────────────────────────────────
 class NewGameDialog:
     """Modal for selecting player civ and difficulty before launching a game."""
 
@@ -78,145 +78,127 @@ class NewGameDialog:
         # difficulty
         diff_frame = tk.Frame(self.win, bg=BG)
         diff_frame.pack(pady=(0, 10))
-        tk.Label(diff_frame, text="Difficulty:", bg=BG, fg=TEXT, font=("Segoe UI", 11)).pack(side=tk.LEFT, padx=(10, 8))
-        self.diff_var = tk.StringVar(value="medium")
-        for label, val in [("Easy", "easy"), ("Medium", "medium"), ("Hard", "hard")]:
-            tk.Radiobutton(diff_frame, label, variable=self.diff_var, value=val,
-                  	       bg=BG, fg=TEXT, selectcolor=BG).pack(side=tk.LEFT, padx=(2, 2))
 
-        # civ listbox
-        tk.Label(self.win, text="Choose your civilization:", bg=BG, fg=TEXT, font=("Segoe UI", 11)).pack(pady=(0, 4))
+        self.diff_var = tk.StringVar(value="Standard")
+        for d in ["Rookie", "Easy", "Standard", "Hard", "Immortal"]:
+            tk.Radiobutton(diff_frame, text=d, variable=self.diff_var,
+                           value=d, bg=BG, fg=TEXT, selectcolor=BG).pack(side=tk.LEFT, padx=6)
 
-        list_frame = tk.Frame(self.win, bg=BG, bd=1, relief=tk.SOLID)
-        list_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=(0, 16))
+        # civ selection
+        tk.Label(self.win, text="Choose your civilization:", font=("Segoe UI", 12),
+                 bg=BG, fg=TEXT).pack(pady=(10, 4))
 
-        sb = tk.Scrollbar(list_frame)
+        self.sel_civ = tk.StringVar()
+        scroll = tk.Frame(self.win, bg=BG, width=680, height=200)
+        scroll.pack(pady=4)
+        scroll.pack_propagate(False)
+
+        cv = tk.Canvas(scroll, bg=PANEL_BG, highlightthickness=0)
+        sb = tk.Scrollbar(scroll, orient=tk.VERTICAL, command=cv.yview)
+        sf = tk.Frame(cv, bg=PANEL_BG)
+        sf.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        cv.create_window((0, 0), window=sf, anchor="nw")
+        cv.configure(yscrollcommand=sb.set)
+        cv.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.civ_list = tk.Listbox(list_frame, yscrollcommand=sb.set, bg=PANEL_BG, fg=TEXT,
-                  	      	   selectbackground=HIGHLIGHT, font=("Segoe UI", 10),
-                  	      	   activestyle="none", highlightthickness=0)
-        for name in sorted(CIVILIZATIONS.keys()):
-            civ = CIVILIZATIONS[name]
-            self.civ_list.insert(tk.END, f"{civ.name:<14}  {civ.bonus[:50]}")
-        self.civ_list.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-        self.civ_list.bind("<<ListboxSelect>>", self._on_select)
-        sb.config(command=self.civ_list.yview)
+        self.scroll_frame = sf
+        for civ in CIVILIZATIONS.values():
+            f = tk.Frame(sf, bg=PANEL_BG)
+            f.pack(fill=tk.X, padx=4, pady=2)
+            clr = self._civ_color(civ)
+            tk.Label(f, text=f"●  {civ.name} ({civ.bonus})", bg=PANEL_BG, fg=clr,
+                     font=("Segoe UI", 10), padx=6, anchor=tk.W).pack(side=tk.LEFT)
+            tk.Radiobutton(f, variable=self.sel_civ, value=civ.name,
+                           bg=PANEL_BG, fg=TEXT, selectcolor=PANEL_BG).pack(side=tk.RIGHT)
 
-        # info label (shows civ details on selection)
-        self.info_label = tk.Label(self.win, text="Select a civilization", bg=BG, fg=SUBTLE,
-                  	      	   font=("Segoe UI", 9), wraplength=640, justify=tk.LEFT)
-        self.info_label.pack(pady=(0, 12))
+        # start button
+        def on_start():
+            if not self.sel_civ.get():
+                messagebox.showwarning("Warning", "Please select a civilization.")
+                return
+            civ = CIVILIZATIONS[self.sel_civ.get()]
+            self.result = (civ, self.diff_var.get())
+            self.win.destroy()
 
-        # buttons
-        btn_frame = tk.Frame(self.win, bg=BG)
-        btn_frame.pack(pady=(0, 20))
-        tk.Button(btn_frame, text="Start Game", command=self._confirm, width=14,
-                  bg=HIGHLIGHT, fg="white", font=("Segoe UI", 11, "bold")).pack(side=tk.LEFT, padx=12)
-        tk.Button(btn_frame, text="Cancel", command=self.win.destroy, width=14,
-                  bg=ACCENT, fg=TEXT, font=("Segoe UI", 11)).pack(side=tk.LEFT, padx=12)
-
-        self.civ_list.selection_set(0)
-        self._on_select(None)
-
-    def _on_select(self, event) -> None:
-        sel = self.civ_list.curselection()
-        if not sel:
-            return
-        name = list(CIVILIZATIONS.keys())[sel[0]]
-        civ = CIVILIZATIONS[name]
-        self.info_label.config(text=(
-            f"{civ.name}\n"
-            f"  🌾 Food  : {civ.food_bonus}    ⚙ Prod : {civ.prod_bonus}\n"
-            f"  💰 Gold   : {civ.gold_bonus}    🔬 Sci  : {civ.science_bonus}\n"
-            f"  🛡️ Def   : {civ.defense_bonus}   🌍 Exp : {civ.expansion_bonus}\n"
-            f"  {civ.bonus}"
-        ))
-
-    def _confirm(self) -> None:
-        sel = self.civ_list.curselection()
-        if not sel:
-            messagebox.showwarning("No selection", "Pick a civilization.")
-            return
-        name = list(CIVILIZATIONS.keys())[sel[0]]
-        civ = CIVILIZATIONS[name]
-        self.result = (civ, self.diff_var.get())
-        self.win.destroy()
+        tk.Button(self.win, text="Start Game!", font=("Segoe UI", 14, "bold"),
+                  bg=HIGHLIGHT, fg=TEXT, activebackground="#c73e52", activeforeground=TEXT,
+                  command=on_start).pack(pady=(10, 20))
 
 
-# ── Tech Tree Popup ────────────────────────────────────────────
-class TechTreePopup(tk.Toplevel):
-    """Shows researched vs available technologies."""
+# ── Tech Tree panel (right side) ────────────────────────
+class TechTreePanel(tk.Frame):
+    """Shows the technology tree with researched/unlocked states."""
 
-    def __init__(self, parent, tech_manager, civ_name: str = "Player") -> None:
-        super().__init__(parent)
-        self.tm = tech_manager
-        self.civ_name = civ_name
-        self.title("Technology Tree")
-        self.geometry("520x480")
-        self.resizable(True, True)
-        self.configure(bg=BG)
+    def __init__(self, parent, tech_mgr: TechManager) -> None:
+        super().__init__(parent, bg=BG)
+        self.tech_mgr = tech_mgr
+        self.pack(fill=tk.BOTH, expand=True)
         self._build()
 
     def _build(self) -> None:
-        top = tk.Frame(self, bg=BG)
-        top.pack(fill=tk.X, padx=8, pady=(6, 0))
-        tk.Label(top, text="Filter:", bg=BG, fg=SUBTLE).pack(side=tk.LEFT)
-        self.var = tk.StringVar()
-        self.var.trace_add("write", self._redraw)
-        ttk.Entry(top, textvariable=self.var, width=20).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Checkbutton(top, text="Show researched", variable=tk.BooleanVar(value=True),
-                        command=self._redraw).pack(side=tk.LEFT, padx=(10, 0))
+        tk.Label(self, text="Technology Tree", font=("Segoe UI", 14, "bold"),
+                 bg=BG, fg=HIGHLIGHT, anchor=tk.W).pack(fill=tk.X, padx=8, pady=(8, 0))
 
-        canvas = tk.Canvas(self, bg=BG, highlightthickness=0)
-        sb = tk.Scrollbar(self, orient=tk.VERTICAL, command=canvas.yview)
-        self.scroll_frame = tk.Frame(canvas, bg=BG)
-        self.scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # search
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *a: self._filter())
+        tk.Entry(self, textvariable=self.search_var, bg=PANEL_BG, fg=TEXT,
+                 insertbackground=TEXT, font=("Segoe UI", 10)).pack(fill=tk.X, padx=8, pady=4)
+
+        # branch filter
+        self.branch_var = tk.StringVar(value="All")
+        branches = ["All"] + list({t.branch for t in TECHNOLOGIES.values()})
+        for b in branches:
+            tk.Radiobutton(self, text=b, variable=self.branch_var, value=b,
+                           bg=BG, fg=TEXT, selectcolor=BG, command=self._filter).pack(side=tk.LEFT, padx=4)
+
+        # scrollable tech list
+        scroll_frame = tk.Frame(self, bg=BG)
+        scroll_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+        scroll_frame.pack_propagate(False)
+
+        self.canvas = tk.Canvas(scroll_frame, bg=BG, highlightthickness=0)
+        sb = tk.Scrollbar(scroll_frame, orient=tk.VERTICAL, command=self.canvas.yview)
+        self.scroll_frame = tk.Frame(self.canvas, bg=BG)
+        self.scroll_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=sb.set)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # bind mousewheel
-        canvas.bind("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 60)), "units"))
+        self._filter()
 
-        self._redraw()
-
-    def _redraw(self, *_):
-        for w in self.scroll_frame.wframes:
+    def _filter(self) -> None:
+        for w in self.scroll_frame.winfo_children():
             w.destroy()
-        self.scroll_frame.wframes = []
+        branch = self.branch_var.get()
+        if branch == "All":
+            branch = None
+        filter_txt = self.search_var.get().lower()
+        researched = self.tech_mgr.researched_techs
 
-        filter_txt = self.var.get().lower()
-        researched = set(self.tm.researched.keys())
+        for tech in sorted(TECHNOLOGIES.values(), key=lambda t: t.cost):
+            if branch and tech.branch != branch:
+                continue
+            if filter_txt and filter_txt not in tech.name.lower():
+                continue
+            is_done = tech.name in researched
+            is_avail = not is_done and all(p in researched for p in tech.prerequisites)
 
-        for branch in [TechBranch.SCIENTIFIC, TechBranch.MILITARY, TechBranch.CIVIC]:
-            header = tk.Frame(self.scroll_frame, bg=ACCENT)
-            header.pack(fill=tk.X, pady=(8, 0))
-            tk.Label(header, text=branch.value, bg=ACCENT, fg=TEXT, font=("Segoe UI", 11, "bold"),
-                     padx=8, pady=2).pack(side=tk.LEFT)
-
-            for tname, tech in sorted(TECHNOLOGIES.items()):
-                if tech.branch != branch:
-                    continue
-                if filter_txt and filter_txt not in tname.lower():
-                    continue
-                is_done = tname in researched
-                is_avail = not is_done and all(p in researched for p in tech.prerequisites)
-
-                row = tk.Frame(self.scroll_frame, bg=BG)
-                row.pack(fill=tk.X, padx=4, pady=1)
-                icon = "✓" if is_done else ("▶" if is_avail else "🔒")
-                clr = "#4caf50" if is_done else ("#ffeb3b" if is_avail else "#555")
-                tk.Label(row, text=f"{icon}  {tname}", bg=BG, fg=clr, font=("Segoe UI", 10),
-                         padx=6, pady=1, anchor=tk.W).pack(side=tk.LEFT)
-                prereq_str = ", ".join(tech.prerequisites) if tech.prerequisites else "None"
-                tk.Label(row, text=f"[{prereq_str}]  cost:{tech.cost}", bg=BG, fg=SUBTLE,
-                         font=("Segoe UI", 8), padx=6, anchor=tk.W).pack(side=tk.LEFT)
-                self.scroll_frame.wframes.append(row)
+            row = tk.Frame(self.scroll_frame, bg=BG)
+            row.pack(fill=tk.X, padx=4, pady=1)
+            icon = "✓" if is_done else ("▶" if is_avail else "🔒")
+            clr = "#4caf50" if is_done else ("#ffeb3b" if is_avail else "#555")
+            tk.Label(row, text=f"{icon}  {tech.name}", bg=BG, fg=clr, font=("Segoe UI", 10),
+                     padx=6, pady=1, anchor=tk.W).pack(side=tk.LEFT)
+            prereq_str = ", ".join(tech.prerequisites) if tech.prerequisites else "None"
+            tk.Label(row, text=f"[{prereq_str}]  cost:{tech.cost}", bg=BG, fg=SUBTLE,
+                     font=("Segoe UI", 8), padx=6, anchor=tk.W).pack(side=tk.LEFT)
+            self.scroll_frame.wframes.append(row)
 
 
-# ── City detail panel (right side) ───────────────────────────
+# ── City detail panel (right side) ────────────────────────────
 class CityDetailPanel(tk.Frame):
     """Shows info about the selected / capital city."""
 
@@ -227,7 +209,7 @@ class CityDetailPanel(tk.Frame):
 
     def _build(self) -> None:
         self.title_lbl = tk.Label(self, text="City", font=("Segoe UI", 14, "bold"),
-                                  bg=PANEL_BG, fg=HIGHLIGHT, anchor=tk.W)
+                                   bg=PANEL_BG, fg=HIGHLIGHT, anchor=tk.W)
         self.title_lbl.pack(fill=tk.X, padx=8, pady=(8, 0))
 
         self.info_text = tk.Text(self, bg=PANEL_BG, fg=TEXT, font=("Consolas", 10),
@@ -266,7 +248,17 @@ class CityDetailPanel(tk.Frame):
 
 # ── Action-log panel (bottom-right) ──────────────────────────
 class ActionLogPanel(tk.Frame):
-    """Scrollable event log."""
+    """Scrollable event log with color-coded events."""
+
+    EVENT_COLORS = {
+        "combat": "#e94560",
+        "diplomacy": "#4caf50",
+        "tech": "#2196f3",
+        "economy": "#ff9800",
+        "warning": "#f44336",
+        "victory": "#ffd700",
+        "default": "#aab",
+    }
 
     def __init__(self, parent) -> None:
         super().__init__(parent, bg=PANEL_BG2)
@@ -282,9 +274,11 @@ class ActionLogPanel(tk.Frame):
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(2, 0))
         sb.pack(side=tk.RIGHT, fill=tk.Y, pady=(2, 0))
 
-    def add(self, msg: str) -> None:
+    def add(self, msg: str, event_type: str = "default") -> None:
+        color = self.EVENT_COLORS.get(event_type, self.EVENT_COLORS["default"])
+        self.log_text.tag_config(event_type, foreground=color)
         self.log_text.configure(state=tk.NORMAL)
-        self.log_text.insert(tk.END, f"  {msg}\n")
+        self.log_text.insert(tk.END, f"  {msg}\n", event_type)
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
 
@@ -322,6 +316,26 @@ class CivKingsGUI:
         self.root.bind('<Control-c>', lambda e: self.show_cities())
         self.root.bind('<n>', lambda e: self.next_turn())
         self.root.bind('<Escape>', lambda e: self._clear_selection())
+    
+    def _on_key_press(self, event: tk.Event) -> None:
+        """Handle keyboard shortcuts."""
+        shortcuts = {
+            'n': self.next_turn,
+            't': self.show_tech_tree,
+            'd': self.show_diplomacy,
+            'u': self.show_units,
+            'c': self.show_cities,
+            'y': self.show_dynasty,
+            'v': self.show_victory_screen,
+            'e': self.show_events,
+            's': self.save_game,
+            'Escape': self._cancel_selection,
+        }
+        if event.char in shortcuts:
+            shortcuts[event.char]()
+        if event.keysym == 'F5':
+            self.render_map()
+            self._update_top_bar()
     
     def _schedule_effect(self, effect_name: str) -> None:
         """Schedule a visual/sound effect to be played."""
@@ -368,6 +382,10 @@ class CivKingsGUI:
         self.context_menu.add_command(label="Production", command=self._context_production)
         self.context_menu.add_command(label="Move Here", command=self._context_move)
         self.context_menu.add_command(label="Attack", command=self._context_attack)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Zoom In", command=self._zoom_in)
+        self.context_menu.add_command(label="Zoom Out", command=self._zoom_out)
+        self.context_menu.add_command(label="Reset Map", command=self._reset_zoom)
         
         # Bind right-click
         self.root.bind("<Button-3>", self._show_context_menu)
@@ -387,6 +405,7 @@ class CivKingsGUI:
         bar = tk.Frame(self.root, bg=ACCENT, height=48)
         bar.pack(fill=tk.X, side=tk.TOP)
         bar.pack_propagate(False)
+        self.top_bar_frame = bar  # Store reference for updates
 
         items = [
             ("🌾 Food", self.game.city_manager.get_total_yields(self.game.player_civ.name).get("food", 0)),
@@ -405,8 +424,8 @@ class CivKingsGUI:
         # Sound toggle button
         self.sound_on = tk.BooleanVar(value=True)
         self.sound_btn = tk.Checkbutton(bar, text="🔊", variable=self.sound_on,
-                                       command=self._toggle_sound, bg=ACCENT,
-                                       fg=TEXT, selectcolor=ACCENT)
+                                   command=self._toggle_sound, bg=ACCENT,
+                                   fg=TEXT, selectcolor=ACCENT)
         self.sound_btn.pack(side=tk.RIGHT, padx=8)
         
         # Game speed buttons
@@ -415,8 +434,8 @@ class CivKingsGUI:
         self.speed_var = tk.StringVar(value="1x")
         for label, val in [("1x", "1"), ("2x", "2"), ("5x", "5")]:
             tk.Radiobutton(self.speed_frame, text=label, variable=self.speed_var,
-                           value=val, bg=ACCENT, fg=TEXT,
-                           selectcolor=ACCENT, command=lambda s=val: self._set_speed(s)).pack(side=tk.LEFT, padx=2)
+                         value=val, bg=ACCENT, fg=TEXT,
+                         selectcolor=ACCENT, command=lambda s=val: self._set_speed(s)).pack(side=tk.LEFT, padx=2)
         
         # Track previous yields for trend arrows
         self._prev_yields: Optional[Dict[str, int]] = None
@@ -530,8 +549,8 @@ class CivKingsGUI:
         ]
         for name, cb in btns:
             tk.Button(f, text=name, bg=ACCENT, fg=TEXT, font=("Segoe UI", 10, "bold"),
-                      activebackground=HIGHLIGHT, activeforeground=TEXT,
-                      command=cb, width=12).pack(side=tk.LEFT, padx=4, pady=(0, 10))
+                  activebackground=HIGHLIGHT, activeforeground=TEXT,
+                  command=cb, width=12).pack(side=tk.LEFT, padx=4, pady=(0, 10))
 
     # ── map rendering ───────────────────────────────────────────
 
@@ -666,6 +685,60 @@ class CivKingsGUI:
         # Continue loop if there are active particles
         if hasattr(self.visual_effects, 'particles') and self.visual_effects.particles:
             self.root.after(16, self._animation_loop)
+
+    def _cancel_selection(self) -> None:
+        """Clear the current selection."""
+        self.selected_city = None
+        self.selected_unit = None
+        if hasattr(self, 'right_panel'):
+            self.right_panel.update(self.game.cities[0] if self.game.cities else City("Empty", (0, 0)))
+
+    def _clear_selection(self) -> None:
+        """Alias for _cancel_selection."""
+        self._cancel_selection()
+
+    def _zoom_in(self) -> None:
+        """Zoom in the map."""
+        if hasattr(self, 'map_canvas') and hasattr(self.map_canvas, 'zoom_pan'):
+            self.map_canvas.zoom_pan.zoom_in()
+            self.render_map()
+
+    def _zoom_out(self) -> None:
+        """Zoom out the map."""
+        if hasattr(self, 'map_canvas') and hasattr(self.map_canvas, 'zoom_pan'):
+            self.map_canvas.zoom_pan.zoom_out()
+            self.render_map()
+
+    def _reset_zoom(self) -> None:
+        """Reset map zoom."""
+        if hasattr(self, 'map_canvas') and hasattr(self.map_canvas, 'zoom_pan'):
+            self.map_canvas.zoom_pan.reset_zoom()
+            self.render_map()
+
+    def _show_context_menu(self, event: tk.Event) -> None:
+        """Show context menu on right-click."""
+        self.context_menu.post(event.x_root, event.y_root)
+
+    def _context_select_unit(self) -> None:
+        """Select the unit at the context menu target."""
+        pass  # Implementation depends on context target
+
+    def _context_select_city(self) -> None:
+        """Select the city at the context menu target."""
+        pass  # Implementation depends on context target
+
+    def _context_production(self) -> None:
+        """Open production menu for the selected city."""
+        if self.selected_city:
+            ProductionPopup(self.root, self.selected_city, self.game)
+
+    def _context_move(self) -> None:
+        """Move selected unit to context target."""
+        pass  # Implementation depends on context target
+
+    def _context_attack(self) -> None:
+        """Attack at context target."""
+        pass  # Implementation depends on context target
 
 
 # ── Application entry point ─────────────────────────────────────
