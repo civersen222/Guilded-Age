@@ -603,7 +603,7 @@ class CivKingsGUI:
         messagebox.showinfo("Your Units", "".join(lines))
 
     def show_cities(self) -> None:
-        lines = [f"=== {c.name} ===\n  Pop: {c.population}  Food: {c.gold}  Prod: {c.production}  Gold: {c.gold}\n\n"
+        lines = [f"=== {c.name} ===\n  Pop: {c.population}  Food: {c.food}  Prod: {c.production}  Gold: {c.gold}\n\n"
                  for c in self.game.cities]
         messagebox.showinfo("Your Cities", "".join(lines))
 
