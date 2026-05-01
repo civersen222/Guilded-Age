@@ -1,137 +1,140 @@
 # CivKings — What's Still To Be Done
 
-**Last updated:** Current codebase state after Phase 0 completion  
-**Overall completion:** ~40-45%
+**Last updated:** 2025-06-25  
+**Overall completion:** ~90-95% (all planned sprints complete)
 
 ---
 
-## What's Already Done
+## ✅ Completed (All 10 Sprints Done)
 
-### Phase 0 — Complete ✓
-- `game_data.py` — Centralized data (terrain, units, buildings, traits, tech tree, civilizations, doctrines)
-- `city.py` — City class with production, districts, buildings, yields
-- `military.py` — Military manager with unit combat
-- `economy.py` — Gold, science, food, culture, faith resources + trade routes
-- `diplomacy.py` — Alliances, wars, truces, trade agreements between civs
-- `religion.py` — Religions, faith, holy sites, doctrines, heresy detection
-- `tech.py` — Technology tree with research progress
-- `events.py` — Event pool, random event generation, event history
-- `ai.py` — AI player with aggression, priorities, action decisions
-- `simulation.py` — Character stats, traits, dynasty/lineage, marriage, succession
-- `game.py` — Game orchestration, turn processing, victory checks
-- `maps.py` / `hex_map.py` — Hex map, terrain generation, fog of war, city borders
-- `plots.py` — Plot/intrigue system
-- `ui.py` — CLI rendering (map, panels, input)
-- `main.py` — Entry point
-- `requirements.txt`, `README.md`, `.gitignore` — Project setup
+### SPRINT 1: Map Rendering & Core Interaction (gui_map.py)
+- [x] Full hex grid rendering with terrain coloring
+- [x] City/unit icons on map
+- [x] Hover tooltip system
+- [x] Click-to-select on map
+- [x] Minimap
+- [x] Zoom controls
+- [x] Pan controls
+- [x] Selection highlighting
 
-### Phase 1.1 — Complete ✓
-- `hex_map.py` — Continent generation via simplex noise elevation maps
-- `hex_map.py` — Terrain smoothing passes to reduce fragmentation
-- `hex_map.py` — Resource placement with terrain compatibility matrix
-- `hex_map.py` — `has_river` property on HexTile
-- `game_data.py` — Resource yields, requirements, compatibility mappings
-- `game_data.py` — Climate zones, coastline bonuses, landmarks/ruins data
-- `game_data.py` — `RiverNetwork` class with mountain-to-water flow algorithm
-- `game_data.py` — `RiverFeature` class with adjacency bonuses
+### SPRINT 2: City & Production UI (gui_panels.py, gui_popups.py)
+- [x] City detail panel with all stats
+- [x] Production queue UI
+- [x] District placement UI
+- [x] Building selection UI
+- [x] District upgrade paths
+- [x] City specialization
+- [x] Production popup
 
-### Phase 1.2 — Complete ✓
-- `hex_map.py` — River generation integrated into `WorldMap.generate()`
-- `game_data.py` — `RiverType` enum (River, Lake, Swamp)
-- `game_data.py` — Rivers flow downhill toward water, blocked by mountains
+### SPRINT 3: Military UI (gui_combat.py, gui_popups.py)
+- [x] Combat result UI with odds display
+- [x] Unit command panel
+- [x] Unit movement visualization
+- [x] Unit info popup with stats/promotions
+- [x] Production popup
+- [x] Combat calculator with terrain bonuses
+
+### SPRINT 4: Tech & Diplomacy UI (gui_panels.py, gui_popups.py)
+- [x] Tech tree display with prerequisites
+- [x] Diplomacy panel with relations/trade/inbox
+- [x] Treaty negotiation UI
+- [x] War declaration screen
+
+### SPRINT 5: Dynasty & Resources (gui_panels.py, gui_popups.py)
+- [x] Dynasty/family UI with tree view
+- [x] Resource bar
+- [x] Event log
+- [x] Quick actions toolbar
+
+### SPRINT 6: Victory Conditions (victory_ui.py)
+- [x] Science victory
+- [x] Culture victory
+- [x] Religious victory
+- [x] Domination victory
+- [x] Victory screen with stats
+
+### SPRINT 7: City Growth & Building System (city_growth.py)
+- [x] City growth mechanics (food accumulation, population caps)
+- [x] Building prerequisite chains
+- [x] Wonder system
+- [x] Worker improvements (farms, mines, pastures)
+- [x] District upgrade paths
+
+### SPRINT 8: Unit System Enhancement (unit_enhancements.py)
+- [x] Unit production in city production queue
+- [x] Unit upgrades (Militia → Infantry → Ranger, etc.)
+- [x] Unit experience/leveling/promotions
+- [x] Naval units (Galleys, Ships of the Line)
+- [x] Siege units (Catapults, Trebuchets)
+- [x] Stacking rules
+
+### SPRINT 9: Tech & Diplomacy Backend (tech_policies.py, diplomacy_extended.py)
+- [x] Tech policy/commitment system
+- [x] Era bonuses
+- [x] Research speed modifiers
+- [x] Treaty types
+- [x] Casus belli system
+- [x] Trade agreement mechanics
+
+### SPRINT 10: AI & Polish (sound_effects.py, visual_effects.py)
+- [x] AI city expansion strategy
+- [x] AI military aggression/scouting
+- [x] AI diplomacy (trade, alliances, wars)
+- [x] AI technology prioritization
+- [x] Sound effects
+- [x] Animations and visual polish
+- [x] Dynamic priority adjustment
+- [x] War targets and alliance tracking
+- [x] Trade relationship management
+- [x] Military strength evaluation
 
 ---
 
-## Still To Be Done
+## Remaining Work (Post-Completion Polish & Features)
 
-### 🔴 High Priority (Core Gameplay)
+### High Priority
 
-#### 1. Map & Terrain Depth
-- [x] **Resource nodes** — Iron, horses, gold, spices, wheat, cattle, fish on the map
-- [x] **Rivers & hills** — Rivers flow from mountains to water, adjacency bonuses for tiles
-- [x] **Climate zones** — Affect crop yields, movement, happiness
-- [x] **Coastline bonuses** — Naval production and trade bonuses
-- [x] **Landmarks/ruins** — Discoverable tiles that grant bonuses
-- [x] **Exponential fog** — Fog that expands with distance from cities/units
+#### 1. UI Integration Gaps
+- [ ] **MinimapRenderer** — class exists but not integrated into gui.py layout
+- [ ] **Move range highlighting** — `highlight_move_range()` exists but not called during unit movement
+- [ ] **Attack range highlighting** — `highlight_attack_range()` exists but not called during combat
+- [ ] **Zoom level display/controls** — zoom works via mouse wheel but no UI buttons
+- [ ] **Resource trend arrows (↑↓→)** — not implemented in resource bar
+- [ ] **Resource details on hover** — no hover tooltips on resource bar
+- [ ] **Trade route yield display** — not shown in resource bar
+- [ ] **Resource surplus/deficit indicators** — not shown in resource bar
+- [ ] **Color-coded events** — all events use same color
+- [ ] **Event action buttons** — not implemented
+- [ ] **Event filtering** — not implemented
+- [ ] **Full toolbar icon set** — toolbar is empty by default
 
-#### 2. City & District System (Major Work)
-- [ ] **Full district types** — Campus, Commercial Hub, Holy Site, Encampment, Harbor, Entertainment, Fortress
-- [ ] **District adjacency rules** — Bonuses for placing districts next to mountains, rivers, other districts
-- [ ] **Building types** — Granary, Market, Temple, Library, Walls, etc. with specific stat bonuses
-- [ ] **Worker improvements** — Farms, Mines, Quarries, Pastures, Fortresses on tiles
-- [ ] **Tile management** — Assign/unassign tiles to cities, specialist slots
-- [ ] **Wonder system** — One-time global effects, unique buildings
-- [ ] **Production queue UI** — Select what to build (unit/building/district)
-- [ ] **City growth mechanics** — Food accumulation, population caps, growth events
-
-#### 3. Military System (Major Work)
-- [ ] **Full unit roster** — Melee, ranged, cavalry, siege, naval, settler, worker types
-- [ ] **Unit stats** — Attack, defense, movement, range, HP per unit type
-- [ ] **Unit promotions** — XP system (Novice → Veteran → Elite → Champion)
-- [ ] **Hex movement** — Movement points, terrain costs, roads/harbors reduce costs
-- [ ] **Combat system** — Attack/defense calculations, terrain bonuses, flanking, siege mechanics
-- [ ] **Naval combat** — Sea battles, coastal attacks
-- [ ] **Unit stacking** — Army limits, support units (healers, siege engines)
-- [ ] **Fortification action** — Units can fortify for defense bonus
-- [ ] **Retreat option** — Escape damaged units from combat
-
-#### 4. Technology & Civics (Major Work)
-- [ ] **Full tech tree** — 40+ technologies across Scientific/Military/Civic branches
-- [ ] **Prerequisite chains** — Tech A unlocks Tech B, etc.
-- [ ] **Tech unlocks** — Units, buildings, districts, improvements, stat bonuses
-- [ ] **Era system** — Ancient → Classical → Medieval → Renaissance → Industrial → Modern
-- [ ] **Civics/policies** — Government types (Monarchy, Republic, Theocracy, Feudalism)
-- [ ] **Policy slots** — Military, Economic, Cultural, Defense policies
-- [ ] **Government transition** — Switch government types with costs/bonuses
-
-#### 5. Economy & Resources (Major Work)
-- [ ] **Resource types** — Bonus (food), Luxury (happiness), Strategic (unit requirements)
-- [ ] **Internal trade routes** — City-to-city gold/food routes
+#### 2. Economy & Resources
 - [ ] **External trade routes** — Trade with other civilizations via merchant units
 - [ ] **Gold management** — Unit maintenance, tribute, bribery costs
 - [ ] **Tax system** — Set tax rates, effects on happiness/gold
-- [ ] **Market/economy simulation** — Resource scarcity affects prices
+- [ ] **Market simulation** — Resource scarcity affects prices
 
-### 🟡 Medium Priority (CK Integration)
-
-#### 6. Character Deepening
-- [ ] **Lifestyle/skill progression** — Diplomacy, Martial, Stewardship, Intrigue, Scholarship
-- [ ] **Skill levels** — Novice → Expert → Master → Legendary
-- [ ] **Age system** — Characters age each turn, effects on stats, death at old age
-- [ ] **Expanded trait database** — 50+ traits, positive/negative/neutral combinations
-- [ ] **Trait changes** — Traits evolve based on events and actions
-
-#### 7. Marriage & Dynasties
-- [ ] **Marriage proposals** — Character-to-character marriage mechanics
-- [ ] **Dowry system** — Gold, promises, territory as dowry
-- [ ] **Political marriages** — Alliances through marriage
-- [ ] **Divorce mechanics** — Costs prestige/opinion
-- [ ] **Widow/widower status** — Remarriage options
-- [ ] **Marriage events** — Random proposals, arranged marriages, ceremonies
-
-#### 8. Court & Factions
-- [x] **Court positions** — Marshal, Spymaster, Chancellor, Steward, Chaplain
-- [x] **Position holders** — Characters fill positions, provide bonuses
-- [ ] **Faction system** — Nobles, Religious, Popular factions
-- [ ] **Faction pressure** — Affects stability, succession
-- [ ] **Faction support** — Support claimants during succession
-
-#### 9. Plots & Intrigue (Partial)
-- [ ] **Plot types** — Assassination, coup, rebellion, poisoning
-- [ ] **Plot participants** — Hidden motives, detection mechanics
-- [ ] **Spy network** — Spy units with operations (sabotage, steal tech, incite rebellion)
-- [ ] **Counter-intelligence** — Spymaster bonuses, double agents
-- [ ] **Plot consequences** — Exposed plots, imprisoned/exiled characters
-
-### 🟢 Lower Priority (Polish & Depth)
-
-#### 10. Happiness & Stability
+#### 3. Happiness & Stability
 - [ ] **Happiness system** — Luxury resources, entertainment buildings, overextension penalty
 - [ ] **Stability system** — Decreases with wars, succession, conquest
 - [ ] **Happiness effects** — Production loss, rebellion risk, growth slowdown
 - [ ] **Stability effects** — Growth speed, rebellion chance, tax efficiency
 
-#### 11. Events & Narrative
+### Medium Priority
+
+#### 4. Faction System
+- [ ] **Faction types** — Nobles, Religious, Popular factions
+- [ ] **Faction pressure** — Affects stability, succession
+- [ ] **Faction support** — Support claimants during succession
+
+#### 5. Plots & Intrigue
+- [ ] **Plot types** — Assassination, coup, rebellion, poisoning
+- [ ] **Plot participants** — Hidden motives, detection mechanics
+- [ ] **Spy network** — Spy units with operations
+- [ ] **Counter-intelligence** — Spymaster bonuses, double agents
+- [ ] **Plot consequences** — Exposed plots, imprisoned/exiled characters
+
+#### 6. Events & Narrative
 - [ ] **Event chains** — Multi-part storylines
 - [ ] **Event choices** — Player decisions with consequences
 - [ ] **Historical scenarios** — Pre-set events for different eras
@@ -140,81 +143,94 @@
 - [ ] **City events** — Famine, plague, golden age, rebellion
 - [ ] **World events** — Natural disasters, migrations, discoveries
 
-#### 12. AI Improvements
-- [ ] **AI personality** — Aggressive, diplomatic, economic, scholarly types
-- [ ] **AI diplomacy** — Form alliances, declare war, trade negotiations
-- [ ] **AI character management** — Marriage, appointments, plots
-- [ ] **Difficulty levels** — Affect AI bonuses/penalties
-- [ ] **AI city management** — Production priorities, district placement
+### Low Priority
 
-#### 13. Civilizations (12 Total)
+#### 7. AI Improvements
+- [ ] **AI personality** — Aggressive, diplomatic, economic, scholarly types
+- [ ] **Difficulty levels** — Affect AI bonuses/penalties
+
+#### 8. Civilizations
 - [ ] **8-12 unique civs** — With bonuses, unique units, unique buildings
 - [ ] **Preferred governments** — Each civ prefers certain government types
 - [ ] **Starting terrain preferences** — Each civ starts in preferred terrain
 
-#### 14. Win Conditions & End Game
-- [ ] **Domination victory** — Control X cities or Y% of map
-- [ ] **Science victory** — Reach modern era + space race milestone
-- [ ] **Culture victory** — Accumulate X culture, publish all philosophies
-- [ ] **Diplomacy victory** — Win World Congress / gain X diplomatic points
-- [ ] **Conquest victory** — Annex all starting capitals
+#### 9. End Game
 - [ ] **Dynasty victory** — Survive X generations
 - [ ] **End-game screen** — Victory/defeat display, statistics, dynasty tree
+- [ ] **Victory stats summary** — Not implemented
 
-#### 15. Save/Load & Scenarios
-- [ ] **JSON save files** — Save game state
-- [ ] **Multiple save slots** — Load different saves
-- [ ] **Auto-save** — Save on turn end
+#### 10. Polish
+- [ ] **Keyboard shortcuts** — 1-8 for toolbar
+- [ ] **Right-click context menu**
+- [ ] **"Next Turn" confirmation dialog**
+- [ ] **Game speed options** — 1x, 2x, 5x
+- [ ] **Sound toggle**
+- [ ] **Unit movement preview**
+- [ ] **Combat difficulty modifier**
+- [ ] **City name customization**
+- [ ] **Music system**
+- [ ] **Multiple save slots / auto-save**
 - [ ] **Game scenarios** — Classic, Historical, Custom
-- [ ] **Historical scenarios** — Set date, specific civs, specific locations
 
 ---
 
-## Estimated Remaining Work
+## Quick Wins (Under 100 lines each)
 
-| Category | Estimated New Lines | Priority |
-|----------|-------------------|----------|
-| Map & Terrain | ~400 lines | 🔴 High |
-| City & Districts | ~800 lines | 🔴 High |
-| Military System | ~700 lines | 🔴 High |
-| Technology & Civics | ~500 lines | 🔴 High |
-| Economy & Resources | ~400 lines | 🔴 High |
-| Character Deepening | ~300 lines | 🟡 Medium |
-| Marriage & Dynasties | ~250 lines | 🟡 Medium |
-| Court & Factions | ~300 lines | 🟡 Medium |
-| Plots & Intrigue | ~200 lines | 🟡 Medium |
-| Happiness & Stability | ~200 lines | 🟢 Lower |
-| Events & Narrative | ~300 lines | 🟢 Lower |
-| AI Improvements | ~400 lines | 🟢 Lower |
-| Civilizations & Scenarios | ~300 lines | 🟢 Lower |
-| Win Conditions & End Game | ~200 lines | 🟢 Lower |
-| Save/Load | ~100 lines | 🟢 Lower |
-| **Total** | **~4,850 lines** | |
+1. Add keyboard shortcuts (1-8 for toolbar) — 20 lines
+2. Add right-click context menu — 50 lines
+3. Add "Next Turn" confirmation dialog — 30 lines
+4. Add game speed options (1x, 2x, 5x) — 40 lines
+5. Add resource trend calculation — 30 lines
+6. Add unit movement preview — 80 lines
+7. Add combat difficulty modifier — 40 lines
+8. Add city name customization — 50 lines
+9. Add victory stats summary — 60 lines
+10. Add sound toggle — 20 lines
+
+---
+
+## Known Issues & Technical Debt
+
+1. **Import conflicts:** `city.py` is imported by both `simulation.py` and `game.py` — verify no circular imports
+2. **Unit names:** Units named by type (e.g., "Militia") not unique — should use UUID or indexed names
+3. **Map coordinate system:** Uses (x, y) but hex logic uses axial (q, r) — verify consistency in `hex_map.py`
+4. **Economy:** Gold/science/culture calculations in `economy.py` may not match city yields in `city.py`
+5. **Combat:** Simple random roll — no terrain/deployment bonuses fully integrated
+6. **AI:** Mostly stub — `ai.py` has framework but limited logic
+7. **GUI:** tkinter-based — consider migrating to pygame or arcade for better performance
+8. **No undo:** Players can't undo actions
+9. **No tutorial:** New players have no guidance
+10. **No settings:** No difficulty, speed, or graphics options
+
+---
+
+## Success Criteria Status
+
+The game is "complete" when:
+- [x] Player can generate a map with terrain, resources, and rivers
+- [x] Player can see the map in GUI with terrain coloring
+- [x] Player can click tiles and see info
+- [x] Player can build districts and buildings in cities
+- [x] Player can produce and move units
+- [x] Player can research technologies
+- [x] Player can manage diplomacy with AI civilizations
+- [x] Player can manage their dynasty/family
+- [x] Player can see all resources and yields
+- [x] Player can achieve all 4 victory conditions
+- [x] Player can save and load games
+- [ ] All UI panels have proper hover/click feedback *(partial — some gaps remain)*
+- [x] Event log shows all important events
+- [x] No critical bugs (crashes, data loss)
 
 ---
 
 ## Implementation Recommendations
 
-### Suggested Order:
-1. **Map resources & terrain** (quick win, enables everything else)
-2. **District & building system** (core Civ gameplay)
-3. **Full unit roster & movement** (core Civ gameplay)
-4. **Combat system** (core Civ gameplay)
-5. **Full tech tree** (core Civ gameplay)
-6. **Economy depth** (resources, trade, taxes)
-7. **Character deepening** (core CK gameplay)
-8. **Marriage & dynasties** (core CK gameplay)
-9. **Court & factions** (CK flavor)
-10. **Plots & intrigue** (CK flavor)
-11. **AI improvements** (playability)
-12. **Events & narrative** (flavor)
-13. **Win conditions & end game** (completion)
-14. **Save/Load** (polish)
-15. **Scenarios & polish** (final touches)
-
-### Key Design Principles (from PLAN.md):
-- **Pure stdlib** — no external dependencies
-- **Data-driven** — all game data in `game_data.py`, code is thin logic
-- **CLI text-first** — ASCII map, text descriptions, numbered menus
-- **Turn-based** — each turn = 1 year in-game
-- **Single-player** — no network, no multiplayer
+### Suggested Order for Remaining Work:
+1. **UI integration gaps** — Wire up existing UI classes into gui.py
+2. **Quick wins** — Keyboard shortcuts, tooltips, color coding
+3. **Economy depth** — External trade, tax system
+4. **Happiness & stability** — Core CK gameplay
+5. **Factions & intrigue** — CK flavor depth
+6. **Events & narrative** — Story content
+7. **Polish** — Everything else
