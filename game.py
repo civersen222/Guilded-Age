@@ -25,6 +25,13 @@ from tech import TechManager
 from events import EventManager
 from plots import PlotManager
 from victory import VictoryConditionTracker, VictoryType
+from tax_system import TaxSystem
+from happiness_system import HappinessSystem
+from stability_system import StabilitySystem
+from market_simulation import MarketSimulation
+from gold_management import GoldManagement
+from external_trade_routes import ExternalTradeRoutes
+from faction_system import FactionManager, FactionEventGenerator
 
 
 @dataclass
@@ -81,6 +88,15 @@ class Game:
         self.military_manager = MilitaryManager([])
         self.court: Optional[Court] = None
         self.victory_tracker = VictoryConditionTracker()
+        
+        # Economy sub-systems
+        self.tax_system = TaxSystem()
+        self.happiness_system = HappinessSystem()
+        self.stability_system = StabilitySystem()
+        self.market = MarketSimulation()
+        self.gold_management = GoldManagement()
+        self.external_trade = ExternalTradeRoutes()
+        self.faction_manager = FactionManager(self.player_civ.name)
         
         # Initialize game
         self._initialize_game()
@@ -139,6 +155,9 @@ class Game:
         # Initialize court
         self.court = Court(root_char)
         
+        # Initialize factions
+        self.faction_manager.initialize_factions()
+        
         # Initialize per-player data
         self.players[self.player_civ.name] = self.player_civ
         self.gold[self.player_civ.name] = 100
@@ -176,6 +195,50 @@ class Game:
             msgs.append(f"\nEvent: {event_name}")
             msgs.append(f"  {event_desc}")
             self.state.turn_events.append(f"{event_name}: {event_desc}")
+        
+        # Process economy systems
+        civ_name = self.player_civ.name
+        
+        # 1. Tax Income
+        tax_income = self.tax_system.process_tax_income(self.cities)
+        self.gold[civ_name] += tax_income
+        msgs.append(f"\n  Tax Income: +{tax_income} gold")
+        
+        # 2. Happiness & Stability
+        self.happiness_system.update_city_count(len(self.cities))
+        self.stability_system.calculate_unrest()
+        self.stability_system.calculate_revolt_risk()
+        msgs.append(f"  Happiness: {self.happiness_system.current_happiness}%")
+        msgs.append(f"  Stability: {self.stability_system.stability}%")
+        
+        # 3. Gold Expenses
+        expense_summary = self.gold_management.process_monthly_expenses(self.gold[civ_name])
+        msgs.append(f"  Gold Surplus: {'+' if expense_summary['surplus_deficit'] >= 0 else ''}{expense_summary['surplus_deficit']}")
+        
+        # 4. Market Simulation
+        self.market.update_all_prices()
+        msgs.append(f"  Market: Prices updated")
+        
+        # 5. External Trade
+        if self.external_trade.routes:
+            trade_yields = self.external_trade.process_all_routes()
+            for target_civ, yields in trade_yields.items():
+                for cargo, amount in yields.items():
+                    msgs.append(f"  Trade with {target_civ}: +{amount:.1f} {cargo}")
+        
+        # 6. Faction Effects
+        faction_effects = self.faction_manager.get_faction_effects()
+        if faction_effects['stability'] != 0:
+            msgs.append(f"  Faction Stability Effect: {faction_effects['stability']:+.1f}")
+        if self.faction_manager.conflict_level > 50:
+            msgs.append(f"  ⚠️ High faction conflict level: {self.faction_manager.conflict_level:.0f}%")
+        
+        # Random faction events
+        if random.random() < 0.15:  # 15% chance of faction event
+            faction_event = FactionEventGenerator.generate_faction_event(self.faction_manager)
+            if faction_event:
+                msgs.append(f"  {faction_event}")
+                self.state.turn_events.append(faction_event)
         
         # Check victory conditions
         victory_msg = self._check_victory()
