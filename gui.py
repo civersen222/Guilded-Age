@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import List, Dict, Optional, Tuple
 import math
+import time
 
 from game import Game, GameState
 from game_data import CIVILIZATIONS, Civilization, TECHNOLOGIES, Technology, Era, TechBranch, UNIT_TYPES, UnitType, BUILDINGS, DISTRICTS, BuildingType, DistrictType, TerrainType, MAP_WEIGHTS, RESOURCE_WEIGHTS, ResourceType
@@ -24,6 +25,8 @@ from simulation import Character, Dynasty
 from ai import AIPlayer
 from gui_map import HexGridRenderer, HoverTooltip, MapCanvas, TileHighlight
 from gui_popups import ProductionPopup, UnitInfoPopup, DiplomacyPopup, DynastyPopup, VictoryPanel, TechTreePopup
+from sound_effects import get_sound_manager
+from visual_effects import VisualEffects
 
 
 
@@ -299,6 +302,33 @@ class CivKingsGUI:
         self.hex_items: Dict[Tuple[int, int], tk.CanvasItem] = {}  # (q,r) -> canvas item
         self.HEX_SIZE = 28  # hex radius / cell size
         self._build_ui()
+        
+        # Initialize sound and visual effects
+        self.sound_manager = get_sound_manager()
+        self.sound_on = tk.BooleanVar(value=True)
+        self.visual_effects = VisualEffects(self.map_canvas.canvas) if hasattr(self.map_canvas, 'canvas') else None
+        self._last_effect_time = 0.0
+        
+        # Keyboard shortcuts
+        self.root.bind('<Key>', self._on_key_press)
+        self._bind_map_shortcuts()
+    
+    def _bind_map_shortcuts(self) -> None:
+        """Bind keyboard shortcuts for map interaction."""
+        self.root.bind('<Control-s>', lambda e: self.save_game())
+        self.root.bind('<Control-t>', lambda e: self.show_tech_tree())
+        self.root.bind('<Control-d>', lambda e: self.show_diplomacy())
+        self.root.bind('<Control-u>', lambda e: self.show_units())
+        self.root.bind('<Control-c>', lambda e: self.show_cities())
+        self.root.bind('<n>', lambda e: self.next_turn())
+        self.root.bind('<Escape>', lambda e: self._clear_selection())
+    
+    def _schedule_effect(self, effect_name: str) -> None:
+        """Schedule a visual/sound effect to be played."""
+        self._last_effect_time = time.time()
+        if self.visual_effects:
+            self.visual_effects.trigger_effect(effect_name)
+        self.sound_manager.play(effect_name)
 
     # ── UI construction ────────────────────────────────────────────
     def _build_ui(self) -> None:
@@ -310,6 +340,40 @@ class CivKingsGUI:
         self._main_area()
         self._bottom_bar()
         self._center_buttons()
+        
+        # Keyboard shortcuts
+        self.root.bind("<Next>", lambda e: self.next_turn())  # Page Down
+        self.root.bind("<Prior>", lambda e: self.show_tech_tree())  # Page Up
+        self.root.bind("<Control-n>", lambda e: self.next_turn())  # Ctrl+N
+        self.root.bind("<Control-s>", lambda e: self.save_game())  # Ctrl+S
+        self.root.bind("<Control+t>", lambda e: self.show_tech_tree())  # Ctrl+T
+        self.root.bind("<Control+d>", lambda e: self.show_diplomacy())  # Ctrl+D
+        self.root.bind("<Control+y>", lambda e: self.show_dynasty())  # Ctrl+Y
+        self.root.bind("<Control+u>", lambda e: self.show_units())  # Ctrl+U
+        self.root.bind("<Control+c>", lambda e: self.show_cities())  # Ctrl+C
+        self.root.bind("<Control+e>", lambda e: self.show_events())  # Ctrl+E
+        self.root.bind("<space>", lambda e: self.next_turn())  # Space
+        self.root.bind("<Escape>", lambda e: self._cancel_selection())  # Esc
+        self.root.bind("<Delete>", lambda e: self._cancel_selection())  # Delete
+        
+        # Speed control
+        self.speed_multiplier = 1
+        self.speed_var = tk.StringVar(value="1x")
+        
+        # Context menu
+        self.context_menu = tk.Menu(self.root, tearoff=0, bg=PANEL_BG, fg=TEXT, font=("Segoe UI", 9))
+        self.context_menu.add_command(label="Select Unit", command=self._context_select_unit)
+        self.context_menu.add_command(label="Select City", command=self._context_select_city)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Production", command=self._context_production)
+        self.context_menu.add_command(label="Move Here", command=self._context_move)
+        self.context_menu.add_command(label="Attack", command=self._context_attack)
+        
+        # Bind right-click
+        self.root.bind("<Button-3>", self._show_context_menu)
+        
+        # Track context menu target
+        self.context_target_tile = None
 
         # select capital city
         for city in self.game.cities:
@@ -337,6 +401,87 @@ class CivKingsGUI:
             f.pack(side=tk.LEFT, padx=12, pady=6)
             tk.Label(f, text=f"{label}: {value}", bg=ACCENT, fg=TEXT,
                      font=("Segoe UI", 10, "bold")).pack()
+        
+        # Sound toggle button
+        self.sound_on = tk.BooleanVar(value=True)
+        self.sound_btn = tk.Checkbutton(bar, text="🔊", variable=self.sound_on,
+                                       command=self._toggle_sound, bg=ACCENT,
+                                       fg=TEXT, selectcolor=ACCENT)
+        self.sound_btn.pack(side=tk.RIGHT, padx=8)
+        
+        # Game speed buttons
+        self.speed_frame = tk.Frame(bar, bg=ACCENT)
+        self.speed_frame.pack(side=tk.RIGHT, padx=8)
+        self.speed_var = tk.StringVar(value="1x")
+        for label, val in [("1x", "1"), ("2x", "2"), ("5x", "5")]:
+            tk.Radiobutton(self.speed_frame, text=label, variable=self.speed_var,
+                           value=val, bg=ACCENT, fg=TEXT,
+                           selectcolor=ACCENT, command=lambda s=val: self._set_speed(s)).pack(side=tk.LEFT, padx=2)
+        
+        # Track previous yields for trend arrows
+        self._prev_yields: Optional[Dict[str, int]] = None
+    
+    def _update_top_bar(self) -> None:
+        """Update the top bar with current values and trend arrows."""
+        yields = self.game.city_manager.get_total_yields(self.game.player_civ.name)
+        gold = self.game.gold.get(self.game.player_civ.name, 0)
+        turn = self.game.state.turn
+        
+        items = [
+            ("🌾 Food", yields.get("food", 0), "food"),
+            ("⚙ Production", yields.get("production", 0), "production"),
+            ("💰 Gold", gold, "gold"),
+            ("🔬 Science", yields.get("science", 0), "science"),
+            ("😊 Happiness", yields.get("happiness", 0), "happiness"),
+            ("📅 Turn", turn, "turn"),
+        ]
+        
+        # Clear and rebuild resource labels
+        for widget in self.top_bar_frame.winfo_children():
+            if isinstance(widget, tk.Frame) and widget not in (self.sound_btn.master, self.speed_frame):
+                widget.destroy()
+        
+        for label, value, key in items:
+            f = tk.Frame(self.top_bar_frame, bg=ACCENT)
+            f.pack(side=tk.LEFT, padx=12, pady=6)
+            
+            # Determine color based on surplus/deficit
+            fg_color = TEXT
+            if key in ("food", "production", "gold", "science", "happiness"):
+                if value > 0:
+                    fg_color = "#4caf50"  # green for surplus
+                elif value < 0:
+                    fg_color = "#f44336"  # red for deficit
+            
+            # Calculate trend arrow
+            arrow = ""
+            if self._prev_yields and key in self._prev_yields and key != "turn":
+                prev = self._prev_yields[key]
+                diff = value - prev
+                if diff > 0:
+                    arrow = "↑"
+                elif diff < 0:
+                    arrow = "↓"
+                else:
+                    arrow = "→"
+            
+            self._prev_yields = {k: v for k, v in yields.items() if k != "happiness"}
+            self._prev_yields["gold"] = gold
+            
+            display_text = f"{label}: {value}{arrow}"
+            tk.Label(f, text=display_text, bg=ACCENT, fg=fg_color,
+                     font=("Segoe UI", 10, "bold")).pack()
+    
+    def _toggle_sound(self) -> None:
+        """Toggle sound on/off."""
+        self.sound_on.set(not self.sound_on.get())
+        self.sound_manager.muted = not self.sound_on.get()
+        self.sound_btn.config(text="🔊" if self.sound_on.get() else "🔇")
+    
+    def _set_speed(self, speed: str) -> None:
+        """Set game speed multiplier."""
+        self.speed_multiplier = int(speed)
+        self.speed_var.set(f"{self.speed_multiplier}x")
 
     def _main_area(self) -> None:
         frame = tk.Frame(self.root, bg=BG)
@@ -427,14 +572,27 @@ class CivKingsGUI:
 
     # ── actions ──────────────────────────────────────────
     def next_turn(self) -> None:
+        if self.game.state == GameState.PLAYING:
+            if not messagebox.askyesno("Next Turn", "Advance to next turn?"):
+                return
         msgs = self.game.process_turn()
         self.render_map()
+        self._update_top_bar()
         if self.selected_city:
             self.right_panel.update(self.selected_city)
         for msg in msgs:
             self.log_panel.add(msg)
+            # Trigger effects for important events
+            if "combat" in msg.lower() or "battle" in msg.lower():
+                self._schedule_effect("combat")
+            elif "tech" in msg.lower() or "research" in msg.lower():
+                self._schedule_effect("tech_researched")
+            elif "produced" in msg.lower() or "built" in msg.lower():
+                self._schedule_effect("build_complete")
         # Check for victory after every turn
         self._check_victory()
+        # Schedule next animation update
+        self.root.after(16, self._animation_loop)  # ~60 FPS
 
     def show_tech_tree(self) -> None:
         TechTreePopup(self.root, self.game.tech_manager)
@@ -477,6 +635,7 @@ class CivKingsGUI:
     def _check_victory(self) -> None:
         """Check and display victory/defeat screen."""
         if self.game.state.game_over and self.game.state.victory:
+            self._schedule_effect("victory")
             self.root.destroy()
             winner = self.game.state.victory
             msg = f"🏆 VICTORY! 🏆\n\n{winner}\n\nTurn: {self.game.state.turn}"
@@ -498,6 +657,15 @@ class CivKingsGUI:
             "=" * 50,
         ]
         messagebox.showinfo("Game Over", "\n".join(lines))
+    
+    def _animation_loop(self) -> None:
+        """Update and render visual effects."""
+        if self.visual_effects:
+            self.visual_effects.update()
+            self.visual_effects.render()
+        # Continue loop if there are active particles
+        if hasattr(self.visual_effects, 'particles') and self.visual_effects.particles:
+            self.root.after(16, self._animation_loop)
 
 
 # ── Application entry point ─────────────────────────────────────
