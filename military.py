@@ -5,6 +5,7 @@ Handles units, combat, movement, and military organization
 import random
 from typing import List, Dict, Optional, Tuple
 from game_data import UNIT_TYPES, UnitType, TERRAIN_DEFENSE_BONUS, TerrainType
+from combat import CombatResult
 
 
 class Unit:
@@ -34,7 +35,6 @@ class Unit:
         self.is_alive = True
         self.last_combat_result = None
         self.kills = 0
-        self.moves_left = moves_left if moves_left is not None else self.base_move
         
         # Base stats from unit type
         base = self.get_base_stats()
@@ -42,6 +42,8 @@ class Unit:
         self.defense = base["defense"]
         self.base_move = base["movement"]
         self.max_moves = self.base_move
+        
+        self.moves_left = moves_left if moves_left is not None else self.base_move
         
         # Check and apply promotions
         self.check_promotions()
@@ -167,10 +169,10 @@ class MilitaryManager:
         unit.moves_left -= distance
         return True
     
-    def combat(self, attacker: Unit, defender: Unit) -> Optional[str]:
-        """Execute combat. Returns result string or None if invalid."""
+    def combat(self, attacker: Unit, defender: Unit) -> Optional[CombatResult]:
+        """Execute combat. Returns CombatResult or None if invalid."""
         if not attacker.is_alive or not defender.is_alive:
-            return "One or both units are dead"
+            return None
         
         # Base combat power
         atk_power = attacker.attack
@@ -196,30 +198,31 @@ class MilitaryManager:
         atk_power += attacker.xp // 50
         def_power += defender.xp // 50
         
-        # Resolve
+        # Resolve combat using deal_damage for proper death handling
+        result = CombatResult()
+        att_was_alive = attacker.is_alive
+        def_was_alive = defender.is_alive
+        
         if atk_power > def_power:
             damage = max(10, atk_power - def_power)
-            defender.hp -= damage
-            attacker.xp += 10
-            
-            new_promos = attacker.check_promotions()
-            
-            if defender.hp <= 0:
-                defender.deal_damage(0)
-                result = f"Attacker wins! {defender.unit_type} destroyed. (+{damage} dmg)"
+            attacker.deal_damage(0)  # attacker takes no damage on win
+            defender.deal_damage(damage)
+            if def_was_alive and not defender.is_alive:
                 attacker.kills += 1
-            else:
-                result = f"Attacker wins! Dealt {damage} damage."
-        else:
+            result.description = f"Attacker wins! {defender.unit_type} destroyed. (+{damage} dmg)"
+        elif def_power > atk_power:
             damage = max(5, def_power - atk_power)
-            attacker.hp -= damage
-            
-            if attacker.hp <= 0:
-                attacker.deal_damage(0)
-                result = f"Defender wins! {attacker.unit_type} destroyed. (+{damage} dmg)"
+            attacker.deal_damage(damage)
+            defender.deal_damage(0)  # defender takes no damage on win
+            if att_was_alive and not attacker.is_alive:
                 defender.kills += 1
-            else:
-                result = f"Defender wins! Dealt {damage} damage."
+            result.description = f"Defender wins! {attacker.unit_type} destroyed. (+{damage} dmg)"
+        else:
+            # Draw - both take small damage
+            dmg = random.randint(5, 15)
+            attacker.deal_damage(dmg)
+            defender.deal_damage(dmg)
+            result.description = f"Combat ended in a draw! Both took {dmg} damage."
         
         attacker.last_combat_result = result
         defender.last_combat_result = result

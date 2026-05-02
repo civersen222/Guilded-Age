@@ -4,17 +4,22 @@ Handles army-vs-army combat with terrain modifiers, ruler martial bonuses,
 and casualty tracking.
 """
 import random
-from typing import List, Dict, Optional, Tuple
-from military import Unit
+from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
 from hex_map import HexTile
 from simulation import Character
 from game_data import TerrainType, TERRAIN_DEFENSE_BONUS
+
+if TYPE_CHECKING:
+    from military import Unit
+
+# Re-export CombatResult so callers can import from here
+__all__ = ["Casualty", "CombatResult", "resolve_combat"]
 
 
 class Casualty:
     """Records a unit lost in combat."""
 
-    def __init__(self, unit: Unit, side: str):
+    def __init__(self, unit: "Unit", side: str):
         self.unit = unit
         self.side = side  # "attacker" or "defender"
         self.damage_dealt = 0
@@ -110,36 +115,36 @@ def resolve_combat(
         raw_dmg_to_att = def_power - atk_power
         dmg_to_att = max(0, raw_dmg_to_att)
 
-        att.hp -= dmg_to_att
-        def_.hp -= dmg_to_def
+        # Use deal_damage() for proper death handling
+        if dmg_to_def > 0:
+            att.deal_damage(dmg_to_def)
+        if dmg_to_att > 0:
+            def_.deal_damage(dmg_to_att)
 
-        att_cas = Casualty(att, "attacker")
-        att_cas.damage_dealt = dmg_to_def
-        att_cas.damage_taken = dmg_to_att
-        def_cas = Casualty(def_, "defender")
-        def_cas.damage_dealt = dmg_to_att
-        def_cas.damage_taken = dmg_to_def
+        # Clamp HP
+        if att.hp < 0:
+            att.hp = 0
+        if def_.hp < 0:
+            def_.hp = 0
+
+        # Record casualties
+        att.casualty = Casualty(att, "attacker")
+        att.casualty.damage_dealt = dmg_to_def
+        att.casualty.damage_taken = dmg_to_att
+        def_.casualty = Casualty(def_, "defender")
+        def_.casualty.damage_dealt = dmg_to_att
+        def_.casualty.damage_taken = dmg_to_def
 
         if att.hp <= 0:
-            att.casualty = att_cas
             att.is_alive = False
-            att.hp = 0
-            result.attacker_casualties.append(att_cas)
+            result.attacker_casualties.append(att.casualty)
             att_units.remove(att)
-        else:
-            att.casualty = att_cas
 
         if def_.hp <= 0:
-            def_.casualty = def_cas
             def_.is_alive = False
-            def_.hp = 0
-            result.defender_casualties.append(def_cas)
+            result.defender_casualties.append(def_.casualty)
             def_units.remove(def_)
-        else:
-            def_.casualty = def_cas
 
-        att_stats = att.get_stats()
-        def_stats = def_.get_stats()
         dmg_log.append(
             f"  {att.unit_type} vs {def_.unit_type}: "
             f"Attacker dealt {dmg_to_def:.0f} dmg, Defender dealt {dmg_to_att:.0f} dmg"

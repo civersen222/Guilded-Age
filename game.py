@@ -243,6 +243,44 @@ class Game:
         if self.faction_manager.conflict_level > 50:
             msgs.append(f"  ⚠️ High faction conflict level: {self.faction_manager.conflict_level:.0f}%")
         
+        # 7. City Production
+        for city in self.cities.values():
+            if city.owner == civ_name:
+                # Calculate yields
+                yields = city.calculate_yields()
+                
+                # Process production for each city
+                if city.production_queue:
+                    item = city.production_queue[0]
+                    cost = city.get_production_cost(item)
+                    if cost is not None:
+                        completed_item = city.process_production(
+                            yields.get('food', 0),
+                            yields.get('gold', 0),
+                            yields.get('science', 0),
+                            yields.get('production', 0)
+                        )
+                        if completed_item:
+                            # Complete the production
+                            if completed_item in UNIT_TYPES:
+                                # Create new unit
+                                new_unit = Unit(
+                                    unit_type=completed_item,
+                                    owner=civ_name,
+                                    position=city.position,
+                                    moves_left=UNIT_TYPES[completed_item].movement
+                                )
+                                new_unit.name = f"{civ_name} {completed_item} {len([u for u in self.units.values() if u.owner == civ_name and u.unit_type == completed_item])}"
+                                self.units[new_unit.name] = new_unit
+                                self.map.add_unit(new_unit)
+                                msgs.append(f"  🏭 City '{city.name}' completed: {completed_item}")
+                            elif completed_item in BUILDINGS:
+                                # Add building to city
+                                city.add_building(BUILDINGS[completed_item])
+                                msgs.append(f"  🏗️ City '{city.name}' completed: {completed_item} built")
+                        
+                        msgs.append(f"  🏭 '{city.name}' producing: {item} ({city.production}/{cost})")
+        
         # Random faction events
         if random.random() < 0.15:  # 15% chance of faction event
             faction_event = FactionEventGenerator.generate_faction_event(self.faction_manager)

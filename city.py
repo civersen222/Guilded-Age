@@ -8,6 +8,7 @@ from game_data import (
     BUILDINGS, DISTRICTS, BuildingType, DistrictType,
     ClimateZone, CLIMATE_MODIFIERS, COASTLINE_BONUSES,
     TerrainType, LandmarkType, LANDMARKS,
+    UNIT_TYPES, UnitType,
 )
 
 # Map adjacency_bonus keys to TerrainType enum values
@@ -41,7 +42,7 @@ class City:
         self.population = population
         self.gold = gold
         self.production = 0
-        self.max_production = 100
+        self.production_capacity = 100
         self.production_queue: List[str] = []
         self.current_production: Optional[str] = None
         self.districts: Dict[str, DistrictType] = {}
@@ -300,6 +301,55 @@ class City:
 
         return yields
 
+    def calculate_production_capacity(self) -> int:
+        """Calculate total production capacity based on districts and buildings."""
+        base = 100
+        # Encampment district gives +10% production capacity
+        if "Encampment" in self.districts:
+            base += 20
+        # Fortress district gives +20% production capacity
+        if "Fortress" in self.districts:
+            base += 40
+        # Buildings that boost production capacity
+        for building in self.buildings.values():
+            if building.name == "Stable":
+                base += 10
+        return base
+
+    def get_production_cost(self, item: str) -> Optional[int]:
+        """Look up production cost from game data."""
+        if item in UNIT_TYPES:
+            return UNIT_TYPES[item].production_cost
+        if item in BUILDINGS:
+            return BUILDINGS[item].production_cost
+        return None
+
+    def is_production_complete(self) -> bool:
+        """Check if current production is complete."""
+        if not self.current_production:
+            return False
+        cost = self.get_production_cost(self.current_production)
+        if cost is None:
+            return False
+        return self.production >= cost
+
+    def get_production_details(self) -> Dict[str, Any]:
+        """Get current production details for UI display."""
+        if not self.current_production:
+            return {}
+        cost = self.get_production_cost(self.current_production)
+        if cost is None:
+            return {}
+        progress = min(self.production / cost, 1.0) if cost > 0 else 1.0
+        return {
+            "item": self.current_production,
+            "cost": cost,
+            "current": self.production,
+            "progress": progress,
+            "is_complete": progress >= 1.0,
+            "capacity": self.production_capacity,
+        }
+
     def assign_production(self, item: str):
         """Assign an item to production queue"""
         if item not in self.production_queue:
@@ -309,6 +359,7 @@ class City:
         """Process one turn of city production"""
         self.gold += turn_gold
         self.science += turn_science
+        self.production_capacity = self.calculate_production_capacity()
         self.production += turn_production
 
         if self.production_queue:
@@ -316,7 +367,11 @@ class City:
             if self.current_production is None:
                 self.current_production = item
 
-            if self.production >= 100:
+            cost = self.get_production_cost(item)
+            if cost is None:
+                cost = 100  # fallback
+
+            if self.production >= cost:
                 if item in self.production_queue:
                     self.production_queue.remove(item)
                 self.current_production = None
