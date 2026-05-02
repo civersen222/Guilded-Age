@@ -54,7 +54,7 @@ class CityDetailPanel(tk.Frame):
             f"Position:    {city.position}\n"
             f"Population:  {city.population}\n"
             f"Gold:        {city.gold}\n"
-            f"Production:  {city.production}/{city.max_production}\n"
+            f"Production:  {city.production}/{city.production_capacity}\n"
             f"Science:     {city.science}\n"
             f"Happiness:   {city.happiness}\n"
             f"Yields:      {city.calculate_yields()}\n"
@@ -110,7 +110,7 @@ class ProductionQueuePanel(tk.Frame):
             f.pack(fill=tk.X, pady=1)
             tk.Label(f, text=f"▶ {current}", bg=PANEL_BG2, fg=HIGHLIGHT,
                      font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=4, pady=2)
-            tk.Label(f, text=f"({self.city.production}/{self.city.max_production})", bg=PANEL_BG2, fg=SUBTLE,
+            tk.Label(f, text=f"({self.city.production}/{self.city.production_capacity})", bg=PANEL_BG2, fg=SUBTLE,
                      font=("Segoe UI", 8)).pack(side=tk.RIGHT, padx=4, pady=2)
 
         # Queue items
@@ -119,7 +119,7 @@ class ProductionQueuePanel(tk.Frame):
             f.pack(fill=tk.X, pady=1)
             tk.Label(f, text=f"{i+1}. {item}", bg=PANEL_BG, fg=TEXT,
                      font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=4, pady=2)
-            tk.Label(f, text=f"[{self.city.max_production} prod]", bg=PANEL_BG, fg=SUBTLE,
+            tk.Label(f, text=f"[{self.city.production_capacity} prod]", bg=PANEL_BG, fg=SUBTLE,
                      font=("Segoe UI", 8)).pack(side=tk.RIGHT, padx=4, pady=2)
 
     def refresh(self):

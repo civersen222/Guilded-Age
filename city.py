@@ -350,10 +350,26 @@ class City:
             "capacity": self.production_capacity,
         }
 
-    def assign_production(self, item: str):
-        """Assign an item to production queue"""
-        if item not in self.production_queue:
-            self.production_queue.append(item)
+    def assign_production(self, item: str, researched_techs: Optional[set] = None, owned_resources: Optional[set] = None) -> bool:
+        """Assign an item to production queue with validation. Returns True if successfully assigned."""
+        if item in self.production_queue or item == self.current_production:
+            return False
+        
+        if item in UNIT_TYPES:
+            utype = UNIT_TYPES[item]
+            # Check resource requirement
+            if utype.resource_required and owned_resources and utype.resource_required not in owned_resources:
+                return False
+            # Check technology requirement
+            if utype.requires_tech and researched_techs and utype.requires_tech not in researched_techs:
+                return False
+        elif item in BUILDINGS:
+            btype = BUILDINGS[item]
+            if btype.requires_tech and researched_techs and btype.requires_tech not in researched_techs:
+                return False
+        
+        self.production_queue.append(item)
+        return True
 
     def process_production(self, turn_food: float, turn_gold: float, turn_science: float, turn_production: float):
         """Process one turn of city production"""

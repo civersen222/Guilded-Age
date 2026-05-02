@@ -231,7 +231,7 @@ class CityDetailPanel(tk.Frame):
             f"Position:    {city.position}\n"
             f"Population:  {city.population}\n"
             f"Gold:        {city.gold}\n"
-            f"Production:  {city.production}/{city.max_production}\n"
+            f"Production:  {city.production}/{city.production_capacity}\n"
             f"Science:     {city.science}\n"
             f"Happiness:   {city.happiness}\n"
             f"Yields:      {city.calculate_yields()}\n"

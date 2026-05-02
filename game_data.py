@@ -481,26 +481,27 @@ class UnitType:
     production_cost: int
     gold_maintenance: int
     resource_required: Optional[str] = None
+    requires_tech: Optional[str] = None
     unique_to: Optional[str] = None  # civilization name
 
 
 UNIT_TYPES: Dict[str, UnitType] = {}
 for _name, _args in [
-    ("Militia",        (UnitCategory.MELEE, 5,  6,  1, 25,   0, None, None)),
-    ("Swordsman",      (UnitCategory.MELEE, 10, 10, 1, 50,   1, "Iron", None)),
-    ("Legion",         (UnitCategory.MELEE, 13, 12, 1, 70,   1, "Iron", "Rome")),
-    ("Phalanx",        (UnitCategory.MELEE, 11, 14, 1, 55,   0, None, "Greece")),
-    ("Archer",         (UnitCategory.RANGED, 8,  5,  1, 40,   1, None, None)),
-    ("Crossbowman",    (UnitCategory.RANGED, 11, 6,  1, 60,   1, "Iron", None)),
-    ("Knight",         (UnitCategory.CAVALRY, 13, 10, 2, 80,   2, "Horses", None)),
-    ("Chariot",        (UnitCategory.CAVALRY, 12, 7,  2, 60,   1, "Horses", "Mesopotamia")),
-    ("Siege Tower",    (UnitCategory.SIEGE, 14, 3,  1, 90,   2, None, None)),
-    ("Catapult",       (UnitCategory.SIEGE, 16, 3,  1, 100,  2, None, None)),
-    ("Trireme",        (UnitCategory.NAVAL, 9,  7,  3, 70,   1, None, None)),
-    ("Galley",         (UnitCategory.NAVAL, 7,  5,  3, 50,   0, None, None)),
-    ("Settler",        (UnitCategory.SETTLER, 0,  0,  2, 100,  0, None, None)),
-    ("Worker",         (UnitCategory.WORKER, 0,  0,  2, 40,   0, None, None)),
-    ("Monk",           (UnitCategory.HELD,  4,  5,  2, 60,   0, None, None)),
+    ("Militia",        (UnitCategory.MELEE, 5,  6,  1, 25,   0, None, None, None)),
+    ("Swordsman",      (UnitCategory.MELEE, 10, 10, 1, 50,   1, "Iron", "Iron Working", None)),
+    ("Legion",         (UnitCategory.MELEE, 13, 12, 1, 70,   1, "Iron", "Iron Working", "Rome")),
+    ("Phalanx",        (UnitCategory.MELEE, 11, 14, 1, 55,   0, None, "Iron Working", "Greece")),
+    ("Archer",         (UnitCategory.RANGED, 8,  5,  1, 40,   1, None, "Archery", None)),
+    ("Crossbowman",    (UnitCategory.RANGED, 11, 6,  1, 60,   1, "Iron", "Iron Working", None)),
+    ("Knight",         (UnitCategory.CAVALRY, 13, 10, 2, 80,   2, "Horses", "Chivalry", None)),
+    ("Chariot",        (UnitCategory.CAVALRY, 12, 7,  2, 60,   1, "Horses", "Animal Husbandry", "Mesopotamia")),
+    ("Siege Tower",    (UnitCategory.SIEGE, 14, 3,  1, 90,   2, None, "Engineering", None)),
+    ("Catapult",       (UnitCategory.SIEGE, 16, 3,  1, 100,  2, None, "Engineering", None)),
+    ("Trireme",        (UnitCategory.NAVAL, 9,  7,  3, 70,   1, None, "Mathematics", None)),
+    ("Galley",         (UnitCategory.NAVAL, 7,  5,  3, 50,   0, None, "Navigation", None)),
+    ("Settler",        (UnitCategory.SETTLER, 0,  0,  2, 100,  0, None, None, None)),
+    ("Worker",         (UnitCategory.WORKER, 0,  0,  2, 40,   0, None, None, None)),
+    ("Monk",           (UnitCategory.HELD,  4,  5,  2, 60,   0, None, "Theology", None)),
 ]:
     UNIT_TYPES[_name] = UnitType(_name, *_args)
 

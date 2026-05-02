@@ -385,7 +385,7 @@ class Game:
         
         # Get AI decision
         available_tiles = [(u.position[0], u.position[1]) for u in units if u.unit_type == "Settler" and u.moves_left > 0]
-        action = ai.decide_next_action(current_tech, cities_count, military_strength, available_gold, available_tiles)
+        action = ai.decide_next_action(current_tech, cities_count, military_strength, available_gold)
         
         msgs.append(f"    AI Strategy: {ai.priorities['military']*100:.0f}% military, {ai.priorities['science']*100:.0f}% science")
         
@@ -396,7 +396,7 @@ class Game:
             available_cities = [c for c in cities if c.owner == civ_name]
             if available_cities:
                 target_city = available_cities[0]
-                target_city.assign_production(action["build"])
+                target_city.assign_production(action["build"], researched_techs=set(current_tech))
                 msgs.append(f"    -> Assigned to {target_city.name} production queue")
         
         if action.get("expand") and action.get("target_tile"):
@@ -453,6 +453,40 @@ class Game:
                 self.research[civ_name].research_progress[ai.target_research] = \
                     self.research[civ_name].research_progress.get(ai.target_research, 0) + cost
                 msgs.append(f"    Researching: {ai.target_research}")
+        
+        # Process production for AI cities
+        for city in cities:
+            if city.production_queue:
+                if city.current_production is None and city.production_queue:
+                    city.current_production = city.production_queue.pop(0)
+                
+                item = city.current_production
+                cost = city.get_production_cost(item)
+                if cost is not None:
+                    capacity = city.calculate_production_capacity()
+                    city.production = min(city.production + capacity, city.production_capacity)
+                    
+                    if city.production >= cost:
+                        if item in UNIT_TYPES:
+                            new_unit = Unit(
+                                unit_type=item,
+                                owner=civ_name,
+                                position=city.position,
+                                moves_left=UNIT_TYPES[item].movement
+                            )
+                            new_unit.name = f"{civ_name} {item} {len([u for u in self.units.values() if u.owner == civ_name and u.unit_type == item])}"
+                            self.units[new_unit.name] = new_unit
+                            self.map.add_unit(new_unit)
+                            msgs.append(f"    🏭 AI '{city.name}' completed: {item}")
+                        elif item in BUILDINGS:
+                            city.add_building(BUILDINGS[item])
+                            msgs.append(f"    🏗️ AI '{city.name}' completed: {item} built")
+                        
+                        city.current_production = None
+                        city.production = 0
+                
+                if city.production_queue and city.current_production is None:
+                    city.current_production = city.production_queue.pop(0)
         
         return msgs
 
