@@ -23,7 +23,7 @@ from events import EventManager
 from plots import PlotManager
 from simulation import Character, Dynasty
 from ai import AIPlayer
-from gui_map import HexGridRenderer, HoverTooltip, MapCanvas, TileHighlight
+from gui_map import HexGridRenderer, HoverTooltip, MapCanvas, TileHighlight, MinimapRenderer
 from gui_popups import ProductionPopup, UnitInfoPopup, DiplomacyPopup, DynastyPopup, VictoryPanel, TechTreePopup, FactionsPanel, HappinessPanel, StabilityPanel, EconomyPanel, DiplomacyPanel
 from sound_effects import get_sound_manager
 from visual_effects import VisualEffects
@@ -448,7 +448,6 @@ class CivKingsGUI:
         self.minimap_frame = tk.Frame(self.map_canvas, bg=ACCENT, 
                                        width=150, height=150, bd=1, relief=tk.RAISED)
         self.minimap_frame.place(relx=1.0, rely=0, anchor='ne', x=-5)
-        self.minimap_frame.lower(self.map_canvas)
         
         # Create minimap canvas
         self.minimap_canvas = tk.Canvas(self.minimap_frame, bg="#0d1b2a",
