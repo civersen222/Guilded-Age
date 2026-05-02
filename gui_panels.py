@@ -6,9 +6,9 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Dict, List, Optional, Callable
 
-from game_data import ProductionType, TechBranch
+from game_data import TechBranch
 from city import City
-from unit import Unit
+from military import Unit
 from research_tree import Technology
 from game import Game
 
