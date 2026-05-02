@@ -619,6 +619,64 @@ class MapCanvas(tk.Canvas):
         self.renderer.clear_highlights()
         self.render(self.game_state.map.tiles if self.game_state else {})
         
+    def _get_moveable_tiles(self, start_coord: Tuple[int, int], moves_left: int) -> Set[Tuple[int, int]]:
+        """BFS to find all tiles reachable with the given moves left, respecting terrain costs."""
+        moveable = set()
+        # (coord, remaining_moves)
+        queue = deque([(start_coord, moves_left)])
+        visited = {start_coord}
+        
+        while queue:
+            (q, r), remaining = queue.popleft()
+            if remaining <= 0:
+                continue
+            
+            # Get neighbors
+            for dq, dr in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]:
+                nq, nr = q + dq, r + dr
+                if (nq, nr) in visited:
+                    continue
+                
+                tile = self.game_state.map.get_tile(nq, nr)
+                if not tile:
+                    continue
+                
+                # Check if tile is passable (no mountains for most units)
+                if tile.terrain == TerrainType.MOUNTAIN:
+                    continue
+                
+                # Check if tile is water (unless unit can move on water)
+                if tile.terrain in (TerrainType.WATER_COAST, TerrainType.OCEAN):
+                    continue
+                
+                # Calculate movement cost
+                movement_cost = TERRAIN_MOVEMENT_COST.get(tile.terrain, 1)
+                if remaining >= movement_cost:
+                    moveable.add((nq, nr))
+                    visited.add((nq, nr))
+                    queue.append(((nq, nr), remaining - movement_cost))
+        
+        return moveable
+        
+    def _render_with_move_highlight(self):
+        """Re-render the map with moveable tiles highlighted."""
+        self.renderer.clear_highlights()
+        
+        # Re-add selection highlight
+        if self.selected_tile:
+            self.renderer.set_highlight(self.selected_tile, TileHighlight.SELECTED)
+        
+        # Re-add hover highlight
+        if self.hovered_tile:
+            self.renderer.set_highlight(self.hovered_tile, TileHighlight.HOVER)
+        
+        # Add move range highlights
+        if self.moveable_tiles:
+            move_highlights = {coord: TileHighlight.MOVE_RANGE for coord in self.moveable_tiles}
+            self.renderer.highlight_tiles(move_highlights)
+        
+        self.render(self.game_state.map.tiles if self.game_state else {})
+        
     def get_selected_tile(self) -> Optional[Tuple[int, int]]:
         """Get currently selected tile."""
         return self.selected_tile
