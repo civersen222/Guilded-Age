@@ -7,8 +7,9 @@ from tkinter import ttk
 from typing import Dict, List, Optional, Tuple, Set
 from enum import Enum
 import math
+from collections import deque
 
-from game_data import TerrainType, ResourceType
+from game_data import TerrainType, TERRAIN_MOVEMENT_COST, ResourceType
 from hex_map import HexTile, WorldMap
 
 
@@ -457,6 +458,11 @@ class MapCanvas(tk.Canvas):
         self.selected_tile: Optional[Tuple[int, int]] = None
         self.hovered_tile: Optional[Tuple[int, int]] = None
         
+        # Unit selection and movement state
+        self.selected_unit_tile: Optional[Tuple[int, int]] = None
+        self.selected_unit_name: Optional[str] = None
+        self.moveable_tiles: Set[Tuple[int, int]] = set()
+        
         # Bind events
         self.bind("<Button-1>", self._on_click)
         self.bind("<Motion>", self._on_motion)
@@ -486,17 +492,57 @@ class MapCanvas(tk.Canvas):
         """Handle map click."""
         if self.game_state is None:
             return
-            
+        
         tile_coord = self.renderer.get_tile_at_pixel(event.x, event.y)
         if tile_coord:
             self.selected_tile = tile_coord
+            tile = self.game_state.map.get_tile(tile_coord[0], tile_coord[1])
+            
+            # If tile has an owned unit, select it for movement
+            if tile and tile.unit:
+                unit_name = tile.unit
+                unit = self.game_state.units.get(unit_name)
+                if unit and unit.owner == self.game_state.current_player:
+                    if unit.moves_left > 0:
+                        self.selected_unit_tile = tile_coord
+                        self.selected_unit_name = unit_name
+                        self.moveable_tiles = self._get_moveable_tiles(
+                            tile_coord, unit.moves_left
+                        )
+                        self._render_with_move_highlight()
+                        if hasattr(self.game_state, 'on_unit_selected'):
+                            self.game_state.on_unit_selected(tile_coord, unit)
+                        return
+            
+            # If we had a unit selected and clicked a moveable tile, move it
+            if self.selected_unit_tile and tile_coord in self.moveable_tiles:
+                old_tile = self.game_state.map.get_tile(
+                    self.selected_unit_tile[0], self.selected_unit_tile[1]
+                )
+                if old_tile:
+                    old_tile.unit = None
+                tile.unit = self.selected_unit_name
+                # Update unit position
+                unit = self.game_state.units.get(self.selected_unit_name)
+                if unit:
+                    unit.position = tile_coord
+                self.selected_unit_tile = None
+                self.selected_unit_name = None
+                self.moveable_tiles = set()
+                self._render_with_move_highlight()
+                if hasattr(self.game_state, 'on_unit_moved'):
+                    self.game_state.on_unit_moved(tile_coord)
+                return
+            
+            # Normal tile selection
+            self.selected_unit_tile = None
+            self.moveable_tiles = set()
             self.renderer.select_tile(tile_coord)
             self.render(self.game_state.map.tiles if self.game_state else {})
             
             # Notify game state
             if hasattr(self.game_state, 'on_tile_selected'):
                 self.game_state.on_tile_selected(tile_coord)
-                
     def _on_motion(self, event):
         """Handle mouse motion."""
         tile_coord = self.renderer.get_tile_at_pixel(event.x, event.y)
