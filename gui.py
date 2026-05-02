@@ -408,21 +408,6 @@ class CivKingsGUI:
         self._bottom_bar()
         self._center_buttons()
         
-        # Keyboard shortcuts
-        self.root.bind("<Next>", lambda e: self.next_turn())  # Page Down
-        self.root.bind("<Prior>", lambda e: self.show_tech_tree())  # Page Up
-        self.root.bind("<Control-n>", lambda e: self.next_turn())  # Ctrl+N
-        self.root.bind("<Control-s>", lambda e: self.save_game())  # Ctrl+S
-        self.root.bind("<Control+t>", lambda e: self.show_tech_tree())  # Ctrl+T
-        self.root.bind("<Control+d>", lambda e: self.show_diplomacy())  # Ctrl+D
-        self.root.bind("<Control+y>", lambda e: self.show_dynasty())  # Ctrl+Y
-        self.root.bind("<Control+u>", lambda e: self.show_units())  # Ctrl+U
-        self.root.bind("<Control+c>", lambda e: self.show_cities())  # Ctrl+C
-        self.root.bind("<Control+e>", lambda e: self.show_events())  # Ctrl+E
-        self.root.bind("<space>", lambda e: self.next_turn())  # Space
-        self.root.bind("<Escape>", lambda e: self._cancel_selection())  # Esc
-        self.root.bind("<Delete>", lambda e: self._cancel_selection())  # Delete
-        
         # Speed control
         self.speed_multiplier = 1
         self.speed_var = tk.StringVar(value="1x")
@@ -447,12 +432,12 @@ class CivKingsGUI:
         self.context_target_tile = None
 
         # select capital city
-        for city in self.game.cities:
+        for city in self.game.cities.values():
             if city.name == "Capital":
                 self.selected_city = city
                 break
         if not self.selected_city and self.game.cities:
-            self.selected_city = self.game.cities[0]
+            self.selected_city = next(iter(self.game.cities.values()))
 
     def _init_minimap(self) -> None:
         """Initialize the minimap canvas in the bottom-right of the map area."""
