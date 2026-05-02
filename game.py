@@ -209,10 +209,21 @@ class Game:
         # Process economy systems
         civ_name = self.player_civ.name
         
+        # --- Gold maintenance for player units ---
+        gold_maintenance_total = 0
+        for unit in self.units.values():
+            if unit.owner == civ_name and unit.is_alive:
+                utype = UNIT_TYPES.get(unit.unit_type)
+                if utype and utype.gold_maintenance:
+                    gold_maintenance_total += utype.gold_maintenance
+        if gold_maintenance_total > 0:
+            self.gold[civ_name] -= gold_maintenance_total
+            msgs.append(f"\n  Gold Maintenance: -{gold_maintenance_total}")
+        
         # 1. Tax Income
         tax_income = self.tax_system.process_tax_income(self.cities)
         self.gold[civ_name] += tax_income
-        msgs.append(f"\n  Tax Income: +{tax_income} gold")
+        msgs.append(f"  Tax Income: +{tax_income} gold")
         
         # 2. Happiness & Stability
         self.happiness_system.update_city_count(len(self.cities))
@@ -287,6 +298,14 @@ class Game:
             if faction_event:
                 msgs.append(f"  {faction_event}")
                 self.state.turn_events.append(faction_event)
+        
+        # --- Clean up dead units ---
+        dead_units = [name for name, unit in self.units.items() if not unit.is_alive]
+        for name in dead_units:
+            self.map.remove_unit(self.units[name])
+            del self.units[name]
+        if dead_units:
+            msgs.append(f"\n  💀 {len(dead_units)} dead unit(s) removed from game")
         
         # Check victory conditions
         victory_msg = self._check_victory()
@@ -373,21 +392,12 @@ class Game:
         # Apply AI decisions
         if action.get("build"):
             msgs.append(f"    Building: {action['build']}")
-            # Create the unit
-            if units:
-                from military import Unit
-                settler_or_worker = [u for u in units if u.unit_type in ("Settler", "Worker")]
-                if settler_or_worker:
-                    pos = settler_or_worker[0].position
-                    new_unit = Unit(
-                        unit_type=action["build"],
-                        owner=civ_name,
-                        position=pos,
-                        moves_left=1 if action["build"] == "Settler" else 1
-                    )
-                    new_unit.name = f"{civ_name} {action['build']} {len([u for u in self.units.values() if u.owner == civ_name and u.unit_type == action['build']])}"
-                    self.units[new_unit.name] = new_unit
-                    self.map.add_unit(new_unit)
+            # Assign to a city's production queue instead of instant spawn
+            available_cities = [c for c in cities if c.owner == civ_name]
+            if available_cities:
+                target_city = available_cities[0]
+                target_city.assign_production(action["build"])
+                msgs.append(f"    -> Assigned to {target_city.name} production queue")
         
         if action.get("expand") and action.get("target_tile"):
             tile = action["target_tile"]
