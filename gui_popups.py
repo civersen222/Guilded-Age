@@ -62,7 +62,7 @@ class ProductionPopup(tk.Toplevel):
 
         # Populate production options
         from city import BuildingType, DistrictType
-        options: List[Tuple[str, str, any]] = []
+        options: List[Tuple[str, str, object]] = []
         for btype in BuildingType:
             info = btype.value
             cost = getattr(btype, 'cost', 50)
