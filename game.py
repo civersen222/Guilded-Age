@@ -9,7 +9,8 @@ from game_data import (
     TerrainType, VICTORY_CONDITIONS,
     TECHNOLOGIES, Technology, Era, TechBranch,
     TRAIT_DATABASE, CIVILIZATIONS, Civilization,
-    COASTLINE_BONUSES, LANDMARKS, LandmarkType, ClimateZone, get_climate_for_row
+    COASTLINE_BONUSES, LANDMARKS, LandmarkType, ClimateZone, get_climate_for_row,
+    UNIT_TYPES, UnitCategory
 )
 from hex_map import HexMap, HexTile
 from city import City
@@ -263,6 +264,22 @@ class Game:
         # Increment turn
         self.state.turn += 1
         self.state.phase = "Player"
+        
+        # Reset movement points for player units
+        for unit in self.units.values():
+            if unit.owner == self.player_civ.name:
+                utype = UNIT_TYPES.get(unit.unit_type)
+                if utype:
+                    if utype.category in (UnitCategory.SETTLER, UnitCategory.WORKER):
+                        unit.moves_left = 2
+                    elif utype.category == UnitCategory.CAVALRY:
+                        unit.moves_left = 2
+                    elif utype.category == UnitCategory.NAVAL:
+                        unit.moves_left = 2
+                    else:
+                        unit.moves_left = 1
+                else:
+                    unit.moves_left = 1
         
         return msgs
 

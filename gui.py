@@ -641,7 +641,7 @@ class CivKingsGUI:
 
     # ── actions ──────────────────────────────────────────
     def next_turn(self) -> None:
-        if self.game.state == GameState.PLAYING:
+        if not self.game.state.game_over:
             if not messagebox.askyesno("Next Turn", "Advance to next turn?"):
                 return
         msgs = self.game.process_turn()
