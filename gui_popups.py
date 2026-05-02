@@ -7,7 +7,7 @@ from tkinter import ttk, messagebox
 from typing import Dict, List, Optional, Tuple
 
 from game import Game
-from game_data import TECHNOLOGIES, Technology, TechBranch
+from game_data import TECHNOLOGIES, Technology, TechBranch, BUILDINGS, DISTRICTS, UNIT_TYPES, BuildingType, DistrictType
 from victory import VictoryType, VictoryConditionTracker
 from simulation import Character, Dynasty
 from city import City
@@ -43,7 +43,7 @@ class ProductionPopup(tk.Toplevel):
     def _build(self) -> None:
         tk.Label(self, text=f"Produce in {self.city.name}", font=("Segoe UI", 13, "bold"),
                  bg=BG, fg=HIGHLIGHT).pack(pady=(10, 4))
-        tk.Label(self, text=f"Production: {self.city.production}/{self.city.max_production}",
+        tk.Label(self, text=f"Production: {self.city.production}/{self.city.production_capacity}",
                  bg=BG, fg=TEXT).pack()
         tk.Label(self, text=f"Queue: {self.city.production_queue}",
                  bg=BG, fg=SUBTLE).pack(pady=(0, 8))
@@ -61,16 +61,11 @@ class ProductionPopup(tk.Toplevel):
         sb.config(command=self.listbox.yview)
 
         # Populate production options
-        from city import BuildingType, DistrictType
         options: List[Tuple[str, str, object]] = []
-        for btype in BuildingType:
-            info = btype.value
-            cost = getattr(btype, 'cost', 50)
-            options.append((f"🏛 {info}", f"cost: {cost}", btype))
-        for dtype in DistrictType:
-            info = dtype.value
-            cost = getattr(dtype, 'cost', 100)
-            options.append((f"🏘 {info}", f"cost: {cost}", dtype))
+        for bname, btype in BUILDINGS.items():
+            options.append((f"🏛 {btype.name}", f"cost: {btype.production_cost}", bname))
+        for dname, dtype in DISTRICTS.items():
+            options.append((f"🏘 {dtype.name}", f"cost: {dtype.production_cost}", dname))
         # Units
         for utype_name, utype in UNIT_TYPES.items():
             cost = getattr(utype, 'production_cost', 40)
@@ -94,9 +89,9 @@ class ProductionPopup(tk.Toplevel):
         if not sel:
             messagebox.showwarning("No selection", "Pick something to produce.")
             return
-        item = self.listbox.get(sel[0])
+        item = self.listbox.get(sel[0]).split('(')[0].strip()
         self.city.production_queue.append(item)
-        self.log_panel.add(f"Producing: {item}")
+        self.city.current_production = item
         self.destroy()
 
 
