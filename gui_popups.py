@@ -656,3 +656,308 @@ UNIT_TYPES = {
     "Infantry": type('UnitType', (), {'production_cost': 40})(),
     "Archers": type('UnitType', (), {'production_cost': 35})(),
 }
+
+
+
+# ═══════════════════════════════════════════
+# Factions Panel
+# ═══════════════════════════════════════════
+class FactionsPanel(tk.Toplevel):
+    def __init__(self, parent, game):
+        super().__init__(parent)
+        self.title('Factions')
+        self.geometry('480x420')
+        self.configure(bg=BG)
+        self.game = game
+        self._build()
+        self.update_view()
+
+    def _build(self):
+        tk.Label(self, text='Political Factions', font=('Segoe UI', 13, 'bold'), bg=BG, fg=HIGHLIGHT).pack(pady=(8, 4))
+        frame = tk.Frame(self, bg=BG)
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+        sb = tk.Scrollbar(frame)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.text = tk.Text(frame, bg=PANEL_BG, fg=TEXT, font=('Consolas', 10), padx=8, pady=4, relief=tk.FLAT, wrap=tk.WORD, highlightthickness=0)
+        self.text.pack(fill=tk.BOTH, expand=True, pady=4)
+        sb.config(command=self.text.yview)
+        self.text.configure(yscrollcommand=sb.set)
+        tk.Button(self, text='Refresh', command=self.update_view, bg=ACCENT, fg=TEXT, activebackground=HIGHLIGHT, activeforeground=TEXT, font=('Segoe UI', 10)).pack(pady=(0, 8))
+
+    def update_view(self):
+        self.text.configure(state=tk.NORMAL)
+        self.text.delete('1.0', tk.END)
+        fm = self.game.faction_manager
+        if not fm or not fm.factions:
+            self.text.insert(tk.END, '  No faction data available.')
+            self.text.configure(state=tk.DISABLED)
+            return
+        lines = ['=== ' + fm.civilization_name + ' ===\n']
+        lines.append('Conflict Level: {:.0f}/100\n'.format(fm.conflict_level))
+        for ftype, faction in fm.factions.items():
+            icon = chr(128121) if faction.faction_type == 'nobles' else chr(9998) if faction.faction_type == 'religious' else chr(127977)
+            status = 'Dominant' if faction.is_dominant else 'Marginalized' if faction.is_marginalized else 'Active'
+            color = HIGHLIGHT if faction.is_dominant else ALIVE_COLOR if faction.is_marginalized else SUBTLE
+            lines.append('  ' + icon + ' ' + faction.name)
+            lines.append('    Type: {}  |  Influence: {}/100  |  Support: {}/100'.format(faction.faction_type, faction.influence, faction.support))
+            lines.append('    Status: ' + color + status)
+            demands = ', '.join(faction.demands) if faction.demands else 'None'
+            lines.append('    Demands: ' + demands)
+            lines.append('    Stability Effect: {:+.1f}'.format(faction.stability_effect))
+            lines.append('')
+        if fm.dominant_faction:
+            lines.append('Dominant Faction: ' + fm.dominant_faction.name)
+        self.text.insert(tk.END, '\n'.join(lines))
+        self.text.configure(state=tk.DISABLED)
+
+
+
+# ═══════════════════════════════════════════
+# Economy Panel
+# ═══════════════════════════════════════════
+class EconomyPanel(tk.Toplevel):
+    def __init__(self, parent, game):
+        super().__init__(parent)
+        self.title('Economy')
+        self.geometry('460x400')
+        self.configure(bg=BG)
+        self.game = game
+        self._build()
+        self.update_view()
+
+    def _build(self):
+        tk.Label(self, text='Economy Overview', font=('Segoe UI', 13, 'bold'), bg=BG, fg=HIGHLIGHT).pack(pady=(8, 4))
+        frame = tk.Frame(self, bg=BG)
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+        sb = tk.Scrollbar(frame)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.text = tk.Text(frame, bg=PANEL_BG, fg=TEXT, font=('Consolas', 10), padx=8, pady=4, relief=tk.FLAT, wrap=tk.WORD, highlightthickness=0)
+        self.text.pack(fill=tk.BOTH, expand=True, pady=4)
+        sb.config(command=self.text.yview)
+        self.text.configure(yscrollcommand=sb.set)
+        tk.Button(self, text='Refresh', command=self.update_view, bg=ACCENT, fg=TEXT, activebackground=HIGHLIGHT, activeforeground=TEXT, font=('Segoe UI', 10)).pack(pady=(0, 8))
+
+    def update_view(self):
+        self.text.configure(state=tk.NORMAL)
+        self.text.delete('1.0', tk.END)
+        econ = self.game.economy_manager
+        if not econ:
+            self.text.insert(tk.END, '  No economy data available.')
+            self.text.configure(state=tk.DISABLED)
+            return
+        lines = [
+            '  Gold: {:,.0f}'.format(econ.gold),
+            '  Science: {:,.0f}'.format(econ.science),
+            '  Food: {:,.0f}'.format(econ.food),
+            '  Culture: {:,.0f}'.format(econ.culture),
+            '  Faith: {:,.0f}'.format(econ.faith),
+            '',
+            '  Trade Routes: {}'.format(len(econ.trade_routes)),
+        ]
+        for res_name, res_amt in econ.resources.items():
+            lines.append('  Resource - ' + res_name + ': ' + str(res_amt))
+        self.text.insert(tk.END, '\n'.join(lines))
+        self.text.configure(state=tk.DISABLED)
+
+
+# ═══════════════════════════════════════════
+# Diplomacy Panel
+# ═══════════════════════════════════════════
+class DiplomacyPanel(tk.Toplevel):
+    def __init__(self, parent, game):
+        super().__init__(parent)
+        self.title('Diplomacy')
+        self.geometry('460x400')
+        self.configure(bg=BG)
+        self.game = game
+        self._build()
+        self.update_view()
+
+    def _build(self):
+        tk.Label(self, text='Diplomatic Relations', font=('Segoe UI', 13, 'bold'), bg=BG, fg=HIGHLIGHT).pack(pady=(8, 4))
+        frame = tk.Frame(self, bg=BG)
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+        sb = tk.Scrollbar(frame)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.text = tk.Text(frame, bg=PANEL_BG, fg=TEXT, font=('Consolas', 10), padx=8, pady=4, relief=tk.FLAT, wrap=tk.WORD, highlightthickness=0)
+        self.text.pack(fill=tk.BOTH, expand=True, pady=4)
+        sb.config(command=self.text.yview)
+        self.text.configure(yscrollcommand=sb.set)
+        tk.Button(self, text='Refresh', command=self.update_view, bg=ACCENT, fg=TEXT, activebackground=HIGHLIGHT, activeforeground=TEXT, font=('Segoe UI', 10)).pack(pady=(0, 8))
+
+    def update_view(self):
+        self.text.configure(state=tk.NORMAL)
+        self.text.delete('1.0', tk.END)
+        civs = getattr(self.game, 'civilizations', None)
+        if not civs or not self.game.player_civ:
+            self.text.insert(tk.END, '  No diplomacy data available.')
+            self.text.configure(state=tk.DISABLED)
+            return
+        player = self.game.player_civ
+        lines = ['=== Relations with ' + player.name + ' ===\n']
+        for civ_id, civ in civs.items():
+            if civ_id == player.id:
+                continue
+            relation = civ.reputation if hasattr(civ, 'reputation') else 50
+            status = 'Ally' if relation >= 80 else 'Friend' if relation >= 60 else 'Neutral' if relation >= 40 else 'Hostile' if relation >= 20 else 'Enemy'
+            lines.append('  ' + civ.name + ': ' + status + ' (Reputation: ' + str(int(relation)) + ')')
+        self.text.insert(tk.END, '\n'.join(lines))
+        self.text.configure(state=tk.DISABLED)
+class HappinessPanel(tk.Toplevel):
+    def __init__(self, parent, game):
+        super().__init__(parent)
+        self.title('Happiness')
+        self.geometry('500x500')
+        self.configure(bg=BG)
+        self.game = game
+        self._build()
+        self.update_view()
+
+    def _build(self):
+        tk.Label(self, text='Citizen Happiness', font=('Segoe UI', 13, 'bold'), bg=BG, fg=HIGHLIGHT).pack(pady=(8, 4))
+        frame = tk.Frame(self, bg=BG)
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+        sb = tk.Scrollbar(frame)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.text = tk.Text(frame, bg=PANEL_BG, fg=TEXT, font=('Consolas', 10), padx=8, pady=4, relief=tk.FLAT, wrap=tk.WORD, highlightthickness=0)
+        self.text.pack(fill=tk.BOTH, expand=True, pady=4)
+        sb.config(command=self.text.yview)
+        self.text.configure(yscrollcommand=sb.set)
+        tk.Button(self, text='Refresh', command=self.update_view, bg=ACCENT, fg=TEXT, activebackground=HIGHLIGHT, activeforeground=TEXT, font=('Segoe UI', 10)).pack(pady=(0, 8))
+
+    def update_view(self):
+        self.text.configure(state=tk.NORMAL)
+        self.text.delete('1.0', tk.END)
+        hs = self.game.happiness_system
+        if not hs:
+            self.text.insert(tk.END, '  No happiness data available.')
+            self.text.configure(state=tk.DISABLED)
+            return
+        lines = [
+            '  Overall Happiness: ' + str(hs.current_happiness) + '%',
+            '  Base Happiness: ' + str(hs.base_happiness) + '%',
+            '  Luxury Resources: ' + str(len(getattr(hs, 'luxury_resources', []))),
+            '  Entertainment Buildings: ' + str(len(getattr(hs, 'entertainment_buildings', []))),
+            '  Overextension Penalty: ' + str(getattr(hs, 'overextension_penalty', 0)),
+            '  Population: ' + str(getattr(hs, 'population', 0)),
+            '  Cities: ' + str(getattr(hs, 'city_count', 0)),
+            '',
+            '  Luxury Resources:',
+        ]
+        for res in getattr(hs, 'luxury_resources', []):
+            lines.append('    - ' + str(res))
+        lines.append('')
+        lines.append('  Entertainment Buildings:')
+        for bld in getattr(hs, 'entertainment_buildings', []):
+            lines.append('    - ' + str(bld))
+        lines.append('')
+        lines.append('  Per-City Happiness:')
+        for city in getattr(self.game, 'cities', []):
+            lines.append('    ' + city.name + ': ' + str(city.happiness))
+        self.text.insert(tk.END, '\n'.join(lines))
+        self.text.configure(state=tk.DISABLED)
+
+
+class StabilityPanel(tk.Toplevel):
+    def __init__(self, parent, game):
+        super().__init__(parent)
+        self.title('Stability')
+        self.geometry('500x500')
+        self.configure(bg=BG)
+        self.game = game
+        self._build()
+        self.update_view()
+
+    def _build(self):
+        tk.Label(self, text='Realm Stability', font=('Segoe UI', 13, 'bold'), bg=BG, fg=HIGHLIGHT).pack(pady=(8, 4))
+        frame = tk.Frame(self, bg=BG)
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+        sb = tk.Scrollbar(frame)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.text = tk.Text(frame, bg=PANEL_BG, fg=TEXT, font=('Consolas', 10), padx=8, pady=4, relief=tk.FLAT, wrap=tk.WORD, highlightthickness=0)
+        self.text.pack(fill=tk.BOTH, expand=True, pady=4)
+        sb.config(command=self.text.yview)
+        self.text.configure(yscrollcommand=sb.set)
+        tk.Button(self, text='Refresh', command=self.update_view, bg=ACCENT, fg=TEXT, activebackground=HIGHLIGHT, activeforeground=TEXT, font=('Segoe UI', 10)).pack(pady=(0, 8))
+
+    def update_view(self):
+        self.text.configure(state=tk.NORMAL)
+        self.text.delete('1.0', tk.END)
+        ss = self.game.stability_system
+        if not ss:
+            self.text.insert(tk.END, '  No stability data available.')
+            self.text.configure(state=tk.DISABLED)
+            return
+        lines = [
+            '  Stability: ' + str(ss.stability) + '%',
+            '  Unrest Level: ' + str(getattr(ss, 'unrest_level', 'N/A')),
+            '  Revolt Risk: ' + str(getattr(ss, 'revolt_risk', 'N/A')),
+            '  Revolts: ' + str(len(getattr(ss, 'revolts', []))),
+            '',
+            '  Factors:',
+        ]
+        factors = getattr(ss, 'factors', {})
+        for factor in factors:
+            val = factors.get(factor, 0)
+            lines.append('    - ' + factor + ': ' + str(val))
+        lines.append('')
+        lines.append('  City Stability:')
+        for city in getattr(self.game, 'cities', []):
+            yields = city.calculate_yields()
+            stab = yields.get('stability', 50)
+            lines.append('    ' + city.name + ': ' + str(stab) + '%')
+        self.text.insert(tk.END, '\n'.join(lines))
+        self.text.configure(state=tk.DISABLED)
+class TechTreePopup(tk.Toplevel):
+    def __init__(self, parent, game):
+        super().__init__(parent)
+        self.title('Technology Tree')
+        self.geometry('550x500')
+        frame = tk.Frame(self, bg=BG)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        tk.Label(self, text='Technology Tree', font=('Segoe UI', 13, 'bold'), bg=BG, fg=HIGHLIGHT).pack(pady=(8, 4))
+        self.text = tk.Text(frame, bg=PANEL_BG, fg=TEXT, font=('Consolas', 10), padx=8, pady=4, relief=tk.FLAT, wrap=tk.WORD, highlightthickness=0)
+        self.text.pack(fill=tk.BOTH, expand=True)
+        tk.Button(self, text='Refresh', command=self.update_view, bg=ACCENT, fg=TEXT, activebackground=HIGHLIGHT, activeforeground=TEXT, font=('Segoe UI', 10)).pack(pady=(0, 8))
+        self.update_view()
+
+    def update_view(self):
+        self.text.delete('1.0', tk.END)
+        tech_manager = getattr(self.game, 'tech_manager', None)
+        if not tech_manager:
+            self.text.insert(tk.END, '  No technology data available.')
+            self.text.configure(state=tk.DISABLED)
+            return
+        
+        lines = ['=== Technology Tree ===\n']
+        
+        # Show researched technologies
+        researched = getattr(tech_manager, 'researched', {})
+        if researched:
+            lines.append('Researched Technologies:')
+            for tech_name, tech in researched.items():
+                lines.append(f'  \u2705 {tech_name}')
+            lines.append('')
+        
+        # Show current research
+        current = getattr(tech_manager, 'current_research', None)
+        progress = getattr(tech_manager, 'current_research_progress', 0)
+        if current:
+            tech = TECHNOLOGIES.get(current)
+            cost = tech.cost if tech else 0
+            lines.append(f'Current Research: {current} ({progress}/{cost})')
+            lines.append('')
+        
+        # Show available technologies
+        available = tech_manager.get_available_technologies('player') if hasattr(tech_manager, 'get_available_technologies') else []
+        if available:
+            lines.append('Available Technologies:')
+            for tech_name in available:
+                tech = TECHNOLOGIES.get(tech_name)
+                cost = tech.cost if tech else 0
+                prereqs = tech.prerequisites if tech else []
+                prereq_str = ', '.join(prereqs) if prereqs else 'None'
+                lines.append(f'  \u25a1 {tech_name} (Cost: {cost}, Prereqs: {prereq_str})')
+        
+        self.text.insert(tk.END, '\n'.join(lines))
+        self.text.configure(state=tk.DISABLED)

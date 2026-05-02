@@ -11,7 +11,7 @@ class Religion:
     
     def __init__(self, name: str, founder: str):
         self.name = name
-        self.finder = founder
+        self.founder = founder
         self.followers: Dict[str, int] = {}  # civ -> number of followers
         self.doctrines: List[str] = []
         self.holy_sites: List[Tuple[int, int]] = []

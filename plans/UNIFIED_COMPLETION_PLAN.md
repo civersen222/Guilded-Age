@@ -350,29 +350,33 @@
 - [x] Siege units (Catapults, Trebuchets)
 - [x] Stacking rules
 
-### 🟡 REMAINING SPRINTS (Backend Systems)
+### ✅ COMPLETED SPRINTS (Backend Systems)
 
-### SPRINT 9: Tech & Diplomacy Backend (Week 12)
-**Goal:** Full tech and diplomacy systems with policies and agreements.
-12. Tech policy/commitment system
-13. Era bonuses
-14. Research speed modifiers
-15. Treaty types
-16. Casus belli system
-17. Trade agreement mechanics
+#### ✅ SPRINT 9: Tech & Diplomacy Backend — DONE
+- [x] Tech policy/commitment system (`tech_policies.py`)
+- [x] Era bonuses
+- [x] Research speed modifiers
+- [x] Treaty types (`diplomacy_extended.py`)
+- [x] Casus belli system
+- [x] Trade agreement mechanics
 
-**Total: ~250 lines**
+**Total: ~400 lines**
 
-### SPRINT 10: AI & Polish (Week 13-14)
-**Goal:** Improve AI and add polish.
-18. AI city expansion strategy
-19. AI military aggression/scouting
-20. AI diplomacy
-21. AI technology prioritization
-22. Sound effects
-23. Animations and visual polish
+### ✅ COMPLETED SPRINTS (Backend Systems)
 
-**Total: ~500 lines**
+#### ✅ SPRINT 10: AI & Polish — DONE
+- [x] AI city expansion strategy (strategic tile scoring)
+- [x] AI military aggression/scouting (threat assessment, enemy intelligence)
+- [x] AI diplomacy (trade offers, alliances, wars, non-aggression pacts)
+- [x] AI technology prioritization (strategic tech selection)
+- [x] Sound effects (`sound_effects.py`)
+- [x] Animations and visual polish (`visual_effects.py`)
+- [x] Dynamic priority adjustment system
+- [x] War targets and alliance tracking
+- [x] Trade relationship management
+- [x] Military strength evaluation
+
+**Total: ~600 lines**
 
 ---
 

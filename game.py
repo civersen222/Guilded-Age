@@ -32,6 +32,7 @@ from market_simulation import MarketSimulation
 from gold_management import GoldManagement
 from external_trade_routes import ExternalTradeRoutes
 from faction_system import FactionManager, FactionEventGenerator
+from ai import AIPlayer
 
 
 @dataclass
@@ -76,6 +77,9 @@ class Game:
         self.players: Dict[str, Civilization] = {}
         self.gold: Dict[str, int] = {}
         self.research: Dict[str, TechManager] = {}
+        
+        # AI players
+        self.ai_players: Dict[str, AIPlayer] = {}
         
         # Shared managers (created after cities/units exist)
         self.diplomacy_manager = DiplomacyManager()
@@ -169,6 +173,11 @@ class Game:
             if tech_name in TECHNOLOGIES:
                 self.research[self.player_civ.name].research(tech_name, self.player_civ.name)
         
+        # Create AI players for each AI civ
+        for civ_name, civ in self.civilizations.items():
+            if civ_name != self.player_civ.name:
+                self.ai_players[civ_name] = AIPlayer(civ_name, "medium")
+        
         # Generate initial events
         self.event_manager.generate_events()
 
@@ -185,8 +194,8 @@ class Game:
         for civ_name, civ in self.civilizations.items():
             if civ_name == self.player_civ.name:
                 continue
-            msgs.append(f"  {civ_name} processes its turn.")
-            # TODO: Implement full AI logic here
+            msgs.append(f"  --- {civ_name}'s turn ---")
+            msgs.extend(self._process_ai_turn(civ_name, civ))
         
         # Process events
         event = self.event_manager.generate_event()
@@ -284,6 +293,103 @@ class Game:
                 pass
         
         return None
+
+    def _process_ai_turn(self, civ_name: str, civ: Civilization) -> List[str]:
+        """Process one turn for an AI civilization and return messages."""
+        msgs = []
+        ai = self.ai_players.get(civ_name)
+        if not ai:
+            return msgs
+        
+        # Get AI state
+        cities = [c for c in self.cities.values() if c.owner == civ_name]
+        cities_count = len(cities)
+        units = [u for u in self.units.values() if u.owner == civ_name]
+        military_strength = sum(u.moves_left * 10 for u in units if u.unit_type not in ("Settler", "Worker"))
+        current_tech = list(self.research[civ_name].researched_technologies) if civ_name in self.research else []
+        available_gold = self.gold.get(civ_name, 0)
+        
+        # Get AI decision
+        available_tiles = [(u.position[0], u.position[1]) for u in units if u.unit_type == "Settler" and u.moves_left > 0]
+        action = ai.decide_next_action(current_tech, cities_count, military_strength, available_gold, available_tiles)
+        
+        msgs.append(f"    AI Strategy: {ai.priorities['military']*100:.0f}% military, {ai.priorities['science']*100:.0f}% science")
+        
+        # Apply AI decisions
+        if action.get("build"):
+            msgs.append(f"    Building: {action['build']}")
+            # Create the unit
+            if units:
+                from military import Unit
+                settler_or_worker = [u for u in units if u.unit_type in ("Settler", "Worker")]
+                if settler_or_worker:
+                    pos = settler_or_worker[0].position
+                    new_unit = Unit(
+                        unit_type=action["build"],
+                        owner=civ_name,
+                        position=pos,
+                        moves_left=1 if action["build"] == "Settler" else 1
+                    )
+                    new_unit.name = f"{civ_name} {action['build']} {len([u for u in self.units.values() if u.owner == civ_name and u.unit_type == action['build']])}"
+                    self.units[new_unit.name] = new_unit
+                    self.map.add_unit(new_unit)
+        
+        if action.get("expand") and action.get("target_tile"):
+            tile = action["target_tile"]
+            from city import City
+            new_city = City(
+                name=f"{civ_name} City {cities_count + 1}",
+                owner=civ_name,
+                position=tile,
+                population=3,
+                gold=50,
+                climate_zone="temperate",
+                is_coastal=False
+            )
+            self.cities[new_city.name] = new_city
+            self.map.add_city(new_city)
+            msgs.append(f"    Founded new city at {tile}")
+        
+        if action.get("attack") and action.get("diplo_target"):
+            target_name = action["diplo_target"]
+            enemy_units = [u for u in units if u.owner == target_name]
+            if enemy_units:
+                msgs.append(f"    Attacking {target_name}!")
+                # Simplified combat: just report it
+                target_city = next((c for c in cities if c.owner == target_name), None)
+                if target_city:
+                    msgs.append(f"    Targeting city: {target_city.name}")
+        
+        if action.get("diplo_action"):
+            msgs.append(f"    Diplomacy: {action['diplo_action']} ({action.get('diplo_target', '')})")
+        
+        # Update research priority
+        if ai.target_research is None:
+            if action["type"] == "military":
+                military_techs = [t for t in TECHNOLOGIES.values() 
+                                if t.branch.name == "MILITARY" and t.name not in current_tech]
+                if military_techs:
+                    ai.target_research = military_techs[0].name
+            elif action["type"] == "science":
+                science_techs = [t for t in TECHNOLOGIES.values() 
+                                if t.branch.name == "SCIENTIFIC" and t.name not in current_tech]
+                if science_techs:
+                    ai.target_research = science_techs[0].name
+            else:
+                civic_techs = [t for t in TECHNOLOGIES.values() 
+                              if t.branch.name == "CIVIC" and t.name not in current_tech]
+                if civic_techs:
+                    ai.target_research = civic_techs[0].name
+        
+        if ai.target_research and civ_name in self.research:
+            tech = TECHNOLOGIES.get(ai.target_research)
+            if tech and ai.target_research not in self.research[civ_name].researched_technologies:
+                cost = tech.research_cost if hasattr(tech, 'research_cost') else 100
+                self.research[civ_name].research_progress[ai.target_research] = \
+                    self.research[civ_name].research_progress.get(ai.target_research, 0) + cost
+                msgs.append(f"    Researching: {ai.target_research}")
+        
+        return msgs
 
     def to_dict(self) -> dict:
         """Serialize game state for saving."""

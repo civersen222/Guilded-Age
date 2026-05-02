@@ -24,7 +24,7 @@ from plots import PlotManager
 from simulation import Character, Dynasty
 from ai import AIPlayer
 from gui_map import HexGridRenderer, HoverTooltip, MapCanvas, TileHighlight
-from gui_popups import ProductionPopup, UnitInfoPopup, DiplomacyPopup, DynastyPopup, VictoryPanel, TechTreePopup
+from gui_popups import ProductionPopup, UnitInfoPopup, DiplomacyPopup, DynastyPopup, VictoryPanel, TechTreePopup, FactionsPanel, HappinessPanel, StabilityPanel, EconomyPanel, DiplomacyPanel
 from sound_effects import get_sound_manager
 from visual_effects import VisualEffects
 
@@ -296,6 +296,7 @@ class CivKingsGUI:
         self.hex_items: Dict[Tuple[int, int], tk.CanvasItem] = {}  # (q,r) -> canvas item
         self.HEX_SIZE = 28  # hex radius / cell size
         self._build_ui()
+        self._init_minimap()
         
         # Initialize sound and visual effects
         self.sound_manager = get_sound_manager()
@@ -401,6 +402,50 @@ class CivKingsGUI:
         if not self.selected_city and self.game.cities:
             self.selected_city = self.game.cities[0]
 
+    def _init_minimap(self) -> None:
+        """Initialize the minimap canvas in the bottom-right of the map area."""
+        if not hasattr(self, 'map_canvas') or not self.map_canvas:
+            return
+        
+        # Create minimap frame
+        self.minimap_frame = tk.Frame(self.map_canvas, bg=ACCENT, 
+                                       width=150, height=150, bd=1, relief=tk.RAISED)
+        self.minimap_frame.place(relx=1.0, rely=0, anchor='ne', x=-5)
+        self.minimap_frame.lower(self.map_canvas)
+        
+        # Create minimap canvas
+        self.minimap_canvas = tk.Canvas(self.minimap_frame, bg="#0d1b2a",
+                                         width=148, height=148,
+                                         highlightthickness=0)
+        self.minimap_canvas.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+        
+        # Create minimap renderer
+        self.minimap_renderer = MinimapRenderer(
+            self.minimap_canvas,
+            self.hex_map.width,
+            self.hex_map.height
+        )
+    
+    def _update_minimap(self) -> None:
+        """Update the minimap with current map state."""
+        if not hasattr(self, 'minimap_renderer') or not self.minimap_renderer:
+            return
+        
+        tiles = self.hex_map.tiles if self.hex_map else {}
+        
+        # Get camera view from map canvas
+        cam_q, cam_r = 0, 0
+        cam_w, cam_h = self.hex_map.width, self.hex_map.height
+        if hasattr(self, 'map_canvas') and self.map_canvas:
+            if hasattr(self.map_canvas, 'zoom_pan'):
+                cam_w = max(1, int(self.hex_map.width / self.map_canvas.zoom_pan.zoom))
+                cam_h = max(1, int(self.hex_map.height / self.map_canvas.zoom_pan.zoom))
+                if hasattr(self.map_canvas.zoom_pan, 'offset'):
+                    cam_q = int(self.map_canvas.zoom_pan.offset[0])
+                    cam_r = int(self.map_canvas.zoom_pan.offset[1])
+        
+        self.minimap_renderer.render_minimap(tiles, (cam_q, cam_r, cam_w, cam_h))
+    
     def _top_bar(self) -> None:
         bar = tk.Frame(self.root, bg=ACCENT, height=48)
         bar.pack(fill=tk.X, side=tk.TOP)
@@ -542,6 +587,9 @@ class CivKingsGUI:
             ("Show Cities", self.show_cities),
             ("Diplomacy", self.show_diplomacy),
             ("Dynasty", self.show_dynasty),
+            ("Factions", self.show_factions),
+            ("Happiness", self.show_happiness),
+            ("Stability", self.show_stability),
             ("Victory", self.show_victory_screen),
             ("Events", self.show_events),
             ("Save Game", self.save_game),
@@ -560,6 +608,8 @@ class CivKingsGUI:
             self.game.map.tiles,
             zoom=self.map_canvas.zoom_pan.zoom_level
         )
+        self._update_minimap()
+        self._update_zoom_display()
 
     def _on_map_click(self, tile_coord) -> None:
         """Callback from MapCanvas when a tile is clicked."""
@@ -631,6 +681,15 @@ class CivKingsGUI:
 
     def show_dynasty(self) -> None:
         DynastyPopup(self.root, self.game)
+
+    def show_factions(self) -> None:
+        FactionsPanel(self.root, self.game)
+
+    def show_happiness(self) -> None:
+        HappinessPanel(self.root, self.game)
+
+    def show_stability(self) -> None:
+        StabilityPanel(self.root, self.game)
 
     def show_victory_screen(self) -> None:
         VictoryPanel(self.root, self.game)
