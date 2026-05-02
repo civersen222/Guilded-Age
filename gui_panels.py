@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Dict, List, Optional, Callable
 
-from game_data import TechBranch
+from game_data import TechBranch, BUILDINGS, DISTRICTS, UNIT_TYPES
 from city import City
 from military import Unit
 from research_tree import Technology
@@ -71,7 +71,7 @@ class CityDetailPanel(tk.Frame):
 
 # ── Production Queue Panel ──
 class ProductionQueuePanel(tk.Frame):
-    """Queue of items being produced in a city."""
+    """Queue of items being produced in a city, with progress bars."""
 
     def __init__(self, parent, city: City, on_queue_change: Optional[Callable] = None):
         super().__init__(parent, bg=PANEL_BG)
@@ -104,22 +104,54 @@ class ProductionQueuePanel(tk.Frame):
                      font=("Segoe UI", 9)).pack(pady=4)
             return
 
-        # Current item
+        # Current item with progress bar
         if current:
             f = tk.Frame(self.list_frame, bg=PANEL_BG2, relief=tk.RAISED, bd=1)
             f.pack(fill=tk.X, pady=1)
-            tk.Label(f, text=f"▶ {current}", bg=PANEL_BG2, fg=HIGHLIGHT,
+            
+            # Get cost info
+            cost = 0
+            item_name = current
+            if current in BUILDINGS:
+                cost = BUILDINGS[current].production_cost
+                item_name = BUILDINGS[current].name
+            elif current in DISTRICTS:
+                cost = DISTRICTS[current].production_cost
+                item_name = DISTRICTS[current].name
+            elif current in UNIT_TYPES:
+                cost = getattr(UNIT_TYPES[current], 'production_cost', 40)
+                item_name = current
+            
+            # Progress bar
+            progress = min(1.0, self.city.production / cost) if cost > 0 else 0
+            bar = tk.Canvas(f, width=150, height=10, bg="#333", highlightthickness=0)
+            bar.create_rectangle(0, 0, 150 * progress, 10, fill=HIGHLIGHT)
+            bar.pack(side=tk.LEFT, padx=4, pady=2)
+            
+            tk.Label(f, text=f"▶ {item_name}", bg=PANEL_BG2, fg=HIGHLIGHT,
                      font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=4, pady=2)
-            tk.Label(f, text=f"({self.city.production}/{self.city.production_capacity})", bg=PANEL_BG2, fg=SUBTLE,
+            tk.Label(f, text=f"{self.city.production}/{cost}", bg=PANEL_BG2, fg=SUBTLE,
                      font=("Segoe UI", 8)).pack(side=tk.RIGHT, padx=4, pady=2)
 
-        # Queue items
+        # Queue items with costs
         for i, item in enumerate(queue):
             f = tk.Frame(self.list_frame, bg=PANEL_BG, relief=tk.FLAT, bd=0)
             f.pack(fill=tk.X, pady=1)
-            tk.Label(f, text=f"{i+1}. {item}", bg=PANEL_BG, fg=TEXT,
+            
+            cost = 0
+            item_name = item
+            if item in BUILDINGS:
+                cost = BUILDINGS[item].production_cost
+                item_name = BUILDINGS[item].name
+            elif item in DISTRICTS:
+                cost = DISTRICTS[item].production_cost
+                item_name = DISTRICTS[item].name
+            elif item in UNIT_TYPES:
+                cost = getattr(UNIT_TYPES[item], 'production_cost', 40)
+            
+            tk.Label(f, text=f"{i+1}. {item_name}", bg=PANEL_BG, fg=TEXT,
                      font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=4, pady=2)
-            tk.Label(f, text=f"[{self.city.production_capacity} prod]", bg=PANEL_BG, fg=SUBTLE,
+            tk.Label(f, text=f"[{cost} prod]", bg=PANEL_BG, fg=SUBTLE,
                      font=("Segoe UI", 8)).pack(side=tk.RIGHT, padx=4, pady=2)
 
     def refresh(self):

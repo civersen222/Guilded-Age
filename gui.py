@@ -220,11 +220,39 @@ class CityDetailPanel(tk.Frame):
         self.info_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=4)
         sb.pack(side=tk.RIGHT, fill=tk.Y, pady=4)
 
-        # production queue buttons area
+        # production queue area
         self.prod_frame = tk.Frame(self, bg=PANEL_BG)
         self.prod_frame.pack(fill=tk.X, padx=8, pady=(4, 0))
 
+        # production queue label
+        self.prod_label = tk.Label(self.prod_frame, text="Production Queue",
+                                 bg=PANEL_BG, fg=HIGHLIGHT, font=("Segoe UI", 10, "bold"),
+                                 anchor=tk.W)
+        self.prod_label.pack(fill=tk.X, pady=(0, 2))
+
+        # production queue list
+        self.prod_list = tk.Frame(self.prod_frame, bg=PANEL_BG)
+        self.prod_list.pack(fill=tk.X)
+
+        # quick start button
+        self.start_btn = tk.Button(self.prod_frame, text="\u25b6 Start Production",
+                                 bg=ACCENT, fg=TEXT, font=("Segoe UI", 10, "bold"),
+                                 activebackground=HIGHLIGHT, activeforeground=TEXT,
+                                 command=self._on_start)
+        self.start_btn.pack(fill=tk.X, pady=(4, 0))
+
+    def _on_start(self):
+        from gui_popups import ProductionPopup
+        if not self._city:
+            return
+        popup = ProductionPopup(self, self._city)
+
+    def _clear_prod_list(self):
+        for w in self.prod_list.winfo_children():
+            w.destroy()
+
     def update(self, city: City) -> None:
+        self._city = city
         self.title_lbl.config(text=city.name)
         text = (
             f"Owner:       {city.owner}\n"
@@ -244,6 +272,30 @@ class CityDetailPanel(tk.Frame):
         self.info_text.delete("1.0", tk.END)
         self.info_text.insert(tk.END, text)
         self.info_text.configure(state=tk.DISABLED)
+
+        # Update production queue display
+        self._clear_prod_list()
+        if not city.current_production and not city.production_queue:
+            tk.Label(self.prod_list, text="No active production",
+                   bg=PANEL_BG, fg=SUBTLE, font=("Segoe UI", 9),
+                   anchor=tk.W).pack(fill=tk.X, pady=4)
+            return
+
+        if city.current_production:
+            f = tk.Frame(self.prod_list, bg=PANEL_BG2)
+            f.pack(fill=tk.X, pady=1)
+            tk.Label(f, text=f"\u25b6 {city.current_production}", bg=PANEL_BG2, fg=HIGHLIGHT,
+                   font=("Segoe UI", 9, "bold"), anchor=tk.W).pack(side=tk.LEFT, padx=4)
+            tk.Label(f, text=f"[{city.production}/{city.production_capacity}]", bg=PANEL_BG2, fg=SUBTLE,
+                   font=("Segoe UI", 8), anchor=tk.E).pack(side=tk.RIGHT, padx=4)
+
+        for i, item in enumerate(city.production_queue):
+            f = tk.Frame(self.prod_list, bg=PANEL_BG)
+            f.pack(fill=tk.X, pady=1)
+            tk.Label(f, text=f"{i+1}. {item}", bg=PANEL_BG, fg=TEXT,
+                   font=("Segoe UI", 9), anchor=tk.W).pack(side=tk.LEFT, padx=4)
+            tk.Label(f, text=f"[{city.production_capacity} prod]", bg=PANEL_BG, fg=SUBTLE,
+                   font=("Segoe UI", 8), anchor=tk.E).pack(side=tk.RIGHT, padx=4)
 
 
 # ── Action-log panel (bottom-right) ──────────────────────────
