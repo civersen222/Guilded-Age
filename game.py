@@ -110,6 +110,11 @@ class Game:
         self.city_manager.cities = list(self.cities.values())
         self.military_manager.units = list(self.units.values())
     
+    @property
+    def fog(self):
+        """Expose fog of war from the map."""
+        return self.map.fog
+    
     def _initialize_game(self):
         """Set up initial game state"""
         # Create player starting city
