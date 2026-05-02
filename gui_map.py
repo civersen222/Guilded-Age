@@ -502,7 +502,7 @@ class MapCanvas(tk.Canvas):
             if tile and tile.unit:
                 unit_name = tile.unit
                 unit = self.game_state.units.get(unit_name)
-                if unit and unit.owner == self.game_state.current_player:
+                if unit and unit.owner == self.game_state.state.current_player:
                     if unit.moves_left > 0:
                         self.selected_unit_tile = tile_coord
                         self.selected_unit_name = unit_name
@@ -516,16 +516,21 @@ class MapCanvas(tk.Canvas):
             
             # If we had a unit selected and clicked a moveable tile, move it
             if self.selected_unit_tile and tile_coord in self.moveable_tiles:
+                # Calculate movement cost for the destination tile
+                dest_tile = self.game_state.map.get_tile(tile_coord[0], tile_coord[1])
+                movement_cost = TERRAIN_MOVEMENT_COST.get(dest_tile.terrain, 1) if dest_tile else 1
+                
                 old_tile = self.game_state.map.get_tile(
                     self.selected_unit_tile[0], self.selected_unit_tile[1]
                 )
                 if old_tile:
                     old_tile.unit = None
                 tile.unit = self.selected_unit_name
-                # Update unit position
+                # Update unit position and consume movement points
                 unit = self.game_state.units.get(self.selected_unit_name)
                 if unit:
                     unit.position = tile_coord
+                    unit.moves_left = max(0, unit.moves_left - movement_cost)
                 self.selected_unit_tile = None
                 self.selected_unit_name = None
                 self.moveable_tiles = set()

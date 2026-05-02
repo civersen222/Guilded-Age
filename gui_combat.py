@@ -25,12 +25,17 @@ class CombatCalculator:
     def calculate(attacker: Unit, defender: Unit, attacker_tile: HexTile,
                   defender_tile: HexTile) -> Dict:
         """Calculate combat odds and expected outcome."""
-        result = resolve_combat(attacker, defender, attacker_tile, defender_tile)
+        # resolve_combat expects lists for armies; wrap single units
+        result = resolve_combat(
+            [attacker], [defender],
+            defender_tile,  # defender's tile
+            None, None,     # ruler params (not used for single-unit)
+        )
 
         return {
-            "attacker_win_chance": result.attacker_win_chance,
-            "attacker_loss_chance": result.attacker_loss_chance,
-            "defender_loss_chance": result.defender_loss_chance,
+            "attacker_win_chance": (100.0 if result.attacker_victory else 0.0),
+            "attacker_loss_chance": (100.0 if result.defender_victory else 0.0),
+            "defender_loss_chance": (100.0 if result.defender_victory else 0.0),
             "attacker_hp_after": result.attacker_hp_after,
             "defender_hp_after": result.defender_hp_after,
             "attacker_xp": result.attacker_xp,

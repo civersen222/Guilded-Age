@@ -41,6 +41,13 @@ class CombatResult:
         self.attacker_remaining_hp: List[int] = []
         self.defender_remaining_hp: List[int] = []
         self.description = ""
+        # Single-unit combat convenience attributes
+        self.attacker_hp_after = 0
+        self.defender_hp_after = 0
+        self.attacker_xp = 0
+        self.defender_xp = 0
+        self.attacker_victory = False
+        self.defender_victory = False
 
     def __str__(self):
         lines = [self.description]
@@ -157,6 +164,18 @@ def resolve_combat(
     for u in defender_army:
         if u.is_alive:
             result.defender_remaining_hp.append(u.hp)
+
+    # Convenience attributes for single-unit combat (used by CombatUI)
+    if attacker_army:
+        alive = [u for u in attacker_army if u.is_alive]
+        result.attacker_hp_after = alive[-1].hp if alive else 0
+        result.attacker_xp = alive[-1].xp
+        result.attacker_victory = not any(u.is_alive for u in defender_army)
+    if defender_army:
+        alive = [u for u in defender_army if u.is_alive]
+        result.defender_hp_after = alive[-1].hp if alive else 0
+        result.defender_xp = alive[-1].xp
+        result.defender_victory = not any(u.is_alive for u in attacker_army)
 
     if result.attacker_casualties:
         total_att_dmg = sum(c.damage_dealt for c in result.attacker_casualties)
