@@ -446,7 +446,7 @@ class CityManager:
 
     def get_total_yields(self, owner: str, tiles: Optional[Dict[tuple, Any]] = None) -> Dict[str, float]:
         """Get total yields for a civilization"""
-        total = {"food": 0.0, "gold": 0.0, "science": 0.0, "production": 0.0, "culture": 0.0}
+        total = {"food": 0.0, "gold": 0.0, "science": 0.0, "production": 0.0, "culture": 0.0, "stability": 0.0}
 
         for city in self.get_cities_by_owner(owner):
             yields = city.calculate_yields(tiles)
