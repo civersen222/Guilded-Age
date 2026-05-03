@@ -9,12 +9,12 @@ from typing import Dict, Optional
 from game_data import VictoryType
 from victory import VictoryConditionTracker
 
-BG = "#1a1a2e"
-PANEL_BG = "#16213e"
-HIGHLIGHT = "#e94560"
-TEXT = "#eee"
-SUBTLE = "#aab"
-ACCENT = "#0f3460"
+BG = "#121212"
+PANEL_BG = "#1e1e1e"
+HIGHLIGHT = "#c9a84c"
+TEXT = "#e0d6c2"
+SUBTLE = "#8b7d6b"
+ACCENT = "#2a2a2a"
 
 
 class VictoryPanel(tk.Toplevel):
@@ -59,7 +59,7 @@ class VictoryPanel(tk.Toplevel):
             pct = self.vt.get_percentage(vtype)
             achieved = pct >= 100
             desc = self.vt.get_victory_description(vtype)
-            bar_color = "#4caf50" if achieved else "#e94560"
+            bar_color = "#c9a84c" if achieved else "#8b3a3a"
             bg_color = "#1a3a1a" if achieved else BG
 
             row = tk.Frame(self.scroll_frame, bg=bg_color)

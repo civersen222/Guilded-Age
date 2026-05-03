@@ -12,13 +12,13 @@ from military import Unit
 from research_tree import Technology
 from game import Game
 
-BG = "#1a1a2e"
-PANEL_BG = "#16213e"
-PANEL_BG2 = "#121a30"
-HIGHLIGHT = "#e94560"
-TEXT = "#eee"
-SUBTLE = "#aab"
-ACCENT = "#0f3460"
+BG = "#121212"
+PANEL_BG = "#1e1e1e"
+PANEL_BG2 = "#252525"
+HIGHLIGHT = "#c9a84c"
+TEXT = "#e0d6c2"
+SUBTLE = "#8b7d6b"
+ACCENT = "#2a2a2a"
 
 
 # ── City Detail Panel ──

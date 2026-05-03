@@ -30,24 +30,27 @@ from visual_effects import VisualEffects
 
 
 
-# ── Colour palette ─────────────────────────────────────────────
-BG = "#1a1a2e"
-PANEL_BG = "#16213e"
-PANEL_BG2 = "#1c2a44"
-ACCENT = "#0f3460"
-HIGHLIGHT = "#e94560"
-TEXT = "#eee"
-SUBTLE = "#aab"
+# ── Dark Fantasy Colour Palette ─────────────────────────────────
+BG = "#0a0b0d"
+PANEL_BG = "#16181d"
+PANEL_BG2 = "#23262d"
+ACCENT = "#23262d"
+HIGHLIGHT = "#c5a059"
+TEXT = "#e0e0e0"
+SUBTLE = "#888"
+BORDER = "#33363d"
+GOLD = "#c5a059"
+RED = "#b23a3a"
 TERRAIN_COL: Dict[TerrainType, str] = {
-    TerrainType.PLAINS:       "#4a7c3f",
-    TerrainType.GRASSLAND:    "#5a9c4f",
-    TerrainType.FOREST:       "#2d5a27",
-    TerrainType.HILLS:        "#8b7d3c",
-    TerrainType.MOUNTAIN:     "#6b6b6b",
-    TerrainType.DESERT:       "#d4b84a",
-    TerrainType.TUNDRA:       "#c8d8d8",
-    TerrainType.WATER_COAST:  "#2e6fb5",
-    TerrainType.OCEAN:        "#1a4f8a",
+    TerrainType.PLAINS:       "#3d4d3d",
+    TerrainType.GRASSLAND:    "#4a5d4a",
+    TerrainType.FOREST:       "#2d4a2d",
+    TerrainType.HILLS:        "#5a5a3d",
+    TerrainType.MOUNTAIN:     "#4a4a4a",
+    TerrainType.DESERT:       "#6a5a3a",
+    TerrainType.TUNDRA:       "#5a6a6a",
+    TerrainType.WATER_COAST:  "#2a4a6a",
+    TerrainType.OCEAN:        "#1a3a5a",
 }
 
 
@@ -72,8 +75,8 @@ class NewGameDialog:
         self.win.grab_set()
         self.win.configure(bg=BG)
 
-        tk.Label(self.win, text="CivKings — Dynasty & Conquest", font=("Segoe UI", 20, "bold"),
-                 bg=BG, fg=HIGHLIGHT).pack(pady=(20, 10))
+        tk.Label(self.win, text="DYNASTY & DOMINION", font=("Segoe UI", 20, "bold"),
+                 bg=BG, fg=GOLD).pack(pady=(20, 10))
 
         # difficulty
         diff_frame = tk.Frame(self.win, bg=BG)
@@ -89,12 +92,12 @@ class NewGameDialog:
                  bg=BG, fg=TEXT).pack(pady=(10, 4))
 
         self.sel_civ = tk.StringVar()
-        scroll = tk.Frame(self.win, bg=BG, width=680, height=200)
+        scroll = tk.Frame(self.win, bg=PANEL_BG, width=680, height=200, highlightbackground=BORDER, highlightthickness=1)
         scroll.pack(pady=4)
         scroll.pack_propagate(False)
 
-        cv = tk.Canvas(scroll, bg=PANEL_BG, highlightthickness=0)
-        sb = tk.Scrollbar(scroll, orient=tk.VERTICAL, command=cv.yview)
+        cv = tk.Canvas(scroll, bg=PANEL_BG, highlightthickness=0, highlightbackground=BORDER)
+        sb = tk.Scrollbar(scroll, orient=tk.VERTICAL, command=cv.yview, bg=PANEL_BG2)
         sf = tk.Frame(cv, bg=PANEL_BG)
         sf.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
         cv.create_window((0, 0), window=sf, anchor="nw")
@@ -104,7 +107,7 @@ class NewGameDialog:
 
         self.scroll_frame = sf
         for civ in CIVILIZATIONS.values():
-            f = tk.Frame(sf, bg=PANEL_BG)
+            f = tk.Frame(sf, bg=PANEL_BG, highlightbackground=BORDER, highlightthickness=0)
             f.pack(fill=tk.X, padx=4, pady=2)
             clr = self._civ_color(civ)
             tk.Label(f, text=f"●  {civ.name} ({civ.bonus})", bg=PANEL_BG, fg=clr,
@@ -122,7 +125,7 @@ class NewGameDialog:
             self.win.destroy()
 
         tk.Button(self.win, text="Start Game!", font=("Segoe UI", 14, "bold"),
-                  bg=HIGHLIGHT, fg=TEXT, activebackground="#c73e52", activeforeground=TEXT,
+                  bg=GOLD, fg="#000", activebackground="#d4af6a", activeforeground="#000",
                   command=on_start).pack(pady=(10, 20))
 
 
@@ -138,20 +141,20 @@ class TechTreePanel(tk.Frame):
 
     def _build(self) -> None:
         tk.Label(self, text="Technology Tree", font=("Segoe UI", 14, "bold"),
-                 bg=BG, fg=HIGHLIGHT, anchor=tk.W).pack(fill=tk.X, padx=8, pady=(8, 0))
+                 bg=BG, fg=GOLD, anchor=tk.W).pack(fill=tk.X, padx=8, pady=(8, 0))
 
         # search
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *a: self._filter())
-        tk.Entry(self, textvariable=self.search_var, bg=PANEL_BG, fg=TEXT,
-                 insertbackground=TEXT, font=("Segoe UI", 10)).pack(fill=tk.X, padx=8, pady=4)
+        tk.Entry(self, textvariable=self.search_var, bg=PANEL_BG2, fg=TEXT,
+                 insertbackground=TEXT, font=("Segoe UI", 10), relief=tk.FLAT, highlightthickness=1, highlightbackground=BORDER).pack(fill=tk.X, padx=8, pady=4)
 
         # branch filter
         self.branch_var = tk.StringVar(value="All")
         branches = ["All"] + list({t.branch for t in TECHNOLOGIES.values()})
         for b in branches:
             tk.Radiobutton(self, text=b, variable=self.branch_var, value=b,
-                           bg=BG, fg=TEXT, selectcolor=BG, command=self._filter).pack(side=tk.LEFT, padx=4)
+                           bg=BG, fg=TEXT, selectcolor=BG, command=self._filter, padx=4).pack(side=tk.LEFT, padx=4)
 
         # scrollable tech list
         scroll_frame = tk.Frame(self, bg=BG)
@@ -209,12 +212,12 @@ class CityDetailPanel(tk.Frame):
 
     def _build(self) -> None:
         self.title_lbl = tk.Label(self, text="City", font=("Segoe UI", 14, "bold"),
-                                   bg=PANEL_BG, fg=HIGHLIGHT, anchor=tk.W)
+                                   bg=PANEL_BG, fg=GOLD, anchor=tk.W)
         self.title_lbl.pack(fill=tk.X, padx=8, pady=(8, 0))
 
         self.info_text = tk.Text(self, bg=PANEL_BG, fg=TEXT, font=("Consolas", 10),
                                  padx=8, pady=4, relief=tk.FLAT, wrap=tk.NONE,
-                                 highlightthickness=0, state=tk.DISABLED)
+                                 highlightthickness=0, highlightbackground=BORDER, state=tk.DISABLED)
         sb = tk.Scrollbar(self, orient=tk.VERTICAL, command=self.info_text.yview)
         self.info_text.configure(yscrollcommand=sb.set)
         self.info_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=4)
@@ -226,7 +229,7 @@ class CityDetailPanel(tk.Frame):
 
         # production queue label
         self.prod_label = tk.Label(self.prod_frame, text="Production Queue",
-                                 bg=PANEL_BG, fg=HIGHLIGHT, font=("Segoe UI", 10, "bold"),
+                                 bg=PANEL_BG, fg=GOLD, font=("Segoe UI", 10, "bold"),
                                  anchor=tk.W)
         self.prod_label.pack(fill=tk.X, pady=(0, 2))
 
@@ -236,8 +239,8 @@ class CityDetailPanel(tk.Frame):
 
         # quick start button
         self.start_btn = tk.Button(self.prod_frame, text="\u25b6 Start Production",
-                                 bg=ACCENT, fg=TEXT, font=("Segoe UI", 10, "bold"),
-                                 activebackground=HIGHLIGHT, activeforeground=TEXT,
+                                 bg=GOLD, fg="#000", font=("Segoe UI", 10, "bold"),
+                                 activebackground="#d4af6a", activeforeground="#000",
                                  command=self._on_start)
         self.start_btn.pack(fill=tk.X, pady=(4, 0))
 
@@ -303,7 +306,7 @@ class ActionLogPanel(tk.Frame):
     """Scrollable event log with color-coded events."""
 
     EVENT_COLORS = {
-        "combat": "#e94560",
+        "combat": "#8b3a3a",
         "diplomacy": "#4caf50",
         "tech": "#2196f3",
         "economy": "#ff9800",
@@ -316,11 +319,11 @@ class ActionLogPanel(tk.Frame):
         super().__init__(parent, bg=PANEL_BG2)
         self.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         tk.Label(self, text="Event Log", font=("Segoe UI", 11, "bold"),
-                 bg=PANEL_BG2, fg=HIGHLIGHT, anchor=tk.W).pack(fill=tk.X, padx=4, pady=(4, 0))
+                 bg=PANEL_BG2, fg=GOLD, anchor=tk.W).pack(fill=tk.X, padx=4, pady=(4, 0))
 
         self.log_text = tk.Text(self, bg=PANEL_BG2, fg=TEXT, font=("Consolas", 9),
                                 padx=6, pady=2, relief=tk.FLAT, wrap=tk.NONE,
-                                highlightthickness=0, state=tk.DISABLED)
+                                highlightthickness=0, highlightbackground=BORDER, state=tk.DISABLED)
         sb = tk.Scrollbar(self, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=sb.set)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(2, 0))
@@ -399,7 +402,7 @@ class CivKingsGUI:
 
     # ── UI construction ────────────────────────────────────────────
     def _build_ui(self) -> None:
-        self.root.title("CivKings")
+        self.root.title("DYNASTY & DOMINION")
         self.root.configure(bg=BG)
         self.root.geometry("1200x750")
 
@@ -413,7 +416,7 @@ class CivKingsGUI:
         self.speed_var = tk.StringVar(value="1x")
         
         # Context menu
-        self.context_menu = tk.Menu(self.root, tearoff=0, bg=PANEL_BG, fg=TEXT, font=("Segoe UI", 9))
+        self.context_menu = tk.Menu(self.root, tearoff=0, bg=PANEL_BG2, fg=TEXT, font=("Segoe UI", 9), borderwidth=1)
         self.context_menu.add_command(label="Select Unit", command=self._context_select_unit)
         self.context_menu.add_command(label="Select City", command=self._context_select_city)
         self.context_menu.add_separator()
@@ -445,14 +448,15 @@ class CivKingsGUI:
             return
         
         # Create minimap frame
-        self.minimap_frame = tk.Frame(self.map_canvas, bg=ACCENT, 
-                                       width=150, height=150, bd=1, relief=tk.RAISED)
+        self.minimap_frame = tk.Frame(self.map_canvas, bg=PANEL_BG2,
+                                       width=150, height=150, bd=0, relief=tk.FLAT)
         self.minimap_frame.place(relx=1.0, rely=0, anchor='ne', x=-5)
+        self.minimap_frame.config(highlightbackground=BORDER, highlightthickness=1)
         
         # Create minimap canvas
-        self.minimap_canvas = tk.Canvas(self.minimap_frame, bg="#0d1b2a",
+        self.minimap_canvas = tk.Canvas(self.minimap_frame, bg="#0a0b0d",
                                          width=148, height=148,
-                                         highlightthickness=0)
+                                         highlightthickness=0, highlightbackground=BORDER)
         self.minimap_canvas.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
         
         # Create minimap renderer
@@ -483,10 +487,14 @@ class CivKingsGUI:
         self.minimap_renderer.render_minimap(tiles, (cam_q, cam_r, cam_w, cam_h))
     
     def _top_bar(self) -> None:
-        bar = tk.Frame(self.root, bg=ACCENT, height=48)
+        bar = tk.Frame(self.root, bg=PANEL_BG2, height=48)
         bar.pack(fill=tk.X, side=tk.TOP)
         bar.pack_propagate(False)
+        bar.config(highlightbackground=BORDER, highlightthickness=1)
         self.top_bar_frame = bar  # Store reference for updates
+
+        tk.Label(bar, text="DYNASTY & DOMINION", bg=PANEL_BG2, fg=GOLD,
+                 font=("Segoe UI", 12, "bold")).pack(side=tk.LEFT, padx=12, pady=6)
 
         items = [
             ("🌾 Food", self.game.city_manager.get_total_yields(self.game.player_civ.name).get("food", 0)),
@@ -497,26 +505,26 @@ class CivKingsGUI:
             ("📅 Turn", self.game.state.turn),
         ]
         for label, value in items:
-            f = tk.Frame(bar, bg=ACCENT)
+            f = tk.Frame(bar, bg=PANEL_BG2)
             f.pack(side=tk.LEFT, padx=12, pady=6)
-            tk.Label(f, text=f"{label}: {value}", bg=ACCENT, fg=TEXT,
+            tk.Label(f, text=f"{label}: {value}", bg=PANEL_BG2, fg=TEXT,
                      font=("Segoe UI", 10, "bold")).pack()
         
         # Sound toggle button
         self.sound_on = tk.BooleanVar(value=True)
         self.sound_btn = tk.Checkbutton(bar, text="🔊", variable=self.sound_on,
-                                   command=self._toggle_sound, bg=ACCENT,
-                                   fg=TEXT, selectcolor=ACCENT)
+                                   command=self._toggle_sound, bg=PANEL_BG2,
+                                   fg=TEXT, selectcolor=PANEL_BG2)
         self.sound_btn.pack(side=tk.RIGHT, padx=8)
         
         # Game speed buttons
-        self.speed_frame = tk.Frame(bar, bg=ACCENT)
+        self.speed_frame = tk.Frame(bar, bg=PANEL_BG2)
         self.speed_frame.pack(side=tk.RIGHT, padx=8)
         self.speed_var = tk.StringVar(value="1x")
         for label, val in [("1x", "1"), ("2x", "2"), ("5x", "5")]:
             tk.Radiobutton(self.speed_frame, text=label, variable=self.speed_var,
-                         value=val, bg=ACCENT, fg=TEXT,
-                         selectcolor=ACCENT, command=lambda s=val: self._set_speed(s)).pack(side=tk.LEFT, padx=2)
+                         value=val, bg=PANEL_BG2, fg=TEXT,
+                         selectcolor=PANEL_BG2, command=lambda s=val: self._set_speed(s)).pack(side=tk.LEFT, padx=2)
         
         # Track previous yields for trend arrows
         self._prev_yields: Optional[Dict[str, int]] = None
@@ -588,7 +596,7 @@ class CivKingsGUI:
         frame.pack(fill=tk.BOTH, expand=True, side=tk.LEFT, padx=4, pady=(4, 0))
 
         # map canvas
-        self.map_frame = tk.Frame(frame, bg=ACCENT)
+        self.map_frame = tk.Frame(frame, bg=BG, highlightbackground=BORDER, highlightthickness=1)
         self.map_frame.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
 
         self.map_canvas = MapCanvas(self.map_frame, game_state=self.game)
@@ -606,11 +614,11 @@ class CivKingsGUI:
         self.log_panel.add(f"Welcome to CivKings! You play as {self.game.player_civ.name}.")
 
     def _bottom_bar(self) -> None:
-        bar = tk.Frame(self.root, bg=ACCENT, height=36)
+        bar = tk.Frame(self.root, bg=PANEL_BG2, height=36)
         bar.pack(fill=tk.X, side=tk.BOTTOM)
         bar.pack_propagate(False)
         tk.Label(bar, text="Click a unit to select | Click a city to view | R-click for production",
-                 bg=ACCENT, fg=SUBTLE, font=("Segoe UI", 9)).pack()
+                 bg=PANEL_BG2, fg=SUBTLE, font=("Segoe UI", 9)).pack()
 
     def _center_buttons(self) -> None:
         f = tk.Frame(self.root, bg=BG)
@@ -632,9 +640,12 @@ class CivKingsGUI:
             ("Quit", self.quit),
         ]
         for name, cb in btns:
-            tk.Button(f, text=name, bg=ACCENT, fg=TEXT, font=("Segoe UI", 10, "bold"),
-                  activebackground=HIGHLIGHT, activeforeground=TEXT,
-                  command=cb, width=12).pack(side=tk.LEFT, padx=4, pady=(0, 10))
+            btn_bg = RED if name == "Next Turn" else GOLD
+            btn_fg = "#fff" if name == "Next Turn" else "#000"
+            btn_active = "#d44" if name == "Next Turn" else "#d4af6a"
+            tk.Button(f, text=name, bg=btn_bg, fg=btn_fg, font=("Segoe UI", 10, "bold") if name == "Next Turn" else ("Segoe UI", 10),
+                  activebackground=btn_active, activeforeground=btn_fg,
+                  command=cb, width=12, relief=tk.FLAT, highlightthickness=0).pack(side=tk.LEFT, padx=4, pady=(0, 10))
 
     # ── map rendering ───────────────────────────────────────────
 
@@ -645,7 +656,6 @@ class CivKingsGUI:
             zoom=self.map_canvas.zoom_pan.zoom_level
         )
         self._update_minimap()
-        self._update_zoom_display()
 
     def _on_map_click(self, tile_coord) -> None:
         """Callback from MapCanvas when a tile is clicked."""

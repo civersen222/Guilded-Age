@@ -15,16 +15,18 @@ from military import Unit
 from court import Court, CourtPosition
 
 
-# ── Colours ──
-BG = "#1a1a2e"
-PANEL_BG = "#16213e"
-PANEL_BG2 = "#1c2a44"
-ACCENT = "#0f3460"
-HIGHLIGHT = "#e94560"
-TEXT = "#eee"
-SUBTLE = "#aab"
-ALIVE_COLOR = "#4ecca3"
-DEAD_COLOR = "#e94560"
+# ── Dark Fantasy Colours ──
+BG = "#0a0b0d"
+PANEL_BG = "#16181d"
+PANEL_BG2 = "#23262d"
+ACCENT = "#23262d"
+HIGHLIGHT = "#c5a059"
+TEXT = "#e0e0e0"
+SUBTLE = "#888"
+ALIVE_COLOR = "#c9a84c"
+DEAD_COLOR = "#8b3a3a"
+BORDER = "#33363d"
+GOLD = "#c5a059"
 
 
 # ── Production Queue Popup ──
@@ -96,7 +98,7 @@ class ProductionPopup(tk.Toplevel):
                 can_produce = False
                 reason = f"Requires {btype.requires_tech}"
             
-            color = "#4ecca3" if can_produce else "#e94560"
+            color = "#c9a84c" if can_produce else "#8b3a3a"
             text = f"  [B] {btype.name}  [Cost: {btype.production_cost}]  [Req: {req}]"
             if reason:
                 text += f"  ({reason})"
@@ -116,7 +118,7 @@ class ProductionPopup(tk.Toplevel):
                 can_produce = False
                 reason = f"Requires {dtype.requires_tech}"
             
-            color = "#4ecca3" if can_produce else "#e94560"
+            color = "#c9a84c" if can_produce else "#8b3a3a"
             text = f"  [D] {dtype.name}  [Cost: {dtype.production_cost}]  [Req: {req}]"
             if reason:
                 text += f"  ({reason})"
@@ -145,7 +147,7 @@ class ProductionPopup(tk.Toplevel):
                 can_produce = False
                 reason = f"Requires {utype.resource_required}"
             
-            color = "#4ecca3" if can_produce else "#e94560"
+            color = "#c9a84c" if can_produce else "#8b3a3a"
             text = f"  [U] {utype_name}  [Cost: {cost}]  [Req: {req}]"
             if reason:
                 text += f"  ({reason})"
@@ -246,7 +248,7 @@ class VictoryPopup(tk.Toplevel):
 
         for vtype, info in conditions.items():
             status = "Complete" if info['complete'] else f"{info['progress']:.0%}"
-            color = "#4ecca3" if info['complete'] else "#ffeb3b"
+            color = "#c9a84c" if info['complete'] else "#f0a030"
             listbox.insert(tk.END, f"{vtype.value}: {status}")
             listbox.itemconfig(listbox.size() - 1, bg=PANEL_BG2, fg=color)
         
@@ -289,7 +291,7 @@ class DiplomacyPopup(tk.Toplevel):
 
         for other_id, relations in player.diplomacy.items():
             status = relations['status']
-            color = "#4ecca3" if status == "Allied" else ("#ffeb3b" if status == "Neutral" else "#e94560")
+            color = "#c9a84c" if status == "Allied" else ("#f0a030" if status == "Neutral" else "#8b3a3a")
             listbox.insert(tk.END, f"{other_id}: {status}")
             listbox.itemconfig(listbox.size() - 1, bg=PANEL_BG2, fg=color)
         
@@ -355,7 +357,7 @@ class CourtPopup(tk.Toplevel):
 
         for pos, occupant in self.court.positions.items():
             status = f"{pos.value}: {occupant}" if occupant else f"{pos.value}: Vacant"
-            color = "#4ecca3" if occupant else "#888"
+            color = "#c9a84c" if occupant else "#888"
             listbox.insert(tk.END, status)
             listbox.itemconfig(listbox.size() - 1, bg=PANEL_BG2, fg=color)
         
@@ -429,7 +431,7 @@ class HappinessPanel(tk.Toplevel):
 
         hs = self.game.happiness_system
         happiness = hs.current_happiness
-        color = "#4ecca3" if happiness >= 60 else ("#f0a030" if happiness >= 40 else "#e94560")
+        color = "#c9a84c" if happiness >= 60 else ("#f0a030" if happiness >= 40 else "#8b3a3a")
 
         # Big percentage
         tk.Label(self, text=f"{happiness}%", font=("Segoe UI", 36, "bold"),
@@ -493,7 +495,7 @@ class StabilityPanel(tk.Toplevel):
 
         ss = self.game.stability_system
         stability = ss.stability
-        color = "#4ecca3" if stability >= 60 else ("#f0a030" if stability >= 40 else "#e94560")
+        color = "#c9a84c" if stability >= 60 else ("#f0a030" if stability >= 40 else "#8b3a3a")
 
         tk.Label(self, text=f"{stability}%", font=("Segoe UI", 36, "bold"),
                  bg=BG, fg=color).pack(pady=(4, 8))
@@ -549,7 +551,7 @@ class EconomyPanel(tk.Toplevel):
 
         # Gold display
         tk.Label(self, text=f"Gold: {gold}", font=("Segoe UI", 20, "bold"),
-                 bg=BG, fg="#4ecca3").pack(pady=(4, 4))
+                 bg=BG, fg="#c9a84c").pack(pady=(4, 4))
 
         # Tax rate slider
         tax_frame = tk.Frame(self, bg=BG)
@@ -643,7 +645,7 @@ class FactionsPanel(tk.Toplevel):
         for fname, faction in factions.items():
             if hasattr(faction, 'influence'):
                 text = f"  {faction.name} ({faction.faction_type})  [Influence: {faction.influence}]  [Support: {faction.support}]"
-                color = "#4ecca3" if faction.influence >= 50 else ("#f0a030" if faction.influence >= 30 else "#e94560")
+                color = "#c9a84c" if faction.influence >= 50 else ("#f0a030" if faction.influence >= 30 else "#8b3a3a")
             else:
                 text = f"  {fname}: {faction}"
                 color = TEXT
@@ -695,7 +697,7 @@ class VictoryPanel(tk.Toplevel):
             bar = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
             achieved = "✓" if cond.value >= cond.threshold else " "
             text = f"  [{achieved}] {vtype.value:18s}  [{bar}]  {pct:.0f}%"
-            color = "#4ecca3" if pct >= 100 else ("#f0a030" if pct >= 50 else SUBTLE)
+            color = "#c9a84c" if pct >= 100 else ("#f0a030" if pct >= 50 else SUBTLE)
             self.listbox.insert(tk.END, text)
             self.listbox.itemconfig(self.listbox.size() - 1, bg=PANEL_BG2, fg=color)
 
@@ -703,7 +705,7 @@ class VictoryPanel(tk.Toplevel):
         achieved = tracker.get_victory()
         if achieved:
             tk.Label(self, text=f"Victory: {achieved.value}",
-                     font=("Segoe UI", 11, "bold"), bg=BG, fg="#4ecca3").pack(pady=(8, 0))
+                     font=("Segoe UI", 11, "bold"), bg=BG, fg="#c9a84c").pack(pady=(8, 0))
 
         tk.Button(self, text="Close", bg=ACCENT, fg=TEXT,
                   font=("Segoe UI", 10), command=self.destroy).pack(pady=(8, 10))
@@ -816,7 +818,7 @@ class DiplomacyPanel(tk.Toplevel):
             # Get relation score
             rel_key = (player_name, civ_name)
             rel_score = dm.relations.get(rel_key, 0)
-            color = "#4ecca3" if rel_score >= 30 else ("#f0a030" if rel_score >= -10 else "#e94560")
+            color = "#c9a84c" if rel_score >= 30 else ("#f0a030" if rel_score >= -10 else "#8b3a3a")
 
             # Status
             is_allied = civ_name in dm.alliances.get(player_name, [])

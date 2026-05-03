@@ -26,17 +26,17 @@ class TileHighlight(Enum):
 class HexGridRenderer:
     """Handles rendering of hex grid tiles with terrain, resources, and features."""
     
-    # Terrain color palette
+    # Terrain color palette - Dark Fantasy theme
     TERRAIN_COLORS = {
-        TerrainType.PLAINS: "#4a7c3f",
-        TerrainType.GRASSLAND: "#5a9c4f",
-        TerrainType.FOREST: "#2d5a27",
-        TerrainType.HILLS: "#8b7d3c",
-        TerrainType.MOUNTAIN: "#6b6b6b",
-        TerrainType.DESERT: "#d4b84a",
-        TerrainType.TUNDRA: "#c8d8d8",
-        TerrainType.WATER_COAST: "#2e6fb5",
-        TerrainType.OCEAN: "#1a4f8a",
+        TerrainType.PLAINS: "#3d4d3d",
+        TerrainType.GRASSLAND: "#4a5d4a",
+        TerrainType.FOREST: "#2d4a2d",
+        TerrainType.HILLS: "#5a5a3d",
+        TerrainType.MOUNTAIN: "#4a4a4a",
+        TerrainType.DESERT: "#6a5a3a",
+        TerrainType.TUNDRA: "#5a6a6a",
+        TerrainType.WATER_COAST: "#2a4a6a",
+        TerrainType.OCEAN: "#1a3a5a",
     }
     
     # Resource icons (unicode)
@@ -52,12 +52,13 @@ class HexGridRenderer:
         ResourceType.STRATEGIC_OIL: "🛢",
     }
     
-    # Highlight overlay colors
+    # Highlight overlay colors - Dark Fantasy theme
     HIGHLIGHT_COLORS = {
-        TileHighlight.SELECTED: "#e94560",
+        TileHighlight.SELECTED: "#c5a059",
         TileHighlight.HOVER: "#ffffff",
         TileHighlight.MOVE_RANGE: "#4caf50",
         TileHighlight.ATTACK_RANGE: "#ff9800",
+        TileHighlight.ENEMY_TERRITORY: "#b23a3a",
         TileHighlight.ENEMY_TERRITORY: "#f44336",
     }
     
@@ -121,17 +122,17 @@ class HexGridRenderer:
                 
             # Draw hex tile
             pts = self._hex_points(hex_x, hex_y, hex_size)
-            tile_color = self.TERRAIN_COLORS.get(tile.terrain_type, "#333333")
+            tile_color = self.TERRAIN_COLORS.get(tile.terrain, "#333333")
             
             # Adjust color for water depth
-            if tile.terrain_type in (TerrainType.WATER_COAST, TerrainType.OCEAN):
+            if tile.terrain in (TerrainType.WATER_COAST, TerrainType.OCEAN):
                 # Make deeper water darker
-                depth_factor = 0.7 if tile.terrain_type == TerrainType.OCEAN else 0.9
+                depth_factor = 0.7 if tile.terrain == TerrainType.OCEAN else 0.9
                 tile_color = self._adjust_color_brightness(tile_color, depth_factor)
             
             # Draw terrain
             tag_id = self.canvas.create_polygon(
-                pts, fill=tile_color, outline="#1a1a2e", width=1,
+                pts, fill=tile_color, outline="#121212", width=1,
                 tags=(str(q), str(r), "tile")
             )
             
@@ -305,7 +306,7 @@ class MinimapRenderer:
             x = q * scale
             y = r * scale
             
-            color = HexGridRenderer.TERRAIN_COLORS.get(tile.terrain_type, "#333333")
+            color = HexGridRenderer.TERRAIN_COLORS.get(tile.terrain, "#333333")
             self.minimap_items[(q, r)] = self.canvas.create_rectangle(
                 x, y, x + scale, y + scale,
                 fill=color, outline="#000000", width=0
@@ -320,7 +321,7 @@ class MinimapRenderer:
         
         self.camera_rect = self.canvas.create_rectangle(
             cam_x, cam_y, cam_x + cam_w_pixels, cam_y + cam_h_pixels,
-            fill="none", outline="#ffffff", width=2
+            outline="#ffffff", width=2
         )
 
 
@@ -346,10 +347,10 @@ class HoverTooltip:
         self.tooltip.wm_geometry(f"+{widget.winfo_rootx() + 10}+{widget.winfo_rooty() + widget.winfo_height() + 5}")
         
         # Add tooltip content
-        frame = tk.Frame(self.tooltip, bg="#1a1a2e", bd=1, relief=tk.RAISED)
+        frame = tk.Frame(self.tooltip, bg="#121212", bd=1, relief=tk.RAISED)
         frame.pack()
         
-        tk.Label(frame, text=text, bg="#1a1a2e", fg="#ffffff",
+        tk.Label(frame, text=text, bg="#121212", fg="#e0d6c2",
                 font=("Segoe UI", 9), padx=5, pady=2).pack()
         
         # Update tooltip position on mouse move
@@ -446,7 +447,7 @@ class MapCanvas(tk.Canvas):
     """Main map canvas with integrated rendering and interaction."""
     
     def __init__(self, master, game_state=None):
-        super().__init__(master, bg="#0d1b2a", highlightthickness=0)
+        super().__init__(master, bg="#0a0b0d", highlightthickness=0)
         
         self.game_state = game_state
         self.renderer = HexGridRenderer(self)
@@ -588,7 +589,7 @@ class MapCanvas(tk.Canvas):
         lines = [f"Tile ({tile.q}, {tile.r})"]
         
         # Terrain type
-        terrain_name = tile.terrain_type.value.replace("_", " ").title()
+        terrain_name = tile.terrain.value.replace("_", " ").title()
         lines.append(f"Terrain: {terrain_name}")
         
         # Resources

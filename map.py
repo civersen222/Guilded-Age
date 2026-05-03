@@ -67,7 +67,7 @@ class ImprovedMap(WorldMap):
     def _generate_resources(self):
         """Place resources on tiles based on terrain compatibility."""
         for (q, r), tile in self.tiles.items():
-            compatible_resources = TERRAIN_RESOURCE_COMPATIBILITY.get(tile.terrain_type, [])
+            compatible_resources = TERRAIN_RESOURCE_COMPATIBILITY.get(tile.terrain, [])
             if compatible_resources and random.random() < 0.15:
                 self.resources[(q, r)] = random.choice(compatible_resources)
 
@@ -167,21 +167,21 @@ def render_map(improved_map: ImprovedMap, fog: ImprovedFogOfWar, cities=None, un
                 res = improved_map.resources[key]
                 icon = resource_icons.get(res, "?")
                 row += f" [{icon}] "
-            elif tile.terrain_type == TerrainType.MOUNTAIN:
+            elif tile.terrain == TerrainType.MOUNTAIN:
                 row += " [M] "
-            elif tile.terrain_type == TerrainType.FOREST:
+            elif tile.terrain == TerrainType.FOREST:
                 row += " [F] "
-            elif tile.terrain_type == TerrainType.PLAINS or tile.terrain_type == TerrainType.GRASSLAND:
+            elif tile.terrain == TerrainType.PLAINS or tile.terrain == TerrainType.GRASSLAND:
                 row += " [.] "
-            elif tile.terrain_type == TerrainType.DESERT:
+            elif tile.terrain == TerrainType.DESERT:
                 row += " [:] "
-            elif tile.terrain_type == TerrainType.TUNDRA:
+            elif tile.terrain == TerrainType.TUNDRA:
                 row += " [~] "
-            elif tile.terrain_type == TerrainType.WATER_COAST:
+            elif tile.terrain == TerrainType.WATER_COAST:
                 row += " [-] "
-            elif tile.terrain_type == TerrainType.OCEAN:
+            elif tile.terrain == TerrainType.OCEAN:
                 row += " [~] "
-            elif tile.terrain_type == TerrainType.HILLS:
+            elif tile.terrain == TerrainType.HILLS:
                 row += " [v] "
             else:
                 row += " [?] "

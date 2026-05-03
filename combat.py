@@ -3,6 +3,8 @@ CivKings - Tactical Combat Resolver
 Handles army-vs-army combat with terrain modifiers, ruler martial bonuses,
 and casualty tracking.
 """
+from __future__ import annotations
+
 import random
 from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
 from hex_map import HexTile

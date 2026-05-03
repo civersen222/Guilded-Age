@@ -10,12 +10,12 @@ from combat import resolve_combat, CombatResult
 from military import Unit
 from hex_map import HexTile
 
-BG = "#1a1a2e"
-PANEL_BG = "#16213e"
-HIGHLIGHT = "#e94560"
-TEXT = "#eee"
-SUBTLE = "#aab"
-ACCENT = "#0f3460"
+BG = "#121212"
+PANEL_BG = "#1e1e1e"
+HIGHLIGHT = "#c9a84c"
+TEXT = "#e0d6c2"
+SUBTLE = "#8b7d6b"
+ACCENT = "#2a2a2a"
 
 
 class CombatCalculator:

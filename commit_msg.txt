@@ -1,11 +1,5 @@
-Enhance AI strategy, add TechTreePopup, fix gui_popups string literals
+Fix GUI startup and color compatibility issues
 
-- Add comprehensive AI state tracking (diplomacy, treaties, grudges)
-- Implement dynamic priority adjustment based on game state
-- Add strategic unit selection with era-appropriate choices
-- Add city expansion scoring based on terrain/resources
-- Add missing TechTreePopup class to gui_popups.py
-- Fix broken newline string literals in gui_popups.py
-- Add visual effects system (sound_effects.py, visual_effects.py)
-- Update game state management and event handling
-- Expand religion system
+- main.py: Launch GUI by default instead of CLI text mode
+- game_data.py: Replace non-standard Tkinter color names with hex codes
+- city.py: Add stability key to get_total_yields() to prevent KeyError
