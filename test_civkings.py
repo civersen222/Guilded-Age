@@ -164,7 +164,7 @@ class TestReligionManager(unittest.TestCase):
         rm = ReligionManager()
         religion = rm.found_religion("Monotheism", "Rome")
         self.assertIsNotNone(religion)
-        self.assertEqual(religion.finder, "Rome")
+        self.assertEqual(religion.founder, "Rome")
 
     def test_faith_calculation(self):
         from religion import ReligionManager
