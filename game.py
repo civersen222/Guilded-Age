@@ -10,7 +10,7 @@ from game_data import (
     TECHNOLOGIES, Technology, Era, TechBranch,
     TRAIT_DATABASE, CIVILIZATIONS, Civilization,
     COASTLINE_BONUSES, LANDMARKS, LandmarkType, ClimateZone, get_climate_for_row,
-    UNIT_TYPES, UnitCategory
+    UNIT_TYPES, UnitCategory, BUILDINGS
 )
 from hex_map import HexMap, HexTile
 from city import City
