@@ -66,7 +66,7 @@ class Minimap:
             pos = getattr(city, "position", (0, 0))
             cx, cy = pos
             dot_x = x + (cx - min_x) * self._scale
-            dot_y = y + self.SIZE - self.MARGIN - (cy - min_y) * self._scale - self.SIZE
+            dot_y = y + self.SIZE - self.MARGIN - (cy - min_y) * self._scale
             is_player = getattr(city, "owner", "") == player_name
             colour = (255, 215, 0) if is_player else (178, 58, 58)
             pygame.draw.circle(surface, colour, (int(dot_x), int(dot_y)), 3)
@@ -74,7 +74,7 @@ class Minimap:
         # Draw viewport rectangle
         bounds = self.camera.get_visible_bounds()
         vx = x + (bounds[0] - min_x) * self._scale
-        vy = y + self.SIZE - self.MARGIN - (bounds[3] - min_y) * self._scale - self.SIZE
+        vy = y + self.SIZE - self.MARGIN - (bounds[3] - min_y) * self._scale
         vw = (bounds[2] - bounds[0]) * self._scale
         vh = (bounds[3] - bounds[1]) * self._scale
         pygame.draw.rect(surface, (255, 255, 255), (int(vx), int(vy), int(vw), int(vh)), 1)
