@@ -15,6 +15,7 @@ from pygame_app.map.tile_atlas import TileAtlas
 from pygame_app.map.hex_renderer import HexRenderer
 from pygame_app.map.minimap import Minimap
 from pygame_app.panels.resource_bar import ResourceBar
+from pygame_app.panels.city_panel import CityPanel
 
 
 class GameScreen(BaseScreen):
@@ -28,6 +29,7 @@ class GameScreen(BaseScreen):
         self._minimap = None
         self._map_surface = None
         self._resource_bar = None
+        self._city_panel = None
         self._next_turn_btn = None
         self._panning = False
         self._pan_start = (0, 0)
@@ -66,6 +68,13 @@ class GameScreen(BaseScreen):
         # Resource bar
         self._resource_bar = ResourceBar(self.ui_manager, game)
 
+        # City panel (left sidebar)
+        self._city_panel = CityPanel(
+            self.ui_manager,
+            pygame.Rect(0, RESOURCE_BAR_HEIGHT, LEFT_PANEL_WIDTH, 400),
+        )
+        self._city_panel.refresh(game)
+
         # Next Turn button
         self._next_turn_btn = pygame_gui.elements.UIButton(
             relative_rect=pygame.Rect(SCREEN_WIDTH - RIGHT_PANEL_WIDTH - 20,
@@ -78,6 +87,8 @@ class GameScreen(BaseScreen):
     def exit(self):
         if self._resource_bar:
             self._resource_bar.destroy()
+        if self._city_panel:
+            self._city_panel.destroy()
         if self._next_turn_btn:
             self._next_turn_btn.kill()
 
@@ -92,12 +103,14 @@ class GameScreen(BaseScreen):
                 and event.ui_element == self._next_turn_btn):
             game.process_turn()
             self._resource_bar.refresh(game)
+            self._city_panel.refresh(game)
             return
 
         # Enter key = Next Turn
         if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
             game.process_turn()
             self._resource_bar.refresh(game)
+            self._city_panel.refresh(game)
             return
 
         # Middle mouse button drag for panning
@@ -135,6 +148,14 @@ class GameScreen(BaseScreen):
                 factor = 1.1 if event.y > 0 else 0.9
                 self._camera.zoom_at(mx, my, factor)
                 return
+
+        # City panel button click: center camera on that city
+        city = self._city_panel.handle_event(event)
+        if city is not None:
+            pos = getattr(city, "position", (0, 0))
+            wx, wy = HexRenderer.hex_to_world(pos[0], pos[1])
+            self._camera.center_on(wx, wy)
+            return
 
         # Home key: center on first city
         if event.type == pygame.KEYDOWN and event.key == pygame.K_HOME:
