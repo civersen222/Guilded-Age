@@ -14,6 +14,7 @@ from pygame_app.map.camera import Camera
 from pygame_app.map.tile_atlas import TileAtlas
 from pygame_app.map.hex_renderer import HexRenderer
 from pygame_app.map.minimap import Minimap
+from pygame_app.panels.resource_bar import ResourceBar
 
 
 class GameScreen(BaseScreen):
@@ -26,7 +27,7 @@ class GameScreen(BaseScreen):
         self._hex_renderer = None
         self._minimap = None
         self._map_surface = None
-        self._resource_label = None
+        self._resource_bar = None
         self._next_turn_btn = None
         self._panning = False
         self._pan_start = (0, 0)
@@ -62,12 +63,8 @@ class GameScreen(BaseScreen):
         # Map surface
         self._map_surface = pygame.Surface((MAP_W, MAP_H))
 
-        # Resource bar label
-        self._resource_label = pygame_gui.elements.UILabel(
-            relative_rect=pygame.Rect(MAP_X + 5, MAP_Y + 5, MAP_W - 10, RESOURCE_BAR_HEIGHT - 10),
-            text=self._format_resource_text(game),
-            manager=self.ui_manager,
-        )
+        # Resource bar
+        self._resource_bar = ResourceBar(self.ui_manager, game)
 
         # Next Turn button
         self._next_turn_btn = pygame_gui.elements.UIButton(
@@ -79,27 +76,12 @@ class GameScreen(BaseScreen):
         )
 
     def exit(self):
-        if self._resource_label:
-            self._resource_label.kill()
+        if self._resource_bar:
+            self._resource_bar.destroy()
         if self._next_turn_btn:
             self._next_turn_btn.kill()
 
-    def _format_resource_text(self, game):
-        """Format the resource bar text."""
-        civ_name = game.player_civ.name if hasattr(game.player_civ, "name") else "Player"
-        yields = game.city_manager.get_total_yields(civ_name, game.map.tiles)
-        gold = game.gold.get(civ_name, 0)
-        turn = game.state.turn
-        f = yields.get("food", 0)
-        p = yields.get("production", 0)
-        g = gold
-        s = yields.get("science", 0)
-        return (
-            f"{civ_name} | "
-            f"Food: {f:.1f} | Prod: {p:.1f} | "
-            f"Gold: {int(g)} | Sci: {s:.1f} | "
-            f"Turn {turn}"
-        )
+
 
     def handle_event(self, event):
         game = self.app.game
@@ -109,13 +91,13 @@ class GameScreen(BaseScreen):
                 and hasattr(self, "_next_turn_btn")
                 and event.ui_element == self._next_turn_btn):
             game.process_turn()
-            self._resource_label.set_text(self._format_resource_text(game))
+            self._resource_bar.refresh(game)
             return
 
         # Enter key = Next Turn
         if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
             game.process_turn()
-            self._resource_label.set_text(self._format_resource_text(game))
+            self._resource_bar.refresh(game)
             return
 
         # Middle mouse button drag for panning
