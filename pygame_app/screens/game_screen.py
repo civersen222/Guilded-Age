@@ -16,6 +16,9 @@ from pygame_app.map.hex_renderer import HexRenderer
 from pygame_app.map.minimap import Minimap
 from pygame_app.panels.resource_bar import ResourceBar
 from pygame_app.panels.city_panel import CityPanel
+from pygame_app.panels.event_log import EventLog
+from pygame_app.panels.turn_summary import TurnSummary
+from pygame_app.panels.action_bar import ActionBar
 
 
 class GameScreen(BaseScreen):
@@ -30,6 +33,9 @@ class GameScreen(BaseScreen):
         self._map_surface = None
         self._resource_bar = None
         self._city_panel = None
+        self._event_log = None
+        self._turn_summary = None
+        self._action_bar = None
         self._next_turn_btn = None
         self._panning = False
         self._pan_start = (0, 0)
@@ -75,6 +81,20 @@ class GameScreen(BaseScreen):
         )
         self._city_panel.refresh(game)
 
+        # Event log (right sidebar)
+        self._event_log = EventLog(
+            self.ui_manager,
+            pygame.Rect(SCREEN_WIDTH - RIGHT_PANEL_WIDTH, RESOURCE_BAR_HEIGHT,
+                        RIGHT_PANEL_WIDTH, SCREEN_HEIGHT - RESOURCE_BAR_HEIGHT - ACTION_BAR_HEIGHT),
+        )
+
+        # Action bar (bottom bar)
+        self._action_bar = ActionBar(self.ui_manager)
+        self._action_bar.set_mode("default")
+
+        # Turn summary (modal popup)
+        self._turn_summary = TurnSummary()
+
         # Next Turn button
         self._next_turn_btn = pygame_gui.elements.UIButton(
             relative_rect=pygame.Rect(SCREEN_WIDTH - RIGHT_PANEL_WIDTH - 20,
@@ -89,6 +109,12 @@ class GameScreen(BaseScreen):
             self._resource_bar.destroy()
         if self._city_panel:
             self._city_panel.destroy()
+        if self._event_log:
+            self._event_log.destroy()
+        if self._action_bar:
+            self._action_bar.destroy()
+        if self._turn_summary and self._turn_summary.is_visible:
+            self._turn_summary._kill()
         if self._next_turn_btn:
             self._next_turn_btn.kill()
 
@@ -96,6 +122,17 @@ class GameScreen(BaseScreen):
 
     def handle_event(self, event):
         game = self.app.game
+
+        # Turn summary dismiss
+        if self._turn_summary and self._turn_summary.is_visible:
+            if self._turn_summary.handle_event(event):
+                return
+
+        # Action bar buttons
+        action = self._action_bar.handle_event(event)
+        if action is not None:
+            self._handle_action(action, game)
+            return
 
         # Next Turn button
         if (event.type == pygame_gui.UI_BUTTON_PRESSED
@@ -165,6 +202,14 @@ class GameScreen(BaseScreen):
                 wx, wy = HexRenderer.hex_to_world(pos[0], pos[1])
                 self._camera.center_on(wx, wy)
             return
+
+    def _handle_action(self, action: str, game) -> None:
+        """Handle an action from the action bar."""
+        if action == "Next Turn":
+            game.process_turn()
+            self._resource_bar.refresh(game)
+            self._city_panel.refresh(game)
+            self._event_log.add_event(f"Turn advanced to turn {game.turn}", "info")
 
     def update(self, dt):
         # WASD / arrow key panning
