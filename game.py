@@ -140,7 +140,7 @@ class Game:
         candidates = [
             (t.x, t.y)
             for t in self.map.tiles.values()
-            if t.terrain not in (TerrainType.OCEAN,)
+            if t.terrain not in (TerrainType.OCEAN, TerrainType.WATER_COAST)
             and all(self.map.get_distance(t.x, t.y, cx, cy) >= min_dist for cx, cy in city_positions)
         ]
         return random.choice(candidates) if candidates else None

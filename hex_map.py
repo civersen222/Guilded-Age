@@ -829,6 +829,11 @@ class HexMap:
             return random.choice(valid_starts)
         elif land_tiles:
             return random.choice(land_tiles)
+        # Fallback: find any non-ocean tile
+        land_tiles2 = [(x, y) for (x, y), t in self.terrain_map.items()
+                       if t not in (TerrainType.OCEAN, TerrainType.WATER_COAST)]
+        if land_tiles2:
+            return random.choice(land_tiles2)
         return (0, 0)
 
     def add_city(self, city) -> None:
