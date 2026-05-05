@@ -6,6 +6,87 @@ from typing import Dict, List, Optional, Set, Union
 from game_data import TECHNOLOGIES, Technology, Era, TechBranch
 
 
+# Eureka conditions: maps tech name -> human-readable condition description
+EUREKA_CONDITIONS: Dict[str, str] = {
+    'Mining': 'Build a Quarry',
+    'Sailing': 'Found a coastal city',
+    'Archery': 'Kill a unit with a ranged unit',
+    'Writing': 'Meet another civilization',
+    'Bronze Working': 'Kill 3 enemy units',
+    'Iron Working': 'Build a Barracks',
+    'Currency': 'Establish a trade route',
+    'Education': 'Build a Library',
+}
+
+
+class EurekaTracker:
+    """Tracks eureka triggers that give 50% research discount on related technologies."""
+
+    def __init__(self):
+        self.triggered: Set[str] = set()
+
+    def check_eureka(self, tech_name: str, game_context: Dict) -> bool:
+        """Check if the eureka condition for a tech is met.
+        If so, add 50% of the tech's cost as free progress to tech_manager
+        and record the trigger. Returns True if triggered."""
+        if tech_name in self.triggered:
+            return False
+
+        condition_text = EUREKA_CONDITIONS.get(tech_name)
+        if not condition_text:
+            return False
+
+        # Evaluate condition against game_context
+        met = self._evaluate_condition(tech_name, condition_text, game_context)
+        if not met:
+            return False
+
+        # Trigger eureka: add 50% of cost as free progress
+        tech = TECHNOLOGIES.get(tech_name)
+        if tech:
+            boost = tech.cost // 2
+            tech_manager = game_context.get("tech_manager")
+            if tech_manager:
+                # If this tech is currently being researched, add progress directly
+                if tech_manager.current_research == tech_name:
+                    tech_manager.current_research_progress += boost
+                    if tech_manager.current_research_progress >= tech.cost:
+                        tech_manager.complete_research()
+                # Otherwise add to science_pool as a general boost
+                else:
+                    tech_manager.science_pool += boost
+            self.triggered.add(tech_name)
+            print(f"⚡ Eureka! {tech_name} — {condition_text} → +{boost} research")
+        return True
+
+    def _evaluate_condition(self, tech_name: str, condition: str, ctx: Dict) -> bool:
+        """Evaluate whether a condition is satisfied by the game context."""
+        # Build-in checks using game_context keys
+        if condition == 'Build a Quarry':
+            return ctx.get("quarry_built", False)
+        elif condition == 'Found a coastal city':
+            return ctx.get("coastal_city_founded", False)
+        elif condition == 'Kill a unit with a ranged unit':
+            return ctx.get("ranged_kill", False)
+        elif condition == 'Meet another civilization':
+            return ctx.get("met_civilization", False)
+        elif condition == 'Kill 3 enemy units':
+            return ctx.get("enemy_kills", 0) >= 3
+        elif condition == 'Build a Barracks':
+            return ctx.get("barracks_built", False)
+        elif condition == 'Establish a trade route':
+            return ctx.get("trade_route_established", False)
+        elif condition == 'Build a Library':
+            return ctx.get("library_built", False)
+        return False
+
+    def get_status(self, tech_name: str) -> str:
+        """Return 'triggered' or the condition text."""
+        if tech_name in self.triggered:
+            return "triggered"
+        return EUREKA_CONDITIONS.get(tech_name, "Unknown")
+
+
 class TechManager:
     """Manages technology research and progression"""
     

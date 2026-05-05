@@ -22,7 +22,7 @@ from military import MilitaryManager
 from economy import EconomyManager
 from diplomacy import DiplomacyManager
 from religion import ReligionManager
-from tech import TechManager
+from tech import TechManager, EurekaTracker, EUREKA_CONDITIONS
 from events import EventManager
 from plots import PlotManager
 from victory import VictoryConditionTracker, VictoryType
@@ -86,6 +86,7 @@ class Game:
         self.diplomacy_manager = DiplomacyManager()
         self.religion_manager = ReligionManager()
         self.tech_manager = TechManager()
+        self.eureka_tracker = EurekaTracker()
         self.event_manager = EventManager()
         self.plot_manager = PlotManager()
         self.dynasty_manager = DynastyManager()
@@ -259,6 +260,44 @@ class Game:
             msgs.append(f"\nEvent: {event_name}")
             msgs.append(f"  {event_desc}")
             self.state.turn_events.append(f"{event_name}: {event_desc}")
+        
+        # Check eureka conditions
+        civ_name = self.player_civ.name
+        eureka_ctx = {
+            "tech_manager": self.research.get(civ_name),
+            "quarry_built": any(
+                "Quarry" in getattr(city, "buildings", [])
+                for city in self.cities.values()
+                if city.owner == civ_name
+            ),
+            "coastal_city_founded": any(
+                city.is_coastal for city in self.cities.values()
+                if city.owner == civ_name
+            ),
+            "ranged_kill": getattr(self, "_ranged_kill_this_turn", False),
+            "met_civilization": any(
+                hasattr(self.diplomacy_manager, "_met_civs")
+                and civ_name in self.diplomacy_manager._met_civs
+                for _ in ()
+            ) or hasattr(self.diplomacy_manager, 'alliances')
+            or hasattr(self.diplomacy_manager, 'relations'),
+            "enemy_kills": getattr(self, "_enemy_kills_this_turn", 0),
+            "barracks_built": any(
+                "Barracks" in getattr(city, "buildings", [])
+                for city in self.cities.values()
+                if city.owner == civ_name
+            ),
+            "trade_route_established": bool(
+                getattr(self.external_trade, 'routes', None)
+            ),
+            "library_built": any(
+                "Library" in getattr(city, "buildings", [])
+                for city in self.cities.values()
+                if city.owner == civ_name
+            ),
+        }
+        for tech_name in EUREKA_CONDITIONS:
+            self.eureka_tracker.check_eureka(tech_name, eureka_ctx)
         
         # Process economy systems
         civ_name = self.player_civ.name
