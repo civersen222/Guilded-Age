@@ -312,6 +312,12 @@ class GameScreen(BaseScreen):
                 self._hex_renderer.attack_range.clear()
                 # Check for a player unit at this hex and select it
                 self._select_unit_at_hex(game, hx, hy)
+                # Check for a player city at this hex and open production popup
+                player_name = getattr(game.player_civ, "name", "")
+                for city in game.cities.values():
+                    if getattr(city, "owner", "") == player_name and getattr(city, "position", None) == (hx, hy):
+                        self._open_production_popup(game, city)
+                        return
                 # Check minimap click
                 if self._minimap:
                     self._minimap.handle_click(mx, my, SCREEN_HEIGHT)
@@ -474,15 +480,16 @@ class GameScreen(BaseScreen):
             self._event_log.add_event(f"{unit.unit_type} skipped", "info")
             self._unit_panel.refresh(game)
 
-    def _show_production(self, game) -> None:
+    def _show_production(self, game, city=None) -> None:
         """Show production popup for selected city."""
-        if self._city_panel.city_buttons:
-            # Get first selected city or show all
-            pass
         from pygame_app.popups.production import ProductionPopup
         popup = ProductionPopup()
-        popup.show(self.ui_manager, None, game)
+        popup.show(self.ui_manager, city, game)
         self._production_popup = popup
+
+    def _open_production_popup(self, game, city) -> None:
+        """Open production popup for a specific city."""
+        self._show_production(game, city)
 
     def update(self, dt):
         # WASD / arrow key panning

@@ -65,7 +65,7 @@ class ProductionPopup:
         self.selection_list = pygame_gui.elements.UISelectionList(
             relative_rect=pygame.Rect(
                 self.MARGIN, self.MARGIN, left_w, self.HEIGHT - self.MARGIN * 2 - self.BUTTON_H - 10),
-            items=items,
+            item_list=items,
             manager=ui_manager,
             container=self.window,
         )

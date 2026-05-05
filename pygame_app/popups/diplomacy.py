@@ -55,7 +55,7 @@ class DiplomacyPopup:
 
         self.civ_list = pygame_gui.elements.UISelectionList(
             relative_rect=pygame.Rect(MARGIN, MARGIN, left_w, HEIGHT - MARGIN * 2 - BUTTON_H - 10),
-            items=items,
+            item_list=items,
             manager=ui_manager,
             container=self.window,
         )
