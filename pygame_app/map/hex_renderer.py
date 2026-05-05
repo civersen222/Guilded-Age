@@ -186,12 +186,18 @@ class HexRenderer:
         max_wx += margin_wx
         max_wy += margin_wy
 
+        # Convert world bounds to hex coordinate bounds
+        min_hx, min_hy = self.world_to_hex(min_wx, min_wy)
+        max_hx, max_hy = self.world_to_hex(max_wx, max_wy)
+
         hexes: Set[Tuple[int, int]] = set()
-        for wx in range(int(min_wx), int(max_wx) + 1, int(HEX_SIZE * 1.5)):
-            for wy in range(int(min_wy), int(max_wy) + 1, int(HEX_SIZE * math.sqrt(3))):
-                hx, hy = self.world_to_hex(wx, wy)
+        for hx in range(min_hx - margin, max_hx + margin + 1):
+            for hy in range(min_hy - margin, max_hy + margin + 1):
                 if (hx, hy) in self.hex_map.tiles:
-                    hexes.add((hx, hy))
+                    wx, wy = self.hex_to_world(hx, hy)
+                    sx, sy = self.camera.world_to_screen(wx, wy)
+                    if 0 <= sx < self.camera.screen_w and 0 <= sy < self.camera.screen_h:
+                        hexes.add((hx, hy))
         return hexes
 
     # ── hex geometry helpers ───────────────────────────────────────────
@@ -494,11 +500,20 @@ class HexRenderer:
 
         # --- 5. Unit markers ---
         units = getattr(game, "units", {})
+        total_units = len(units)
+        units_drawn = 0
         for unit_id, unit in units.items():
             unit_hex = getattr(unit, "position", (0, 0))
             hx, hy = unit_hex
             if (hx, hy) not in visible:
                 continue
+            
+            wx, wy = self.hex_to_world(hx, hy)
+            sx, sy = self.camera.world_to_screen(wx, wy)
+            if not (0 <= sx < surface.get_width() and 0 <= sy < surface.get_height()):
+                continue
+            
+            units_drawn += 1
             wx, wy = self.hex_to_world(hx, hy)
             sx, sy = self.camera.world_to_screen(wx, wy)
             if not (0 <= sx < surface.get_width() and 0 <= sy < surface.get_height()):
@@ -557,6 +572,10 @@ class HexRenderer:
                 surface, hp_colour,
                 (bar_x, bar_y, int(bar_w * hp_ratio), bar_h),
             )
+
+        if units_drawn != total_units:
+            import sys
+            print(f"[HexRenderer] {units_drawn}/{total_units} units drawn. Visible={len(visible)}", file=sys.stderr)
 
         # --- 6. Fog of war ---
         fog_surf = pygame.Surface(

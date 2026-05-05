@@ -29,16 +29,22 @@ class UnitPanel:
             manager=ui_manager,
         )
         self.unit_buttons: Dict[pygame_gui.elements.UIButton, Any] = {}
+        self._last_unit_keys: tuple = ()
         self._font = pygame.font.SysFont("consolas", 11)
         self._font_bold = pygame.font.SysFont("consolas", 11, bold=True)
 
     def refresh(self, game: Any) -> None:
-        """Rebuild unit buttons from current game state."""
+        """Rebuild unit buttons only when the unit list actually changes."""
+        player_units = [u for u in game.units.values() if u.owner == game.player_civ.name]
+        current_keys = tuple((u.unit_type, u.hp, u.max_hp, u.moves_left, str(getattr(u, "position", (0,0)))) for u in player_units)
+
+        if current_keys == self._last_unit_keys:
+            return
+        self._last_unit_keys = current_keys
+
         for btn in list(self.unit_buttons.keys()):
             btn.kill()
         self.unit_buttons.clear()
-
-        player_units = [u for u in game.units.values() if u.owner == game.player_civ.name]
 
         y = self.MARGIN
         for unit in player_units:

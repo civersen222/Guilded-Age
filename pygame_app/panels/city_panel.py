@@ -30,17 +30,23 @@ class CityPanel:
             manager=ui_manager,
         )
         self.city_buttons: Dict[pygame_gui.elements.UIButton, Any] = {}
+        self._last_city_keys: tuple = ()
         self._font = pygame.font.SysFont("consolas", 11)
         self._font_bold = pygame.font.SysFont("consolas", 11, bold=True)
 
     def refresh(self, game: Any) -> None:
-        """Rebuild city buttons from current game state."""
+        """Rebuild city buttons only when the city list actually changes."""
+        player_civ_name = game.player_civ.name
+        cities = [c for c in game.cities.values() if c.owner == player_civ_name]
+        current_keys = tuple(c.name for c in cities)
+
+        if current_keys == self._last_city_keys:
+            return
+        self._last_city_keys = current_keys
+
         for btn in list(self.city_buttons.keys()):
             btn.kill()
         self.city_buttons.clear()
-
-        player_civ_name = game.player_civ.name
-        cities = [c for c in game.cities.values() if c.owner == player_civ_name]
 
         y = self.MARGIN
         for city in cities:
