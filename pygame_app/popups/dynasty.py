@@ -98,7 +98,13 @@ class DynastyPopup:
             parts.append(f"<br><b>Dynasty Members ({len(members)}):</b><br>")
             for m in members:
                 alive = "✓" if m.is_alive else "✗"
-                parts.append(f"{alive} {m.name} (Age {m.age})<br>")
+                is_ruler = (m == ruler)
+                relation = "Ruler" if is_ruler else ("Heir" if m.is_heir else "Member")
+                parts.append(f"{alive} <b>{m.name}</b> (Age {m.age}) — {relation}<br>")
+                parts.append(f"   Stats: D:{m.get_effective_stat('diplomacy')} M:{m.get_effective_stat('martial')} S:{m.get_effective_stat('stewardship')} I:{m.get_effective_stat('intrigue')}<br>")
+                if m.traits:
+                    parts.append(f"   Traits: {', '.join(m.traits)}<br>")
+                parts.append("<br>")
 
         else:
             parts.append("<i>No dynasty established yet.</i><br>")

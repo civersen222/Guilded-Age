@@ -40,6 +40,7 @@ class GameScreen(BaseScreen):
         self._next_turn_btn = None
         self._unit_panel = None
         self._selected_unit = None
+        self._selected_city = None
         self._panning = False
         self._pan_start = (0, 0)
         self._dragging_middle = False
@@ -156,6 +157,11 @@ class GameScreen(BaseScreen):
         if action is not None:
             self._handle_action(action, game)
             return
+
+        # Production popup events
+        if hasattr(self, "_production_popup") and self._production_popup is not None:
+            if self._production_popup.handle_event(event):
+                return
 
         # Next Turn button
         if (event.type == pygame_gui.UI_BUTTON_PRESSED
@@ -316,8 +322,18 @@ class GameScreen(BaseScreen):
                 player_name = getattr(game.player_civ, "name", "")
                 for city in game.cities.values():
                     if getattr(city, "owner", "") == player_name and getattr(city, "position", None) == (hx, hy):
+                        self._selected_city = city
                         self._open_production_popup(game, city)
                         return
+                # Settle city if a Settler is selected and hex is empty
+                if (self._selected_unit
+                        and getattr(self._selected_unit, "unit_type", "") == "Settler"
+                        and self._selected_unit.owner == player_name):
+                    self._hex_renderer.selected_hex = (hx, hy)
+                    self._hex_renderer.move_range.clear()
+                    self._hex_renderer.attack_range.clear()
+                    self._try_settle_city(game, hx, hy)
+                    return
                 # Check minimap click
                 if self._minimap:
                     self._minimap.handle_click(mx, my, SCREEN_HEIGHT)
@@ -368,7 +384,7 @@ class GameScreen(BaseScreen):
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
             self._unit_panel.refresh(game)
-            self._event_log.add_event(f"Turn advanced to turn {game.turn}", "info")
+            self._event_log.add_event(f"Turn advanced to turn {game.state.turn}", "info")
         elif action == "Save":
             self._save_game(game)
         elif action in ("Move", "Attack", "Fortify", "Skip"):
@@ -389,7 +405,9 @@ class GameScreen(BaseScreen):
             popup.show(self.ui_manager, game)
             self._dynasty_popup = popup
         elif action == "Production":
-            self._show_production(game)
+            self._show_production(game, self._selected_city)
+        elif action == "Settle":
+            self._settle_city(game)
 
     def _save_game(self, game) -> None:
         """Save the current game state."""
@@ -413,7 +431,11 @@ class GameScreen(BaseScreen):
             self._hex_renderer.move_range = self._hex_renderer.calculate_move_range(
                 getattr(unit, "position", (0, 0)), moves_left, game.units, game
             )
-        self._action_bar.set_mode("unit_selected")
+        # Check if this is a Settler to show Settle button
+        if getattr(unit, "unit_type", "") == "Settler":
+            self._action_bar.set_mode("settler_selected")
+        else:
+            self._action_bar.set_mode("unit_selected")
 
     def _select_unit_at_hex(self, game, hx, hy) -> None:
         """Select unit at hex if it belongs to player."""
@@ -485,12 +507,83 @@ class GameScreen(BaseScreen):
             self._event_log.add_event(f"{unit.unit_type} skipped", "info")
             self._unit_panel.refresh(game)
 
+    def _try_settle_city(self, game, hx, hy) -> None:
+        """Try to settle a new city at the given hex (from left-click)."""
+        if not self._selected_unit:
+            return
+        unit = self._selected_unit
+        if getattr(unit, "unit_type", "") != "Settler":
+            return
+        position = (hx, hy)
+        # Check no existing city at this position
+        for city in game.cities.values():
+            if getattr(city, "position", None) == position:
+                self._event_log.add_event("A city already exists here", "error")
+                return
+        # Check no enemy unit at this position
+        player_name = game.player_civ.name
+        for uid, u in game.units.items():
+            if getattr(u, "is_alive", False) and getattr(u, "owner", "") != player_name:
+                if getattr(u, "position", None) == position:
+                    self._event_log.add_event("Cannot settle on an enemy unit", "error")
+                    return
+        # Create new city
+        city_name = f"{game.player_civ.name} Colony"
+        counter = 1
+        while city_name in game.cities:
+            counter += 1
+            city_name = f"{game.player_civ.name} Colony {counter}"
+        start_tile = self.map.tiles.get(position)
+        if start_tile is None:
+            self._event_log.add_event("Cannot settle on this terrain", "error")
+            return
+        is_coastal = getattr(start_tile, "terrain", None) in ("WATER_COAST", "OCEAN")
+        from game_data import get_climate_for_row
+        climate = get_climate_for_row(position[1], self.map.height)
+        from city import City
+        new_city = City(
+            name=city_name,
+            owner=game.player_civ.name,
+            position=position,
+            population=1,
+            gold=0,
+            climate_zone=climate,
+            is_coastal=is_coastal,
+        )
+        game.cities[new_city.name] = new_city
+        game.map.add_city(new_city)
+        game.city_manager.cities = list(game.cities.values())
+        # Move Settler to the new city position and remove it
+        unit.position = position
+        game.map.remove_unit(unit)
+        del game.units[unit.name]
+        self._event_log.add_event(f"Founded {new_city.name}!", "success")
+        self._selected_unit = None
+        self._action_bar.set_mode("default")
+        self._hex_renderer.selected_hex = None
+        self._hex_renderer.move_range.clear()
+        self._unit_panel.refresh(game)
+        self._city_panel.refresh(game)
+
+    def _settle_city(self, game) -> None:
+        """Settle a new city at the selected Settler's current position (from action bar)."""
+        if not self._selected_unit:
+            return
+        unit = self._selected_unit
+        if getattr(unit, "unit_type", "") != "Settler":
+            return
+        position = getattr(unit, "position", None)
+        if position is None:
+            return
+        self._try_settle_city(game, position[0], position[1])
+
     def _show_production(self, game, city=None) -> None:
         """Show production popup for selected city."""
         from pygame_app.popups.production import ProductionPopup
         popup = ProductionPopup()
         popup.show(self.ui_manager, city, game)
         self._production_popup = popup
+        self._active_popup = popup
 
     def _open_production_popup(self, game, city) -> None:
         """Open production popup for a specific city."""

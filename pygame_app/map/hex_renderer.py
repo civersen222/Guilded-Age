@@ -573,9 +573,7 @@ class HexRenderer:
                 (bar_x, bar_y, int(bar_w * hp_ratio), bar_h),
             )
 
-        if units_drawn != total_units:
-            import sys
-            print(f"[HexRenderer] {units_drawn}/{total_units} units drawn. Visible={len(visible)}", file=sys.stderr)
+ 
 
         # --- 6. Fog of war ---
         fog_surf = pygame.Surface(
