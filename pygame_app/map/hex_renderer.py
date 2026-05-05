@@ -205,23 +205,24 @@ class HexRenderer:
     # ── hex geometry helpers ───────────────────────────────────────────
 
     @staticmethod
-    def _hex_vertices(cx: float, cy: float) -> Tuple[float, ...]:
+    def _hex_vertices(cx: float, cy: float, zoom: float = 1.0) -> Tuple[float, ...]:
         """Return 6 vertex coords for a flat-top hex centred at (cx, cy).
 
-        Vertices at angles π/3 * i (i = 0..5).
+        Vertices at angles π/3 * i (i = 0..5). Scaled by zoom to match tile size.
         """
         points: list[float] = []
         for i in range(6):
             angle = math.pi / 3 * i
-            points.append(cx + HEX_SIZE * math.cos(angle))
-            points.append(cy + HEX_SIZE * math.sin(angle))
+            points.append(cx + HEX_SIZE * zoom * math.cos(angle))
+            points.append(cy + HEX_SIZE * zoom * math.sin(angle))
         return tuple(points)
 
     def _screen_hex_points(self, hx: int, hy: int) -> Tuple[float, ...]:
         """Screen-space vertex coords for a hex."""
         wx, wy = HexRenderer.hex_to_world(hx, hy)
         sx, sy = self.camera.world_to_screen(wx, wy)
-        return self._hex_vertices(sx, sy)
+        zoom = getattr(self.camera, "zoom", 1.0)
+        return self._hex_vertices(sx, sy, zoom)
 
     # ── drawing primitives ─────────────────────────────────────────────
 
@@ -237,20 +238,21 @@ class HexRenderer:
                        colour: tuple, alpha: int = 100):
         """Fill a hex with a semi-transparent colour overlay."""
         points = [(int(verts[i]), int(verts[i + 1])) for i in range(0, len(verts), 2)]
-        hex_surf = pygame.Surface(
-            (int(2 * HEX_SIZE) + 2, int(2 * HEX_SIZE * math.sqrt(3)) + 2),
-            pygame.SRCALPHA,
-        )
-        hex_surf.set_colorkey((0, 0, 0))
-        pygame.draw.polygon(hex_surf, (*colour, alpha), points)
 
-        # Find bounding box of points to blit at correct offset
-        xs = [int(p[0]) for p in points]
-        ys = [int(p[1]) for p in points]
+        # Compute bounding box from actual points (zoom-aware)
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
         min_x, min_y = min(xs), min(ys)
-        offset_x = -min_x + 1
-        offset_y = -min_y + 1
-        surface.blit(hex_surf, (offset_x, offset_y))
+        max_x, max_y = max(xs), max(ys)
+        w = int(max_x - min_x) + 3
+        h = int(max_y - min_y) + 3
+
+        hex_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        hex_surf.set_colorkey((0, 0, 0))
+        offset_points = [(p[0] - min_x + 1, p[1] - min_y + 1) for p in points]
+        pygame.draw.polygon(hex_surf, (*colour, alpha), offset_points)
+
+        surface.blit(hex_surf, (0, 0))
 
     # ── move / attack range calculation ──────────────────────────────
 
@@ -423,8 +425,8 @@ class HexRenderer:
                     surface,
                     TERRAIN_COLORS.get(terrain_name, (128, 128, 128)),
                     [(int(p[0]), int(p[1])) for p in zip(
-                        self._hex_vertices(csx, csy)[0::2],
-                        self._hex_vertices(csx, csy)[1::2],
+                        self._hex_vertices(csx, csy, zoom)[0::2],
+                        self._hex_vertices(csx, csy, zoom)[1::2],
                     )],
                 )
             else:
@@ -614,8 +616,9 @@ class HexRenderer:
                 # Pulsing glow with sin wave
                 pulse_alpha = int(120 + 80 * math.sin(time * 4))
                 pulse_verts = self._hex_vertices(
-                    self._screen_hex_points(hx, hy)[0] + HEX_SIZE * 0.15,
-                    self._screen_hex_points(hx, hy)[1] + HEX_SIZE * 0.15,
+                    verts[0] + HEX_SIZE * zoom * 0.15,
+                    verts[1] + HEX_SIZE * zoom * 0.15,
+                    zoom,
                 )
                 self._draw_hex_fill(surface, pulse_verts, GOLD, alpha=pulse_alpha)
                 self._draw_hex_outline(surface, verts, GOLD, width=3)
