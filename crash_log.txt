@@ -8,10 +8,20 @@ Traceback (most recent call last):
   File "C:\Users\civer\civkings\pygame_app\app.py", line 72, in run
     self._current_screen.handle_event(event)
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
-  File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 355, in handle_event
-    self._move_selected_unit(game, hx, hy)
-    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
-  File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 425, in _move_selected_unit
-    success = MilitaryManager.move_unit(game.military, unit, (hx, hy))
-                                        ^^^^^^^^^^^^^
-AttributeError: 'Game' object has no attribute 'military'
+  File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 157, in handle_event
+    self._handle_action(action, game)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 373, in _handle_action
+    popup.show(self.ui_manager, game)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\civer\civkings\pygame_app\popups\tech_tree.py", line 52, in show
+    self.window = pygame_gui.elements.UIWindow(
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        relative_rect=pygame.Rect(cx, cy, WIDTH, HEIGHT),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        window_type="modal",
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+TypeError: UIWindow.__init__() got an unexpected keyword argument 'relative_rect'
