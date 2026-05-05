@@ -127,7 +127,7 @@ class ResourceBar:
         for i, key in enumerate(keys):
             x = spacing * i + 8
             y = 10
-            label_text = self._labels[key].get_text()
+            label_text = self._labels[key].text
 
             # Color coding for yield values
             if key == "civ_name":
@@ -140,7 +140,7 @@ class ResourceBar:
                 base = parts[0] if parts else label_text
                 income_part = f"({parts[1]}" if len(parts) > 1 else ""
                 if income_part:
-                    income_val = int(float(income_part.replace("+", "").replace(")", "").replace("/t", "")))
+                    income_val = int(float(income_part.replace("+", "").replace(")", "").replace("(", "").replace("/t", "")))
                     inc_color = self._yield_color(income_val)
                     rendered = self._font.render(base.strip(), True, WHITE_TEXT)
                     surface.blit(rendered, (x, y))

@@ -106,14 +106,13 @@ class HexRenderer:
             pos = getattr(unit, "position", None)
             if pos is None:
                 continue
-            uid_int = int(uid)
-            current_positions[uid_int] = pos
+            current_positions[uid] = pos
 
-            prev_pos = self._prev_unit_positions.get(uid_int)
+            prev_pos = self._prev_unit_positions.get(uid)
             if prev_pos is not None and prev_pos != pos:
                 # Unit moved — create animation
                 self._animations.append({
-                    "unit_id": uid_int,
+                    "unit_id": uid,
                     "start_pos": prev_pos,
                     "end_pos": pos,
                     "progress": 0.0,
@@ -132,7 +131,7 @@ class HexRenderer:
         # Remove completed animations
         self._animations = [a for a in self._animations if a["progress"] < 1.0]
 
-    def _get_animated_position(self, unit_id: int) -> Optional[Tuple[float, float]]:
+    def _get_animated_position(self, unit_id: str) -> Optional[Tuple[float, float]]:
         """Get interpolated screen position for a unit in animation, or None."""
         for anim in self._animations:
             if anim["unit_id"] == unit_id:
@@ -506,7 +505,7 @@ class HexRenderer:
                 continue
 
             # Check for animated movement — use interpolated position
-            anim_pos = self._get_animated_position(int(unit_id))
+            anim_pos = self._get_animated_position(unit_id)
             if anim_pos:
                 sx, sy = anim_pos
 
