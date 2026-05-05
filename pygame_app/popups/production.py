@@ -41,10 +41,9 @@ class ProductionPopup:
         cy = (SCREEN_HEIGHT - self.HEIGHT) // 2
 
         self.window = pygame_gui.elements.UIWindow(
-            relative_rect=pygame.Rect(cx, cy, self.WIDTH, self.HEIGHT),
-            window_title=f"Production: {getattr(city, 'name', 'City')}",
+            pygame.Rect(cx, cy, self.WIDTH, self.HEIGHT),
             manager=ui_manager,
-            window_type="modal",
+            window_display_title=f"Production: {getattr(city, 'name', 'City')}",
         )
 
         # LEFT side: selection list of available items

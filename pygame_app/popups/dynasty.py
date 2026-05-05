@@ -41,10 +41,9 @@ class DynastyPopup:
         cy = (SCREEN_HEIGHT - HEIGHT) // 2
 
         self.window = pygame_gui.elements.UIWindow(
-            relative_rect=pygame.Rect(cx, cy, WIDTH, HEIGHT),
-            window_title="Dynasty",
+            pygame.Rect(cx, cy, WIDTH, HEIGHT),
             manager=ui_manager,
-            window_type="modal",
+            window_display_title="Dynasty",
         )
 
         html = self._build_html(game)

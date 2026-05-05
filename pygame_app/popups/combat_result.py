@@ -40,10 +40,9 @@ class CombatResultPopup:
             title = "Victory!"
 
         self.window = pygame_gui.elements.UIWindow(
-            relative_rect=pygame.Rect(cx, cy, WIDTH, HEIGHT),
-            window_title=title,
+            pygame.Rect(cx, cy, WIDTH, HEIGHT),
             manager=ui_manager,
-            window_type="modal",
+            window_display_title=title,
         )
 
         html = self._build_html(result)
