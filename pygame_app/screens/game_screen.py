@@ -138,6 +138,14 @@ class GameScreen(BaseScreen):
     def handle_event(self, event):
         game = self.app.game
 
+        # Mouse wheel zoom MUST come before any event.pos access
+        if event.type == pygame.MOUSEWHEEL:
+            if event.y != 0:
+                mx, my = pygame.mouse.get_pos()
+                factor = 1.1 if event.y > 0 else 0.9
+                self._camera.zoom_at(mx, my, factor)
+                return
+
         # Turn summary dismiss
         if self._turn_summary and self._turn_summary.is_visible:
             if self._turn_summary.handle_event(event):
@@ -306,14 +314,6 @@ class GameScreen(BaseScreen):
         if unit is not None:
             self._select_unit(game, unit)
             return
-
-        # Mouse wheel zoom
-        if event.type == pygame.MOUSEWHEEL:
-            if event.y != 0:
-                mx, my = event.pos
-                factor = 1.1 if event.y > 0 else 0.9
-                self._camera.zoom_at(mx, my, factor)
-                return
 
         # City panel button click: center camera on that city
         city = self._city_panel.handle_event(event)

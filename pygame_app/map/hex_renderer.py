@@ -52,7 +52,7 @@ class HexRenderer:
 
         # Movement animations
         self._animations: list = []
-        self._prev_unit_positions: Dict[int, Tuple[int, int]] = {}
+        self._prev_unit_positions: Dict[str, Tuple[int, int]] = {}
 
         self._load_sprites()
 
@@ -516,7 +516,7 @@ class HexRenderer:
             offset_x = 0
             offset_y = 0
             for other_id, other in units.items():
-                if other_id != unit_id and getattr(other, "hex", (0, 0)) == unit_hex:
+                if other_id != unit_id and getattr(other, "position", (0, 0)) == unit_hex:
                     offset_x += 8
                     offset_y += 8
 
@@ -525,7 +525,8 @@ class HexRenderer:
 
             # Unit sprite
             unit_type = getattr(unit, "unit_type", None) or getattr(unit, "type", "?")
-            sprite = self._unit_sprites.get(unit_type)
+            # Try exact match, then lowercase key lookup
+            sprite = self._unit_sprites.get(unit_type) or self._unit_sprites.get(unit_type.lower())
             if sprite:
                 sprite_size = sprite.get_width()
                 sprite_offset = sprite_size // 2
@@ -538,7 +539,7 @@ class HexRenderer:
                 )
 
             # Type label
-            type_label = getattr(unit, "type", "?")[:3].upper()
+            type_label = getattr(unit, "unit_type", "?")[:3].upper()
             self._blit_text(surface, type_label, (ox, oy - size - 6),
                             font=self._font_small, colour=TEXT)
 

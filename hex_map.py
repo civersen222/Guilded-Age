@@ -443,7 +443,11 @@ class ContinentGenerator:
             for y in range(self.height):
                 nx, ny = x / scale, y / scale
                 val = self.noise.octave_noise(nx, ny, octaves=5, persistence=0.6)
+                # Map from [-1,1] to [0,1] with steeper falloff for edges
                 val = (val + 1) / 2
+                # Stretch the range to produce more variation using sigmoid around midpoint
+                # Shift midpoint to 0.5, stretch around it
+                val = 0.5 + (val - 0.5) * 2.5
                 val = max(0, min(1, val))
                 elevation_map[(x, y)] = val
 
@@ -490,18 +494,22 @@ class ContinentGenerator:
             on_continent = any((x, y) in c.tiles for c in self.continents)
 
             if not on_continent or elevation < 0.35:
-                if elevation < 0.2:
+                if elevation < 0.15:
                     terrain_map[(x, y)] = TerrainType.OCEAN
                 else:
                     terrain_map[(x, y)] = TerrainType.WATER_COAST
-            elif elevation < 0.45:
+            elif elevation < 0.30:
                 terrain_map[(x, y)] = TerrainType.PLAINS
-            elif elevation < 0.55:
+            elif elevation < 0.42:
                 terrain_map[(x, y)] = TerrainType.GRASSLAND
-            elif elevation < 0.65:
+            elif elevation < 0.52:
                 terrain_map[(x, y)] = TerrainType.HILLS
-            elif elevation < 0.75:
+            elif elevation < 0.60:
                 terrain_map[(x, y)] = TerrainType.FOREST
+            elif elevation < 0.68:
+                terrain_map[(x, y)] = TerrainType.DESERT
+            elif elevation < 0.78:
+                terrain_map[(x, y)] = TerrainType.TUNDRA
             else:
                 terrain_map[(x, y)] = TerrainType.MOUNTAIN
 
@@ -582,7 +590,8 @@ class TerrainSmoothing:
                     if terrain_counts:
                         most_common = max(terrain_counts, key=terrain_counts.get)
                         count = terrain_counts[most_common]
-                        if count >= 3 and most_common != current:
+                        # Only change if majority of neighbors agree (5+ out of 8)
+                        if count >= 5 and most_common != current:
                             if most_common == TerrainType.MOUNTAIN and current not in (TerrainType.MOUNTAIN, TerrainType.HILLS):
                                 smoothed[pos] = most_common
                             elif most_common != TerrainType.MOUNTAIN:

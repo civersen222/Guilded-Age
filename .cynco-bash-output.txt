@@ -1,0 +1,129 @@
+diff --git a/hex_map.py b/hex_map.py
+index eb18994..9c12296 100644
+--- a/hex_map.py
++++ b/hex_map.py
+@@ -443,7 +443,11 @@ class ContinentGenerator:
+             for y in range(self.height):
+                 nx, ny = x / scale, y / scale
+                 val = self.noise.octave_noise(nx, ny, octaves=5, persistence=0.6)
++                # Map from [-1,1] to [0,1] with steeper falloff for edges
+                 val = (val + 1) / 2
++                # Stretch the range to produce more variation using sigmoid around midpoint
++                # Shift midpoint to 0.5, stretch around it
++                val = 0.5 + (val - 0.5) * 2.5
+                 val = max(0, min(1, val))
+                 elevation_map[(x, y)] = val
+ 
+@@ -490,18 +494,22 @@ class ContinentGenerator:
+             on_continent = any((x, y) in c.tiles for c in self.continents)
+ 
+             if not on_continent or elevation < 0.35:
+-                if elevation < 0.2:
++                if elevation < 0.15:
+                     terrain_map[(x, y)] = TerrainType.OCEAN
+                 else:
+                     terrain_map[(x, y)] = TerrainType.WATER_COAST
+-            elif elevation < 0.45:
++            elif elevation < 0.30:
+                 terrain_map[(x, y)] = TerrainType.PLAINS
+-            elif elevation < 0.55:
++            elif elevation < 0.42:
+                 terrain_map[(x, y)] = TerrainType.GRASSLAND
+-            elif elevation < 0.65:
++            elif elevation < 0.52:
+                 terrain_map[(x, y)] = TerrainType.HILLS
+-            elif elevation < 0.75:
++            elif elevation < 0.60:
+                 terrain_map[(x, y)] = TerrainType.FOREST
++            elif elevation < 0.68:
++                terrain_map[(x, y)] = TerrainType.DESERT
++            elif elevation < 0.78:
++                terrain_map[(x, y)] = TerrainType.TUNDRA
+             else:
+                 terrain_map[(x, y)] = TerrainType.MOUNTAIN
+ 
+@@ -582,7 +590,8 @@ class TerrainSmoothing:
+                     if terrain_counts:
+                         most_common = max(terrain_counts, key=terrain_counts.get)
+                         count = terrain_counts[most_common]
+-                        if count >= 3 and most_common != current:
++                        # Only change if majority of neighbors agree (5+ out of 8)
++                        if count >= 5 and most_common != current:
+                             if most_common == TerrainType.MOUNTAIN and current not in (TerrainType.MOUNTAIN, TerrainType.HILLS):
+                                 smoothed[pos] = most_common
+                             elif most_common != TerrainType.MOUNTAIN:
+diff --git a/pygame_app/map/hex_renderer.py b/pygame_app/map/hex_renderer.py
+index 5d25894..aaa595d 100644
+--- a/pygame_app/map/hex_renderer.py
++++ b/pygame_app/map/hex_renderer.py
+@@ -52,7 +52,7 @@ class HexRenderer:
+ 
+         # Movement animations
+         self._animations: list = []
+-        self._prev_unit_positions: Dict[int, Tuple[int, int]] = {}
++        self._prev_unit_positions: Dict[str, Tuple[int, int]] = {}
+ 
+         self._load_sprites()
+ 
+@@ -516,7 +516,7 @@ class HexRenderer:
+             offset_x = 0
+             offset_y = 0
+             for other_id, other in units.items():
+-                if other_id != unit_id and getattr(other, "hex", (0, 0)) == unit_hex:
++                if other_id != unit_id and getattr(other, "position", (0, 0)) == unit_hex:
+                     offset_x += 8
+                     offset_y += 8
+ 
+@@ -525,7 +525,8 @@ class HexRenderer:
+ 
+             # Unit sprite
+             unit_type = getattr(unit, "unit_type", None) or getattr(unit, "type", "?")
+-            sprite = self._unit_sprites.get(unit_type)
++            # Try exact match, then lowercase key lookup
++            sprite = self._unit_sprites.get(unit_type) or self._unit_sprites.get(unit_type.lower())
+             if sprite:
+                 sprite_size = sprite.get_width()
+                 sprite_offset = sprite_size // 2
+@@ -538,7 +539,7 @@ class HexRenderer:
+                 )
+ 
+             # Type label
+-            type_label = getattr(unit, "type", "?")[:3].upper()
++            type_label = getattr(unit, "unit_type", "?")[:3].upper()
+             self._blit_text(surface, type_label, (ox, oy - size - 6),
+                             font=self._font_small, colour=TEXT)
+ 
+diff --git a/pygame_app/screens/game_screen.py b/pygame_app/screens/game_screen.py
+index e16f30d..20d117e 100644
+--- a/pygame_app/screens/game_screen.py
++++ b/pygame_app/screens/game_screen.py
+@@ -138,6 +138,14 @@ class GameScreen(BaseScreen):
+     def handle_event(self, event):
+         game = self.app.game
+ 
++        # Mouse wheel zoom MUST come before any event.pos access
++        if event.type == pygame.MOUSEWHEEL:
++            if event.y != 0:
++                mx, my = pygame.mouse.get_pos()
++                factor = 1.1 if event.y > 0 else 0.9
++                self._camera.zoom_at(mx, my, factor)
++                return
++
+         # Turn summary dismiss
+         if self._turn_summary and self._turn_summary.is_visible:
+             if self._turn_summary.handle_event(event):
+@@ -307,14 +315,6 @@ class GameScreen(BaseScreen):
+             self._select_unit(game, unit)
+             return
+ 
+-        # Mouse wheel zoom
+-        if event.type == pygame.MOUSEWHEEL:
+-            if event.y != 0:
+-                mx, my = event.pos
+-                factor = 1.1 if event.y > 0 else 0.9
+-                self._camera.zoom_at(mx, my, factor)
+-                return
+-
+         # City panel button click: center camera on that city
+         city = self._city_panel.handle_event(event)
+         if city is not None:
