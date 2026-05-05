@@ -36,6 +36,7 @@ from faction_system import FactionManager, FactionEventGenerator
 from ai import AIPlayer
 from improvements import ImprovementManager
 from great_people import GreatPeopleManager
+from era_system import EraSystem
 
 
 @dataclass
@@ -103,6 +104,7 @@ class Game:
         self.victory_tracker = VictoryConditionTracker()
         self.improvement_manager = ImprovementManager()
         self.great_people_manager = GreatPeopleManager()
+        self.era_system = EraSystem()
         
         # Economy sub-systems
         self.tax_system = TaxSystem()
@@ -392,6 +394,7 @@ class Game:
                                 from game_data import WONDERS
                                 city.add_building(completed_item)
                                 msgs.append(f"  🏛️ City '{city.name}' completed: {completed_item}")
+                                self.era_system.record_moment('first_wonder')
                             elif completed_item in UNIT_TYPES:
                                 # Create new unit
                                 new_unit = Unit(
@@ -428,6 +431,12 @@ class Game:
         gp_msgs = self.great_people_manager.process_turn(self)
         msgs.extend(gp_msgs)
         
+        # Era moment checks
+        civ_name = self.player_civ.name
+        # met_all_civs
+        if civ_name in self.diplomacy_manager.relations and len(self.diplomacy_manager.relations) >= len(self.civilizations) - 1:
+            self.era_system.record_moment('met_all_civs')
+        
         # Random faction events
         if random.random() < 0.15:  # 15% chance of faction event
             faction_event = FactionEventGenerator.generate_faction_event(self.faction_manager)
@@ -457,6 +466,21 @@ class Game:
         # Increment turn
         self.state.turn += 1
         self.state.phase = "Player"
+        
+        # Era score check
+        new_era = self.era_system.check_era_transition()
+        if new_era != self.era_system.current_era:
+            old_era = self.era_system.current_era
+            self.era_system.current_era = new_era
+            msgs.append(f"\n  🌍 ERA CHANGE: {old_era} Age → {new_era} Age!")
+            bonuses = self.era_system.get_era_bonuses(new_era)
+            if bonuses:
+                bonus_parts = []
+                if 'loyalty' in bonuses:
+                    bonus_parts.append(f"loyalty {'+' if bonuses['loyalty'] > 0 else ''}{bonuses['loyalty']}")
+                if 'yields' in bonuses:
+                    bonus_parts.append(f"yields ×{bonuses['yields']}")
+                msgs.append(f"  Bonuses: {', '.join(bonus_parts)}")
         
         # Reset movement points for player units
         for unit in self.units.values():
