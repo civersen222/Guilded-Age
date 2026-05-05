@@ -81,7 +81,7 @@ class HexRenderer:
         for wx in range(int(min_wx), int(max_wx) + 1, int(HEX_SIZE * 1.5)):
             for wy in range(int(min_wy), int(max_wy) + 1, int(HEX_SIZE * math.sqrt(3))):
                 hx, hy = self.world_to_hex(wx, wy)
-                if self.hex_map.in_bounds(hx, hy):
+                if (hx, hy) in self.hex_map.tiles:
                     hexes.add((hx, hy))
         return hexes
 
@@ -155,7 +155,7 @@ class HexRenderer:
                 nx, ny = cx + dq, cy + dr
                 if (nx, ny) in visited:
                     continue
-                if not self.hex_map.in_bounds(nx, ny):
+                if (nx, ny) not in self.hex_map.tiles:
                     continue
 
                 tile = self.hex_map.get_tile(nx, ny)
@@ -205,7 +205,7 @@ class HexRenderer:
 
         for dq, dr in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]:
             nx, ny = attacker_hex[0] + dq, attacker_hex[1] + dr
-            if not self.hex_map.in_bounds(nx, ny):
+            if (nx, ny) not in self.hex_map.tiles:
                 continue
             for uid, unit in units.items():
                 if (getattr(unit, "is_alive", False)
@@ -254,11 +254,11 @@ class HexRenderer:
 
             terrain_name = tile.terrain.name
             tile_surface = self.tile_atlas.get_tile(terrain_name, zoom)
+            csx = sx - HEX_SIZE
+            csy = sy - HEX_SIZE
 
             # If atlas doesn't have the tile, fallback to colour fill
             if tile_surface.get_width() < 10:  # error indicator
-                csx = sx - HEX_SIZE
-                csy = sy - HEX_SIZE
                 pygame.draw.polygon(
                     surface,
                     TERRAIN_COLORS.get(terrain_name, (128, 128, 128)),
