@@ -1,1 +1,17 @@
-(stale - fixed in commit 3a34713)
+Traceback (most recent call last):
+  File "<string>", line 7, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\civer\civkings\pygame_app\app.py", line 89, in main
+    app.run()
+    ~~~~~~~^^
+  File "C:\Users\civer\civkings\pygame_app\app.py", line 80, in run
+    self._current_screen.draw(self.screen)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 596, in draw
+    self._city_panel.draw(surface)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\civer\civkings\pygame_app\panels\city_panel.py", line 68, in draw
+    y_pos = self.panel.get_abs_position()[1]
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'UIPanel' object has no attribute 'get_abs_position'. Did you mean: 'set_image_position'?

@@ -1,129 +1,139 @@
-diff --git a/hex_map.py b/hex_map.py
-index eb18994..9c12296 100644
---- a/hex_map.py
-+++ b/hex_map.py
-@@ -443,7 +443,11 @@ class ContinentGenerator:
-             for y in range(self.height):
-                 nx, ny = x / scale, y / scale
-                 val = self.noise.octave_noise(nx, ny, octaves=5, persistence=0.6)
-+                # Map from [-1,1] to [0,1] with steeper falloff for edges
-                 val = (val + 1) / 2
-+                # Stretch the range to produce more variation using sigmoid around midpoint
-+                # Shift midpoint to 0.5, stretch around it
-+                val = 0.5 + (val - 0.5) * 2.5
-                 val = max(0, min(1, val))
-                 elevation_map[(x, y)] = val
+diff --git a/pygame_app/panels/event_log.py b/pygame_app/panels/event_log.py
+index 2c7a99e..2f9f548 100644
+--- a/pygame_app/panels/event_log.py
++++ b/pygame_app/panels/event_log.py
+@@ -53,6 +53,7 @@ class EventLog:
+         self._font_bold = pygame.font.SysFont("consolas", 10, bold=True)
+         self._scroll_offset = 0
+         self._max_scroll = 0
++        self._text_surface: Optional[pygame.Surface] = None
  
-@@ -490,18 +494,22 @@ class ContinentGenerator:
-             on_continent = any((x, y) in c.tiles for c in self.continents)
+     def add_event(self, text: str, category: str = "info") -> None:
+         """Add a single color-coded event to the log."""
+@@ -94,15 +95,7 @@ class EventLog:
  
-             if not on_continent or elevation < 0.35:
--                if elevation < 0.2:
-+                if elevation < 0.15:
-                     terrain_map[(x, y)] = TerrainType.OCEAN
-                 else:
-                     terrain_map[(x, y)] = TerrainType.WATER_COAST
--            elif elevation < 0.45:
-+            elif elevation < 0.30:
-                 terrain_map[(x, y)] = TerrainType.PLAINS
--            elif elevation < 0.55:
-+            elif elevation < 0.42:
-                 terrain_map[(x, y)] = TerrainType.GRASSLAND
--            elif elevation < 0.65:
-+            elif elevation < 0.52:
-                 terrain_map[(x, y)] = TerrainType.HILLS
--            elif elevation < 0.75:
-+            elif elevation < 0.60:
-                 terrain_map[(x, y)] = TerrainType.FOREST
-+            elif elevation < 0.68:
-+                terrain_map[(x, y)] = TerrainType.DESERT
-+            elif elevation < 0.78:
-+                terrain_map[(x, y)] = TerrainType.TUNDRA
-             else:
-                 terrain_map[(x, y)] = TerrainType.MOUNTAIN
+     def _render(self) -> None:
+         """Rebuild the HTML text from stored events."""
+-        parts: List[str] = []
+-        for event, cat in self.events:
+-            if cat == "separator":
+-                parts.append(f"<font color='#666666'>{event}</font><br>")
+-            else:
+-                color = CATEGORY_COLORS.get(cat, CATEGORY_COLORS["info"])
+-                hex_color = f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
+-                parts.append(f"<font color='{hex_color}'>{event}</font><br>")
+-        self.text_box.set_html_text("".join(parts))
++        pass  # draw() renders events directly from self.events
  
-@@ -582,7 +590,8 @@ class TerrainSmoothing:
-                     if terrain_counts:
-                         most_common = max(terrain_counts, key=terrain_counts.get)
-                         count = terrain_counts[most_common]
--                        if count >= 3 and most_common != current:
-+                        # Only change if majority of neighbors agree (5+ out of 8)
-+                        if count >= 5 and most_common != current:
-                             if most_common == TerrainType.MOUNTAIN and current not in (TerrainType.MOUNTAIN, TerrainType.HILLS):
-                                 smoothed[pos] = most_common
-                             elif most_common != TerrainType.MOUNTAIN:
-diff --git a/pygame_app/map/hex_renderer.py b/pygame_app/map/hex_renderer.py
-index 5d25894..aaa595d 100644
---- a/pygame_app/map/hex_renderer.py
-+++ b/pygame_app/map/hex_renderer.py
-@@ -52,7 +52,7 @@ class HexRenderer:
- 
-         # Movement animations
-         self._animations: list = []
--        self._prev_unit_positions: Dict[int, Tuple[int, int]] = {}
-+        self._prev_unit_positions: Dict[str, Tuple[int, int]] = {}
- 
-         self._load_sprites()
- 
-@@ -516,7 +516,7 @@ class HexRenderer:
-             offset_x = 0
-             offset_y = 0
-             for other_id, other in units.items():
--                if other_id != unit_id and getattr(other, "hex", (0, 0)) == unit_hex:
-+                if other_id != unit_id and getattr(other, "position", (0, 0)) == unit_hex:
-                     offset_x += 8
-                     offset_y += 8
- 
-@@ -525,7 +525,8 @@ class HexRenderer:
- 
-             # Unit sprite
-             unit_type = getattr(unit, "unit_type", None) or getattr(unit, "type", "?")
--            sprite = self._unit_sprites.get(unit_type)
-+            # Try exact match, then lowercase key lookup
-+            sprite = self._unit_sprites.get(unit_type) or self._unit_sprites.get(unit_type.lower())
-             if sprite:
-                 sprite_size = sprite.get_width()
-                 sprite_offset = sprite_size // 2
-@@ -538,7 +539,7 @@ class HexRenderer:
-                 )
- 
-             # Type label
--            type_label = getattr(unit, "type", "?")[:3].upper()
-+            type_label = getattr(unit, "unit_type", "?")[:3].upper()
-             self._blit_text(surface, type_label, (ox, oy - size - 6),
-                             font=self._font_small, colour=TEXT)
- 
+     def draw(self, surface: pygame.Surface) -> None:
+         """Draw custom event log with polished UI."""
 diff --git a/pygame_app/screens/game_screen.py b/pygame_app/screens/game_screen.py
-index e16f30d..20d117e 100644
+index 20d117e..b72e273 100644
 --- a/pygame_app/screens/game_screen.py
 +++ b/pygame_app/screens/game_screen.py
-@@ -138,6 +138,14 @@ class GameScreen(BaseScreen):
-     def handle_event(self, event):
-         game = self.app.game
+@@ -219,32 +219,44 @@ class GameScreen(BaseScreen):
+             if event.key == pygame.K_t:
+                 if self._active_popup:
+                     self._active_popup._kill()
++                    self._active_popup = None
+                 from pygame_app.popups.tech_tree import TechTreePopup
+-                self._active_popup = TechTreePopup(self.ui_manager, game)
++                popup = TechTreePopup()
++                popup.show(self.ui_manager, game)
++                self._active_popup = popup
+                 return
  
-+        # Mouse wheel zoom MUST come before any event.pos access
-+        if event.type == pygame.MOUSEWHEEL:
-+            if event.y != 0:
-+                mx, my = pygame.mouse.get_pos()
-+                factor = 1.1 if event.y > 0 else 0.9
-+                self._camera.zoom_at(mx, my, factor)
-+                return
+             # D: open diplomacy
+             if event.key == pygame.K_d:
+                 if self._active_popup:
+                     self._active_popup._kill()
++                    self._active_popup = None
+                 from pygame_app.popups.diplomacy import DiplomacyPopup
+-                self._active_popup = DiplomacyPopup(self.ui_manager, game)
++                popup = DiplomacyPopup()
++                popup.show(self.ui_manager, game)
++                self._active_popup = popup
+                 return
+ 
+             # Y: open dynasty
+             if event.key == pygame.K_y:
+                 if self._active_popup:
+                     self._active_popup._kill()
++                    self._active_popup = None
+                 from pygame_app.popups.dynasty import DynastyPopup
+-                self._active_popup = DynastyPopup(self.ui_manager, game)
++                popup = DynastyPopup()
++                popup.show(self.ui_manager, game)
++                self._active_popup = popup
+                 return
+ 
+             # P: open production popup for selected city
+             if event.key == pygame.K_p:
+                 if self._active_popup:
+                     self._active_popup._kill()
++                    self._active_popup = None
+                 from pygame_app.popups.production import ProductionPopup
+-                self._active_popup = ProductionPopup(self.ui_manager, game)
++                popup = ProductionPopup()
++                popup.show(self.ui_manager, None, game)
++                self._active_popup = popup
+                 return
+ 
+             # F: fortify selected unit
+@@ -357,10 +369,14 @@ class GameScreen(BaseScreen):
+             self._handle_unit_action(action, game)
+         elif action == "Tech Tree":
+             from pygame_app.popups.tech_tree import TechTreePopup
+-            self._tech_popup = TechTreePopup(self.ui_manager, game)
++            popup = TechTreePopup()
++            popup.show(self.ui_manager, game)
++            self._tech_popup = popup
+         elif action == "Diplomacy":
+             from pygame_app.popups.diplomacy import DiplomacyPopup
+-            self._diplomacy_popup = DiplomacyPopup(self.ui_manager, game)
++            popup = DiplomacyPopup()
++            popup.show(self.ui_manager, game)
++            self._diplomacy_popup = popup
+         elif action == "Production":
+             self._show_production(game)
+ 
+@@ -465,7 +481,9 @@ class GameScreen(BaseScreen):
+             # Get first selected city or show all
+             pass
+         from pygame_app.popups.production import ProductionPopup
+-        self._production_popup = ProductionPopup(self.ui_manager, game)
++        popup = ProductionPopup()
++        popup.show(self.ui_manager, None, game)
++        self._production_popup = popup
+ 
+     def update(self, dt):
+         # WASD / arrow key panning
+@@ -498,6 +516,13 @@ class GameScreen(BaseScreen):
+             self._hex_renderer.update(dt)
+             self._elapsed += dt
+ 
++        # Refresh side panels
++        game = self.app.game
++        if self._city_panel:
++            self._city_panel.refresh(game)
++        if self._unit_panel:
++            self._unit_panel.refresh(game)
 +
-         # Turn summary dismiss
-         if self._turn_summary and self._turn_summary.is_visible:
-             if self._turn_summary.handle_event(event):
-@@ -307,14 +315,6 @@ class GameScreen(BaseScreen):
-             self._select_unit(game, unit)
-             return
+     def _check_needs_attention(self, game) -> bool:
+         """Check if any player units have moves left or cities need production."""
+         civ_name = game.player_civ.name
+@@ -566,6 +591,14 @@ class GameScreen(BaseScreen):
+             self._action_bar.set_needs_attention(needs_attention)
+             self._action_bar.draw(surface)
  
--        # Mouse wheel zoom
--        if event.type == pygame.MOUSEWHEEL:
--            if event.y != 0:
--                mx, my = event.pos
--                factor = 1.1 if event.y > 0 else 0.9
--                self._camera.zoom_at(mx, my, factor)
--                return
--
-         # City panel button click: center camera on that city
-         city = self._city_panel.handle_event(event)
-         if city is not None:
++        # ── Draw side panels ──────────────────────────────────────────────
++        if self._city_panel:
++            self._city_panel.draw(surface)
++        if self._unit_panel:
++            self._unit_panel.draw(surface)
++        if self._event_log:
++            self._event_log.draw(surface)
++
+         # ── Map surface ───────────────────────────────────────────────────
+         self._map_surface.fill(BG)
+         if self._hex_renderer:
