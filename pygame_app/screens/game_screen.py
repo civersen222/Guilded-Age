@@ -3,6 +3,8 @@ import pygame
 import pygame_gui
 
 from pygame_app.screens.base import BaseScreen
+from game_data import TerrainType
+
 from pygame_app.constants import (
     SCREEN_WIDTH, SCREEN_HEIGHT,
     MAP_X, MAP_Y, MAP_W, MAP_H,
@@ -143,8 +145,10 @@ class GameScreen(BaseScreen):
         if event.type == pygame.MOUSEWHEEL:
             if event.y != 0:
                 mx, my = pygame.mouse.get_pos()
-                factor = 1.1 if event.y > 0 else 0.9
-                self._camera.zoom_at(mx, my, factor)
+                factor = 1.15 if event.y > 0 else 1 / 1.15
+                local_x = mx - MAP_X
+                local_y = my - MAP_Y
+                self._camera.zoom_at(local_x, local_y, factor)
                 return
 
         # Turn summary dismiss
@@ -282,7 +286,7 @@ class GameScreen(BaseScreen):
                 if not hasattr(event, "pos"):
                     return
                 mx, my = event.pos
-                self._camera.zoom_at(mx, my, 1.15)
+                self._camera.zoom_at(mx - MAP_X, my - MAP_Y, 1.15)
                 return
 
             # -: zoom out
@@ -290,7 +294,7 @@ class GameScreen(BaseScreen):
                 if not hasattr(event, "pos"):
                     return
                 mx, my = event.pos
-                self._camera.zoom_at(mx, my, 1 / 1.15)
+                self._camera.zoom_at(mx - MAP_X, my - MAP_Y, 1 / 1.15)
                 return
 
             # G: toggle yield overlay
@@ -316,7 +320,7 @@ class GameScreen(BaseScreen):
             mx, my = event.pos
             # Check map area
             if MAP_X <= mx <= MAP_X + MAP_W and MAP_Y <= my <= MAP_Y + MAP_H:
-                hx, hy = self._hex_renderer.screen_to_hex(mx, my)
+                hx, hy = self._hex_renderer.screen_to_hex(mx - MAP_X, my - MAP_Y)
                 self._hex_renderer.selected_hex = (hx, hy)
                 self._hex_renderer.move_range.clear()
                 self._hex_renderer.attack_range.clear()
@@ -538,7 +542,7 @@ class GameScreen(BaseScreen):
         if start_tile is None:
             self._event_log.add_event("Cannot settle on this terrain", "error")
             return
-        if start_tile.terrain.name in ('WATER_COAST', 'OCEAN'):
+        if start_tile.terrain in (TerrainType.WATER_COAST, TerrainType.OCEAN):
             self._event_log.add_event("Cannot settle on water tiles", "error")
             return
         is_coastal = start_tile.terrain.name == 'WATER_COAST'
@@ -560,7 +564,8 @@ class GameScreen(BaseScreen):
         # Move Settler to the new city position and remove it
         unit.position = position
         game.military_manager.remove_unit(unit)
-        del game.units[unit.name]
+        if unit.name in game.units:
+            del game.units[unit.name]
         self._event_log.add_event(f"Founded {new_city.name}!", "success")
         self._selected_unit = None
         self._action_bar.set_mode("default")

@@ -395,8 +395,9 @@ class HexRenderer:
 
             terrain_name = tile.terrain.name
             tile_surface = self.tile_atlas.get_tile(terrain_name, zoom)
-            csx = sx - HEX_SIZE
-            csy = sy - HEX_SIZE
+            # Center tile on hex center using actual tile dimensions
+            csx = sx - tile_surface.get_width() // 2
+            csy = sy - tile_surface.get_height() // 2
 
             # If atlas doesn't have the tile, fallback to colour fill
             if tile_surface.get_width() < 10:  # error indicator
