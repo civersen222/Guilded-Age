@@ -77,12 +77,10 @@ class MainMenuScreen(BaseScreen):
         self.app.switch_screen('new_game_dialog')
 
     def _load_game(self):
-        from pygame_gui.windows import UIMessageWindow
-        UIMessageWindow(
-            rect=pygame.Rect(400, 300, 300, 150),
-            html_message="Save/Load coming in Phase 6.",
-            manager=self.ui_manager,
-        )
+        from pygame_app.screens.load_game_screen import LoadGameScreen
+        if 'load_game' not in self.app._screens:
+            self.app.register_screen('load_game', LoadGameScreen(self.app))
+        self.app.switch_screen('load_game')
 
     def draw(self, surface):
         pass

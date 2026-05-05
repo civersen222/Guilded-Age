@@ -210,6 +210,14 @@ class GameScreen(BaseScreen):
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
             self._event_log.add_event(f"Turn advanced to turn {game.turn}", "info")
+        elif action == "Save":
+            self._save_game(game)
+
+    def _save_game(self, game) -> None:
+        """Save the current game state."""
+        from save_system import save_game
+        path = save_game(game)
+        self._event_log.add_event(f"Game saved to {path}", "success")
 
     def update(self, dt):
         # WASD / arrow key panning

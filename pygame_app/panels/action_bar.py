@@ -13,6 +13,7 @@ ACTION_BUTTONS = {
         ("Next Turn", "Next Turn"),
         ("Tech Tree", "Tech Tree"),
         ("Diplomacy", "Diplomacy"),
+        ("Save", "Save"),
     ],
     "unit_selected": [
         ("Move", "Move"),
