@@ -12,7 +12,7 @@ from game_data import (
     COASTLINE_BONUSES, LANDMARKS, LandmarkType, ClimateZone, get_climate_for_row,
     UNIT_TYPES, UnitCategory, BUILDINGS
 )
-from hex_map import HexMap, HexTile
+from hex_map import HexMap, HexTile, ExponentialFogOfWar
 from city import City
 from military import Unit
 from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager, execute_succession, SUCCESSION_LAWS
@@ -63,7 +63,11 @@ class Game:
         # Map
         self.map = HexMap(map_width, map_height)
         self.map.generate()
-        
+
+        # Fog of war
+        self._fog = ExponentialFogOfWar()
+        self._fog.set_tiles(self.map.tiles)
+
         # Player civilization
         self.player_civ = player_civ
         self.civilizations: Dict[str, Civilization] = {player_civ.name: self.player_civ}
@@ -127,8 +131,8 @@ class Game:
     
     @property
     def fog(self):
-        """Expose fog of war from the map."""
-        return self.map.fog
+        """Expose fog of war."""
+        return self._fog
     
     def _find_safe_tile(self, min_dist: int = 5) -> Optional[Tuple[int, int]]:
         """Find a tile at least min_dist hexes away from all existing cities."""
