@@ -184,6 +184,20 @@ class AIPlayer:
             pool.append(name)
         return pool
 
+    def get_opinion_on_player(self) -> float:
+        """Return opinion score of this AI toward the human player (-100 to 100)."""
+        base = self.trust_level.get("player", 0.0)
+        # Adjust by aggression and history
+        if self.aggression > 0.6:
+            base -= 10
+        elif self.aggression < 0.3:
+            base += 10
+        # Grudges reduce opinion
+        for civ, grudges in self.grudges.items():
+            if civ != self.civ_name:
+                base -= grudges * 5
+        return max(-100, min(100, base))
+
     def _manage_production(self, game) -> List[str]:
         """For each AI city, assign production based on needs."""
         msgs = []

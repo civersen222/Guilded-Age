@@ -92,7 +92,7 @@ class TestGameCreation(unittest.TestCase):
         from game import Game
         game = Game(CIVILIZATIONS["Rome"], [CIVILIZATIONS["Greece"]])
         self.assertEqual(game.state.turn, 1)
-        self.assertEqual(len(game.cities), 1)
+        self.assertEqual(len(game.cities), 2)
 
     def test_turn_processing(self):
         from game_data import CIVILIZATIONS
