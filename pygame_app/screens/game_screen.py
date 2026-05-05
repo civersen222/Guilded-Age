@@ -47,6 +47,7 @@ class GameScreen(BaseScreen):
         self._held_keys = set()
         self._active_popup = None
         self.show_yields = False
+        self._elapsed = 0.0
 
     def enter(self):
         game = self.app.game
@@ -495,59 +496,82 @@ class GameScreen(BaseScreen):
         # Update hex renderer animations
         if self._hex_renderer:
             self._hex_renderer.update(dt)
+            self._elapsed += dt
+
+    def _check_needs_attention(self, game) -> bool:
+        """Check if any player units have moves left or cities need production."""
+        civ_name = game.player_civ.name
+        # Check units with moves
+        for unit in game.units.values():
+            if unit.owner == civ_name and unit.is_alive and getattr(unit, "moves_left", 0) > 0:
+                return True
+        # Check cities with production queue
+        for city in game.cities.values():
+            if city.owner == civ_name and getattr(city, "production_queue", None):
+                return True
+        return False
 
     def draw(self, surface):
-        # Fill map surface
+        game = self.app.game
+
+        # ── Panel backgrounds (dark) ──────────────────────────────────────
+        # Top resource bar
+        surface.fill(PANEL_BG, pygame.Rect(0, 0, SCREEN_WIDTH, RESOURCE_BAR_HEIGHT))
+        # Bottom action bar
+        surface.fill(PANEL_BG, pygame.Rect(0, SCREEN_HEIGHT - ACTION_BAR_HEIGHT,
+                                           SCREEN_WIDTH, ACTION_BAR_HEIGHT))
+        # Left panel
+        surface.fill(PANEL_BG, pygame.Rect(0, RESOURCE_BAR_HEIGHT,
+                                           LEFT_PANEL_WIDTH,
+                                           SCREEN_HEIGHT - RESOURCE_BAR_HEIGHT - ACTION_BAR_HEIGHT))
+        # Right panel
+        surface.fill(PANEL_BG, pygame.Rect(SCREEN_WIDTH - RIGHT_PANEL_WIDTH, RESOURCE_BAR_HEIGHT,
+                                           RIGHT_PANEL_WIDTH,
+                                           SCREEN_HEIGHT - RESOURCE_BAR_HEIGHT - ACTION_BAR_HEIGHT))
+
+        # ── Gold border lines ─────────────────────────────────────────────
+        gold = (197, 160, 89)
+        # Top bar bottom border (gold)
+        pygame.draw.line(surface, gold, (0, RESOURCE_BAR_HEIGHT - 1),
+                         (SCREEN_WIDTH, RESOURCE_BAR_HEIGHT - 1), 1)
+        # Bottom bar top border (gold)
+        bar_y = SCREEN_HEIGHT - ACTION_BAR_HEIGHT
+        pygame.draw.line(surface, gold, (0, bar_y),
+                         (SCREEN_WIDTH, bar_y), 1)
+        # Left panel right border (gold)
+        pygame.draw.line(surface, gold,
+                         (LEFT_PANEL_WIDTH - 1, RESOURCE_BAR_HEIGHT),
+                         (LEFT_PANEL_WIDTH - 1, SCREEN_HEIGHT - ACTION_BAR_HEIGHT), 1)
+        # Right panel left border (gold)
+        rx = SCREEN_WIDTH - RIGHT_PANEL_WIDTH
+        pygame.draw.line(surface, gold,
+                         (rx, RESOURCE_BAR_HEIGHT),
+                         (rx, SCREEN_HEIGHT - ACTION_BAR_HEIGHT), 1)
+        # Map area borders (gold)
+        pygame.draw.line(surface, gold, (MAP_X, MAP_Y - 1), (MAP_X + MAP_W, MAP_Y - 1), 1)
+        pygame.draw.line(surface, gold, (MAP_X, MAP_Y + MAP_H),
+                         (MAP_X + MAP_W, MAP_Y + MAP_H), 1)
+        pygame.draw.line(surface, gold, (MAP_X - 1, MAP_Y),
+                         (MAP_X - 1, MAP_Y + MAP_H), 1)
+        pygame.draw.line(surface, gold, (MAP_X + MAP_W, MAP_Y),
+                         (MAP_X + MAP_W, MAP_Y + MAP_H), 1)
+
+        # ── Draw resource bar with custom text ────────────────────────────
+        if self._resource_bar:
+            self._resource_bar.draw(surface, game)
+
+        # ── Draw action bar with custom buttons ───────────────────────────
+        if self._action_bar:
+            needs_attention = self._check_needs_attention(game)
+            self._action_bar.set_needs_attention(needs_attention)
+            self._action_bar.draw(surface)
+
+        # ── Map surface ───────────────────────────────────────────────────
         self._map_surface.fill(BG)
         if self._hex_renderer:
-            self._hex_renderer.render(self._map_surface, self.app.game)
+            self._hex_renderer.render(self._map_surface, game, self._elapsed)
         surface.blit(self._map_surface, (MAP_X, MAP_Y))
 
-        # Panel backgrounds
-        # Top resource bar
-        pygame.draw.rect(surface, PANEL_BG,
-                         pygame.Rect(0, 0, SCREEN_WIDTH, RESOURCE_BAR_HEIGHT))
-        # Bottom action bar
-        pygame.draw.rect(surface, PANEL_BG,
-                         pygame.Rect(0, SCREEN_HEIGHT - ACTION_BAR_HEIGHT,
-                                    SCREEN_WIDTH, ACTION_BAR_HEIGHT))
-        # Left panel
-        pygame.draw.rect(surface, PANEL_BG,
-                         pygame.Rect(0, RESOURCE_BAR_HEIGHT,
-                                    LEFT_PANEL_WIDTH,
-                                    SCREEN_HEIGHT - RESOURCE_BAR_HEIGHT - ACTION_BAR_HEIGHT))
-        # Right panel
-        pygame.draw.rect(surface, PANEL_BG,
-                         pygame.Rect(SCREEN_WIDTH - RIGHT_PANEL_WIDTH, RESOURCE_BAR_HEIGHT,
-                                    RIGHT_PANEL_WIDTH,
-                                    SCREEN_HEIGHT - RESOURCE_BAR_HEIGHT - ACTION_BAR_HEIGHT))
-
-        # Border lines
-        # Top bar bottom border
-        pygame.draw.line(surface, BORDER, (0, RESOURCE_BAR_HEIGHT),
-                         (SCREEN_WIDTH, RESOURCE_BAR_HEIGHT))
-        # Bottom bar top border
-        bar_y = SCREEN_HEIGHT - ACTION_BAR_HEIGHT
-        pygame.draw.line(surface, BORDER, (0, bar_y),
-                         (SCREEN_WIDTH, bar_y))
-        # Left panel right border
-        pygame.draw.line(surface, BORDER,
-                         (LEFT_PANEL_WIDTH, RESOURCE_BAR_HEIGHT),
-                         (LEFT_PANEL_WIDTH, SCREEN_HEIGHT - ACTION_BAR_HEIGHT))
-        # Right panel left border
-        rx = SCREEN_WIDTH - RIGHT_PANEL_WIDTH
-        pygame.draw.line(surface, BORDER,
-                         (rx, RESOURCE_BAR_HEIGHT),
-                         (rx, SCREEN_HEIGHT - ACTION_BAR_HEIGHT))
-        # Map area borders
-        pygame.draw.line(surface, BORDER, (MAP_X, MAP_Y), (MAP_X + MAP_W, MAP_Y))
-        pygame.draw.line(surface, BORDER, (MAP_X, MAP_Y + MAP_H),
-                         (MAP_X + MAP_W, MAP_Y + MAP_H))
-        pygame.draw.line(surface, BORDER, (MAP_X, MAP_Y),
-                         (MAP_X, MAP_Y + MAP_H))
-        pygame.draw.line(surface, BORDER, (MAP_X + MAP_W, MAP_Y),
-                         (MAP_X + MAP_W, MAP_Y + MAP_H))
-
-        # Minimap
+        # ── Minimap ───────────────────────────────────────────────────────
         if self._minimap:
-            self._minimap.render(surface, self.app.game, SCREEN_HEIGHT)
+            self._minimap.render(surface, game, SCREEN_HEIGHT)

@@ -347,12 +347,35 @@ class HexRenderer:
 
     # ── main render ────────────────────────────────────────────────────
 
-    def render(self, surface: pygame.Surface, game: Any) -> None:
+    def render(self, surface: pygame.Surface, game: Any, time: float = 0.0) -> None:
         """Draw all map layers onto *surface* in z-order."""
         visible = self.get_visible_hexes()
 
         # Track unit movement for animations
         self._track_unit_movement(game)
+
+        player_civ = game.player_civ.name
+
+        # --- Build civ ownership map ---
+        civ_hexes: Dict[str, set] = {}
+        for city in game.cities.values():
+            owner = getattr(city, "owner", "")
+            if not owner:
+                continue
+            hex_pos = getattr(city, "hex", None) or getattr(city, "position", None)
+            if hex_pos is None:
+                continue
+            if owner not in civ_hexes:
+                civ_hexes[owner] = set()
+            civ_hexes[owner].add(hex_pos)
+
+        # Expand ownership to adjacent hexes for territory display
+        territory: Dict[str, set] = {}
+        for owner, hexes in civ_hexes.items():
+            territory[owner] = set(hexes)
+            for hx, hy in hexes:
+                for dq, dr in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]:
+                    territory[owner].add((hx + dq, hy + dr))
 
         # --- 1. Terrain tiles ---
         zoom = getattr(self.camera, "zoom", 1.0)
@@ -382,6 +405,29 @@ class HexRenderer:
                 )
             else:
                 surface.blit(tile_surface, (csx, csy))
+
+        # --- 1b. Hex grid lines (subtle dark outlines) ---
+        for hx, hy in visible:
+            verts = self._screen_hex_points(hx, hy)
+            self._draw_hex_outline(surface, verts, (0, 0, 0), width=1)
+
+        # --- 1c. Territory borders ---
+        territory_colors = {
+            player_civ: (197, 160, 89),  # gold for player
+        }
+        for civ_name, civ_obj in game.civilizations.items():
+            if civ_name != player_civ:
+                territory_colors[civ_name] = (178, 58, 58)  # red for AI
+
+        for hx, hy in visible:
+            owner = None
+            for civ_name, hex_set in territory.items():
+                if (hx, hy) in hex_set:
+                    owner = civ_name
+                    break
+            if owner and owner in territory_colors:
+                verts = self._screen_hex_points(hx, hy)
+                self._draw_hex_outline(surface, verts, territory_colors[owner], width=1)
 
         # --- 2. Resource icons ---
         for hx, hy in visible:
@@ -524,11 +570,18 @@ class HexRenderer:
                 self._draw_hex_fill(fog_surf, verts, (0, 0, 0), alpha=180)
         surface.blit(fog_surf, (0, 0))
 
-        # --- 7. Selection highlight ---
+        # --- 7. Selection highlight (pulsing gold) ---
         if self.selected_hex:
             hx, hy = self.selected_hex
             if (hx, hy) in visible:
                 verts = self._screen_hex_points(hx, hy)
+                # Pulsing glow with sin wave
+                pulse_alpha = int(120 + 80 * math.sin(time * 4))
+                pulse_verts = self._hex_vertices(
+                    self._screen_hex_points(hx, hy)[0] + HEX_SIZE * 0.15,
+                    self._screen_hex_points(hx, hy)[1] + HEX_SIZE * 0.15,
+                )
+                self._draw_hex_fill(surface, pulse_verts, GOLD, alpha=pulse_alpha)
                 self._draw_hex_outline(surface, verts, GOLD, width=3)
 
         # --- 8. Move range ---
