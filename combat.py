@@ -1,22 +1,44 @@
 """
 CivKings - Tactical Combat Resolver
 Handles army-vs-army combat with terrain modifiers, ruler martial bonuses,
-and casualty tracking.
+casualty tracking, flanking, counters, ranged combat, fortification,
+and combat preview.
 """
 from __future__ import annotations
 
+import math
 import random
 from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
 from hex_map import HexTile
 from simulation import Character
-from game_data import TerrainType, TERRAIN_DEFENSE_BONUS
+from game_data import TerrainType, TERRAIN_DEFENSE_BONUS, UNIT_TYPES, UnitCategory
 
 if TYPE_CHECKING:
     from military import Unit
 
 # Re-export CombatResult so callers can import from here
-__all__ = ["Casualty", "CombatResult", "resolve_combat"]
+__all__ = ["Casualty", "CombatResult", "resolve_combat", "preview_combat"]
 
+# ── Counter Bonuses ──────────────────────────────────────────────────────────
+# {unit_type: {counter_type: bonus_percent}}
+COUNTER_BONUSES: Dict[str, Dict[str, int]] = {
+    "Spearman": {"Cavalry": 10},
+    "Archer": {"Infantry": 5},
+    "Cavalry": {"Archer": 5, "Siege": 10},
+}
+
+# Map unit type names to category keywords for counter matching
+UNIT_CATEGORY_MAP: Dict[str, UnitCategory] = {}
+for _name, _utype in UNIT_TYPES.items():
+    UNIT_CATEGORY_MAP[_name] = _utype.category
+
+HEX_OFFSETS = [
+    (1, 0), (1, -1), (0, -1),
+    (-1, 0), (-1, 1), (0, 1),
+]
+
+
+# ── Casualties & Result ──────────────────────────────────────────────────────
 
 class Casualty:
     """Records a unit lost in combat."""
@@ -50,9 +72,12 @@ class CombatResult:
         self.defender_xp = 0
         self.attacker_victory = False
         self.defender_victory = False
+        self.bonuses_applied: Dict[str, int] = {}
 
     def __str__(self):
         lines = [self.description]
+        if self.bonuses_applied:
+            lines.append(f"  Bonuses: {', '.join(f'{k}+{v}' for k, v in self.bonuses_applied.items())}")
         if self.attacker_casualties:
             lines.append(f"  Attacker lost: {len(self.attacker_casualties)} unit(s)")
         if self.defender_casualties:
@@ -60,14 +85,59 @@ class CombatResult:
         return "\n".join(lines)
 
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
 def _terrain_defense_mod(tile: HexTile) -> float:
-    """Return the defense multiplier from the defender's tile.
-    
-    Mountains give +50% defense (1.5x). Plains and most terrain give 0% (1.0x).
-    """
+    """Return the defense multiplier from the defender's tile."""
     base = TERRAIN_DEFENSE_BONUS.get(tile.terrain, 0)
     return 1.0 + base / 100.0
 
+
+def _hex_neighbors(pos: tuple) -> List[tuple]:
+    """Return the 6 hex neighbors of a position."""
+    q, r = pos
+    return [(q + dq, r + dr) for dq, dr in HEX_OFFSETS]
+
+
+def _get_unit_at_position(units: List["Unit"], pos: tuple) -> Optional["Unit"]:
+    """Get a living unit at a given position."""
+    for u in units:
+        if u.is_alive and u.position == pos:
+            return u
+    return None
+
+
+def calculate_flanking(
+    attacker_pos: tuple,
+    defender_pos: tuple,
+    friendly_units: List["Unit"],
+) -> int:
+    """Calculate flanking bonus for the attacker.
+
+    +2 per friendly unit adjacent to the defender (max +12).
+    The attacker itself is excluded.
+    """
+    adj_positions = set(_hex_neighbors(defender_pos))
+    count = 0
+    for unit in friendly_units:
+        if unit.is_alive and unit.position != attacker_pos and unit.position in adj_positions:
+            count += 1
+    return min(count * 2, 12)
+
+
+def _get_counter_bonus(attacker: "Unit", defender: "Unit") -> int:
+    """Return counter bonus percentage if attacker counters defender's category."""
+    atk_type = attacker.unit_type
+    def_category = UNIT_CATEGORY_MAP.get(defender.unit_type, UnitCategory.MELEE)
+    counters = COUNTER_BONUSES.get(atk_type, {})
+    for counter_key, bonus in counters.items():
+        counter_cat = getattr(UnitCategory, counter_key.upper(), None)
+        if counter_cat and def_category == counter_cat:
+            return bonus
+    return 0
+
+
+# ── Resolve Combat ───────────────────────────────────────────────────────────
 
 def resolve_combat(
     attacker_army: List[Unit],
@@ -79,17 +149,15 @@ def resolve_combat(
     """Resolve tactical combat between two armies.
 
     Formula:
-        atk_power = Attack * Ruler_Martial_Bonus
-        def_power = Defense * Terrain_Mod * Ruler_Martial_Bonus
+        atk_power = Attack * (1 + counter_bonus/100) * Ruler_Martial_Bonus
+        def_power = Defense * Terrain_Mod * (1 + fort_bonus) * Ruler_Martial_Bonus
         Damage = max(0, atk_power - def_power)
 
-    - Terrain_Mod comes from the defender's tile (mountains +50%, plains 0%).
-    - Ruler_Martial_Bonus = 1 + (ruler.martial / 100).
-    - If calculated damage <= 0, the defender takes no damage and the
-      attacker instead takes 0 damage (i.e. no wounds; the attacker's
-      attack is simply negated).
-
-    Returns a CombatResult summarizing casualties.
+    Features:
+        - Counter bonuses (COUNTER_BONUSES)
+        - Flanking (+2 per adjacent friendly unit, max +12)
+        - Ranged units deal damage without taking return damage
+        - Fortified defenders get +3 (1st turn) or +6 (2+ turns) defense
     """
     result = CombatResult()
     dmg_log: List[str] = []
@@ -102,39 +170,66 @@ def resolve_combat(
     def_units = [u for u in defender_army if u.is_alive]
 
     while att_units and def_units:
-        # Pick one unit from each side (randomized for variety)
         att = random.choice(att_units)
         def_ = random.choice(def_units)
 
-        # Skip dead units that may have been removed mid-loop
         if not att.is_alive or not def_.is_alive:
             continue
 
-        # Terrain bonus only applies to the defender (standard Civ-style)
-        atk_power = att.get_stats()["attack"] * att_ruler_bonus
-        def_power = def_.get_stats()["defense"] * terrain_mod * def_ruler_bonus
+        # ── Calculate attacker power ──
+        atk_power = att.attack * att_ruler_bonus
+        bonuses: Dict[str, int] = {}
+
+        # Counter bonus
+        counter_bonus = _get_counter_bonus(att, def_)
+        if counter_bonus > 0:
+            atk_power *= (1 + counter_bonus / 100.0)
+            bonuses[f"counter({att.unit_type} vs {def_.unit_type})"] = counter_bonus
+
+        # Flanking bonus
+        flank = calculate_flanking(att.position, def_.position, att_units)
+        if flank > 0:
+            atk_power *= (1 + flank / 100.0)
+            bonuses[f"flanking"] = flank
+
+        # ── Calculate defender power ──
+        def_power = def_.defense * terrain_mod * def_ruler_bonus
+
+        # Fortification bonus
+        if def_.is_fortified:
+            fort_turns = getattr(def_, "_fortify_turns", 0)
+            if fort_turns >= 1:
+                def_power *= 1.06  # +6% defense for 2+ turns
+                bonuses["fortified(2+)"] = 6
+            else:
+                def_power *= 1.03  # +3% defense for 1st turn
+                bonuses["fortified(1)"] = 3
+
+        # ── Determine damage ──
+        def_is_ranged = UNIT_CATEGORY_MAP.get(def_.unit_type) == UnitCategory.RANGED
+        att_is_ranged = UNIT_CATEGORY_MAP.get(att.unit_type) == UnitCategory.RANGED
 
         raw_dmg_to_def = atk_power - def_power
         dmg_to_def = max(0, raw_dmg_to_def)
 
-        # If defender's defense negates the attack completely, the attacker
-        # takes no damage (no wound mechanic on negation).
-        # If attack penetrates, defender takes full damage but attacker also
-        # takes counter-damage = max(0, def_power - atk_power).
-        raw_dmg_to_att = def_power - atk_power
-        dmg_to_att = max(0, raw_dmg_to_att)
+        if def_is_ranged:
+            # Ranged defender deals no counter-damage
+            dmg_to_att = 0
+        elif att_is_ranged:
+            # Ranged attacker takes no counter-damage
+            dmg_to_att = 0
+        else:
+            raw_dmg_to_att = def_power - atk_power
+            dmg_to_att = max(0, raw_dmg_to_att)
 
-        # Use deal_damage() for proper death handling
+        # Apply damage
         if dmg_to_def > 0:
             att.deal_damage(dmg_to_def)
         if dmg_to_att > 0:
             def_.deal_damage(dmg_to_att)
 
-        # Clamp HP
-        if att.hp < 0:
-            att.hp = 0
-        if def_.hp < 0:
-            def_.hp = 0
+        att.hp = max(0, att.hp)
+        def_.hp = max(0, def_.hp)
 
         # Record casualties
         att.casualty = Casualty(att, "attacker")
@@ -167,7 +262,7 @@ def resolve_combat(
         if u.is_alive:
             result.defender_remaining_hp.append(u.hp)
 
-    # Convenience attributes for single-unit combat (used by CombatUI)
+    # Single-unit convenience
     if attacker_army:
         alive = [u for u in attacker_army if u.is_alive]
         result.attacker_hp_after = alive[-1].hp if alive else 0
@@ -178,6 +273,8 @@ def resolve_combat(
         result.defender_hp_after = alive[-1].hp if alive else 0
         result.defender_xp = alive[-1].xp
         result.defender_victory = not any(u.is_alive for u in attacker_army)
+
+    result.bonuses_applied = bonuses
 
     if result.attacker_casualties:
         total_att_dmg = sum(c.damage_dealt for c in result.attacker_casualties)
@@ -190,3 +287,72 @@ def resolve_combat(
         result.description = "Combat ended with no casualties."
 
     return result
+
+
+# ── Combat Preview ───────────────────────────────────────────────────────────
+
+def preview_combat(
+    attacker: "Unit",
+    defender: "Unit",
+    tile: HexTile,
+    friendly_units: Optional[List["Unit"]] = None,
+    defender_fortified: bool = False,
+) -> Dict:
+    """Predict combat outcome without modifying any state.
+
+    Returns:
+        {
+            "attacker_strength": float,
+            "defender_strength": float,
+            "estimated_damage": float,
+            "attacker_win_chance": float,
+            "defender_win_chance": float,
+            "bonuses": dict,
+        }
+    """
+    friendly_units = friendly_units or []
+    terrain_mod = _terrain_defense_mod(tile)
+    bonuses: Dict[str, int] = {}
+
+    # Counter bonus
+    counter_bonus = _get_counter_bonus(attacker, defender)
+    if counter_bonus > 0:
+        bonuses[f"counter({attacker.unit_type} vs {defender.unit_type})"] = counter_bonus
+
+    # Flanking bonus
+    flank = calculate_flanking(attacker.position, defender.position, friendly_units)
+    if flank > 0:
+        bonuses[f"flanking"] = flank
+
+    # Fortification
+    if defender_fortified:
+        bonuses["fortified"] = 3
+
+    # Calculate effective strengths
+    atk_power = attacker.attack * (1 + counter_bonus / 100.0) * (1 + flank / 100.0)
+    def_mult = 1.03 if defender_fortified else 1.0
+    def_power = defender.defense * terrain_mod * def_mult
+
+    # Estimated net damage (attacker vs defender)
+    estimated_damage = max(0, atk_power - def_power)
+
+    # Simulate ~1000 combat rounds for win probability
+    att_wins = 0
+    for _ in range(1000):
+        rng = random.randint(-10, 10)
+        sim_atk = atk_power + rng
+        rng2 = random.randint(-10, 10)
+        sim_def = def_power + rng2
+        if sim_atk > sim_def:
+            att_wins += 1
+
+    win_chance = att_wins / 1000.0
+
+    return {
+        "attacker_strength": round(atk_power, 2),
+        "defender_strength": round(def_power, 2),
+        "estimated_damage": round(estimated_damage, 2),
+        "attacker_win_chance": round(win_chance, 4),
+        "defender_win_chance": round(1 - win_chance, 4),
+        "bonuses": bonuses,
+    }
