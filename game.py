@@ -15,7 +15,7 @@ from game_data import (
 from hex_map import HexMap, HexTile
 from city import City
 from military import Unit
-from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager
+from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager, execute_succession, SUCCESSION_LAWS
 from court import Court, CourtPosition
 from city import CityManager
 from military import MilitaryManager
@@ -80,6 +80,11 @@ class Game:
         self.players: Dict[str, Civilization] = {}
         self.gold: Dict[str, int] = {}
         self.research: Dict[str, TechManager] = {}
+        
+        # Ruler tracking: civ_name -> Character
+        self.rulers: Dict[str, Character] = {}
+        # Succession law per civ
+        self.succession_laws: Dict[str, str] = {}
         
         # AI players
         self.ai_players: Dict[str, AIPlayer] = {}
@@ -215,6 +220,8 @@ class Game:
         self.characters.append(root_char)
         self.dynasty = Dynasty(root_char, {root_char.id: root_char})
         self.dynasty_manager.root = root_char
+        self.rulers[self.player_civ.name] = root_char
+        self.succession_laws[self.player_civ.name] = 'PRIMOGENITURE'
         
         # Initialize court
         self.court = Court(root_char)
@@ -249,6 +256,13 @@ class Game:
         msgs.append(f"\n{'='*60}")
         msgs.append(f"TURN {self.state.turn} - {self.state.phase} PHASE")
         msgs.append(f"{'='*60}")
+        
+        # --- Succession check for player ---
+        civ_name = self.player_civ.name
+        ruler = self.rulers.get(civ_name)
+        if ruler and not ruler.is_alive:
+            succession_events = self._handle_succession(civ_name, msgs)
+            msgs.extend(succession_events)
         
         # Simulate NPC turns
         for civ_name, civ in self.civilizations.items():
@@ -611,6 +625,69 @@ class Game:
                     city.current_production = city.production_queue.pop(0)
         
         return msgs
+
+    def _handle_succession(self, civ_name: str, msgs: List[str]) -> List[str]:
+        """Handle ruler death and succession for a civilization. Returns messages."""
+        succession_msgs: List[str] = []
+        ruler = self.rulers.get(civ_name)
+        if not ruler:
+            return succession_msgs
+
+        succession_msgs.append(f"\n  👑 SUCCESSION for {civ_name}: {ruler.name} has died!")
+
+        # Collect all living dynasty members as heirs
+        heirs: List[Character] = []
+        if self.dynasty:
+            for member in self.dynasty.get_all_members():
+                if member.is_alive:
+                    heirs.append(member)
+        # Also add any player characters of this civ
+        for char in self.characters:
+            if char.is_alive and char not in heirs:
+                heirs.append(char)
+
+        # Get player's cities for the succession resolver
+        player_cities = {name: city for name, city in self.cities.items() if city.owner == civ_name}
+
+        # Execute succession
+        law = self.succession_laws.get(civ_name, 'PRIMOGENITURE')
+        result = execute_succession(ruler, law, player_cities, heirs)
+
+        # Apply results
+        new_ruler = result['new_ruler']
+        if new_ruler:
+            self.rulers[civ_name] = new_ruler
+            succession_msgs.append(f"  New ruler: {new_ruler.name}")
+
+            # Update dynasty root
+            if self.dynasty:
+                self.dynasty.root = new_ruler
+                self.dynasty_manager.root = new_ruler
+
+            # Update court if exists
+            if self.court:
+                self.court.ruler = new_ruler
+
+        # Lost cities become AI-controlled
+        for city_name in result['lost_cities']:
+            city = self.cities.get(city_name)
+            if city:
+                # Find a random AI civ to take the city
+                ai_civs = [n for n in self.civilizations if n != civ_name]
+                if ai_civs:
+                    new_owner = random.choice(ai_civs)
+                    city.owner = new_owner
+                    succession_msgs.append(f"  💔 City '{city_name}' lost to {new_owner}!")
+
+        # Apply stability penalty
+        succession_msgs.append(f"  Stability: -25 on succession")
+        self.stability_system.apply_change(-25)
+
+        # Report events
+        for event in result['events']:
+            succession_msgs.append(f"  {event}")
+
+        return succession_msgs
 
     def to_dict(self) -> dict:
         """Serialize game state for saving."""

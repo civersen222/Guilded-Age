@@ -247,6 +247,127 @@ class DynastyManager:
         if not self.root:
             self.root = char
 
+# Succession laws
+SUCCESSION_LAWS = ['PRIMOGENITURE', 'GAVELKIND', 'SENIORITY', 'ELECTIVE']
+
+def execute_succession(
+    ruler: Character,
+    succession_law: str,
+    cities: Dict[str, 'City'],
+    heirs: List[Character],
+) -> dict:
+    """Execute succession when a ruler dies.
+
+    Args:
+        ruler: The deceased ruler.
+        succession_law: One of PRIMOGENITURE, GAVELKIND, SENIORITY, ELECTIVE.
+        cities: Dict of city_name -> City for the realm.
+        heirs: List of candidate heir Characters.
+
+    Returns:
+        {'new_ruler': Character, 'lost_cities': List[str], 'events': List[str]}
+    """
+    if not isinstance(ruler, Character):
+        # Handle case where ruler is a string name
+        ruler = None
+    events: List[str] = []
+    lost_cities: List[str] = []
+
+    # Filter to living heirs
+    living_heirs = [h for h in heirs if h.is_alive]
+
+    new_ruler: Optional[Character] = None
+
+    if succession_law == 'PRIMOGENITURE':
+        # Eldest child gets everything
+        if living_heirs:
+            new_ruler = max(living_heirs, key=lambda h: h.age)
+            events.append(f"PRIMOGENITURE: {new_ruler.name} (age {new_ruler.age}) inherits the throne as the eldest child.")
+        else:
+            # No children — fall back to SENIORITY
+            new_ruler = _seniority_pick(living_heirs)
+            events.append(f"No heir apparent. SENIORITY picks {new_ruler.name} from the dynasty.")
+
+    elif succession_law == 'GAVELKIND':
+        # Split realm: eldest gets capital, rest distributed
+        if living_heirs:
+            living_heirs.sort(key=lambda h: h.age, reverse=True)
+            new_ruler = living_heirs[0]
+            events.append(f"GAVELKIND: {new_ruler.name} inherits the capital and primary lands.")
+            # Other heirs get some cities — they become independent
+            other_heirs = living_heirs[1:]
+            city_list = list(cities.values())
+            for idx, heir in enumerate(other_heirs):
+                if idx < len(city_list):
+                    city = city_list[idx]
+                    old_owner = city.owner
+                    city.owner = heir.name
+                    events.append(f"  {city.name} goes to {heir.name}")
+                    # If old_owner != new ruler's civ, it's a lost city
+                    if old_owner and old_owner != new_ruler.name:
+                        lost_cities.append(city.name)
+        else:
+            new_ruler = _seniority_pick(living_heirs)
+            events.append(f"No heirs. SENIORITY fallback picks {new_ruler.name}.")
+
+    elif succession_law == 'SENIORITY':
+        # Oldest living dynasty member inherits
+        new_ruler = _seniority_pick(living_heirs)
+        if new_ruler:
+            events.append(f"SENIORITY: {new_ruler.name} (age {new_ruler.age}) is the oldest living dynasty member and inherits.")
+
+    elif succession_law == 'ELECTIVE':
+        # Random weighted by combined stats
+        if living_heirs:
+            weights = []
+            for h in living_heirs:
+                w = h.get_effective_stat('diplomacy') + h.get_effective_stat('martial') + \
+                    h.get_effective_stat('stewardship') + h.get_effective_stat('intrigue')
+                weights.append(max(w, 1))
+            total = sum(weights)
+            # Weighted random
+            r = random.uniform(0, total)
+            cumulative = 0
+            new_ruler = living_heirs[-1]  # fallback to last
+            for h, w in zip(living_heirs, weights):
+                cumulative += w
+                if r <= cumulative:
+                    new_ruler = h
+                    break
+            events.append(f"ELECTIVE: {new_ruler.name} wins the election of nobles (weight: {weights[living_heirs.index(new_ruler)]}).")
+        else:
+            new_ruler = _seniority_pick(living_heirs)
+            events.append(f"No candidates. SENIORITY fallback picks {new_ruler.name}.")
+    else:
+        events.append(f"Unknown succession law '{succession_law}'. Using PRIMOGENITURE.")
+        if living_heirs:
+            new_ruler = max(living_heirs, key=lambda h: h.age)
+            events.append(f"PRIMOGENITURE: {new_ruler.name} inherits as eldest.")
+
+    if new_ruler is None:
+        events.append(f"No viable heirs for {ruler.name if ruler else 'the throne'}. Realm collapses.")
+        lost_cities = list(cities.keys())
+        return {'new_ruler': None, 'lost_cities': lost_cities, 'events': events}
+
+    # Update dynasty: new ruler becomes root
+    if isinstance(ruler, Character):
+        ruler.is_alive = False
+        events.append(f"Ruler {ruler.name} has died.")
+        events.append(f"Stability: -25 on succession.")
+
+    return {
+        'new_ruler': new_ruler,
+        'lost_cities': lost_cities,
+        'events': events,
+    }
+
+
+def _seniority_pick(living_heirs: List[Character]) -> Optional[Character]:
+    """Pick the oldest living character from heirs."""
+    if not living_heirs:
+        return None
+    return max(living_heirs, key=lambda h: h.age)
+
 if __name__ == "__main__":
     # Registry of all characters
     registry: Dict[str, Character] = {}
