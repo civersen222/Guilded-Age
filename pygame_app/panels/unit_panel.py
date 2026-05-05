@@ -63,7 +63,7 @@ class UnitPanel:
         pygame.draw.line(surface, GOLD_TEXT, (0, y_pos), (w, y_pos), 1)
 
         for btn, unit in self.unit_buttons.items():
-            rect = btn.get_rect().copy()
+            rect = btn.get_abs_rect().copy()
             rect.x += self.panel.get_abs_rect().x
             rect.y += self.panel.get_abs_rect().y
 
