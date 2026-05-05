@@ -94,6 +94,10 @@ def _serialize_game(game: Any) -> Dict[str, Any]:
                 for pos, tile in getattr(game.map, 'tiles', {}).items()
             }
         },
+        "ai_players": {
+            name: getattr(ai, 'difficulty', 'medium')
+            for name, ai in getattr(game, 'ai_players', {}).items()
+        },
     }
     return data
 

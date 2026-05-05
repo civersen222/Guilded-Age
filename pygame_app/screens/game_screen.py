@@ -16,6 +16,7 @@ from pygame_app.map.hex_renderer import HexRenderer
 from pygame_app.map.minimap import Minimap
 from pygame_app.panels.resource_bar import ResourceBar
 from pygame_app.panels.city_panel import CityPanel
+from pygame_app.panels.unit_panel import UnitPanel
 from pygame_app.panels.event_log import EventLog
 from pygame_app.panels.turn_summary import TurnSummary
 from pygame_app.panels.action_bar import ActionBar
@@ -37,6 +38,8 @@ class GameScreen(BaseScreen):
         self._turn_summary = None
         self._action_bar = None
         self._next_turn_btn = None
+        self._unit_panel = None
+        self._selected_unit = None
         self._panning = False
         self._pan_start = (0, 0)
         self._dragging_middle = False
@@ -92,6 +95,13 @@ class GameScreen(BaseScreen):
         self._action_bar = ActionBar(self.ui_manager)
         self._action_bar.set_mode("default")
 
+        # Unit panel (below city panel)
+        self._unit_panel = UnitPanel(
+            self.ui_manager,
+            pygame.Rect(0, RESOURCE_BAR_HEIGHT + 400, LEFT_PANEL_WIDTH, 300),
+        )
+        self._unit_panel.refresh(game)
+
         # Turn summary (modal popup)
         self._turn_summary = TurnSummary()
 
@@ -113,6 +123,8 @@ class GameScreen(BaseScreen):
             self._event_log.destroy()
         if self._action_bar:
             self._action_bar.destroy()
+        if self._unit_panel:
+            self._unit_panel.destroy()
         if self._turn_summary and self._turn_summary.is_visible:
             self._turn_summary._kill()
         if self._next_turn_btn:
@@ -169,6 +181,10 @@ class GameScreen(BaseScreen):
                 sy = my - MAP_Y
                 hx, hy = self._hex_renderer.screen_to_hex(sx, sy)
                 self._hex_renderer.selected_hex = (hx, hy)
+                self._hex_renderer.move_range.clear()
+                self._hex_renderer.attack_range.clear()
+                # Check for a player unit at this hex and select it
+                self._select_unit_at_hex(game, hx, hy)
                 # Check minimap click
                 if self._minimap:
                     self._minimap.handle_click(mx, my, SCREEN_HEIGHT)
@@ -177,6 +193,12 @@ class GameScreen(BaseScreen):
             # Check minimap click
             if self._minimap and self._minimap.handle_click(mx, my, SCREEN_HEIGHT):
                 return
+
+        # Unit panel button click: select unit
+        unit = self._unit_panel.handle_event(event)
+        if unit is not None:
+            self._select_unit(game, unit)
+            return
 
         # Mouse wheel zoom
         if event.type == pygame.MOUSEWHEEL:
@@ -203,21 +225,140 @@ class GameScreen(BaseScreen):
                 self._camera.center_on(wx, wy)
             return
 
+        # Right-click to move selected unit
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+            mx, my = event.pos
+            if MAP_X <= mx <= MAP_X + MAP_W and MAP_Y <= my <= MAP_Y + MAP_H:
+                if self._selected_unit:
+                    sx = mx - MAP_X
+                    sy = my - MAP_Y
+                    hx, hy = self._hex_renderer.screen_to_hex(sx, sy)
+                    self._move_selected_unit(game, hx, hy)
+            return
+
     def _handle_action(self, action: str, game) -> None:
         """Handle an action from the action bar."""
         if action == "Next Turn":
             game.process_turn()
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
+            self._unit_panel.refresh(game)
             self._event_log.add_event(f"Turn advanced to turn {game.turn}", "info")
         elif action == "Save":
             self._save_game(game)
+        elif action in ("Move", "Attack", "Fortify", "Skip"):
+            self._handle_unit_action(action, game)
+        elif action == "Tech Tree":
+            from pygame_app.popups.tech_tree import TechTreePopup
+            self._tech_popup = TechTreePopup(self.ui_manager, game)
+        elif action == "Diplomacy":
+            from pygame_app.popups.diplomacy import DiplomacyPopup
+            self._diplomacy_popup = DiplomacyPopup(self.ui_manager, game)
+        elif action == "Production":
+            self._show_production(game)
 
     def _save_game(self, game) -> None:
         """Save the current game state."""
         from save_system import save_game
         path = save_game(game)
         self._event_log.add_event(f"Game saved to {path}", "success")
+
+    def _select_unit(self, game, unit) -> None:
+        """Select a unit and show its move range."""
+        self._selected_unit = unit
+        player_name = game.player_civ.name
+        if unit.owner != player_name:
+            self._selected_unit = None
+            return
+        self._hex_renderer.selected_hex = getattr(unit, "position", (0, 0))
+        self._hex_renderer.attack_range.clear()
+        # Calculate move range
+        moves_left = getattr(unit, "moves_left", 0)
+        if moves_left > 0:
+            game._player_name = player_name
+            self._hex_renderer.move_range = self._hex_renderer.calculate_move_range(
+                getattr(unit, "position", (0, 0)), moves_left, game.units, game
+            )
+        self._action_bar.set_mode("unit_selected")
+
+    def _select_unit_at_hex(self, game, hx, hy) -> None:
+        """Select unit at hex if it belongs to player."""
+        player_name = game.player_civ.name
+        for uid, unit in game.units.items():
+            if (getattr(unit, "is_alive", False)
+                    and getattr(unit, "position", None) == (hx, hy)
+                    and getattr(unit, "owner", "") == player_name):
+                self._select_unit(game, unit)
+                return
+        self._selected_unit = None
+        self._action_bar.set_mode("default")
+
+    def _move_selected_unit(self, game, hx, hy) -> None:
+        """Move selected unit to target hex."""
+        if not self._selected_unit:
+            return
+        unit = self._selected_unit
+        from military import MilitaryManager
+        success = MilitaryManager.move_unit(game.military, unit, (hx, hy))
+        if success:
+            self._event_log.add_event(f"{unit.unit_type} moved to ({hx},{hy})", "success")
+            # Recalculate move range
+            moves_left = getattr(unit, "moves_left", 0)
+            if moves_left > 0:
+                self._hex_renderer.move_range = self._hex_renderer.calculate_move_range(
+                    getattr(unit, "position", (0, 0)), moves_left, game.units, game
+                )
+            else:
+                self._hex_renderer.move_range.clear()
+            self._unit_panel.refresh(game)
+        else:
+            self._event_log.add_event(f"Cannot move {unit.unit_type} to ({hx},{hy})", "error")
+
+    def _handle_unit_action(self, action: str, game) -> None:
+        """Handle Move/Attack/Fortify/Skip actions."""
+        if not self._selected_unit:
+            return
+        unit = self._selected_unit
+
+        if action == "Move":
+            # Show move range, wait for right-click
+            moves_left = getattr(unit, "moves_left", 0)
+            if moves_left > 0:
+                game._player_name = game.player_civ.name
+                self._hex_renderer.move_range = self._hex_renderer.calculate_move_range(
+                    getattr(unit, "position", (0, 0)), moves_left, game.units, game
+                )
+                self._event_log.add_event("Right-click to move", "info")
+            else:
+                self._event_log.add_event("Unit has no moves left", "error")
+
+        elif action == "Attack":
+            # Show attack range (enemy units adjacent)
+            game._player_name = game.player_civ.name
+            self._hex_renderer.attack_range = self._hex_renderer.calculate_attack_range(
+                getattr(unit, "position", (0, 0)), game.units, game
+            )
+            if self._hex_renderer.attack_range:
+                self._event_log.add_event("Select an enemy hex to attack", "info")
+            else:
+                self._event_log.add_event("No enemies in attack range", "error")
+
+        elif action == "Fortify":
+            unit.is_fortified = True
+            self._event_log.add_event(f"{unit.unit_type} fortified", "info")
+
+        elif action == "Skip":
+            unit.moves_left = 0
+            self._event_log.add_event(f"{unit.unit_type} skipped", "info")
+            self._unit_panel.refresh(game)
+
+    def _show_production(self, game) -> None:
+        """Show production popup for selected city."""
+        if self._city_panel.city_buttons:
+            # Get first selected city or show all
+            pass
+        from pygame_app.popups.production import ProductionPopup
+        self._production_popup = ProductionPopup(self.ui_manager, game)
 
     def update(self, dt):
         # WASD / arrow key panning

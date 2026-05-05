@@ -1,5 +1,6 @@
 """Hex tile renderer — draws terrain, resources, cities, units, fog, and highlights."""
 
+from collections import deque
 import math
 from typing import Set, Tuple, Optional, Dict, Any
 
@@ -133,6 +134,87 @@ class HexRenderer:
         offset_x = -min_x + 1
         offset_y = -min_y + 1
         surface.blit(hex_surf, (offset_x, offset_y))
+
+    # ── move / attack range calculation ──────────────────────────────
+
+    def calculate_move_range(
+        self, start: Tuple[int, int], moves_left: int,
+        units: Dict[Any, Any], game: Any,
+    ) -> Set[Tuple[int, int]]:
+        """BFS from *start* using terrain costs; returns set of reachable hexes."""
+        moveable: Set[Tuple[int, int]] = set()
+        queue: deque = deque([(start, moves_left)])
+        visited: Set[Tuple[int, int]] = {start}
+
+        while queue:
+            (cx, cy), remaining = queue.popleft()
+            if remaining <= 0:
+                continue
+
+            for dq, dr in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]:
+                nx, ny = cx + dq, cy + dr
+                if (nx, ny) in visited:
+                    continue
+                if not self.hex_map.in_bounds(nx, ny):
+                    continue
+
+                tile = self.hex_map.get_tile(nx, ny)
+                if not tile:
+                    continue
+
+                terrain = getattr(tile, "terrain", None)
+                if terrain is None:
+                    continue
+
+                # Mountains impassable
+                from game_data import TerrainType
+                if terrain == TerrainType.MOUNTAIN:
+                    continue
+
+                # Water — only passable for naval units (simplified: allow coast/ocean)
+                cost = 1
+                from game_data import TERRAIN_MOVEMENT_COST
+                cost = TERRAIN_MOVEMENT_COST.get(terrain, 1)
+                if cost == 99:  # mountain sentinel
+                    continue
+
+                if remaining >= cost:
+                    # Check no enemy unit blocks (allied units block too for simplicity)
+                    occupied = False
+                    for uid, unit in units.items():
+                        if getattr(unit, "is_alive", False) and getattr(unit, "position", None) == (nx, ny):
+                            if getattr(unit, "owner", "") != getattr(game, "_player_name", ""):
+                                occupied = True
+                                break
+                    if occupied:
+                        continue
+
+                    moveable.add((nx, ny))
+                    visited.add((nx, ny))
+                    queue.append(((nx, ny), remaining - cost))
+
+        return moveable
+
+    def calculate_attack_range(
+        self, attacker_hex: Tuple[int, int],
+        units: Dict[Any, Any], game: Any,
+    ) -> Set[Tuple[int, int]]:
+        """Return all hexes with enemy units reachable by attack (adjacent hexes)."""
+        attackable: Set[Tuple[int, int]] = set()
+        player_name = getattr(game, "_player_name", "")
+
+        for dq, dr in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]:
+            nx, ny = attacker_hex[0] + dq, attacker_hex[1] + dr
+            if not self.hex_map.in_bounds(nx, ny):
+                continue
+            for uid, unit in units.items():
+                if (getattr(unit, "is_alive", False)
+                        and getattr(unit, "position", None) == (nx, ny)
+                        and getattr(unit, "owner", "") != player_name):
+                    attackable.add((nx, ny))
+                    break
+
+        return attackable
 
     # ── label helpers ──────────────────────────────────────────────────
 

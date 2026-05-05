@@ -178,10 +178,15 @@ class NewGameDialog(BaseScreen):
         from game import Game
         self.app.game = Game(civ, map_width=map_size, map_height=map_size)
 
-        # Add AI players
+        # Add AI players and their civs
+        from game_data import CIVILIZATIONS as ALL_CIVS
         from ai import AIPlayer
         for ai_name in ai_civ_names:
             self.app.game.ai_players[ai_name] = AIPlayer(ai_name, difficulty.lower())
+            ai_civ = ALL_CIVS.get(ai_name)
+            if ai_civ:
+                self.app.game.civilizations[ai_name] = ai_civ
+                self.app.game.research[ai_name] = TechManager()
 
         # Switch to game screen
         from pygame_app.screens.game_screen import GameScreen
