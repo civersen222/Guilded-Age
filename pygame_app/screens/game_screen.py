@@ -331,15 +331,7 @@ class GameScreen(BaseScreen):
                         self._selected_city = city
                         self._open_production_popup(game, city)
                         return
-                # Settle city if a Settler is selected and hex is empty
-                if (self._selected_unit
-                        and getattr(self._selected_unit, "unit_type", "") == "Settler"
-                        and self._selected_unit.owner == player_name):
-                    self._hex_renderer.selected_hex = (hx, hy)
-                    self._hex_renderer.move_range.clear()
-                    self._hex_renderer.attack_range.clear()
-                    self._try_settle_city(game, hx, hy)
-                    return
+ 
                 # Check minimap click
                 if self._minimap:
                     self._minimap.handle_click(mx, my, SCREEN_HEIGHT)
@@ -569,7 +561,7 @@ class GameScreen(BaseScreen):
         game.city_manager.cities = list(game.cities.values())
         # Move Settler to the new city position and remove it
         unit.position = position
-        game.map.remove_unit(unit)
+        game.military_manager.remove_unit(unit)
         del game.units[unit.name]
         self._event_log.add_event(f"Founded {new_city.name}!", "success")
         self._selected_unit = None
