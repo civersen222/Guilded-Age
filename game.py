@@ -35,6 +35,7 @@ from external_trade_routes import ExternalTradeRoutes
 from faction_system import FactionManager, FactionEventGenerator
 from ai import AIPlayer
 from improvements import ImprovementManager
+from great_people import GreatPeopleManager
 
 
 @dataclass
@@ -96,6 +97,7 @@ class Game:
         self.court: Optional[Court] = None
         self.victory_tracker = VictoryConditionTracker()
         self.improvement_manager = ImprovementManager()
+        self.great_people_manager = GreatPeopleManager()
         
         # Economy sub-systems
         self.tax_system = TaxSystem()
@@ -407,6 +409,10 @@ class Game:
                 worker_positions, self.map.tiles
             )
             msgs.extend(improvement_msgs)
+        
+        # 9. Great People
+        gp_msgs = self.great_people_manager.process_turn(self)
+        msgs.extend(gp_msgs)
         
         # Random faction events
         if random.random() < 0.15:  # 15% chance of faction event
