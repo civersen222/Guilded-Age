@@ -106,6 +106,9 @@ class Game:
         # Initialize game
         self._initialize_game()
         
+        # Set up AI players with starting cities and units
+        self._setup_ai_players()
+        
         # Update managers with actual data
         self.city_manager.cities = list(self.cities.values())
         self.military_manager.units = list(self.units.values())
@@ -115,6 +118,52 @@ class Game:
         """Expose fog of war from the map."""
         return self.map.fog
     
+    def _find_safe_tile(self, min_dist: int = 5) -> Optional[Tuple[int, int]]:
+        """Find a tile at least min_dist hexes away from all existing cities."""
+        city_positions = [c.position for c in self.cities.values()]
+        candidates = [
+            (t.x, t.y)
+            for t in self.map.tiles.values()
+            if t.terrain not in (TerrainType.OCEAN,)
+            and all(self.map.get_distance(t.x, t.y, cx, cy) >= min_dist for cx, cy in city_positions)
+        ]
+        return random.choice(candidates) if candidates else None
+
+    def _setup_ai_players(self):
+        """Give each AI civ a starting city and a warrior unit."""
+        for civ_name in self.ai_players:
+            tile = self._find_safe_tile(min_dist=5)
+            if not tile:
+                continue
+            civ = self.civilizations[civ_name]
+            is_coastal = self.map.tiles[tile].terrain in (TerrainType.WATER_COAST, TerrainType.OCEAN)
+            climate = get_climate_for_row(tile[1], self.map.height)
+            city = City(
+                name=f"{civ_name} City",
+                owner=civ_name,
+                position=tile,
+                population=3,
+                gold=100,
+                climate_zone=climate,
+                is_coastal=is_coastal,
+            )
+            self.cities[city.name] = city
+            self.map.add_city(city)
+            self.gold[civ_name] = 100
+            self.research[civ_name] = TechManager()
+            for tn in civ.starting_tech:
+                if tn in TECHNOLOGIES:
+                    self.research[civ_name].research(tn, civ_name)
+            warrior = Unit(
+                unit_type="Militia",
+                owner=civ_name,
+                position=tile,
+                moves_left=1,
+            )
+            warrior.name = f"{civ_name} Militia"
+            self.units[warrior.name] = warrior
+            self.map.add_unit(warrior)
+
     def _initialize_game(self):
         """Set up initial game state"""
         # Create player starting city
