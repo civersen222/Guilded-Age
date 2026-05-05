@@ -59,9 +59,12 @@ def wait_for_completion(url: str, prompt_id: str, timeout: int = COMFYUI_TIMEOUT
     raise TimeoutError(f"ComfyUI did not complete prompt {prompt_id} within {timeout}s")
 
 
-def download_image(url: str, output_name: str, dest: Path) -> Path:
+def download_image(url: str, output_name: str, dest: Path, subfolder: str = "", img_type: str = "output") -> Path:
     """Download a generated image from ComfyUI's /view endpoint."""
-    resp = requests.get(f"{url}/view?filename={output_name}", timeout=30)
+    params = {"filename": output_name, "type": img_type}
+    if subfolder:
+        params["subfolder"] = subfolder
+    resp = requests.get(f"{url}/view", params=params, timeout=30)
     resp.raise_for_status()
     dest.mkdir(parents=True, exist_ok=True)
     out_path = dest / output_name
@@ -88,7 +91,7 @@ def resize_variants(img: Image.Image, sizes: list) -> dict:
 
 def pack_atlas(tiles: dict, zoom: int, terrain_names: list) -> tuple:
     """Pack tiles into a horizontal strip atlas. Returns (Image, dict)."""
-    tile_img = tiles[zoom]
+    tile_img = next(iter(tiles.values()))
     tw, th = tile_img.size
     atlas_w = tw * len(terrain_names)
     atlas_h = th
@@ -158,9 +161,10 @@ def main():
         # Clone workflow and replace prompt + seed
         wf = json.loads(json.dumps(workflow))  # deep clone
 
-        # Node 2 = positive prompt, Node 5 = KSampler
+        # Node 2 = positive prompt, Node 5 = KSampler, Node 7 = SaveImage
         wf["2"]["inputs"]["text"] = prompts[terrain]
         wf["5"]["inputs"]["seed"] = seed
+        wf["7"]["inputs"]["filename_prefix"] = f"output/{terrain}"
 
         try:
             prompt_id = post_prompt(url, wf)
@@ -178,7 +182,7 @@ def main():
             filename = file_info["filename"]
             subfolder = file_info.get("subfolder", "")
 
-            img_path = download_image(url, filename, raw_dir)
+            img_path = download_image(url, filename, raw_dir, subfolder, file_info.get("type", "output"))
             print(f"  Saved raw tile: {img_path}")
 
             # Apply hex mask if available

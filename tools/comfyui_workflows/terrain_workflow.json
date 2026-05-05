@@ -2,7 +2,7 @@
   "1": {
     "class_type": "CheckpointLoaderSimple",
     "inputs": {
-      "ckpt_name": "models/checkpoints/juggernautXL.safetensors"
+      "ckpt_name": "v1-5-pruned-emaonly.safetensors"
     }
   },
   "2": {
