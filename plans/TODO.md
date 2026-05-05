@@ -114,8 +114,8 @@
 ### High Priority
 
 #### 1. UI Polish
-- [ ] **Move range highlighting** — HexRenderer has state but no caller
-- [ ] **Attack range highlighting** — HexRenderer has state but no caller
+- [x] **Move range highlighting** — BFS calculates valid move tiles, rendered on map
+- [x] **Attack range highlighting** — BFS calculates attackable tiles, rendered on map
 - [ ] **Zoom level display** — zoom works via mouse wheel only
 - [ ] **Resource trend arrows (↑↓→)** — not implemented
 - [ ] **Resource details on hover** — no hover tooltips
