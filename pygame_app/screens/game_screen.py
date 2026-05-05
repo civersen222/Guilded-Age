@@ -316,9 +316,7 @@ class GameScreen(BaseScreen):
             mx, my = event.pos
             # Check map area
             if MAP_X <= mx <= MAP_X + MAP_W and MAP_Y <= my <= MAP_Y + MAP_H:
-                sx = mx - MAP_X
-                sy = my - MAP_Y
-                hx, hy = self._hex_renderer.screen_to_hex(sx, sy)
+                hx, hy = self._hex_renderer.screen_to_hex(mx, my)
                 self._hex_renderer.selected_hex = (hx, hy)
                 self._hex_renderer.move_range.clear()
                 self._hex_renderer.attack_range.clear()
