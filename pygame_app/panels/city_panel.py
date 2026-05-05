@@ -28,9 +28,7 @@ class CityPanel:
         self.panel = pygame_gui.elements.UIPanel(
             relative_rect=rect,
             manager=ui_manager,
-            start_surface=None,
         )
-        self.panel.get_container().set_alpha(0.0)
         self.city_buttons: Dict[pygame_gui.elements.UIButton, Any] = {}
         self._font = pygame.font.SysFont("consolas", 11)
         self._font_bold = pygame.font.SysFont("consolas", 11, bold=True)
@@ -61,7 +59,6 @@ class CityPanel:
                 manager=self.ui_manager,
                 container=self.panel,
             )
-            btn.set_alpha(0.0)
             self.city_buttons[btn] = city
             y += self.CITY_BTN_HEIGHT + self.MARGIN
 

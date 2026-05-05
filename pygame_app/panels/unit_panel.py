@@ -27,9 +27,7 @@ class UnitPanel:
         self.panel = pygame_gui.elements.UIPanel(
             relative_rect=rect,
             manager=ui_manager,
-            start_surface=None,
         )
-        self.panel.get_container().set_alpha(0.0)
         self.unit_buttons: Dict[pygame_gui.elements.UIButton, Any] = {}
         self._font = pygame.font.SysFont("consolas", 11)
         self._font_bold = pygame.font.SysFont("consolas", 11, bold=True)
@@ -54,7 +52,6 @@ class UnitPanel:
                 manager=self.ui_manager,
                 container=self.panel,
             )
-            btn.set_alpha(0.0)
             self.unit_buttons[btn] = unit
             y += self.UNIT_BTN_HEIGHT + self.MARGIN
 

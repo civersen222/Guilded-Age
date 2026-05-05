@@ -47,9 +47,7 @@ class EventLog:
         self.panel = pygame_gui.elements.UIPanel(
             relative_rect=rect,
             manager=ui_manager,
-            start_surface=None,
         )
-        self.panel.get_container().set_alpha(0.0)
         self.events: List[str] = []
         self._font = pygame.font.SysFont("consolas", 10)
         self._font_bold = pygame.font.SysFont("consolas", 10, bold=True)

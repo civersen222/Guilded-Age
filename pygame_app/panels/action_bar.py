@@ -52,9 +52,7 @@ class ActionBar:
             relative_rect=pygame.Rect(0, SCREEN_HEIGHT - ACTION_BAR_HEIGHT,
                                       SCREEN_WIDTH, ACTION_BAR_HEIGHT),
             manager=ui_manager,
-            start_surface=None,
         )
-        self.panel.get_container().set_alpha(0.0)
         self.buttons: Dict[str, pygame_gui.elements.UIButton] = {}
         self.mode: str = "default"
         self._font = pygame.font.SysFont("consolas", 12, bold=True)
@@ -85,7 +83,6 @@ class ActionBar:
                 manager=self.ui_manager,
                 container=self.panel,
             )
-            btn.set_alpha(0.0)  # we draw our own
             self.buttons[action] = btn
 
     def handle_event(self, event) -> Optional[str]:

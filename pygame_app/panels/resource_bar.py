@@ -47,9 +47,7 @@ class ResourceBar:
         self._panel = pygame_gui.elements.UIPanel(
             relative_rect=pygame.Rect(0, 0, SCREEN_WIDTH, RESOURCE_BAR_HEIGHT),
             manager=ui_manager,
-            start_surface=None,
         )
-        self._panel.get_container().set_alpha(0.0)  # we draw our own bg
         self._create_labels()
         self._font = pygame.font.SysFont("consolas", 12, bold=True)
         self.refresh(game)
@@ -67,7 +65,6 @@ class ResourceBar:
                 text="",
                 manager=self.ui_manager,
             )
-            label.set_alpha(0.0)  # we draw our own text
             self._labels[key] = label
 
     def _yield_color(self, value: float) -> tuple:
