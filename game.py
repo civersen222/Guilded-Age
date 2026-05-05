@@ -217,6 +217,16 @@ class Game:
         self.map.add_unit(settler)
         self.map.add_unit(warrior)
         
+        # Reveal fog around starting city and units
+        sources = []
+        for city in self.cities.values():
+            pos = getattr(city, "position", (0, 0))
+            sources.append((pos[0], pos[1], 3))
+        for unit in self.units.values():
+            pos = getattr(unit, "position", (0, 0))
+            sources.append((pos[0], pos[1], 2))
+        self._fog.update_visibility(sources)
+        
         # Create starting character (ruler)
         root_char = Character(
             name=f"{self.player_civ.name} Founder",

@@ -328,7 +328,7 @@ class HexRenderer:
         # --- 5. Unit markers ---
         units = getattr(game, "units", {})
         for unit_id, unit in units.items():
-            unit_hex = getattr(unit, "hex", (0, 0))
+            unit_hex = getattr(unit, "position", (0, 0))
             hx, hy = unit_hex
             if (hx, hy) not in visible:
                 continue

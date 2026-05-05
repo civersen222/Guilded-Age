@@ -246,12 +246,16 @@ class GameScreen(BaseScreen):
 
             # +/= : zoom in
             if event.key in (pygame.K_PLUS, pygame.K_EQUALS):
+                if not hasattr(event, "pos"):
+                    return
                 mx, my = event.pos
                 self._camera.zoom_at(mx, my, 1.15)
                 return
 
             # -: zoom out
             if event.key == pygame.K_MINUS:
+                if not hasattr(event, "pos"):
+                    return
                 mx, my = event.pos
                 self._camera.zoom_at(mx, my, 1 / 1.15)
                 return
