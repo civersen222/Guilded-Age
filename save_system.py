@@ -98,31 +98,37 @@ def _serialize_game(game: Any) -> Dict[str, Any]:
     return data
 
 
-def _serialize_obj(obj: Any) -> Any:
-    """Recursively serialize an object."""
+def _serialize_obj(obj: Any, _seen: Optional[set] = None) -> Any:
+    """Recursively serialize an object with cycle detection."""
     if obj is None:
         return None
-    if hasattr(obj, 'to_dict'):
-        return obj.to_dict()
-    if hasattr(obj, '__dict__'):
-        result = {}
-        for key, value in obj.__dict__.items():
-            if not key.startswith('_'):
-                result[key] = _serialize_obj(value)
-            else:
-                result[key] = _serialize_obj(value)
-        return result
-    if isinstance(obj, dict):
-        return {str(k): _serialize_obj(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_serialize_obj(item) for item in obj]
-    if isinstance(obj, set):
-        return [_serialize_obj(item) for item in obj]
-    if hasattr(obj, 'value'):  # Enum
-        return obj.value
-    if isinstance(obj, (str, int, float, bool)):
-        return obj
-    return str(obj)
+    if _seen is None:
+        _seen = set()
+    obj_id = id(obj)
+    if obj_id in _seen:
+        return f"<cycle:{type(obj).__name__}>"
+    _seen.add(obj_id)
+    try:
+        if hasattr(obj, 'to_dict'):
+            return obj.to_dict()
+        if hasattr(obj, '__dict__'):
+            result = {}
+            for key, value in obj.__dict__.items():
+                result[key] = _serialize_obj(value, _seen)
+            return result
+        if isinstance(obj, dict):
+            return {str(k): _serialize_obj(v, _seen) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_serialize_obj(item, _seen) for item in obj]
+        if isinstance(obj, set):
+            return [_serialize_obj(item, _seen) for item in obj]
+        if hasattr(obj, 'value'):  # Enum
+            return obj.value
+        if isinstance(obj, (str, int, float, bool)):
+            return obj
+        return str(obj)
+    finally:
+        _seen.discard(obj_id)
 
 
 def load_game(filepath: str) -> Optional[Dict[str, Any]]:
