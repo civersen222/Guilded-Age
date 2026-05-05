@@ -2,6 +2,7 @@
 
 from collections import deque
 import math
+import os
 from typing import Set, Tuple, Optional, Dict, Any
 
 import pygame
@@ -21,6 +22,14 @@ from pygame_app.constants import (
 class HexRenderer:
     """Renders a hex-based game map onto a Pygame surface."""
 
+    # City tiers: (min_pop, max_pop, sprite_key)
+    CITY_TIERS = [
+        (1, 3, "village"),
+        (4, 7, "town"),
+        (8, 12, "city"),
+        (13, 9999, "metropolis"),
+    ]
+
     def __init__(self, hex_map: Any, tile_atlas: Any, camera: Any):
         self.hex_map = hex_map
         self.tile_atlas = tile_atlas
@@ -36,6 +45,107 @@ class HexRenderer:
         self.move_range: Set[Tuple[int, int]] = set()
         self.attack_range: Set[Tuple[int, int]] = set()
         self.hovered_hex: Optional[Tuple[int, int]] = None
+
+        # Sprite caches
+        self._unit_sprites: Dict[str, pygame.Surface] = {}
+        self._city_sprites: Dict[str, pygame.Surface] = {}
+
+        # Movement animations
+        self._animations: list = []
+        self._prev_unit_positions: Dict[int, Tuple[int, int]] = {}
+
+        self._load_sprites()
+
+    def _load_sprites(self) -> None:
+        """Load all unit and city sprite images."""
+        assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
+
+        # Load unit icons (48px)
+        units_icons_dir = os.path.join(assets_dir, "units", "icons")
+        if os.path.isdir(units_icons_dir):
+            for fname in os.listdir(units_icons_dir):
+                if not fname.endswith("_48.png"):
+                    continue
+                unit_type = fname.replace("_48.png", "")
+                path = os.path.join(units_icons_dir, fname)
+                try:
+                    surf = pygame.image.load(path).convert_alpha()
+                    self._unit_sprites[unit_type] = surf
+                except Exception:
+                    pass
+
+        # Load city sprites (64px)
+        cities_sprites_dir = os.path.join(assets_dir, "cities", "sprites")
+        if os.path.isdir(cities_sprites_dir):
+            for fname in os.listdir(cities_sprites_dir):
+                if not fname.endswith("_64.png"):
+                    continue
+                tier = fname.replace("_64.png", "")
+                path = os.path.join(cities_sprites_dir, fname)
+                try:
+                    surf = pygame.image.load(path).convert_alpha()
+                    self._city_sprites[tier] = surf
+                except Exception:
+                    pass
+
+    def _get_city_tier(self, population: int) -> str:
+        """Determine city sprite tier from population."""
+        for min_pop, max_pop, tier in self.CITY_TIERS:
+            if min_pop <= population <= max_pop:
+                return tier
+        return "village"
+
+    def _track_unit_movement(self, game: Any) -> None:
+        """Detect unit position changes and create movement animations."""
+        units = getattr(game, "units", {})
+        current_positions = {}
+
+        for uid, unit in units.items():
+            if not getattr(unit, "is_alive", False):
+                continue
+            pos = getattr(unit, "position", None)
+            if pos is None:
+                continue
+            uid_int = int(uid)
+            current_positions[uid_int] = pos
+
+            prev_pos = self._prev_unit_positions.get(uid_int)
+            if prev_pos is not None and prev_pos != pos:
+                # Unit moved — create animation
+                self._animations.append({
+                    "unit_id": uid_int,
+                    "start_pos": prev_pos,
+                    "end_pos": pos,
+                    "progress": 0.0,
+                    "duration": 0.3,
+                })
+
+        self._prev_unit_positions = current_positions
+
+    def update(self, dt: float) -> None:
+        """Update all movement animations."""
+        for anim in self._animations:
+            anim["progress"] += dt / anim["duration"]
+            if anim["progress"] >= 1.0:
+                anim["progress"] = 1.0
+
+        # Remove completed animations
+        self._animations = [a for a in self._animations if a["progress"] < 1.0]
+
+    def _get_animated_position(self, unit_id: int) -> Optional[Tuple[float, float]]:
+        """Get interpolated screen position for a unit in animation, or None."""
+        for anim in self._animations:
+            if anim["unit_id"] == unit_id:
+                t = anim["progress"]
+                # Smooth easing
+                t = t * t * (3 - 2 * t)  # smoothstep
+                sx_start, sy_start = self.hex_to_world(anim["start_pos"][0], anim["start_pos"][1])
+                sx_end, sy_end = self.hex_to_world(anim["end_pos"][0], anim["end_pos"][1])
+                wx = sx_start + (sx_end - sx_start) * t
+                wy = sy_start + (sy_end - sy_start) * t
+                sx, sy = self.camera.world_to_screen(wx, wy)
+                return sx, sy
+        return None
 
     # ── coordinate transforms ──────────────────────────────────────────
 
@@ -241,6 +351,9 @@ class HexRenderer:
         """Draw all map layers onto *surface* in z-order."""
         visible = self.get_visible_hexes()
 
+        # Track unit movement for animations
+        self._track_unit_movement(game)
+
         # --- 1. Terrain tiles ---
         zoom = getattr(self.camera, "zoom", 1.0)
         for hx, hy in visible:
@@ -313,13 +426,22 @@ class HexRenderer:
             is_player = getattr(city, "owner", "") == player_name
             city_colour = GREEN if is_player else RED
 
-            # Circle marker
-            radius = max(8, HEX_SIZE // 4)
-            pygame.draw.circle(surface, city_colour, (sx, sy), radius, 2)
+            # City sprite
+            pop = getattr(city, "population", 1)
+            tier = self._get_city_tier(pop)
+            sprite = self._city_sprites.get(tier)
+            if sprite:
+                sprite_size = sprite.get_width()
+                offset_x = sx - sprite_size // 2
+                offset_y = sy - sprite_size // 2
+                surface.blit(sprite, (offset_x, offset_y))
+            else:
+                # Fallback: circle marker
+                radius = max(8, HEX_SIZE // 4)
+                pygame.draw.circle(surface, city_colour, (sx, sy), radius, 2)
 
             # Name + pop
             name = getattr(city, "name", city_id)
-            pop = getattr(city, "population", 1)
             self._blit_text(surface, str(name), (sx, sy - HEX_SIZE - 4),
                             font=self._font_med, colour=GOLD)
             self._blit_text(surface, f"P:{pop}", (sx, sy + HEX_SIZE + 8),
@@ -337,6 +459,11 @@ class HexRenderer:
             if not (0 <= sx < surface.get_width() and 0 <= sy < surface.get_height()):
                 continue
 
+            # Check for animated movement — use interpolated position
+            anim_pos = self._get_animated_position(int(unit_id))
+            if anim_pos:
+                sx, sy = anim_pos
+
             is_player = getattr(unit, "owner", "") == player_name
             unit_colour = GREEN if is_player else RED
 
@@ -351,11 +478,19 @@ class HexRenderer:
             ox, oy = sx + offset_x, sy + offset_y
             size = max(6, HEX_SIZE // 5)
 
-            # Square marker
-            pygame.draw.rect(
-                surface, unit_colour,
-                (ox - size, oy - size, size * 2, size * 2),
-            )
+            # Unit sprite
+            unit_type = getattr(unit, "unit_type", None) or getattr(unit, "type", "?")
+            sprite = self._unit_sprites.get(unit_type)
+            if sprite:
+                sprite_size = sprite.get_width()
+                sprite_offset = sprite_size // 2
+                surface.blit(sprite, (ox - sprite_offset, oy - sprite_offset))
+            else:
+                # Fallback: square marker
+                pygame.draw.rect(
+                    surface, unit_colour,
+                    (ox - size, oy - size, size * 2, size * 2),
+                )
 
             # Type label
             type_label = getattr(unit, "type", "?")[:3].upper()

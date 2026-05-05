@@ -492,6 +492,10 @@ class GameScreen(BaseScreen):
 
         self._camera.update(dt)
 
+        # Update hex renderer animations
+        if self._hex_renderer:
+            self._hex_renderer.update(dt)
+
     def draw(self, surface):
         # Fill map surface
         self._map_surface.fill(BG)
