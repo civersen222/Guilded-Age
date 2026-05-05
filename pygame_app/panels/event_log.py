@@ -5,15 +5,22 @@ from typing import Any, Dict, List, Optional
 import pygame
 import pygame_gui
 
-from pygame_app.constants import RIGHT_PANEL_WIDTH, RESOURCE_BAR_HEIGHT, SCREEN_HEIGHT, ACTION_BAR_HEIGHT
+from pygame_app.constants import (
+    RIGHT_PANEL_WIDTH, RESOURCE_BAR_HEIGHT, SCREEN_HEIGHT, ACTION_BAR_HEIGHT,
+    GOLD,
+)
 
-CATEGORY_COLORS: Dict[str, str] = {
-    "economy": "#c5a059",
-    "combat": "#b23a3a",
-    "growth": "#3ab24e",
-    "science": "#3a78b2",
-    "dynasty": "#8a3ab2",
-    "info": "#e0e0e0",
+GOLD_TEXT = (197, 160, 89)
+WHITE_TEXT = (255, 255, 255)
+SUBTLE_TEXT = (136, 136, 136)
+
+CATEGORY_COLORS: Dict[str, tuple] = {
+    "economy": GOLD_TEXT,
+    "combat": (178, 58, 58),
+    "growth": (58, 178, 78),
+    "science": (58, 120, 178),
+    "dynasty": (138, 58, 178),
+    "info": WHITE_TEXT,
 }
 
 CATEGORIZE_HINTS: Dict[str, str] = {
@@ -32,38 +39,34 @@ class EventLog:
     """Right sidebar with a scrollable, color-coded event log."""
 
     MARGIN = 4
+    MAX_EVENTS = 100
 
     def __init__(self, ui_manager: pygame_gui.UIManager, rect: pygame.Rect):
         self.ui_manager = ui_manager
+        self.rect = rect
         self.panel = pygame_gui.elements.UIPanel(
             relative_rect=rect,
             manager=ui_manager,
+            start_surface=None,
         )
+        self.panel.get_container().set_alpha(0.0)
         self.events: List[str] = []
-
-        self.text_box = pygame_gui.elements.UITextBox(
-            relative_rect=pygame.Rect(
-                self.MARGIN,
-                self.MARGIN,
-                rect.width - self.MARGIN * 2,
-                rect.height - self.MARGIN * 2,
-            ),
-            html_text="",
-            manager=self.ui_manager,
-            container=self.panel,
-        )
+        self._font = pygame.font.SysFont("consolas", 10)
+        self._font_bold = pygame.font.SysFont("consolas", 10, bold=True)
+        self._scroll_offset = 0
+        self._max_scroll = 0
 
     def add_event(self, text: str, category: str = "info") -> None:
         """Add a single color-coded event to the log."""
-        color = CATEGORY_COLORS.get(category, CATEGORY_COLORS["info"])
-        self.events.append(text)
-        if len(self.events) > 100:
+        self.events.append((text, category))
+        if len(self.events) > self.MAX_EVENTS:
             self.events.pop(0)
+        self._update_scroll()
         self._render()
 
     def add_turn_events(self, events: List[str], turn: int) -> None:
         """Add a batch of events with auto-categorization and a turn separator."""
-        self.events.append(f"--- Turn {turn} ---")
+        self.events.append((f"--- Turn {turn} ---", "separator"))
         for event_text in events:
             category = "info"
             lower = event_text.lower()
@@ -71,21 +74,17 @@ class EventLog:
                 if keyword in lower:
                     category = cat
                     break
-            self.events.append(event_text)
-            if len(self.events) > 100:
+            self.events.append((event_text, category))
+            if len(self.events) > self.MAX_EVENTS:
                 self.events.pop(0)
+        self._update_scroll()
         self._render()
 
-    def _render(self) -> None:
-        """Rebuild the HTML text from stored events."""
-        parts: List[str] = []
-        for event in self.events:
-            if event.startswith("--- Turn ") and event.endswith(" ---"):
-                parts.append(f"<font color='#888888'>{event}</font><br>")
-            else:
-                color = CATEGORY_COLORS.get(self._detect_category(event), CATEGORY_COLORS["info"])
-                parts.append(f"<font color='{color}'>{event}</font><br>")
-        self.text_box.set_html_text("".join(parts))
+    def _update_scroll(self) -> None:
+        """Update scroll bounds."""
+        panel_h = self.rect.height - self.MARGIN * 2
+        total_h = len(self.events) * 14 + 20
+        self._max_scroll = max(0, total_h - panel_h)
 
     def _detect_category(self, text: str) -> str:
         """Auto-detect category from keyword hints."""
@@ -95,7 +94,57 @@ class EventLog:
                 return cat
         return "info"
 
+    def _render(self) -> None:
+        """Rebuild the HTML text from stored events."""
+        parts: List[str] = []
+        for event, cat in self.events:
+            if cat == "separator":
+                parts.append(f"<font color='#666666'>{event}</font><br>")
+            else:
+                color = CATEGORY_COLORS.get(cat, CATEGORY_COLORS["info"])
+                hex_color = f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
+                parts.append(f"<font color='{hex_color}'>{event}</font><br>")
+        self.text_box.set_html_text("".join(parts))
+
+    def draw(self, surface: pygame.Surface) -> None:
+        """Draw custom event log with polished UI."""
+        x = self.panel.get_abs_position()[0]
+        y = self.panel.get_abs_position()[1]
+        w = self.panel.get_rect().width
+        h = self.panel.get_rect().height
+
+        # Gold border at top
+        pygame.draw.line(surface, GOLD_TEXT, (x, y), (x + w, y), 1)
+
+        # Draw events manually for better control
+        event_y = y + self.MARGIN - self._scroll_offset
+        line_h = 14
+        panel_h = h - self.MARGIN * 2
+
+        for event_text, cat in self.events:
+            if event_y + line_h < y or event_y > y + panel_h:
+                event_y += line_h
+                continue
+
+            if cat == "separator":
+                color = (102, 102, 102)
+            else:
+                color = CATEGORY_COLORS.get(cat, CATEGORY_COLORS["info"])
+
+            text_surf = self._font.render(event_text[:60], True, color)
+            surface.blit(text_surf, (x + 6, event_y))
+            event_y += line_h
+
+    def handle_event(self, event) -> Optional[Any]:
+        """Handle scroll events for scrolling."""
+        if event.type == pygame.MOUSEWHEEL and event.y != 0:
+            self._scroll_offset += int(event.y * 30)
+            self._scroll_offset = max(0, min(self._scroll_offset, self._max_scroll))
+            return True
+        return None
+
     def destroy(self) -> None:
         """Kill panel and all child elements."""
-        self.text_box.kill()
+        if hasattr(self, "text_box"):
+            self.text_box.kill()
         self.panel.kill()

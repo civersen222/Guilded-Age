@@ -2,6 +2,8 @@
 
 import pygame
 
+from pygame_app.constants import GOLD
+
 
 class Minimap:
     """Renders a 200x200 minimap of the hex world."""
@@ -53,6 +55,9 @@ class Minimap:
 
         x = self.MARGIN
         y = screen_h - self.SIZE - self.MARGIN
+
+        # Gold border
+        pygame.draw.rect(surface, GOLD, (x, y, self.SIZE, self.SIZE), 1)
 
         # Draw base terrain
         surface.blit(self._base_surface, (x, y))
