@@ -507,6 +507,23 @@ for _name, _args in [
     UNIT_TYPES[_name] = UnitType(_name, *_args)
 
 
+# ── Technology Tree ──────────────────────────────────────────────────────────
+
+class TechBranch(Enum):
+    SCIENTIFIC = "Scientific"
+    MILITARY = "Military"
+    CIVIC = "Civic"
+
+
+class Era(Enum):
+    ANCIENT = "Ancient"
+    CLASSICAL = "Classical"
+    MEDIEVAL = "Medieval"
+    RENAISSANCE = "Renaissance"
+    INDUSTRIAL = "Industrial"
+    MODERN = "Modern"
+
+
 # ── Wonders ──────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -528,23 +545,6 @@ WONDERS: Dict[str, WonderType] = {
 
 # Set of wonder names already built by any civ (global uniqueness)
 BUILT_WONDERS: Set[str] = set()
-
-
-# ── Technology Tree ──────────────────────────────────────────────────────────
-
-class TechBranch(Enum):
-    SCIENTIFIC = "Scientific"
-    MILITARY = "Military"
-    CIVIC = "Civic"
-
-
-class Era(Enum):
-    ANCIENT = "Ancient"
-    CLASSICAL = "Classical"
-    MEDIEVAL = "Medieval"
-    RENAISSANCE = "Renaissance"
-    INDUSTRIAL = "Industrial"
-    MODERN = "Modern"
 
 
 @dataclass
