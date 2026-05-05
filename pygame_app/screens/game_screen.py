@@ -170,6 +170,9 @@ class GameScreen(BaseScreen):
             game.process_turn()
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
+            turn_events = getattr(game.state, "turn_events", [])
+            if turn_events:
+                self._event_log.add_turn_events(turn_events, game.state.turn)
             return
 
         # Enter key = Next Turn
@@ -177,6 +180,9 @@ class GameScreen(BaseScreen):
             game.process_turn()
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
+            turn_events = getattr(game.state, "turn_events", [])
+            if turn_events:
+                self._event_log.add_turn_events(turn_events, game.state.turn)
             return
 
         # ── Keyboard shortcuts ────────────────────────────────────────────────
@@ -385,6 +391,9 @@ class GameScreen(BaseScreen):
             self._city_panel.refresh(game)
             self._unit_panel.refresh(game)
             self._event_log.add_event(f"Turn advanced to turn {game.state.turn}", "info")
+            turn_events = getattr(game.state, "turn_events", [])
+            if turn_events:
+                self._event_log.add_turn_events(turn_events, game.state.turn)
         elif action == "Save":
             self._save_game(game)
         elif action in ("Move", "Attack", "Fortify", "Skip"):
@@ -407,7 +416,9 @@ class GameScreen(BaseScreen):
         elif action == "Production":
             self._show_production(game, self._selected_city)
         elif action == "Settle":
-            self._settle_city(game)
+            if self._selected_unit:
+                pos = getattr(self._selected_unit, "position", (0, 0))
+                self._settle_city(game, pos[0], pos[1])
 
     def _save_game(self, game) -> None:
         """Save the current game state."""
@@ -565,17 +576,14 @@ class GameScreen(BaseScreen):
         self._unit_panel.refresh(game)
         self._city_panel.refresh(game)
 
-    def _settle_city(self, game) -> None:
-        """Settle a new city at the selected Settler's current position (from action bar)."""
+    def _settle_city(self, game, hx: int, hy: int) -> None:
+        """Settle a new city at the given hex coordinates (from action bar)."""
         if not self._selected_unit:
             return
         unit = self._selected_unit
         if getattr(unit, "unit_type", "") != "Settler":
             return
-        position = getattr(unit, "position", None)
-        if position is None:
-            return
-        self._try_settle_city(game, position[0], position[1])
+        self._try_settle_city(game, hx, hy)
 
     def _show_production(self, game, city=None) -> None:
         """Show production popup for selected city."""

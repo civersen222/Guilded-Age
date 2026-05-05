@@ -167,8 +167,11 @@ class ProductionPopup:
             return True
 
         researched = None
-        if self._game and hasattr(self._game, "tech_manager"):
-            researched = getattr(self._game.tech_manager, "researched_techs", set())
+        if self._game and hasattr(self._game, "research"):
+            player_name = getattr(self._game.player_civ, "name", "")
+            tm = self._game.research.get(player_name)
+            if tm:
+                researched = getattr(tm, "researched_techs", set())
 
         owned_res = None
         if self._game and hasattr(self._game, "economy"):
