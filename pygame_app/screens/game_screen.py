@@ -410,9 +410,7 @@ class GameScreen(BaseScreen):
         elif action == "Production":
             self._show_production(game, self._selected_city)
         elif action == "Settle":
-            if self._selected_unit:
-                pos = getattr(self._selected_unit, "position", (0, 0))
-                self._settle_city(game, pos[0], pos[1])
+            self._settle_city(game)
 
     def _save_game(self, game) -> None:
         """Save the current game state."""
@@ -512,19 +510,24 @@ class GameScreen(BaseScreen):
             self._event_log.add_event(f"{unit.unit_type} skipped", "info")
             self._unit_panel.refresh(game)
 
-    def _try_settle_city(self, game, hx, hy) -> None:
-        """Try to settle a new city at the given hex (from left-click)."""
+    def _settle_city(self, game) -> None:
+        """Settle a new city at the selected Settler's current position."""
         if not self._selected_unit:
             return
         unit = self._selected_unit
         if getattr(unit, "unit_type", "") != "Settler":
             return
-        position = (hx, hy)
+
+        position = getattr(unit, "position", None)
+        if position is None:
+            return
+
         # Check no existing city at this position
         for city in game.cities.values():
             if getattr(city, "position", None) == position:
                 self._event_log.add_event("A city already exists here", "error")
                 return
+
         # Check no enemy unit at this position
         player_name = game.player_civ.name
         for uid, u in game.units.items():
@@ -532,12 +535,8 @@ class GameScreen(BaseScreen):
                 if getattr(u, "position", None) == position:
                     self._event_log.add_event("Cannot settle on an enemy unit", "error")
                     return
-        # Create new city
-        city_name = f"{game.player_civ.name} Colony"
-        counter = 1
-        while city_name in game.cities:
-            counter += 1
-            city_name = f"{game.player_civ.name} Colony {counter}"
+
+        # Check terrain is not water
         start_tile = game.map.tiles.get(position)
         if start_tile is None:
             self._event_log.add_event("Cannot settle on this terrain", "error")
@@ -545,9 +544,16 @@ class GameScreen(BaseScreen):
         if start_tile.terrain in (TerrainType.WATER_COAST, TerrainType.OCEAN):
             self._event_log.add_event("Cannot settle on water tiles", "error")
             return
-        is_coastal = start_tile.terrain.name == 'WATER_COAST'
+
+        # Create new city
+        city_name = f"{game.player_civ.name} Colony"
+        counter = 1
+        while city_name in game.cities:
+            counter += 1
+            city_name = f"{game.player_civ.name} Colony {counter}"
         from game_data import get_climate_for_row
         climate = get_climate_for_row(position[1], game.map.height)
+        is_coastal = start_tile.terrain in (TerrainType.WATER_COAST,)
         from city import City
         new_city = City(
             name=city_name,
@@ -561,8 +567,7 @@ class GameScreen(BaseScreen):
         game.cities[new_city.name] = new_city
         game.map.add_city(new_city)
         game.city_manager.cities = list(game.cities.values())
-        # Move Settler to the new city position and remove it
-        unit.position = position
+        # Remove Settler (it becomes the city)
         game.military_manager.remove_unit(unit)
         if unit.name in game.units:
             del game.units[unit.name]
@@ -573,15 +578,6 @@ class GameScreen(BaseScreen):
         self._hex_renderer.move_range.clear()
         self._unit_panel.refresh(game)
         self._city_panel.refresh(game)
-
-    def _settle_city(self, game, hx: int, hy: int) -> None:
-        """Settle a new city at the given hex coordinates (from action bar)."""
-        if not self._selected_unit:
-            return
-        unit = self._selected_unit
-        if getattr(unit, "unit_type", "") != "Settler":
-            return
-        self._try_settle_city(game, hx, hy)
 
     def _show_production(self, game, city=None) -> None:
         """Show production popup for selected city."""

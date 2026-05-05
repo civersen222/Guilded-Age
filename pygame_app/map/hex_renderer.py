@@ -49,6 +49,8 @@ class HexRenderer:
         # Sprite caches
         self._unit_sprites: Dict[str, pygame.Surface] = {}
         self._city_sprites: Dict[str, pygame.Surface] = {}
+        # Tile zoom-surface cache: {(terrain_name, zoom_tag): pygame.Surface}
+        self._tile_zoom_cache: Dict[Tuple[str, str], pygame.Surface] = {}
 
         # Movement animations
         self._animations: list = []
@@ -394,7 +396,23 @@ class HexRenderer:
                 continue
 
             terrain_name = tile.terrain.name
-            tile_surface = self.tile_atlas.get_tile(terrain_name, zoom)
+            # Scale tile to match current zoom level
+            zoom_tag = self.tile_atlas._nearest_zoom(zoom)
+            target_size = int(HEX_SIZE * 2 * zoom)
+            if target_size < 4:
+                target_size = 4
+            cache_key = (terrain_name, zoom_tag)
+            if cache_key in self._tile_zoom_cache:
+                tile_surface = self._tile_zoom_cache[cache_key]
+            else:
+                base_tile = self.tile_atlas.get_tile(terrain_name, zoom)
+                if base_tile.get_width() < 10:
+                    # Error indicator from atlas
+                    tile_surface = base_tile
+                else:
+                    tile_surface = pygame.transform.smoothscale(base_tile, (target_size, target_size))
+                self._tile_zoom_cache[cache_key] = tile_surface
+
             # Center tile on hex center using actual tile dimensions
             csx = sx - tile_surface.get_width() // 2
             csy = sy - tile_surface.get_height() // 2
