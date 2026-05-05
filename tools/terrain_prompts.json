@@ -1,0 +1,11 @@
+{
+  "PLAINS": "hand-painted dark fantasy grassland, muted olive green, wild grass, medieval, top-down birds eye view, game tile, seamless texture, painterly brushstrokes",
+  "GRASSLAND": "hand-painted dark fantasy lush meadow, deeper green, scattered wildflowers, medieval, top-down birds eye view, game tile, seamless, painterly",
+  "FOREST": "hand-painted dark fantasy dense forest canopy, dark green, ancient trees, mossy, top-down birds eye view, game tile, seamless, painterly",
+  "HILLS": "hand-painted dark fantasy rolling hills, brown-green, rocky outcrops, elevation, top-down birds eye view, game tile, seamless, painterly",
+  "MOUNTAIN": "hand-painted dark fantasy mountain peak, grey stone, snow caps, craggy, top-down birds eye view, game tile, seamless, painterly",
+  "DESERT": "hand-painted dark fantasy arid desert, golden sand, dunes, cracked earth, top-down birds eye view, game tile, seamless, painterly",
+  "TUNDRA": "hand-painted dark fantasy frozen tundra, snow, ice, sparse vegetation, top-down birds eye view, game tile, seamless, painterly",
+  "WATER_COAST": "hand-painted dark fantasy coastline, sandy beach meets shallow water, tidal, top-down birds eye view, game tile, seamless, painterly",
+  "OCEAN": "hand-painted dark fantasy deep ocean water, dark blue waves, mysterious depths, top-down birds eye view, game tile, seamless, painterly"
+}
