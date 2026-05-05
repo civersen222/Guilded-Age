@@ -26,14 +26,23 @@ class HexTile:
         self.explored: bool = False
         self.landmark: Optional[LandmarkType] = None
         self.landmark_discovered: bool = False
+        self.improvement: Optional[str] = None  # improvement type (e.g. 'Farm', 'Mine')
+        self.improvement_progress: int = 0  # 0 = not started, -1 = complete
         
     def get_yields(self) -> Dict[str, float]:
         """Get base yields for this tile"""
+        from improvements import IMPROVEMENTS
         yields = dict(TERRAIN_YIELDS.get(self.terrain, {"food": 0, "production": 0, "gold": 0, "science": 0}))
         if self.resource and self.resource in RESOURCE_YIELDS:
             res_yield = RESOURCE_YIELDS[self.resource]
             for key in ["food", "production", "gold", "science", "faith", "happiness"]:
                 yields[key] = yields.get(key, 0) + getattr(res_yield, key, 0)
+        # Add improvement yields if completed
+        if self.improvement and self.improvement_progress == -1:
+            imp = IMPROVEMENTS.get(self.improvement)
+            if imp:
+                for key, val in imp.get("yields", {}).items():
+                    yields[key] = yields.get(key, 0) + val
         return yields
     
     def __repr__(self):
