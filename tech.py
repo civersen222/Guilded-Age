@@ -95,11 +95,24 @@ class TechManager:
         self.current_research: Optional[str] = None
         self.current_research_progress: int = 0
         self.science_pool: float = 0.0
+        # Dict-like progress tracker for AI compatibility (tracks multiple techs)
+        self._research_progress_dict: Dict[str, int] = {}
     
     @property
     def unlocked_techs(self):
         """Alias for researched (set of unlocked tech names)"""
         return set(self.researched.keys())
+
+    @property
+    def researched_techs(self):
+        """Alias for researched (set-like access for AI compatibility)."""
+        return set(self.researched.keys())
+
+    @property
+    def research_progress(self):
+        """Dict-like access: {tech_name: progress} for AI compatibility.
+        The AI writes progress directly to this dict."""
+        return self._research_progress_dict
     
     def get_available_technologies(self, civ: str) -> List[str]:
         """Get list of available technologies to research"""
