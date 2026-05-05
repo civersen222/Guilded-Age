@@ -66,7 +66,7 @@ class CityPanel:
         """Draw custom city panel with polished UI."""
         # Gold border at top
         y_pos = self.panel.get_abs_rect().y
-        w = self.panel.get_abs_rect().x + self.panel.get_rect().width
+        w = self.panel.get_abs_rect().x + self.panel.get_abs_rect().width
         pygame.draw.line(surface, GOLD_TEXT, (0, y_pos), (w, y_pos), 1)
 
         # Draw each city entry

@@ -101,8 +101,8 @@ class EventLog:
         """Draw custom event log with polished UI."""
         x = self.panel.get_abs_rect().x
         y = self.panel.get_abs_rect().y
-        w = self.panel.get_rect().width
-        h = self.panel.get_rect().height
+        w = self.panel.get_abs_rect().width
+        h = self.panel.get_abs_rect().height
 
         # Gold border at top
         pygame.draw.line(surface, GOLD_TEXT, (x, y), (x + w, y), 1)
