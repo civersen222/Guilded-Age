@@ -87,9 +87,7 @@ class DiplomacyPopup:
                 container=self.window,
             )
 
-        # Select first civ by default
         if civs:
-            self.civ_list.select_item(0)
             self._refresh_info(civs[0])
 
     def _get_known_civs(self) -> List[str]:

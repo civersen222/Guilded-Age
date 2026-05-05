@@ -383,6 +383,11 @@ class GameScreen(BaseScreen):
             popup = DiplomacyPopup()
             popup.show(self.ui_manager, game)
             self._diplomacy_popup = popup
+        elif action == "Dynasty":
+            from pygame_app.popups.dynasty import DynastyPopup
+            popup = DynastyPopup()
+            popup.show(self.ui_manager, game)
+            self._dynasty_popup = popup
         elif action == "Production":
             self._show_production(game)
 
