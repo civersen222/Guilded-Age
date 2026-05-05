@@ -5,13 +5,13 @@ Traceback (most recent call last):
   File "C:\Users\civer\civkings\pygame_app\app.py", line 89, in main
     app.run()
     ~~~~~~~^^
-  File "C:\Users\civer\civkings\pygame_app\app.py", line 80, in run
-    self._current_screen.draw(self.screen)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 596, in draw
-    self._city_panel.draw(surface)
-    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "C:\Users\civer\civkings\pygame_app\panels\city_panel.py", line 74, in draw
-    rect = btn.get_rect().copy()
-           ^^^^^^^^^^^^
-AttributeError: 'UIButton' object has no attribute 'get_rect'. Did you mean: 'set_text'?
+  File "C:\Users\civer\civkings\pygame_app\app.py", line 72, in run
+    self._current_screen.handle_event(event)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 355, in handle_event
+    self._move_selected_unit(game, hx, hy)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 425, in _move_selected_unit
+    success = MilitaryManager.move_unit(game.military, unit, (hx, hy))
+                                        ^^^^^^^^^^^^^
+AttributeError: 'Game' object has no attribute 'military'
