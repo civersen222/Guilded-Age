@@ -44,6 +44,8 @@ def save_game(game: Any, filename: Optional[str] = None, slot: Optional[int] = N
     if slot is not None:
         path = os.path.join(SAVE_DIR, f"save_slot_{slot}.json")
     elif filename:
+        if not filename.endswith(".json"):
+            filename = filename + ".json"
         path = os.path.join(SAVE_DIR, filename)
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
