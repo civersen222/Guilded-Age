@@ -51,6 +51,9 @@ class HexRenderer:
         self._city_sprites: Dict[str, pygame.Surface] = {}
         # Tile zoom-surface cache: {(terrain_name, zoom_tag): pygame.Surface}
         self._tile_zoom_cache: Dict[Tuple[str, str], pygame.Surface] = {}
+        # Zoomed sprite caches: {(sprite_key, size): pygame.Surface}
+        self._zoomed_city_sprites: Dict[Tuple[str, int], pygame.Surface] = {}
+        self._zoomed_unit_sprites: Dict[Tuple[str, int], pygame.Surface] = {}
 
         # Movement animations
         self._animations: list = []
@@ -400,7 +403,7 @@ class HexRenderer:
             terrain_name = tile.terrain.name
             # Scale tile to match current zoom level
             zoom_tag = self.tile_atlas._nearest_zoom(zoom)
-            target_size = int(HEX_SIZE * 2.3 * zoom)
+            target_size = int(HEX_SIZE * 2.5 * zoom)
             if target_size < 4:
                 target_size = 4
             cache_key = (terrain_name, zoom_tag)
@@ -503,9 +506,13 @@ class HexRenderer:
             tier = self._get_city_tier(pop)
             sprite = self._city_sprites.get(tier)
             if sprite:
-                sprite_size = sprite.get_width()
-                offset_x = sx - sprite_size // 2
-                offset_y = sy - sprite_size // 2
+                scaled_size = int(64 * zoom)
+                cache_key = (tier, scaled_size)
+                if cache_key not in self._zoomed_city_sprites:
+                    self._zoomed_city_sprites[cache_key] = pygame.transform.smoothscale(sprite, (scaled_size, scaled_size))
+                sprite = self._zoomed_city_sprites[cache_key]
+                offset_x = sx - scaled_size // 2
+                offset_y = sy - scaled_size // 2
                 surface.blit(sprite, (offset_x, offset_y))
             else:
                 # Fallback: circle marker
@@ -514,10 +521,14 @@ class HexRenderer:
 
             # Name + pop
             name = getattr(city, "name", city_id)
-            self._blit_text(surface, str(name), (sx, sy - HEX_SIZE - 4),
-                            font=self._font_med, colour=GOLD)
-            self._blit_text(surface, f"P:{pop}", (sx, sy + HEX_SIZE + 8),
-                            font=self._font_small, colour=SUBTLE)
+            name_font_size = max(10, int(14 * zoom))
+            pop_font_size = max(8, int(11 * zoom))
+            name_font = pygame.font.SysFont("consolas", name_font_size, bold=True)
+            pop_font = pygame.font.SysFont("consolas", pop_font_size, bold=True)
+            self._blit_text(surface, str(name), (sx, sy - int(HEX_SIZE * zoom) - 4),
+                            font=name_font, colour=GOLD)
+            self._blit_text(surface, f"P:{pop}", (sx, sy + int(HEX_SIZE * zoom) + 8),
+                            font=pop_font, colour=SUBTLE)
 
         # --- 5. Unit markers ---
         units = getattr(game, "units", {})
@@ -564,7 +575,12 @@ class HexRenderer:
             # Try exact match, then lowercase key lookup
             sprite = self._unit_sprites.get(unit_type) or self._unit_sprites.get(unit_type.lower())
             if sprite:
-                sprite_size = sprite.get_width()
+                scaled_size = int(48 * zoom)
+                cache_key = (unit_type, scaled_size)
+                if cache_key not in self._zoomed_unit_sprites:
+                    self._zoomed_unit_sprites[cache_key] = pygame.transform.smoothscale(sprite, (scaled_size, scaled_size))
+                sprite = self._zoomed_unit_sprites[cache_key]
+                sprite_size = scaled_size
                 sprite_offset = sprite_size // 2
                 surface.blit(sprite, (ox - sprite_offset, oy - sprite_offset))
             else:
@@ -576,8 +592,10 @@ class HexRenderer:
 
             # Type label
             type_label = getattr(unit, "unit_type", "?")[:3].upper()
-            self._blit_text(surface, type_label, (ox, oy - size - 6),
-                            font=self._font_small, colour=TEXT)
+            unit_label_font_size = max(8, int(11 * zoom))
+            unit_label_font = pygame.font.SysFont("consolas", unit_label_font_size, bold=True)
+            self._blit_text(surface, type_label, (ox, oy - scaled_size - 6),
+                            font=unit_label_font, colour=TEXT)
 
             # HP bar
             hp = getattr(unit, "hp", 1)
