@@ -24,6 +24,29 @@ TRAIT_DATABASE = {
     "Spymaster": {"intrigue": 3},
 }
 
+# Personality traits (for stress system)
+PERSONALITY_TRAITS = {
+    'Compassionate', 'Honest', 'Just', 'Peaceful', 'Generous', 'Cruel', 'Ambitious',
+}
+
+# Stress triggers: (trait, action) -> stress amount
+STRESS_TRIGGERS = {
+    ('Compassionate', 'execute'): 30,
+    ('Honest', 'plot'): 25,
+    ('Just', 'break_treaty'): 20,
+    ('Peaceful', 'declare_war'): 25,
+    ('Generous', 'raise_taxes'): 10,
+    ('Cruel', 'show_mercy'): 15,
+    ('Ambitious', 'accept_unfavorable_peace'): 20,
+}
+
+# Stress thresholds: {cutoff: (label, fertility_mod, health_mod)}
+STRESS_THRESHOLDS = {
+    100: ('Stressed', -0.10, 0),
+    200: ('Overwhelmed', -0.30, -1),
+    300: ('Breaking Point', -0.50, -2),
+}
+
 class Character:
     def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18):
         self.id = str(uuid.uuid4())[:8]
@@ -35,6 +58,9 @@ class Character:
         self.is_alive = True
         self.gold_reserve = 0.0
         self.age = age
+        
+        # Stress system
+        self.stress = 0  # range 0-300
         
         # Section 6: Character deepening
         self.age_progress = AgeProgress(current_age=age, is_alive=True)
@@ -61,6 +87,55 @@ class Character:
         for trait in self.traits:
             bonus += TRAIT_DATABASE.get(trait, {}).get(stat_name, 0)
         return skill_base + bonus
+
+    def add_stress(self, amount: int) -> Optional[str]:
+        """Increase stress by amount. Returns threshold message if crossed."""
+        if not self.is_alive:
+            return None
+        old_level = self.get_stress_level()
+        self.stress = min(self.stress + amount, 300)
+        new_level = self.get_stress_level()
+        if new_level != old_level and new_level:
+            return f"{self.name} is now '{new_level}' (stress: {self.stress})"
+        return None
+
+    def reduce_stress(self, amount: int):
+        """Decrease stress by amount (min 0)."""
+        self.stress = max(self.stress - amount, 0)
+
+    def check_stress_action(self, action_type: str) -> int:
+        """Check personality traits against action, return stress gain."""
+        for trait in self.traits:
+            if trait in PERSONALITY_TRAITS:
+                key = (trait, action_type)
+                if key in STRESS_TRIGGERS:
+                    return STRESS_TRIGGERS[key]
+        return 0
+
+    def get_stress_level(self) -> Optional[str]:
+        """Return current stress threshold label."""
+        for cutoff in sorted(STRESS_THRESHOLDS.keys(), reverse=True):
+            if self.stress >= cutoff:
+                return STRESS_THRESHOLDS[cutoff][0]
+        return None
+
+    def get_stress_fertility_mod(self) -> float:
+        """Return fertility modifier based on stress level."""
+        for cutoff in sorted(STRESS_THRESHOLDS.keys(), reverse=True):
+            if self.stress >= cutoff:
+                return STRESS_THRESHOLDS[cutoff][1]
+        return 0.0
+
+    def get_stress_health_penalty(self) -> int:
+        """Return health penalty based on stress level."""
+        for cutoff in sorted(STRESS_THRESHOLDS.keys(), reverse=True):
+            if self.stress >= cutoff:
+                return STRESS_THRESHOLDS[cutoff][2]
+        return 0
+
+    def decay_stress(self):
+        """Natural stress decay: -2 per turn."""
+        self.stress = max(self.stress - 2, 0)
 
     def __repr__(self):
         return f"Character({self.name}, ID: {self.id}, Pop: {self.is_alive})"
