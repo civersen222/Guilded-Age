@@ -421,8 +421,7 @@ class GameScreen(BaseScreen):
         if not self._selected_unit:
             return
         unit = self._selected_unit
-        from military import MilitaryManager
-        success = MilitaryManager.move_unit(game.military, unit, (hx, hy))
+        success = game.military_manager.move_unit(unit, (hx, hy))
         if success:
             self._event_log.add_event(f"{unit.unit_type} moved to ({hx},{hy})", "success")
             # Recalculate move range
