@@ -34,6 +34,7 @@ from gold_management import GoldManagement
 from external_trade_routes import ExternalTradeRoutes
 from faction_system import FactionManager, FactionEventGenerator
 from ai import AIPlayer
+from improvements import ImprovementManager
 
 
 @dataclass
@@ -94,6 +95,7 @@ class Game:
         self.military_manager = MilitaryManager([])
         self.court: Optional[Court] = None
         self.victory_tracker = VictoryConditionTracker()
+        self.improvement_manager = ImprovementManager()
         
         # Economy sub-systems
         self.tax_system = TaxSystem()
@@ -384,6 +386,19 @@ class Game:
                                 msgs.append(f"  🏗️ City '{city.name}' completed: {completed_item} built")
                         
                         msgs.append(f"  🏭 '{city.name}' producing: {item} ({city.production}/{cost})")
+        
+        # 8. Tile Improvements (Worker units)
+        worker_positions = {
+            (unit.position[0], unit.position[1])
+            for unit in self.units.values()
+            if unit.owner == civ_name and unit.is_alive
+            and UNIT_TYPES.get(unit.unit_type).category == UnitCategory.WORKER
+        }
+        if worker_positions:
+            improvement_msgs = self.improvement_manager.process_turn(
+                worker_positions, self.map.tiles
+            )
+            msgs.extend(improvement_msgs)
         
         # Random faction events
         if random.random() < 0.15:  # 15% chance of faction event
