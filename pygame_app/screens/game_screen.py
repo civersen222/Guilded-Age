@@ -516,6 +516,13 @@ class GameScreen(BaseScreen):
             self._hex_renderer.update(dt)
             self._elapsed += dt
 
+        # Refresh side panels
+        game = self.app.game
+        if self._city_panel:
+            self._city_panel.refresh(game)
+        if self._unit_panel:
+            self._unit_panel.refresh(game)
+
     def _check_needs_attention(self, game) -> bool:
         """Check if any player units have moves left or cities need production."""
         civ_name = game.player_civ.name
@@ -583,6 +590,14 @@ class GameScreen(BaseScreen):
             needs_attention = self._check_needs_attention(game)
             self._action_bar.set_needs_attention(needs_attention)
             self._action_bar.draw(surface)
+
+        # ── Draw side panels ──────────────────────────────────────────────
+        if self._city_panel:
+            self._city_panel.draw(surface)
+        if self._unit_panel:
+            self._unit_panel.draw(surface)
+        if self._event_log:
+            self._event_log.draw(surface)
 
         # ── Map surface ───────────────────────────────────────────────────
         self._map_surface.fill(BG)

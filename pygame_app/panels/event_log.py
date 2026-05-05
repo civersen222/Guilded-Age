@@ -53,6 +53,7 @@ class EventLog:
         self._font_bold = pygame.font.SysFont("consolas", 10, bold=True)
         self._scroll_offset = 0
         self._max_scroll = 0
+        self._text_surface: Optional[pygame.Surface] = None
 
     def add_event(self, text: str, category: str = "info") -> None:
         """Add a single color-coded event to the log."""
@@ -94,15 +95,7 @@ class EventLog:
 
     def _render(self) -> None:
         """Rebuild the HTML text from stored events."""
-        parts: List[str] = []
-        for event, cat in self.events:
-            if cat == "separator":
-                parts.append(f"<font color='#666666'>{event}</font><br>")
-            else:
-                color = CATEGORY_COLORS.get(cat, CATEGORY_COLORS["info"])
-                hex_color = f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
-                parts.append(f"<font color='{hex_color}'>{event}</font><br>")
-        self.text_box.set_html_text("".join(parts))
+        pass  # draw() renders events directly from self.events
 
     def draw(self, surface: pygame.Surface) -> None:
         """Draw custom event log with polished UI."""
