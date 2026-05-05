@@ -544,13 +544,16 @@ class GameScreen(BaseScreen):
         while city_name in game.cities:
             counter += 1
             city_name = f"{game.player_civ.name} Colony {counter}"
-        start_tile = self.map.tiles.get(position)
+        start_tile = game.map.tiles.get(position)
         if start_tile is None:
             self._event_log.add_event("Cannot settle on this terrain", "error")
             return
-        is_coastal = getattr(start_tile, "terrain", None) in ("WATER_COAST", "OCEAN")
+        if start_tile.terrain.name in ('WATER_COAST', 'OCEAN'):
+            self._event_log.add_event("Cannot settle on water tiles", "error")
+            return
+        is_coastal = start_tile.terrain.name == 'WATER_COAST'
         from game_data import get_climate_for_row
-        climate = get_climate_for_row(position[1], self.map.height)
+        climate = get_climate_for_row(position[1], game.map.height)
         from city import City
         new_city = City(
             name=city_name,
