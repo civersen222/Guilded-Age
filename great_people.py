@@ -123,6 +123,8 @@ class GreatPeopleManager:
             if civ_name not in getattr(game.religion_manager, "religions", {}):
                 religion_name = f"{civ_name} Faith"
                 game.religion_manager.found_religion(civ_name, religion_name)
+                if hasattr(game, 'era_system'):
+                    game.era_system.record_moment('founded_religion')
                 return f"{person_type} activated: founded '{religion_name}'"
             return f"{person_type} activated: '{civ_name}' already has a religion"
 

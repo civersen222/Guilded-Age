@@ -433,9 +433,15 @@ class Game:
         
         # Era moment checks
         civ_name = self.player_civ.name
+        # first_tech
+        if civ_name in self.research and len(self.research[civ_name].researched) > 0:
+            self.era_system.record_moment('first_tech')
         # met_all_civs
         if civ_name in self.diplomacy_manager.relations and len(self.diplomacy_manager.relations) >= len(self.civilizations) - 1:
             self.era_system.record_moment('met_all_civs')
+        # won_battle - check if any player units got kills this turn
+        if any(u.kills > 0 for u in self.units.values() if u.owner == civ_name and u.is_alive):
+            self.era_system.record_moment('won_battle')
         
         # Random faction events
         if random.random() < 0.15:  # 15% chance of faction event
