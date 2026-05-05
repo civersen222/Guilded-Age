@@ -35,6 +35,9 @@ class Unit:
         self.is_alive = True
         self.last_combat_result = None
         self.kills = 0
+        self.is_busy = False
+        self.busy_type: str = ""
+        self.busy_target: str = ""
         
         # Base stats from unit type
         base = self.get_base_stats()

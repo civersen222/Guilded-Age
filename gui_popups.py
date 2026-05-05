@@ -840,5 +840,210 @@ class DiplomacyPanel(tk.Toplevel):
                 tk.Label(self, text=f"  {icon} [{msg.turn}] {msg.from_civ} → {msg.to_civ}: {msg.subject}",
                          font=("Segoe UI", 8), bg=BG, fg=SUBTLE).pack(anchor=tk.W, padx=16)
 
+
+# ── Trade Routes Panel ───────────────────────────────────────────────
+
+class TradeRoutesPanel(tk.Frame):
+    """Shows active trade routes and allows creating new ones."""
+
+    def __init__(self, parent) -> None:
+        super().__init__(parent, bg=PANEL_BG)
+        self.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self._build()
+
+    def _build(self) -> None:
+        tk.Label(self, text="Trade Routes", font=("Segoe UI", 14, "bold"),
+                 bg=PANEL_BG, fg=GOLD, anchor=tk.W).pack(fill=tk.X, padx=8, pady=(8, 0))
+
+        # Active routes display
+        self.routes_text = tk.Text(self, bg=PANEL_BG, fg=TEXT, font=("Consolas", 10),
+                                   padx=8, pady=4, relief=tk.FLAT, wrap=tk.NONE,
+                                   highlightthickness=0, highlightbackground=BORDER, state=tk.DISABLED)
+        sb = tk.Scrollbar(self, orient=tk.VERTICAL, command=self.routes_text.yview)
+        self.routes_text.configure(yscrollcommand=sb.set)
+        self.routes_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=4)
+        sb.pack(side=tk.RIGHT, fill=tk.Y, pady=4)
+
+        # Create route button
+        self.create_btn = tk.Button(self, text="🚢 Create Trade Route",
+                                    bg=GOLD, fg="#000", font=("Segoe UI", 10, "bold"),
+                                    activebackground="#d4af6a", activeforeground="#000",
+                                    command=self._on_create)
+        self.create_btn.pack(fill=tk.X, pady=(4, 0))
+
+    def _on_create(self):
+        from gui_popups import CreateTradeRoutePopup
+        if not hasattr(self, '_city'):
+            return
+        popup = CreateTradeRoutePopup(self, self._city, self.game)
+
+    def update(self, game, active_routes=None) -> None:
+        self.game = game
+        if active_routes is None:
+            active_routes = game.external_trade.get_active_routes(game.player_civ.name)
+
+        self.routes_text.configure(state=tk.NORMAL)
+        self.routes_text.delete("1.0", tk.END)
+
+        if not active_routes:
+            self.routes_text.insert(tk.END, "No active trade routes.\n", "empty")
+            self.routes_text.tag_config("empty", foreground="#555")
+        else:
+            for route in active_routes:
+                dest_owner = route.destination_city.owner
+                status = f"{route.turns_remaining} turns left" if route.is_active else "Expired"
+                line = (f"  {route.origin_city.name} → {route.destination_city.name} "
+                        f"({dest_owner}) — {status}\n")
+                if route.gold_per_turn > 0:
+                    line += f"    +{route.gold_per_turn:.1f} gold/turn\n"
+                if route.food_per_turn > 0:
+                    line += f"    +{route.food_per_turn:.1f} food/turn\n"
+                self.routes_text.insert(tk.END, line)
+
+        self.routes_text.configure(state=tk.DISABLED)
+
+
+class CreateTradeRoutePopup(tk.Toplevel):
+    """Popup for selecting origin city, destination city, and trader unit."""
+
+    def __init__(self, parent, origin_city: City, game: Game) -> None:
+        super().__init__(parent)
+        self.title("Create Trade Route")
+        self.geometry("380x400")
+        self.configure(bg=BG)
+        self.origin_city = origin_city
+        self.game = game
+        self.result = None
+        self._build()
+
+    def _build(self) -> None:
+        tk.Label(self, text="Create Trade Route", font=("Segoe UI", 13, "bold"),
+                 bg=BG, fg=HIGHLIGHT).pack(pady=(10, 4))
+
+        tk.Label(self, text=f"From: {self.origin_city.name}",
+                 bg=BG, fg=TEXT, font=("Segoe UI", 10)).pack(pady=2)
+
+        # Destination city selection
+        tk.Label(self, text="Destination City:",
+                 bg=BG, fg=GOLD, font=("Segoe UI", 10)).pack(pady=(8, 2), anchor=tk.W, padx=12)
+
+        self.dest_var = tk.StringVar()
+        dest_frame = tk.Frame(self, bg=PANEL_BG, highlightbackground=BORDER, highlightthickness=1)
+        dest_frame.pack(fill=tk.X, padx=12, pady=2)
+
+        # Filter cities: not owned by player, not same as origin
+        dest_cities = [c for c in self.game.cities.values()
+                       if c.owner != self.game.player_civ.name and c.position != self.origin_city.position]
+
+        if not dest_cities:
+            tk.Label(dest_frame, text="No other cities available",
+                     bg=PANEL_BG, fg=SUBTLE, font=("Segoe UI", 9)).pack(pady=8)
+            self._create_enabled = False
+        else:
+            sb = tk.Scrollbar(dest_frame, orient=tk.VERTICAL)
+            sb.pack(side=tk.RIGHT, fill=tk.Y)
+            self.dest_listbox = tk.Listbox(dest_frame, yscrollcommand=sb.set, bg=PANEL_BG, fg=TEXT,
+                                           font=("Segoe UI", 9), selectbackground=HIGHLIGHT,
+                                           activestyle="none", height=6)
+            self.dest_listbox.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+            sb.config(command=self.dest_listbox.yview)
+
+            for city in dest_cities:
+                dist = self._hex_dist(self.origin_city.position, city.position)
+                self.dest_listbox.insert(tk.END, f"{city.name} ({city.owner}) — {dist} tiles")
+            self._create_enabled = True
+
+        # Trader unit selection
+        tk.Label(self, text="Trader Unit:",
+                 bg=BG, fg=GOLD, font=("Segoe UI", 10)).pack(pady=(8, 2), anchor=tk.W, padx=12)
+
+        self.trader_var = tk.StringVar()
+        trader_frame = tk.Frame(self, bg=PANEL_BG, highlightbackground=BORDER, highlightthickness=1)
+        trader_frame.pack(fill=tk.X, padx=12, pady=2)
+
+        traders = [u for u in self.game.units.values()
+                   if u.owner == self.game.player_civ.name and u.unit_type == "Trader" and not u.is_busy and u.is_alive]
+
+        if not traders:
+            tk.Label(trader_frame, text="No available Trader units. Build one in a city.",
+                     bg=PANEL_BG, fg=SUBTLE, font=("Segoe UI", 9)).pack(pady=8)
+            self._trader_available = False
+        else:
+            sb2 = tk.Scrollbar(trader_frame, orient=tk.VERTICAL)
+            sb2.pack(side=tk.RIGHT, fill=tk.Y)
+            self.trader_listbox = tk.Listbox(trader_frame, yscrollcommand=sb2.set, bg=PANEL_BG, fg=TEXT,
+                                              font=("Segoe UI", 9), selectbackground=HIGHLIGHT,
+                                              activestyle="none", height=4)
+            self.trader_listbox.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+            sb2.config(command=self.trader_listbox.yview)
+
+            for unit in traders:
+                self.trader_listbox.insert(tk.END, f"{unit.name} @ {unit.position}")
+            self._trader_available = True
+
+        # Buttons
+        btn_frame = tk.Frame(self, bg=BG)
+        btn_frame.pack(pady=(12, 16))
+
+        tk.Button(btn_frame, text="Create Route", font=("Segoe UI", 10, "bold"),
+                  bg=GOLD, fg="#000", activebackground="#d4af6a", activeforeground="#000",
+                  command=self._on_create).pack(side=tk.LEFT, expand=True, padx=4)
+
+        tk.Button(btn_frame, text="Cancel", font=("Segoe UI", 10),
+                  bg=PANEL_BG2, fg=TEXT, activebackground="#333", activeforeground=TEXT,
+                  command=self.destroy).pack(side=tk.LEFT, expand=True, padx=4)
+
+    def _hex_dist(self, pos_a, pos_b):
+        """Approximate hex distance between two positions."""
+        dx = abs(pos_a[0] - pos_b[0])
+        dy = abs(pos_a[1] - pos_b[1])
+        return max(dx, dy, (dx + dy) // 2)
+
+    def _on_create(self):
+        if not self._create_enabled or not self._trader_available:
+            messagebox.showwarning("Cannot Create", "No valid destination or trader available.")
+            return
+
+        dest_text = self.dest_listbox.get(self.dest_listbox.curselection()) if self.dest_listbox.curselection() else None
+        if not dest_text:
+            messagebox.showwarning("Cannot Create", "Please select a destination city.")
+            return
+
+        trader_text = self.trader_listbox.get(self.trader_listbox.curselection()) if self.trader_listbox.curselection() else None
+        if not trader_text:
+            messagebox.showwarning("Cannot Create", "Please select a trader unit.")
+            return
+
+        # Find destination city
+        dest_city = None
+        for city in self.game.cities.values():
+            if city.name in dest_text:
+                dest_city = city
+                break
+
+        # Find trader unit
+        trader_unit = None
+        for unit in self.game.units.values():
+            if unit.name in trader_text:
+                trader_unit = unit
+                break
+
+        if not dest_city or not trader_unit:
+            messagebox.showerror("Error", "Could not find selected city or unit.")
+            return
+
+        # Create the route
+        route = self.game.external_trade.create_route(self.origin_city, dest_city, trader_unit)
+        if route:
+            self.result = route
+            messagebox.showinfo("Trade Route Created",
+                                f"Route established: {self.origin_city.name} → {dest_city.name}\n"
+                                f"Duration: {route.duration} turns\n"
+                                f"Gold/turn: {route.gold_per_turn:.1f}\n"
+                                f"Food/turn: {route.food_per_turn:.1f}")
+            self.destroy()
+        else:
+            messagebox.showerror("Error", "Failed to create trade route.")
+
         tk.Button(self, text="Close", bg=ACCENT, fg=TEXT,
                   font=("Segoe UI", 10), command=self.destroy).pack(pady=(8, 10))

@@ -24,7 +24,7 @@ from plots import PlotManager
 from simulation import Character, Dynasty
 from ai import AIPlayer
 from gui_map import HexGridRenderer, HoverTooltip, MapCanvas, TileHighlight, MinimapRenderer
-from gui_popups import ProductionPopup, UnitInfoPopup, DiplomacyPopup, DynastyPopup, VictoryPanel, TechTreePopup, FactionsPanel, HappinessPanel, StabilityPanel, EconomyPanel, DiplomacyPanel
+from gui_popups import ProductionPopup, UnitInfoPopup, DiplomacyPopup, DynastyPopup, VictoryPanel, TechTreePopup, FactionsPanel, HappinessPanel, StabilityPanel, EconomyPanel, DiplomacyPanel, TradeRoutesPanel, CreateTradeRoutePopup
 from sound_effects import get_sound_manager
 from visual_effects import VisualEffects
 
@@ -608,6 +608,10 @@ class CivKingsGUI:
         self.right_panel = CityDetailPanel(frame)
         self.right_panel.pack(fill=tk.BOTH, expand=True, side=tk.RIGHT)
 
+        # trade routes panel
+        self.trade_routes_panel = TradeRoutesPanel(frame)
+        self.trade_routes_panel.pack(fill=tk.BOTH, expand=True, side=tk.RIGHT, pady=(4, 0))
+
         # log panel
         self.log_panel = ActionLogPanel(frame)
         self.log_panel.pack(fill=tk.BOTH, expand=True, side=tk.RIGHT, pady=(4, 0))
@@ -656,6 +660,13 @@ class CivKingsGUI:
             zoom=self.map_canvas.zoom_pan.zoom_level
         )
         self._update_minimap()
+        self._update_trade_routes()
+
+    def _update_trade_routes(self) -> None:
+        """Refresh the trade routes panel."""
+        if hasattr(self, 'trade_routes_panel'):
+            active = self.game.external_trade.get_active_routes(self.game.player_civ.name)
+            self.trade_routes_panel.update(self.game, active)
 
     def _on_map_click(self, tile_coord) -> None:
         """Callback from MapCanvas when a tile is clicked."""
@@ -667,6 +678,10 @@ class CivKingsGUI:
             if city:
                 self.selected_city = city
                 self.right_panel.update(city)
+                if hasattr(self, 'trade_routes_panel'):
+                    self.trade_routes_panel._city = city
+                    active = self.game.external_trade.get_active_routes(self.game.player_civ.name)
+                    self.trade_routes_panel.update(self.game, active)
         if tile.unit:
             unit = next((u for u in self.game.units if u.position == tile.unit), None)
             if unit:
