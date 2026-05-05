@@ -181,6 +181,7 @@ class NewGameDialog(BaseScreen):
         # Add AI players and their civs
         from game_data import CIVILIZATIONS as ALL_CIVS
         from ai import AIPlayer
+        from tech import TechManager
         for ai_name in ai_civ_names:
             self.app.game.ai_players[ai_name] = AIPlayer(ai_name, difficulty.lower())
             ai_civ = ALL_CIVS.get(ai_name)
