@@ -58,14 +58,14 @@ class UnitPanel:
     def draw(self, surface: pygame.Surface) -> None:
         """Draw custom unit panel with polished UI."""
         # Gold border at top
-        y_pos = self.panel.get_abs_position()[1]
-        w = self.panel.get_abs_position()[0] + self.panel.get_rect().width
+        y_pos = self.panel.get_abs_rect().y
+        w = self.panel.get_abs_rect().x + self.panel.get_rect().width
         pygame.draw.line(surface, GOLD_TEXT, (0, y_pos), (w, y_pos), 1)
 
         for btn, unit in self.unit_buttons.items():
             rect = btn.get_rect().copy()
-            rect.x += self.panel.get_abs_position()[0]
-            rect.y += self.panel.get_abs_position()[1]
+            rect.x += self.panel.get_abs_rect().x
+            rect.y += self.panel.get_abs_rect().y
 
             # Button background
             pygame.draw.rect(surface, BTN_BG, rect, border_radius=3)

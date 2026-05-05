@@ -99,8 +99,8 @@ class EventLog:
 
     def draw(self, surface: pygame.Surface) -> None:
         """Draw custom event log with polished UI."""
-        x = self.panel.get_abs_position()[0]
-        y = self.panel.get_abs_position()[1]
+        x = self.panel.get_abs_rect().x
+        y = self.panel.get_abs_rect().y
         w = self.panel.get_rect().width
         h = self.panel.get_rect().height
 
