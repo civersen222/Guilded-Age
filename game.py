@@ -762,8 +762,7 @@ class Game:
     def save_game(self, filename: Optional[str] = None) -> str:
         """Save game to JSON file. Returns the file path."""
         import save_system
-        path = save_system.save_game(self, filename)
-        return f"Game saved to {path}"
+        return save_system.save_game(self, filename)
 
     @staticmethod
     def load_game(filepath: str) -> Optional['Game']:
