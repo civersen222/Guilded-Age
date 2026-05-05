@@ -11,7 +11,7 @@ Traceback (most recent call last):
   File "C:\Users\civer\civkings\pygame_app\screens\game_screen.py", line 596, in draw
     self._city_panel.draw(surface)
     ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "C:\Users\civer\civkings\pygame_app\panels\city_panel.py", line 69, in draw
-    w = self.panel.get_abs_rect().x + self.panel.get_rect().width
-                                      ^^^^^^^^^^^^^^^^^^^
-AttributeError: 'UIPanel' object has no attribute 'get_rect'
+  File "C:\Users\civer\civkings\pygame_app\panels\city_panel.py", line 74, in draw
+    rect = btn.get_rect().copy()
+           ^^^^^^^^^^^^
+AttributeError: 'UIButton' object has no attribute 'get_rect'. Did you mean: 'set_text'?
