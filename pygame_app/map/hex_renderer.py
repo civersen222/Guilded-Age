@@ -400,7 +400,7 @@ class HexRenderer:
             terrain_name = tile.terrain.name
             # Scale tile to match current zoom level
             zoom_tag = self.tile_atlas._nearest_zoom(zoom)
-            target_size = int(HEX_SIZE * 2 * zoom)
+            target_size = int(HEX_SIZE * 2.3 * zoom)
             if target_size < 4:
                 target_size = 4
             cache_key = (terrain_name, zoom_tag)
