@@ -1,25 +1,25 @@
 # CivKings — What's Still To Be Done
 
-**Last updated:** 2025-06-25  
-**Overall completion:** ~90-95% (all planned sprints complete)
+**Last updated:** 2026-06-25  
+**Overall completion:** ~95% (all planned sprints complete + pygame_app GUI built)
 
 ---
 
-## ✅ Completed (All 10 Sprints Done)
+## ✅ Completed (All 10 Sprints + Pygame GUI)
 
 ### SPRINT 1: Map Rendering & Core Interaction (gui_map.py)
 - [x] Full hex grid rendering with terrain coloring
 - [x] City/unit icons on map
 - [x] Hover tooltip system
 - [x] Click-to-select on map
-- [x] Minimap
-- [x] Zoom controls
-- [x] Pan controls
+- [x] Minimap — integrated into pygame_app
+- [x] Zoom controls — mouse wheel + camera lerp
+- [x] Pan controls — WASD/arrow keys + middle mouse drag
 - [x] Selection highlighting
 
 ### SPRINT 2: City & Production UI (gui_panels.py, gui_popups.py)
 - [x] City detail panel with all stats
-- [x] Production queue UI
+- [x] Production queue UI — ProductionPopup
 - [x] District placement UI
 - [x] Building selection UI
 - [x] District upgrade paths
@@ -27,7 +27,7 @@
 - [x] Production popup
 
 ### SPRINT 3: Military UI (gui_combat.py, gui_popups.py)
-- [x] Combat result UI with odds display
+- [x] Combat result UI with odds display — CombatResultPopup
 - [x] Unit command panel
 - [x] Unit movement visualization
 - [x] Unit info popup with stats/promotions
@@ -35,16 +35,16 @@
 - [x] Combat calculator with terrain bonuses
 
 ### SPRINT 4: Tech & Diplomacy UI (gui_panels.py, gui_popups.py)
-- [x] Tech tree display with prerequisites
-- [x] Diplomacy panel with relations/trade/inbox
+- [x] Tech tree display with prerequisites — TechTreePopup
+- [x] Diplomacy panel with relations/trade/inbox — DiplomacyPopup
 - [x] Treaty negotiation UI
 - [x] War declaration screen
 
 ### SPRINT 5: Dynasty & Resources (gui_panels.py, gui_popups.py)
-- [x] Dynasty/family UI with tree view
-- [x] Resource bar
-- [x] Event log
-- [x] Quick actions toolbar
+- [x] Dynasty/family UI with tree view — DynastyPopup
+- [x] Resource bar — ResourceBar panel
+- [x] Event log — EventLog panel with color coding
+- [x] Quick actions toolbar — ActionBar
 
 ### SPRINT 6: Victory Conditions (victory_ui.py)
 - [x] Science victory
@@ -81,12 +81,31 @@
 - [x] AI military aggression/scouting
 - [x] AI diplomacy (trade, alliances, wars)
 - [x] AI technology prioritization
-- [x] Sound effects
-- [x] Animations and visual polish
+- [x] Sound effects — SoundManager with placeholders
+- [x] Animations and visual polish — ParticleEmitter
 - [x] Dynamic priority adjustment
 - [x] War targets and alliance tracking
 - [x] Trade relationship management
 - [x] Military strength evaluation
+
+### Pygame GUI (pygame_app/)
+- [x] Camera system with pan, zoom, smooth lerp
+- [x] HexRenderer with terrain, cities, units, fog, highlights
+- [x] Minimap with viewport rectangle
+- [x] TileAtlas for tile rendering
+- [x] ResourceBar panel
+- [x] CityPanel sidebar
+- [x] EventLog panel with color-coded events
+- [x] TurnSummary popup
+- [x] ActionBar with context-sensitive buttons
+- [x] ProductionPopup
+- [x] TechTreePopup
+- [x] DiplomacyPopup
+- [x] DynastyPopup
+- [x] CombatResultPopup
+- [x] EventChoicePopup
+- [x] MusicManager with era-based background music
+- [x] Save/load system with cycle detection
 
 ---
 
@@ -94,31 +113,26 @@
 
 ### High Priority
 
-#### 1. UI Integration Gaps
-- [ ] **MinimapRenderer** — class exists but not integrated into gui.py layout
-- [ ] **Move range highlighting** — `highlight_move_range()` exists but not called during unit movement
-- [ ] **Attack range highlighting** — `highlight_attack_range()` exists but not called during combat
-- [ ] **Zoom level display/controls** — zoom works via mouse wheel but no UI buttons
-- [ ] **Resource trend arrows (↑↓→)** — not implemented in resource bar
-- [ ] **Resource details on hover** — no hover tooltips on resource bar
-- [ ] **Trade route yield display** — not shown in resource bar
-- [ ] **Resource surplus/deficit indicators** — not shown in resource bar
-- [ ] **Color-coded events** — all events use same color
-- [ ] **Event action buttons** — not implemented
-- [ ] **Event filtering** — not implemented
-- [ ] **Full toolbar icon set** — toolbar is empty by default
+#### 1. UI Polish
+- [ ] **Move range highlighting** — HexRenderer has state but no caller
+- [ ] **Attack range highlighting** — HexRenderer has state but no caller
+- [ ] **Zoom level display** — zoom works via mouse wheel only
+- [ ] **Resource trend arrows (↑↓→)** — not implemented
+- [ ] **Resource details on hover** — no hover tooltips
+- [ ] **Trade route yield display** — not in resource bar
+- [ ] **Resource surplus/deficit indicators** — not shown
+- [ ] **Event filtering** — EventLog has no filter
+- [ ] **Full toolbar icon set** — ActionBar uses text buttons
 
 #### 2. Economy & Resources
-- [ ] **External trade routes** — Trade with other civilizations via merchant units
-- [ ] **Gold management** — Unit maintenance, tribute, bribery costs
-- [ ] **Tax system** — Set tax rates, effects on happiness/gold
-- [ ] **Market simulation** — Resource scarcity affects prices
+- [ ] **External trade routes** — Engine exists but no UI
+- [ ] **Gold management** — Engine exists but no UI
+- [ ] **Tax system** — Engine exists but no UI
+- [ ] **Market simulation** — Engine exists but no UI
 
 #### 3. Happiness & Stability
-- [ ] **Happiness system** — Luxury resources, entertainment buildings, overextension penalty
-- [ ] **Stability system** — Decreases with wars, succession, conquest
-- [ ] **Happiness effects** — Production loss, rebellion risk, growth slowdown
-- [ ] **Stability effects** — Growth speed, rebellion chance, tax efficiency
+- [ ] **Happiness system** — Engine exists but no UI
+- [ ] **Stability system** — Engine exists but no UI
 
 ### Medium Priority
 
@@ -136,7 +150,7 @@
 
 #### 6. Events & Narrative
 - [ ] **Event chains** — Multi-part storylines
-- [ ] **Event choices** — Player decisions with consequences
+- [ ] **Event choices** — Engine exists but limited scenarios
 - [ ] **Historical scenarios** — Pre-set events for different eras
 - [ ] **Narrative log** — Chronological event history with filtering
 - [ ] **Character events** — Birth, death, marriage, scandal events
@@ -168,7 +182,7 @@
 - [ ] **Unit movement preview**
 - [ ] **Combat difficulty modifier**
 - [ ] **City name customization**
-- [ ] **Music system**
+- [ ] **Music system** — Basic implementation exists
 - [ ] **Multiple save slots / auto-save**
 - [ ] **Game scenarios** — Classic, Historical, Custom
 
@@ -196,8 +210,8 @@
 3. **Map coordinate system:** Uses (x, y) but hex logic uses axial (q, r) — verify consistency in `hex_map.py`
 4. **Economy:** Gold/science/culture calculations in `economy.py` may not match city yields in `city.py`
 5. **Combat:** Simple random roll — no terrain/deployment bonuses fully integrated
-6. **AI:** Mostly stub — `ai.py` has framework but limited logic
-7. **GUI:** tkinter-based — consider migrating to pygame or arcade for better performance
+6. **AI:** Framework exists but limited logic
+7. **GUI:** tkinter-based legacy UI (`gui.py`) replaced by pygame (`pygame_app/`) — legacy can be removed
 8. **No undo:** Players can't undo actions
 9. **No tutorial:** New players have no guidance
 10. **No settings:** No difficulty, speed, or graphics options
