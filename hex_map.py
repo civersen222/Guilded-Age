@@ -421,11 +421,12 @@ class ContinentGenerator:
         self.width = map_width
         self.height = map_height
         self.num_continents = num_continents
-        self.noise = SimplexNoise2D(seed=random.randint(0, 99999))
         self.continents: List[Continent] = []
+        self.continent_centers: List[Tuple[int, int]] = []
 
     def generate_continents(self) -> Dict[Tuple[int, int], TerrainType]:
         """Generate continent-based terrain map. Returns {(x,y): terrain_type}."""
+        self.continent_centers = self._place_continent_centers()
         elevation_map = self._generate_elevation_map()
         land_tiles = {(x, y) for x, y in elevation_map if elevation_map[(x, y)] > 0.35}
         self.continents = self._find_continents(land_tiles)
@@ -434,22 +435,93 @@ class ContinentGenerator:
         self._fix_landlocked_tiles(terrain_map)
         return terrain_map
 
+    def _place_continent_centers(self) -> List[Tuple[int, int]]:
+        """Place continent centers at well-separated positions, well from edges."""
+        centers = []
+        margin = int(max(self.width, self.height) * 0.15)
+        boost_radius = max(self.width, self.height) / (self.num_continents * 0.75)
+        min_dist = boost_radius * 1.6  # Ensure continents don't overlap
+        attempts = 0
+
+        for _ in range(self.num_continents):
+            for _ in range(200):
+                cx = random.randint(margin, self.width - margin)
+                cy = random.randint(margin, self.height - margin)
+                if all(math.dist((cx, cy), (ox, oy)) >= min_dist for ox, oy in centers):
+                    centers.append((cx, cy))
+                    break
+                attempts += 1
+            if not centers or len(centers) < self.num_continents:
+                # Fallback: grid placement
+                cols = min(self.num_continents, 3)
+                rows = max(1, self.num_continents // cols)
+                for r in range(rows):
+                    for c in range(cols):
+                        if len(centers) >= self.num_continents:
+                            break
+                        cx = int((c + 0.5) * self.width / cols)
+                        cy = int((r + 0.5) * self.height / rows)
+                        cx = max(margin, min(self.width - margin, cx))
+                        cy = max(margin, min(self.height - margin, cy))
+                        centers.append((cx, cy))
+                    if len(centers) >= self.num_continents:
+                        break
+
+        return centers[:self.num_continents]
+
     def _generate_elevation_map(self) -> Dict[Tuple[int, int], float]:
-        """Generate elevation using multi-octave noise."""
-        scale = max(self.width, self.height) / 4
+        """Generate elevation using continent-centered island creation."""
         elevation_map: Dict[Tuple[int, int], float] = {}
+        base_noise = SimplexNoise2D(seed=random.randint(0, 99999))
+        detail_noise = SimplexNoise2D(seed=random.randint(0, 99999))
+        scale = max(self.width, self.height) / 5
+
+        # Start with uniform low base elevation (mostly ocean)
+        for x in range(self.width):
+            for y in range(self.height):
+                # Very subtle base noise - mostly flat ocean
+                nx, ny = x / (scale * 4), y / (scale * 4)
+                val = base_noise.octave_noise(nx, ny, octaves=2, persistence=0.4)
+                val = (val + 1) / 2  # [0,1]
+                # Keep base very low and uniform - most tiles will be ocean
+                val = 0.08 + val * 0.08  # base range [0.08, 0.16]
+                elevation_map[(x, y)] = val
+
+        # Add continent islands
+        boost_radius = max(self.width, self.height) / (self.num_continents * 1.5)
 
         for x in range(self.width):
             for y in range(self.height):
-                nx, ny = x / scale, y / scale
-                val = self.noise.octave_noise(nx, ny, octaves=5, persistence=0.6)
-                # Map from [-1,1] to [0,1] with steeper falloff for edges
-                val = (val + 1) / 2
-                # Stretch the range to produce more variation using sigmoid around midpoint
-                # Shift midpoint to 0.5, stretch around it
-                val = 0.5 + (val - 0.5) * 2.5
-                val = max(0, min(1, val))
-                elevation_map[(x, y)] = val
+                current = elevation_map[(x, y)]
+                best_boost = 0.0
+
+                for cx, cy in self.continent_centers:
+                    dx, dy = x - cx, y - cy
+                    dist = math.sqrt(dx * dx + dy * dy)
+                    if dist < boost_radius:
+                        t = dist / boost_radius
+                        # Island shape: gentle cubic falloff for flat tops
+                        falloff = 1.0 - t * t * t  # cubic falloff
+
+                        # Multi-layer noise for elevation variation within island
+                        # Layer 1: large-scale variation (determines broad regions)
+                        large = base_noise.octave_noise(x / scale * 1.5, y / scale * 1.5, octaves=3, persistence=0.5)
+                        large = (large + 1) / 2  # [0,1]
+
+                        # Layer 2: fine-scale variation (adds detail)
+                        fine = detail_noise.octave_noise(x / scale * 4, y / scale * 4, octaves=4, persistence=0.6)
+                        fine = (fine + 1) / 2  # [0,1]
+
+                        # Combine layers for varied elevation:
+                        base_elev = large * 0.60 + 0.35  # [0.35, 0.95]
+                        detail = fine * 0.20 - 0.10  # [-0.10, +0.10]
+                        elevation = (base_elev + detail) * falloff + current * (1 - falloff)
+
+                        if elevation > best_boost:
+                            best_boost = elevation
+
+                # If far from all continent centers, keep base ocean elevation
+                elevation_map[(x, y)] = max(current, min(best_boost, 1.0))
 
         return elevation_map
 
@@ -475,7 +547,7 @@ class ContinentGenerator:
                     if neighbor in land_tiles and neighbor not in visited:
                         queue.append(neighbor)
 
-            if len(continent_tiles) >= 3:
+            if len(continent_tiles) >= 20:
                 center = (
                     sum(p[0] for p in continent_tiles) // len(continent_tiles),
                     sum(p[1] for p in continent_tiles) // len(continent_tiles),
@@ -493,22 +565,25 @@ class ContinentGenerator:
         for (x, y), elevation in elevation_map.items():
             on_continent = any((x, y) in c.tiles for c in self.continents)
 
-            if not on_continent or elevation < 0.35:
+            if not on_continent:
                 if elevation < 0.15:
                     terrain_map[(x, y)] = TerrainType.OCEAN
                 else:
                     terrain_map[(x, y)] = TerrainType.WATER_COAST
-            elif elevation < 0.30:
+            elif elevation < 0.35:
+                # Below land threshold but on continent - coastal water
+                terrain_map[(x, y)] = TerrainType.WATER_COAST
+            elif elevation < 0.45:
                 terrain_map[(x, y)] = TerrainType.PLAINS
-            elif elevation < 0.42:
+            elif elevation < 0.55:
                 terrain_map[(x, y)] = TerrainType.GRASSLAND
-            elif elevation < 0.52:
+            elif elevation < 0.63:
                 terrain_map[(x, y)] = TerrainType.HILLS
-            elif elevation < 0.60:
+            elif elevation < 0.70:
                 terrain_map[(x, y)] = TerrainType.FOREST
-            elif elevation < 0.68:
-                terrain_map[(x, y)] = TerrainType.DESERT
             elif elevation < 0.78:
+                terrain_map[(x, y)] = TerrainType.DESERT
+            elif elevation < 0.85:
                 terrain_map[(x, y)] = TerrainType.TUNDRA
             else:
                 terrain_map[(x, y)] = TerrainType.MOUNTAIN
@@ -628,8 +703,9 @@ class HexMap:
     
     def generate(self):
         """Generate the map with continent-based terrain and smoothing."""
-        # Generate continent-based terrain
-        num_continents = max(2, min(5, (self.width * self.height) // 100))
+        # Generate continent-based terrain - scale with map size, cap at 3 for small maps
+        map_area = self.width * self.height
+        num_continents = max(2, min(3, map_area // 600))
         continent_gen = ContinentGenerator(self.width, self.height, num_continents)
         self.terrain_map = continent_gen.generate_continents()
         self.continents = continent_gen.continents
