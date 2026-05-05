@@ -353,12 +353,38 @@ class Game:
         self.market.update_all_prices()
         msgs.append(f"  Market: Prices updated")
         
-        # 5. External Trade
+        # 5. External Trade (legacy + new visible routes)
         if self.external_trade.routes:
             trade_yields = self.external_trade.process_all_routes()
             for target_civ, yields in trade_yields.items():
                 for cargo, amount in yields.items():
                     msgs.append(f"  Trade with {target_civ}: +{amount:.1f} {cargo}")
+        
+        # New visible trade routes via Trader units
+        route_yields = self.external_trade.process_routes()
+        active_routes = self.external_trade.get_active_routes(civ_name)
+        if active_routes:
+            msgs.append(f"\n  🚢 {len(active_routes)} active trade route(s)")
+            for route in active_routes:
+                dest_civ = route.destination_city.owner
+                msgs.append(f"    {route.origin_city.name} → {route.destination_city.name} ({route.turns_remaining} turns left)")
+                if route.gold_per_turn > 0:
+                    self.gold[civ_name] = self.gold.get(civ_name, 0) + int(route.gold_per_turn)
+                    msgs.append(f"      +{route.gold_per_turn:.1f} gold/turn")
+                if route.food_per_turn > 0:
+                    # Add food to the origin city
+                    if route.origin_city_name in self.cities:
+                        self.cities[route.origin_city_name].food += route.food_per_turn
+                    msgs.append(f"      +{route.food_per_turn:.1f} food/turn")
+        
+        if route_yields:
+            for owner, yields in route_yields.items():
+                if owner == civ_name:
+                    for cargo, amount in yields.items():
+                        if cargo == "gold":
+                            self.gold[civ_name] = self.gold.get(civ_name, 0) + int(amount)
+                        elif cargo == "food" and civ_name in self.cities:
+                            self.cities[civ_name].food += amount
         
         # 6. Faction Effects
         faction_effects = self.faction_manager.get_faction_effects()

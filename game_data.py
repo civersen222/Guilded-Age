@@ -502,6 +502,7 @@ for _name, _args in [
     ("Settler",        (UnitCategory.SETTLER, 0,  0,  2, 100,  0, None, None, None)),
     ("Worker",         (UnitCategory.WORKER, 0,  0,  2, 40,   0, None, None, None)),
     ("Monk",           (UnitCategory.HELD,  4,  5,  2, 60,   0, None, "Theology", None)),
+    ("Trader",         (UnitCategory.WORKER, 0,  0,  4, 50,   0, None, "Currency", None)),
 ]:
     UNIT_TYPES[_name] = UnitType(_name, *_args)
 
