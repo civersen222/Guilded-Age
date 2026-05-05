@@ -202,7 +202,7 @@ class DiplomacyPopup:
             self._kill()
             return True
 
-        if event.type == pygame_gui.UI_SELECTION_LIST_CHANGED:
+        if event.type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
             if self.civ_list is not None:
                 selected = self.civ_list.get_selected_item()
                 if selected and selected.id:

@@ -147,7 +147,7 @@ class ProductionPopup:
                 return self._on_build()
             return True
 
-        if event.type == pygame_gui.UI_SELECTION_LIST_CHANGED:
+        if event.type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
             self._refresh()
             return True
 
