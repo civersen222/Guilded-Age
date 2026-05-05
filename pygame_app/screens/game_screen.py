@@ -219,32 +219,44 @@ class GameScreen(BaseScreen):
             if event.key == pygame.K_t:
                 if self._active_popup:
                     self._active_popup._kill()
+                    self._active_popup = None
                 from pygame_app.popups.tech_tree import TechTreePopup
-                self._active_popup = TechTreePopup(self.ui_manager, game)
+                popup = TechTreePopup()
+                popup.show(self.ui_manager, game)
+                self._active_popup = popup
                 return
 
             # D: open diplomacy
             if event.key == pygame.K_d:
                 if self._active_popup:
                     self._active_popup._kill()
+                    self._active_popup = None
                 from pygame_app.popups.diplomacy import DiplomacyPopup
-                self._active_popup = DiplomacyPopup(self.ui_manager, game)
+                popup = DiplomacyPopup()
+                popup.show(self.ui_manager, game)
+                self._active_popup = popup
                 return
 
             # Y: open dynasty
             if event.key == pygame.K_y:
                 if self._active_popup:
                     self._active_popup._kill()
+                    self._active_popup = None
                 from pygame_app.popups.dynasty import DynastyPopup
-                self._active_popup = DynastyPopup(self.ui_manager, game)
+                popup = DynastyPopup()
+                popup.show(self.ui_manager, game)
+                self._active_popup = popup
                 return
 
             # P: open production popup for selected city
             if event.key == pygame.K_p:
                 if self._active_popup:
                     self._active_popup._kill()
+                    self._active_popup = None
                 from pygame_app.popups.production import ProductionPopup
-                self._active_popup = ProductionPopup(self.ui_manager, game)
+                popup = ProductionPopup()
+                popup.show(self.ui_manager, None, game)
+                self._active_popup = popup
                 return
 
             # F: fortify selected unit
@@ -357,10 +369,14 @@ class GameScreen(BaseScreen):
             self._handle_unit_action(action, game)
         elif action == "Tech Tree":
             from pygame_app.popups.tech_tree import TechTreePopup
-            self._tech_popup = TechTreePopup(self.ui_manager, game)
+            popup = TechTreePopup()
+            popup.show(self.ui_manager, game)
+            self._tech_popup = popup
         elif action == "Diplomacy":
             from pygame_app.popups.diplomacy import DiplomacyPopup
-            self._diplomacy_popup = DiplomacyPopup(self.ui_manager, game)
+            popup = DiplomacyPopup()
+            popup.show(self.ui_manager, game)
+            self._diplomacy_popup = popup
         elif action == "Production":
             self._show_production(game)
 
@@ -465,7 +481,9 @@ class GameScreen(BaseScreen):
             # Get first selected city or show all
             pass
         from pygame_app.popups.production import ProductionPopup
-        self._production_popup = ProductionPopup(self.ui_manager, game)
+        popup = ProductionPopup()
+        popup.show(self.ui_manager, None, game)
+        self._production_popup = popup
 
     def update(self, dt):
         # WASD / arrow key panning
