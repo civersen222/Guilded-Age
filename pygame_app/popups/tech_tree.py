@@ -146,7 +146,8 @@ class TechTreePopup:
         """Refresh the popup display."""
         if self.info_textbox is not None and self._game is not None:
             html = self._build_html(self._game)
-            self.info_textbox.set_html_text(html)
+            self.info_textbox.html_text = html
+            self.info_textbox.rebuild()
 
     def handle_event(self, event) -> bool:
         """Handle events from the popup. Returns True if handled."""

@@ -134,7 +134,8 @@ class ProductionPopup:
         """Refresh the popup display."""
         if self.info_textbox is not None and self._city is not None:
             html = self._build_queue_html(self._city)
-            self.info_textbox.set_html_text(html)
+            self.info_textbox.html_text = html
+            self.info_textbox.rebuild()
 
     def handle_event(self, event) -> bool:
         """Handle events from the popup. Returns True if handled."""

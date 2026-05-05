@@ -161,7 +161,8 @@ class DiplomacyPopup:
         """Refresh the info textbox for a civ."""
         if self.info_textbox is not None:
             html = self._build_info_html(target_civ)
-            self.info_textbox.set_html_text(html)
+            self.info_textbox.html_text = html
+            self.info_textbox.rebuild()
 
     def _on_action(self, action: str) -> bool:
         """Execute a diplomatic action."""
