@@ -9,6 +9,7 @@ from game_data import (
     ClimateZone, CLIMATE_MODIFIERS, COASTLINE_BONUSES,
     TerrainType, LandmarkType, LANDMARKS,
     UNIT_TYPES, UnitType,
+    WONDERS, BUILT_WONDERS, WonderType,
 )
 
 # Map adjacency_bonus keys to TerrainType enum values
@@ -322,6 +323,8 @@ class City:
             return UNIT_TYPES[item].production_cost
         if item in BUILDINGS:
             return BUILDINGS[item].production_cost
+        if item in WONDERS:
+            return WONDERS[item].cost
         return None
 
     def is_production_complete(self) -> bool:
@@ -354,8 +357,15 @@ class City:
         """Assign an item to production queue with validation. Returns True if successfully assigned."""
         if item in self.production_queue or item == self.current_production:
             return False
-        
-        if item in UNIT_TYPES:
+
+        if item in WONDERS:
+            # Wonders can only be built once globally
+            if item in BUILT_WONDERS:
+                return False
+            wtype = WONDERS[item]
+            if wtype.requires_tech and researched_techs and wtype.requires_tech not in researched_techs:
+                return False
+        elif item in UNIT_TYPES:
             utype = UNIT_TYPES[item]
             # Check resource requirement
             if utype.resource_required and owned_resources and utype.resource_required not in owned_resources:
@@ -367,12 +377,13 @@ class City:
             btype = BUILDINGS[item]
             if btype.requires_tech and researched_techs and btype.requires_tech not in researched_techs:
                 return False
-        
+
         self.production_queue.append(item)
         return True
 
     def process_production(self, turn_food: float, turn_gold: float, turn_science: float, turn_production: float):
-        """Process one turn of city production"""
+        """Process one turn of city production.
+        Returns the completed item name, or a (name, is_wonder) tuple for wonders."""
         self.gold += turn_gold
         self.science += turn_science
         self.production_capacity = self.calculate_production_capacity()
@@ -392,9 +403,52 @@ class City:
                     self.production_queue.remove(item)
                 self.current_production = None
                 self.production = 0
+
+                # Handle wonder completion
+                if item in WONDERS:
+                    self._complete_wonder(item)
+                    return (item, True)
+
                 return item
 
         return None
+
+    def _complete_wonder(self, wonder_name: str):
+        """Handle completion of a world wonder."""
+        wtype = WONDERS[wonder_name]
+
+        # Check if another civ already built this wonder
+        if wonder_name in BUILT_WONDERS:
+            # Refund 50% of wonder cost as gold
+            refund = int(wtype.cost * 0.5)
+            self.gold += refund
+            print(f"  ⚠️ {self.owner} built {wonder_name} but another civ already has it — refunded {refund} gold")
+            return
+
+        # Mark as built globally
+        BUILT_WONDERS.add(wonder_name)
+
+        # Add as a special building
+        self.buildings[wonder_name] = wtype
+
+        # Apply effects
+        effects_applied = []
+        for effect_key, effect_val in wtype.effects.items():
+            if effect_key == 'science_bonus':
+                self.science += effect_val * 100  # Convert to flat science
+                effects_applied.append(f"+{effect_val*100} science")
+            elif effect_key == 'worker_speed':
+                effects_applied.append(f"worker speed x{effect_val}")
+            elif effect_key == 'faith_per_turn':
+                self.faith += effect_val
+                effects_applied.append(f"+{effect_val} faith")
+            elif effect_key == 'happiness':
+                self.happiness += int(effect_val)
+                effects_applied.append(f"+{int(effect_val)} happiness")
+            else:
+                effects_applied.append(f"{effect_key} +{effect_val}")
+
+        print(f"  🏛️ {self.owner} completed {wonder_name}: {', '.join(effects_applied)}")
 
 
 class CityManager:

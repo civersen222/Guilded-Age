@@ -367,8 +367,16 @@ class Game:
                             yields.get('production', 0)
                         )
                         if completed_item:
-                            # Complete the production
-                            if completed_item in UNIT_TYPES:
+                            # Handle tuple return (wonder) or string (unit/building)
+                            is_wonder = False
+                            if isinstance(completed_item, tuple):
+                                completed_item, is_wonder = completed_item
+
+                            if is_wonder:
+                                from game_data import WONDERS
+                                city.add_building(completed_item)
+                                msgs.append(f"  🏛️ City '{city.name}' completed: {completed_item}")
+                            elif completed_item in UNIT_TYPES:
                                 # Create new unit
                                 new_unit = Unit(
                                     unit_type=completed_item,

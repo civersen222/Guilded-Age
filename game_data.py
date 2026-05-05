@@ -506,6 +506,29 @@ for _name, _args in [
     UNIT_TYPES[_name] = UnitType(_name, *_args)
 
 
+# ── Wonders ──────────────────────────────────────────────────────────────────
+
+@dataclass
+class WonderType:
+    name: str
+    era: Era
+    cost: int
+    effects: Dict[str, float]
+    requires_tech: Optional[str] = None
+
+
+WONDERS: Dict[str, WonderType] = {
+    'Pyramids': WonderType('Pyramids', Era.ANCIENT, 220, {'worker_speed': 1.25}),
+    'Great Library': WonderType('Great Library', Era.ANCIENT, 200, {'science_bonus': 0.1}),
+    'Stonehenge': WonderType('Stonehenge', Era.ANCIENT, 180, {'faith_per_turn': 2}),
+    'Colosseum': WonderType('Colosseum', Era.CLASSICAL, 300, {'happiness': 3}),
+    'Oxford University': WonderType('Oxford University', Era.RENAISSANCE, 500, {'science_bonus': 0.2}),
+}
+
+# Set of wonder names already built by any civ (global uniqueness)
+BUILT_WONDERS: Set[str] = set()
+
+
 # ── Technology Tree ──────────────────────────────────────────────────────────
 
 class TechBranch(Enum):
