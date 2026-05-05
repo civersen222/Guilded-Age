@@ -45,6 +45,8 @@ class GameScreen(BaseScreen):
         self._dragging_middle = False
         self._drag_start = (0, 0)
         self._held_keys = set()
+        self._active_popup = None
+        self.show_yields = False
 
     def enter(self):
         game = self.app.game
@@ -161,6 +163,106 @@ class GameScreen(BaseScreen):
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
             return
+
+        # ── Keyboard shortcuts ────────────────────────────────────────────────
+        if event.type == pygame.KEYDOWN:
+
+            # Escape: close popup or deselect
+            if event.key == pygame.K_ESCAPE:
+                if self._active_popup:
+                    self._active_popup._kill()
+                    self._active_popup = None
+                elif self._selected_unit:
+                    self._selected_unit = None
+                    self._action_bar.set_mode("default")
+                    self._hex_renderer.move_range.clear()
+                    self._hex_renderer.attack_range.clear()
+                return
+
+            # Space: skip selected unit turn
+            if event.key == pygame.K_SPACE and self._selected_unit:
+                self._selected_unit.moves_left = 0
+                self._hex_renderer.move_range.clear()
+                self._unit_panel.refresh(game)
+                self._event_log.add_event(f"{self._selected_unit.unit_type} skipped", "info")
+                return
+
+            # Tab: cycle to next unit with moves remaining
+            if event.key == pygame.K_TAB:
+                player_name = game.player_civ.name
+                units = [
+                    u for u in game.units.values()
+                    if getattr(u, "is_alive", False)
+                    and getattr(u, "owner", "") == player_name
+                    and getattr(u, "moves_left", 0) > 0
+                ]
+                if units and self._selected_unit:
+                    try:
+                        idx = units.index(self._selected_unit)
+                        self._select_unit(game, units[(idx + 1) % len(units)])
+                    except ValueError:
+                        self._select_unit(game, units[0])
+                elif units:
+                    self._select_unit(game, units[0])
+                return
+
+            # T: open tech tree
+            if event.key == pygame.K_t:
+                if self._active_popup:
+                    self._active_popup._kill()
+                from pygame_app.popups.tech_tree import TechTreePopup
+                self._active_popup = TechTreePopup(self.ui_manager, game)
+                return
+
+            # D: open diplomacy
+            if event.key == pygame.K_d:
+                if self._active_popup:
+                    self._active_popup._kill()
+                from pygame_app.popups.diplomacy import DiplomacyPopup
+                self._active_popup = DiplomacyPopup(self.ui_manager, game)
+                return
+
+            # Y: open dynasty
+            if event.key == pygame.K_y:
+                if self._active_popup:
+                    self._active_popup._kill()
+                from pygame_app.popups.dynasty import DynastyPopup
+                self._active_popup = DynastyPopup(self.ui_manager, game)
+                return
+
+            # P: open production popup for selected city
+            if event.key == pygame.K_p:
+                if self._active_popup:
+                    self._active_popup._kill()
+                from pygame_app.popups.production import ProductionPopup
+                self._active_popup = ProductionPopup(self.ui_manager, game)
+                return
+
+            # F: fortify selected unit
+            if event.key == pygame.K_f and self._selected_unit:
+                self._selected_unit.is_fortified = True
+                self._event_log.add_event(f"{self._selected_unit.unit_type} fortified", "info")
+                return
+
+            # +/= : zoom in
+            if event.key in (pygame.K_PLUS, pygame.K_EQUALS):
+                mx, my = event.pos
+                self._camera.zoom_at(mx, my, 1.15)
+                return
+
+            # -: zoom out
+            if event.key == pygame.K_MINUS:
+                mx, my = event.pos
+                self._camera.zoom_at(mx, my, 1 / 1.15)
+                return
+
+            # G: toggle yield overlay
+            if event.key == pygame.K_g:
+                self.show_yields = not self.show_yields
+                self._event_log.add_event(
+                    "Yield overlay ON" if self.show_yields else "Yield overlay OFF", "info"
+                )
+                return
 
         # Middle mouse button drag for panning
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
