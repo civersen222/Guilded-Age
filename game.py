@@ -285,7 +285,10 @@ class Game:
             if civ_name == self.player_civ.name:
                 continue
             msgs.append(f"  --- {civ_name}'s turn ---")
-            msgs.extend(self._process_ai_turn(civ_name, civ))
+            ai_msgs = self._process_ai_turn(civ_name, civ)
+            msgs.extend(ai_msgs)
+            
+            self.state.turn_events.extend(ai_msgs)
         
         # Process events
         event = self.event_manager.generate_event()
