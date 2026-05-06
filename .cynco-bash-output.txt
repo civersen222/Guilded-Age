@@ -1,139 +1,121 @@
-diff --git a/pygame_app/panels/event_log.py b/pygame_app/panels/event_log.py
-index 2c7a99e..2f9f548 100644
---- a/pygame_app/panels/event_log.py
-+++ b/pygame_app/panels/event_log.py
-@@ -53,6 +53,7 @@ class EventLog:
-         self._font_bold = pygame.font.SysFont("consolas", 10, bold=True)
-         self._scroll_offset = 0
-         self._max_scroll = 0
-+        self._text_surface: Optional[pygame.Surface] = None
- 
-     def add_event(self, text: str, category: str = "info") -> None:
-         """Add a single color-coded event to the log."""
-@@ -94,15 +95,7 @@ class EventLog:
- 
-     def _render(self) -> None:
-         """Rebuild the HTML text from stored events."""
--        parts: List[str] = []
--        for event, cat in self.events:
--            if cat == "separator":
--                parts.append(f"<font color='#666666'>{event}</font><br>")
--            else:
--                color = CATEGORY_COLORS.get(cat, CATEGORY_COLORS["info"])
--                hex_color = f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
--                parts.append(f"<font color='{hex_color}'>{event}</font><br>")
--        self.text_box.set_html_text("".join(parts))
-+        pass  # draw() renders events directly from self.events
- 
-     def draw(self, surface: pygame.Surface) -> None:
-         """Draw custom event log with polished UI."""
+diff --git a/game.py b/game.py
+index e5244e8..7784f54 100644
+--- a/game.py
++++ b/game.py
+@@ -231,7 +231,8 @@ class Game:
+         root_char = Character(
+             name=f"{self.player_civ.name} Founder",
+             stats={"diplomacy": 10, "martial": 10, "stewardship": 10, "intrigue": 10},
+-            traits=["Charismatic"]
++            traits=["Charismatic"],
++            gender="Male"
+         )
+         self.characters.append(root_char)
+         self.dynasty = Dynasty(root_char, {root_char.id: root_char})
+@@ -273,6 +274,41 @@ class Game:
+         msgs.append(f"TURN {self.state.turn} - {self.state.phase} PHASE")
+         msgs.append(f"{'='*60}")
+         
++        # --- Dynasty: age up ruler, spawn heirs ---
++        civ_name = self.player_civ.name
++        ruler = self.rulers.get(civ_name)
++        if ruler and ruler.is_alive:
++            age_event = ruler.age_up()
++            if age_event:
++                msgs.append(f"  👑 {ruler.name} has died ({age_event})")
++                self.state.turn_events.append(f"Ruler {ruler.name} died: {age_event}")
++                succession_events = self._handle_succession(civ_name, msgs)
++                msgs.extend(succession_events)
++            elif self.dynasty and self.state.turn % 10 == 0:
++                living_children = [c for c in self.dynasty.get_all_members() if c.id != ruler.id and c.is_alive]
++                if not living_children:
++                    potential_spouse = None
++                    for char in self.characters:
++                        if char.id != ruler.id and char.is_alive and char.gender != ruler.gender:
++                            potential_spouse = char
++                            break
++                    if not potential_spouse:
++                        potential_spouse = Character(
++                            name=f"{self.player_civ.name} Consort",
++                            age=random.randint(18, 30),
++                            gender="Female" if ruler.gender == "Male" else "Male",
++                            stats={"diplomacy": 8, "martial": 8, "stewardship": 8, "intrigue": 8},
++                            traits=[]
++                        )
++                        self.characters.append(potential_spouse)
++                    child_name = f"{self.player_civ.name} Heir {len([c for c in self.dynasty.get_all_members() if 'Heir' in c.name]) + 1}"
++                    child = generate_child(child_name, ruler, potential_spouse)
++                    self.dynasty.add_member(child, ruler.id)
++                    self.dynasty_manager.add_member(child)
++                    ruler.children_ids.append(child.id)
++                    msgs.append(f"  👶 {ruler.name} has a new child: {child.name}")
++                    self.state.turn_events.append(f"New heir born: {child.name}")
++
+         # --- Succession check for player ---
+         civ_name = self.player_civ.name
+         ruler = self.rulers.get(civ_name)
 diff --git a/pygame_app/screens/game_screen.py b/pygame_app/screens/game_screen.py
-index 20d117e..b72e273 100644
+index 1409c19..827e5bf 100644
 --- a/pygame_app/screens/game_screen.py
 +++ b/pygame_app/screens/game_screen.py
-@@ -219,32 +219,44 @@ class GameScreen(BaseScreen):
-             if event.key == pygame.K_t:
-                 if self._active_popup:
-                     self._active_popup._kill()
-+                    self._active_popup = None
-                 from pygame_app.popups.tech_tree import TechTreePopup
--                self._active_popup = TechTreePopup(self.ui_manager, game)
-+                popup = TechTreePopup()
-+                popup.show(self.ui_manager, game)
-+                self._active_popup = popup
-                 return
+@@ -184,6 +184,8 @@ class GameScreen(BaseScreen):
+             events = game.state.turn_events or []
+             for evt_text in events:
+                 self._event_log.add_event(str(evt_text), "info")
++            if events:
++                self._turn_summary.show(self.ui_manager, events, game.state.turn)
+             return
  
-             # D: open diplomacy
-             if event.key == pygame.K_d:
-                 if self._active_popup:
-                     self._active_popup._kill()
-+                    self._active_popup = None
-                 from pygame_app.popups.diplomacy import DiplomacyPopup
--                self._active_popup = DiplomacyPopup(self.ui_manager, game)
-+                popup = DiplomacyPopup()
-+                popup.show(self.ui_manager, game)
-+                self._active_popup = popup
-                 return
+         # Enter key = Next Turn
+@@ -201,6 +203,8 @@ class GameScreen(BaseScreen):
+             events = game.state.turn_events or []
+             for evt_text in events:
+                 self._event_log.add_event(str(evt_text), "info")
++            if events:
++                self._turn_summary.show(self.ui_manager, events, game.state.turn)
+             return
  
-             # Y: open dynasty
-             if event.key == pygame.K_y:
-                 if self._active_popup:
-                     self._active_popup._kill()
-+                    self._active_popup = None
-                 from pygame_app.popups.dynasty import DynastyPopup
--                self._active_popup = DynastyPopup(self.ui_manager, game)
-+                popup = DynastyPopup()
-+                popup.show(self.ui_manager, game)
-+                self._active_popup = popup
-                 return
+         # ── Keyboard shortcuts ────────────────────────────────────────────────
+@@ -345,6 +349,7 @@ class GameScreen(BaseScreen):
+                 for city in game.cities.values():
+                     if getattr(city, "owner", "") == player_name and getattr(city, "position", None) == (hx, hy):
+                         self._selected_city = city
++                        self._action_bar.set_mode("city_selected")
+                         self._open_production_popup(game, city)
+                         return
+  
+diff --git a/simulation.py b/simulation.py
+index e21535d..0f498d1 100644
+--- a/simulation.py
++++ b/simulation.py
+@@ -48,7 +48,7 @@ STRESS_THRESHOLDS = {
+ }
  
-             # P: open production popup for selected city
-             if event.key == pygame.K_p:
-                 if self._active_popup:
-                     self._active_popup._kill()
-+                    self._active_popup = None
-                 from pygame_app.popups.production import ProductionPopup
--                self._active_popup = ProductionPopup(self.ui_manager, game)
-+                popup = ProductionPopup()
-+                popup.show(self.ui_manager, None, game)
-+                self._active_popup = popup
-                 return
+ class Character:
+-    def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18):
++    def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18, gender: str = "Male"):
+         self.id = str(uuid.uuid4())[:8]
+         self.name = name
+         self.base_stats = stats  # {'diplomacy', 'martial', 'stewardship', 'intrigue'}
+@@ -58,6 +58,7 @@ class Character:
+         self.is_alive = True
+         self.gold_reserve = 0.0
+         self.age = age
++        self.gender = gender
+         
+         # Stress system
+         self.stress = 0  # range 0-300
+@@ -145,6 +146,13 @@ class Dynasty:
+         self.root = root_ancestor
+         self.all_characters = all_characters
  
-             # F: fortify selected unit
-@@ -357,10 +369,14 @@ class GameScreen(BaseScreen):
-             self._handle_unit_action(action, game)
-         elif action == "Tech Tree":
-             from pygame_app.popups.tech_tree import TechTreePopup
--            self._tech_popup = TechTreePopup(self.ui_manager, game)
-+            popup = TechTreePopup()
-+            popup.show(self.ui_manager, game)
-+            self._tech_popup = popup
-         elif action == "Diplomacy":
-             from pygame_app.popups.diplomacy import DiplomacyPopup
--            self._diplomacy_popup = DiplomacyPopup(self.ui_manager, game)
-+            popup = DiplomacyPopup()
-+            popup.show(self.ui_manager, game)
-+            self._diplomacy_popup = popup
-         elif action == "Production":
-             self._show_production(game)
- 
-@@ -465,7 +481,9 @@ class GameScreen(BaseScreen):
-             # Get first selected city or show all
-             pass
-         from pygame_app.popups.production import ProductionPopup
--        self._production_popup = ProductionPopup(self.ui_manager, game)
-+        popup = ProductionPopup()
-+        popup.show(self.ui_manager, None, game)
-+        self._production_popup = popup
- 
-     def update(self, dt):
-         # WASD / arrow key panning
-@@ -498,6 +516,13 @@ class GameScreen(BaseScreen):
-             self._hex_renderer.update(dt)
-             self._elapsed += dt
- 
-+        # Refresh side panels
-+        game = self.app.game
-+        if self._city_panel:
-+            self._city_panel.refresh(game)
-+        if self._unit_panel:
-+            self._unit_panel.refresh(game)
++    def add_member(self, character: Character, parent_id: str):
++        """Add a new member to the dynasty."""
++        self.all_characters[character.id] = character
++        parent = self.all_characters.get(parent_id)
++        if parent and character.id not in parent.children_ids:
++            parent.children_ids.append(character.id)
 +
-     def _check_needs_attention(self, game) -> bool:
-         """Check if any player units have moves left or cities need production."""
-         civ_name = game.player_civ.name
-@@ -566,6 +591,14 @@ class GameScreen(BaseScreen):
-             self._action_bar.set_needs_attention(needs_attention)
-             self._action_bar.draw(surface)
- 
-+        # ── Draw side panels ──────────────────────────────────────────────
-+        if self._city_panel:
-+            self._city_panel.draw(surface)
-+        if self._unit_panel:
-+            self._unit_panel.draw(surface)
-+        if self._event_log:
-+            self._event_log.draw(surface)
-+
-         # ── Map surface ───────────────────────────────────────────────────
-         self._map_surface.fill(BG)
-         if self._hex_renderer:
+     def get_all_members(self) -> List[Character]:
+         members = []
+         visited = set()

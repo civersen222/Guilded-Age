@@ -231,7 +231,8 @@ class Game:
         root_char = Character(
             name=f"{self.player_civ.name} Founder",
             stats={"diplomacy": 10, "martial": 10, "stewardship": 10, "intrigue": 10},
-            traits=["Charismatic"]
+            traits=["Charismatic"],
+            gender="Male"
         )
         self.characters.append(root_char)
         self.dynasty = Dynasty(root_char, {root_char.id: root_char})
@@ -273,6 +274,41 @@ class Game:
         msgs.append(f"TURN {self.state.turn} - {self.state.phase} PHASE")
         msgs.append(f"{'='*60}")
         
+        # --- Dynasty: age up ruler, spawn heirs ---
+        civ_name = self.player_civ.name
+        ruler = self.rulers.get(civ_name)
+        if ruler and ruler.is_alive:
+            age_event = ruler.age_up()
+            if age_event:
+                msgs.append(f"  👑 {ruler.name} has died ({age_event})")
+                self.state.turn_events.append(f"Ruler {ruler.name} died: {age_event}")
+                succession_events = self._handle_succession(civ_name, msgs)
+                msgs.extend(succession_events)
+            elif self.dynasty and self.state.turn % 10 == 0:
+                living_children = [c for c in self.dynasty.get_all_members() if c.id != ruler.id and c.is_alive]
+                if not living_children:
+                    potential_spouse = None
+                    for char in self.characters:
+                        if char.id != ruler.id and char.is_alive and char.gender != ruler.gender:
+                            potential_spouse = char
+                            break
+                    if not potential_spouse:
+                        potential_spouse = Character(
+                            name=f"{self.player_civ.name} Consort",
+                            age=random.randint(18, 30),
+                            gender="Female" if ruler.gender == "Male" else "Male",
+                            stats={"diplomacy": 8, "martial": 8, "stewardship": 8, "intrigue": 8},
+                            traits=[]
+                        )
+                        self.characters.append(potential_spouse)
+                    child_name = f"{self.player_civ.name} Heir {len([c for c in self.dynasty.get_all_members() if 'Heir' in c.name]) + 1}"
+                    child = generate_child(child_name, ruler, potential_spouse)
+                    self.dynasty.add_member(child, ruler.id)
+                    self.dynasty_manager.add_member(child)
+                    ruler.children_ids.append(child.id)
+                    msgs.append(f"  👶 {ruler.name} has a new child: {child.name}")
+                    self.state.turn_events.append(f"New heir born: {child.name}")
+
         # --- Succession check for player ---
         civ_name = self.player_civ.name
         ruler = self.rulers.get(civ_name)

@@ -184,6 +184,8 @@ class GameScreen(BaseScreen):
             events = game.state.turn_events or []
             for evt_text in events:
                 self._event_log.add_event(str(evt_text), "info")
+            if events:
+                self._turn_summary.show(self.ui_manager, events, game.state.turn)
             return
 
         # Enter key = Next Turn
@@ -201,6 +203,8 @@ class GameScreen(BaseScreen):
             events = game.state.turn_events or []
             for evt_text in events:
                 self._event_log.add_event(str(evt_text), "info")
+            if events:
+                self._turn_summary.show(self.ui_manager, events, game.state.turn)
             return
 
         # ── Keyboard shortcuts ────────────────────────────────────────────────
@@ -345,6 +349,7 @@ class GameScreen(BaseScreen):
                 for city in game.cities.values():
                     if getattr(city, "owner", "") == player_name and getattr(city, "position", None) == (hx, hy):
                         self._selected_city = city
+                        self._action_bar.set_mode("city_selected")
                         self._open_production_popup(game, city)
                         return
  

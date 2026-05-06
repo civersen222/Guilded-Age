@@ -48,7 +48,7 @@ STRESS_THRESHOLDS = {
 }
 
 class Character:
-    def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18):
+    def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18, gender: str = "Male"):
         self.id = str(uuid.uuid4())[:8]
         self.name = name
         self.base_stats = stats  # {'diplomacy', 'martial', 'stewardship', 'intrigue'}
@@ -58,6 +58,7 @@ class Character:
         self.is_alive = True
         self.gold_reserve = 0.0
         self.age = age
+        self.gender = gender
         
         # Stress system
         self.stress = 0  # range 0-300
@@ -144,6 +145,13 @@ class Dynasty:
     def __init__(self, root_ancestor: Character, all_characters: Dict[str, Character]):
         self.root = root_ancestor
         self.all_characters = all_characters
+
+    def add_member(self, character: Character, parent_id: str):
+        """Add a new member to the dynasty."""
+        self.all_characters[character.id] = character
+        parent = self.all_characters.get(parent_id)
+        if parent and character.id not in parent.children_ids:
+            parent.children_ids.append(character.id)
 
     def get_all_members(self) -> List[Character]:
         members = []
