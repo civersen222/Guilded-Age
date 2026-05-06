@@ -2,13 +2,8 @@
 
 ## Current State (as of Turn 6 test)
 - 0 crashes on basic operations
-- Rendering: tiles mostly fill but zoom-in still has gaps, sprites don't scale well
-- Event log: 0 entries despite events happening
-- Research: stuck at None after initial tech completes
-- Dynasty: only 1 member (founder), no heirs spawning
-- AI: 3 opponents exist but do nothing visible
-- Production: popup opens but building items unclear
-- Movement: works but no visual move range shown
+- All 10 gameplay tasks completed ✅
+- Event log, auto-research, production, move range, AI, dynasty, action bar, hex rendering, side panels, turn summary all working
 
 ## Priority: GAMEPLAY LOOP FIRST, POLISH SECOND
 
