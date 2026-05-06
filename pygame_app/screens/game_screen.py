@@ -437,6 +437,12 @@ class GameScreen(BaseScreen):
             self._show_production(game, self._selected_city)
         elif action == "Settle":
             self._settle_city(game)
+        elif action == "Deselect":
+            self._selected_unit = None
+            self._selected_city = None
+            self._action_bar.set_mode("default")
+            self._hex_renderer.move_range.clear()
+            self._hex_renderer.attack_range.clear()
 
     def _save_game(self, game) -> None:
         """Save the current game state."""

@@ -29,19 +29,19 @@ ACTION_BUTTONS = {
     ],
     "unit_selected": [
         ("Move", "Move"),
-        ("Attack", "Attack"),
         ("Fortify", "Fortify"),
         ("Skip", "Skip"),
+        ("Deselect", "Deselect"),
     ],
     "settler_selected": [
         ("Settle", "Settle"),
         ("Move", "Move"),
-        ("Attack", "Attack"),
-        ("Fortify", "Fortify"),
         ("Skip", "Skip"),
+        ("Deselect", "Deselect"),
     ],
     "city_selected": [
         ("Production", "Production"),
+        ("Deselect", "Deselect"),
     ],
 }
 
