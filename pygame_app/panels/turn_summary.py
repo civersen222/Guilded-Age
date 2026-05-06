@@ -61,10 +61,9 @@ class TurnSummary:
         cy = (SCREEN_HEIGHT - self.HEIGHT) // 2
 
         self.window = pygame_gui.elements.UIWindow(
-            relative_rect=pygame.Rect(cx, cy, self.WIDTH, self.HEIGHT),
-            window_title=f"Turn {turn} Summary",
+            pygame.Rect(cx, cy, self.WIDTH, self.HEIGHT),
             manager=ui_manager,
-            window_type="modal",
+            window_display_title=f"Turn {turn} Summary",
         )
 
         self.text_box = pygame_gui.elements.UITextBox(
