@@ -167,19 +167,20 @@ class ProductionPopup:
             return True
 
         researched = None
-        if self._game and hasattr(self._game, "research"):
-            player_name = getattr(self._game.player_civ, "name", "")
-            tm = self._game.research.get(player_name)
-            if tm:
-                researched = getattr(tm, "researched_techs", set())
+        if self._game and hasattr(self._game, "tech_manager"):
+            tm = self._game.tech_manager
+            researched = set(getattr(tm, "researched", {}).keys())
 
         owned_res = None
         if self._game and hasattr(self._game, "economy"):
-            owned_res = set(getattr(self._game.economy, "resources", {}))
+            owned_res = set(getattr(self._game.economy, "resources", {}).keys())
 
-        success = self._city.assign_production(item_id, researched, owned_res)
+        success = self._city.assign_production(item_id, researched_techs=researched, owned_resources=owned_res)
         if success:
             self._refresh()
+            if self.info_textbox is not None:
+                self.info_textbox.html_text = f"[green]Building [bold]{item_id}[/bold]![/green]" + self.info_textbox.html_text
+                self.info_textbox.rebuild()
         return True
 
     def _kill(self) -> None:
