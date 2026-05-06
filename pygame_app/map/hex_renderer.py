@@ -403,9 +403,8 @@ class HexRenderer:
             terrain_name = tile.terrain.name
             # Scale tile to match current zoom level
             zoom_tag = self.tile_atlas._nearest_zoom(zoom)
-            target_size = int(HEX_SIZE * 2.5 * zoom)
-            if target_size < 4:
-                target_size = 4
+            target_w = max(4, int(HEX_SIZE * 2.0 * zoom * 1.18))
+            target_h = max(4, int(HEX_SIZE * 1.732 * zoom * 1.18))
             cache_key = (terrain_name, zoom_tag)
             if cache_key in self._tile_zoom_cache:
                 tile_surface = self._tile_zoom_cache[cache_key]
@@ -415,7 +414,7 @@ class HexRenderer:
                     # Error indicator from atlas
                     tile_surface = base_tile
                 else:
-                    tile_surface = pygame.transform.smoothscale(base_tile, (target_size, target_size))
+                    tile_surface = pygame.transform.smoothscale(base_tile, (target_w, target_h))
                 self._tile_zoom_cache[cache_key] = tile_surface
 
             # Center tile on hex center using actual tile dimensions
@@ -506,7 +505,7 @@ class HexRenderer:
             tier = self._get_city_tier(pop)
             sprite = self._city_sprites.get(tier)
             if sprite:
-                scaled_size = int(64 * zoom)
+                scaled_size = max(16, int(64 * zoom))
                 cache_key = (tier, scaled_size)
                 if cache_key not in self._zoomed_city_sprites:
                     self._zoomed_city_sprites[cache_key] = pygame.transform.smoothscale(sprite, (scaled_size, scaled_size))
@@ -575,7 +574,7 @@ class HexRenderer:
             # Try exact match, then lowercase key lookup
             sprite = self._unit_sprites.get(unit_type) or self._unit_sprites.get(unit_type.lower())
             if sprite:
-                scaled_size = int(48 * zoom)
+                scaled_size = max(12, int(48 * zoom))
                 cache_key = (unit_type, scaled_size)
                 if cache_key not in self._zoomed_unit_sprites:
                     self._zoomed_unit_sprites[cache_key] = pygame.transform.smoothscale(sprite, (scaled_size, scaled_size))
