@@ -30,7 +30,7 @@ class UnitPanel:
         )
         self.unit_buttons: Dict[pygame_gui.elements.UIButton, Any] = {}
         self._last_unit_keys: tuple = ()
-       self._font = pygame.font.SysFont("consolas", 14)
+        self._font = pygame.font.SysFont("consolas", 14)
         self._font_bold = pygame.font.SysFont("consolas", 14, bold=True)
 
     def refresh(self, game: Any) -> None:
