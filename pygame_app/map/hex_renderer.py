@@ -403,8 +403,7 @@ class HexRenderer:
             terrain_name = tile.terrain.name
             # Scale tile to match current zoom level
             zoom_tag = self.tile_atlas._nearest_zoom(zoom)
-            target_w = max(4, int(HEX_SIZE * 2.0 * zoom * 1.18))
-            target_h = max(4, int(HEX_SIZE * 1.732 * zoom * 1.18))
+            target_size = max(8, int(HEX_SIZE * 3.0 * zoom))
             cache_key = (terrain_name, zoom_tag)
             if cache_key in self._tile_zoom_cache:
                 tile_surface = self._tile_zoom_cache[cache_key]
@@ -414,7 +413,7 @@ class HexRenderer:
                     # Error indicator from atlas
                     tile_surface = base_tile
                 else:
-                    tile_surface = pygame.transform.smoothscale(base_tile, (target_w, target_h))
+                    tile_surface = pygame.transform.smoothscale(base_tile, (target_size, target_size))
                 self._tile_zoom_cache[cache_key] = tile_surface
 
             # Center tile on hex center using actual tile dimensions
