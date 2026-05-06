@@ -174,9 +174,9 @@ class GameScreen(BaseScreen):
             game.process_turn()
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
-            turn_events = getattr(game.state, "turn_events", [])
-            if turn_events:
-                self._event_log.add_turn_events(turn_events, game.state.turn)
+            events = game.state.turn_events or []
+            for evt_text in events:
+                self._event_log.add_event(str(evt_text), "info")
             return
 
         # Enter key = Next Turn
@@ -184,9 +184,9 @@ class GameScreen(BaseScreen):
             game.process_turn()
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
-            turn_events = getattr(game.state, "turn_events", [])
-            if turn_events:
-                self._event_log.add_turn_events(turn_events, game.state.turn)
+            events = game.state.turn_events or []
+            for evt_text in events:
+                self._event_log.add_event(str(evt_text), "info")
             return
 
         # ── Keyboard shortcuts ────────────────────────────────────────────────
@@ -385,9 +385,9 @@ class GameScreen(BaseScreen):
             self._city_panel.refresh(game)
             self._unit_panel.refresh(game)
             self._event_log.add_event(f"Turn advanced to turn {game.state.turn}", "info")
-            turn_events = getattr(game.state, "turn_events", [])
-            if turn_events:
-                self._event_log.add_turn_events(turn_events, game.state.turn)
+            events = game.state.turn_events or []
+            for evt_text in events:
+                self._event_log.add_event(str(evt_text), "info")
         elif action == "Save":
             self._save_game(game)
         elif action in ("Move", "Attack", "Fortify", "Skip"):
