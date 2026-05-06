@@ -172,6 +172,13 @@ class GameScreen(BaseScreen):
                 and hasattr(self, "_next_turn_btn")
                 and event.ui_element == self._next_turn_btn):
             game.process_turn()
+            if game.tech_manager.current_research is None:
+                available = game.tech_manager.get_available_techs()
+                if available:
+                    tech = available[0]
+                    tech_name = tech.name if hasattr(tech, 'name') else str(tech)
+                    game.tech_manager.start_research(tech)
+                    self._event_log.add_event(f"Auto-researching: {tech_name}", "science")
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
             events = game.state.turn_events or []
@@ -182,6 +189,13 @@ class GameScreen(BaseScreen):
         # Enter key = Next Turn
         if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
             game.process_turn()
+            if game.tech_manager.current_research is None:
+                available = game.tech_manager.get_available_techs()
+                if available:
+                    tech = available[0]
+                    tech_name = tech.name if hasattr(tech, 'name') else str(tech)
+                    game.tech_manager.start_research(tech)
+                    self._event_log.add_event(f"Auto-researching: {tech_name}", "science")
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
             events = game.state.turn_events or []
@@ -381,6 +395,13 @@ class GameScreen(BaseScreen):
         """Handle an action from the action bar."""
         if action == "Next Turn":
             game.process_turn()
+            if game.tech_manager.current_research is None:
+                available = game.tech_manager.get_available_techs()
+                if available:
+                    tech = available[0]
+                    tech_name = tech.name if hasattr(tech, 'name') else str(tech)
+                    game.tech_manager.start_research(tech)
+                    self._event_log.add_event(f"Auto-researching: {tech_name}", "science")
             self._resource_bar.refresh(game)
             self._city_panel.refresh(game)
             self._unit_panel.refresh(game)
