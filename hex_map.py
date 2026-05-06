@@ -814,26 +814,22 @@ class HexMap:
         return "\n".join(display)
 
     def get_starting_tile(self) -> Tuple[int, int]:
-        """Get a random tile for the player's starting position with adequate resources."""
-        land_terrains = {TerrainType.PLAINS, TerrainType.GRASSLAND, TerrainType.FOREST, TerrainType.HILLS}
-        land_tiles = [(x, y) for (x, y), t in self.terrain_map.items() if t in land_terrains]
-
-        valid_starts = []
-        for x, y in land_tiles:
-            land_neighbors = sum(1 for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]
-                               if (x + dx, y + dy) in self.terrain_map and self.terrain_map[(x + dx, y + dy)] in land_terrains)
-            if land_neighbors >= 3:
-                valid_starts.append((x, y))
-
-        if valid_starts:
-            return random.choice(valid_starts)
-        elif land_tiles:
+        """Get a land tile near the center of the map for the player's starting position."""
+        cx, cy = self.width // 2, self.height // 2
+        non_water = {TerrainType.PLAINS, TerrainType.GRASSLAND, TerrainType.FOREST, TerrainType.HILLS, TerrainType.MOUNTAIN, TerrainType.DESERT, TerrainType.TUNDRA}
+        for ring in range(max(self.width, self.height)):
+            candidates = []
+            for dx in range(-ring, ring + 1):
+                for dy in range(-ring, ring + 1):
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < self.width and 0 <= ny < self.height:
+                        if self.terrain_map.get((nx, ny)) in non_water:
+                            candidates.append((nx, ny))
+            if candidates:
+                return random.choice(candidates)
+        land_tiles = [(x, y) for (x, y), t in self.terrain_map.items() if t not in (TerrainType.OCEAN, TerrainType.WATER_COAST)]
+        if land_tiles:
             return random.choice(land_tiles)
-        # Fallback: find any non-ocean tile
-        land_tiles2 = [(x, y) for (x, y), t in self.terrain_map.items()
-                       if t not in (TerrainType.OCEAN, TerrainType.WATER_COAST)]
-        if land_tiles2:
-            return random.choice(land_tiles2)
         return (0, 0)
 
     def add_city(self, city) -> None:
