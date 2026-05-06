@@ -30,8 +30,8 @@ class UnitPanel:
         )
         self.unit_buttons: Dict[pygame_gui.elements.UIButton, Any] = {}
         self._last_unit_keys: tuple = ()
-        self._font = pygame.font.SysFont("consolas", 11)
-        self._font_bold = pygame.font.SysFont("consolas", 11, bold=True)
+       self._font = pygame.font.SysFont("consolas", 14)
+        self._font_bold = pygame.font.SysFont("consolas", 14, bold=True)
 
     def refresh(self, game: Any) -> None:
         """Rebuild unit buttons only when the unit list actually changes."""
@@ -85,38 +85,19 @@ class UnitPanel:
             moves = getattr(unit, "moves_left", 0)
             unit_type = getattr(unit, "unit_type", "Unknown")
 
-            # Unit type in gold
+        # Unit type in gold
             type_surf = self._font_bold.render(unit_type, True, GOLD_TEXT)
-            surface.blit(type_surf, (rect.x + 10, rect.y + 3))
+            surface.blit(type_surf, (rect.x + 10, rect.y + 4))
 
-            # HP bar background
-            bar_w = rect.width - 40
-            bar_h = 6
-            bar_x = rect.x + 10
-            bar_y = rect.y + 20
-            pygame.draw.rect(surface, (20, 20, 20), (bar_x, bar_y, bar_w, bar_h), border_radius=2)
-
-            # HP bar fill
-            hp_ratio = max(0, hp / max_hp) if max_hp > 0 else 0
-            if hp_ratio > 0.5:
-                hp_color = GREEN
-            elif hp_ratio > 0.25:
-                hp_color = GOLD_TEXT
-            else:
-                hp_color = RED
-            pygame.draw.rect(surface, hp_color,
-                             (bar_x, bar_y, int(bar_w * hp_ratio), bar_h), border_radius=2)
-
-            # HP text
-            hp_text = f"{hp}/{max_hp}"
+            # HP and moves on one line
+            hp_text = f"HP:{hp}/{max_hp}"
             hp_surf = self._font.render(hp_text, True, WHITE_TEXT)
-            surface.blit(hp_surf, (bar_x + bar_w - hp_surf.get_width() - 2, bar_y - 1))
+            surface.blit(hp_surf, (rect.x + 10, rect.y + 22))
 
-            # Moves indicator
             mv_color = GOLD_TEXT if moves > 0 else SUBTLE
             mv_text = f"Mv:{moves}" if moves > 0 else "——"
             mv_surf = self._font.render(mv_text, True, mv_color)
-            surface.blit(mv_surf, (rect.x + rect.width - mv_surf.get_width() - 10, rect.y + 3))
+            surface.blit(mv_surf, (rect.x + rect.width - mv_surf.get_width() - 10, rect.y + 22))
 
     def handle_event(self, event) -> Optional[Any]:
         """If a unit button was pressed, return the unit. Otherwise None."""

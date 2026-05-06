@@ -31,8 +31,8 @@ class CityPanel:
         )
         self.city_buttons: Dict[pygame_gui.elements.UIButton, Any] = {}
         self._last_city_keys: tuple = ()
-        self._font = pygame.font.SysFont("consolas", 11)
-        self._font_bold = pygame.font.SysFont("consolas", 11, bold=True)
+        self._font = pygame.font.SysFont("consolas", 14)
+        self._font_bold = pygame.font.SysFont("consolas", 14, bold=True)
 
     def refresh(self, game: Any) -> None:
         """Rebuild city buttons only when the city list actually changes."""
@@ -94,18 +94,15 @@ class CityPanel:
             prod = getattr(city, "current_production", None)
             prod_name = getattr(prod, "name", "IDLE") if prod else "IDLE"
 
-            # Name in gold
-            name_surf = self._font_bold.render(name, True, GOLD_TEXT)
-            surface.blit(name_surf, (rect.x + 10, rect.y + 4))
+            # Full city name with population
+            city_text = f"{name} (Pop {pop})"
+            city_surf = self._font_bold.render(city_text, True, GOLD_TEXT)
+            surface.blit(city_surf, (rect.x + 10, rect.y + 4))
 
-            # Population in white
-            pop_surf = self._font.render(f"Pop:{pop}", True, WHITE_TEXT)
-            surface.blit(pop_surf, (rect.x + 10, rect.y + 20))
-
-            # Production in subtle color
-            prod_surf = self._font.render(f"→ {prod_name}", True, SUBTLE)
+            # Production indicator
+            prod_surf = self._font.render(f"[{prod_name}]", True, SUBTLE)
             px = rect.x + rect.width - prod_surf.get_width() - 10
-            surface.blit(prod_surf, (px, rect.y + 20))
+            surface.blit(prod_surf, (px, rect.y + 22))
 
     def handle_event(self, event) -> Optional[Any]:
         """If a city button was pressed, return the city. Otherwise None."""
