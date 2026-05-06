@@ -172,6 +172,17 @@ class GameScreen(BaseScreen):
                 and hasattr(self, "_next_turn_btn")
                 and event.ui_element == self._next_turn_btn):
             game.process_turn()
+            # Reveal fog for all player units/cities after turn
+            sources = []
+            for city in game.cities.values():
+                if getattr(city, "owner", None) == game.player_civ.name:
+                    pos = getattr(city, "position", (0, 0))
+                    sources.append((pos[0], pos[1], 3))
+            for u in game.units.values():
+                if getattr(u, "owner", None) == game.player_civ.name:
+                    pos = getattr(u, "position", (0, 0))
+                    sources.append((pos[0], pos[1], 2))
+            game.fog.update_visibility(sources)
             if game.tech_manager.current_research is None:
                 available = game.tech_manager.get_available_techs()
                 if available:
@@ -191,6 +202,17 @@ class GameScreen(BaseScreen):
         # Enter key = Next Turn
         if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
             game.process_turn()
+            # Reveal fog for all player units/cities after turn
+            sources = []
+            for city in game.cities.values():
+                if getattr(city, "owner", None) == game.player_civ.name:
+                    pos = getattr(city, "position", (0, 0))
+                    sources.append((pos[0], pos[1], 3))
+            for u in game.units.values():
+                if getattr(u, "owner", None) == game.player_civ.name:
+                    pos = getattr(u, "position", (0, 0))
+                    sources.append((pos[0], pos[1], 2))
+            game.fog.update_visibility(sources)
             if game.tech_manager.current_research is None:
                 available = game.tech_manager.get_available_techs()
                 if available:
@@ -492,6 +514,17 @@ class GameScreen(BaseScreen):
         success = game.military_manager.move_unit(unit, (hx, hy))
         if success:
             self._event_log.add_event(f"{unit.unit_type} moved to ({hx},{hy})", "success")
+            # Reveal fog around new unit position
+            sources = []
+            for city in game.cities.values():
+                if getattr(city, "owner", None) == game.player_civ.name:
+                    pos = getattr(city, "position", (0, 0))
+                    sources.append((pos[0], pos[1], 3))
+            for u in game.units.values():
+                if getattr(u, "owner", None) == game.player_civ.name:
+                    pos = getattr(u, "position", (0, 0))
+                    sources.append((pos[0], pos[1], 2))
+            game.fog.update_visibility(sources)
             # Recalculate move range
             moves_left = getattr(unit, "moves_left", 0)
             if moves_left > 0:
