@@ -170,10 +170,13 @@ class Game:
             for tn in civ.starting_tech:
                 if tn in TECHNOLOGIES:
                     self.research[civ_name].research(tn, civ_name)
+            ai_neighbors = self.map.get_neighbors(tile[0], tile[1])
+            ai_land_neighbors = [n for n in ai_neighbors if n.terrain not in (TerrainType.WATER_COAST, TerrainType.OCEAN)]
+            ai_warrior_pos = (ai_land_neighbors[0].x, ai_land_neighbors[0].y) if ai_land_neighbors else tile
             warrior = Unit(
                 unit_type="Militia",
                 owner=civ_name,
-                position=tile,
+                position=ai_warrior_pos,
                 moves_left=1,
             )
             warrior.name = f"{civ_name} Militia"
@@ -199,17 +202,21 @@ class Game:
         self.cities[starting_city.name] = starting_city
         self.map.add_city(starting_city)
         
-        # Create starting units
+        # Create starting units on adjacent land tiles
+        neighbors = self.map.get_neighbors(start_tile[0], start_tile[1])
+        land_neighbors = [n for n in neighbors if n.terrain not in (TerrainType.WATER_COAST, TerrainType.OCEAN)]
+        settler_pos = (land_neighbors[0].x, land_neighbors[0].y) if land_neighbors else start_tile
+        warrior_pos = (land_neighbors[1].x, land_neighbors[1].y) if len(land_neighbors) > 1 else settler_pos
         settler = Unit(
             unit_type="Settler",
             owner=self.player_civ.name,
-            position=start_tile,
+            position=settler_pos,
             moves_left=2
         )
         warrior = Unit(
             unit_type="Militia",
             owner=self.player_civ.name,
-            position=start_tile,
+            position=warrior_pos,
             moves_left=1
         )
         self.units[settler.name] = settler
@@ -532,7 +539,7 @@ class Game:
         # --- Clean up dead units ---
         dead_units = [name for name, unit in self.units.items() if not unit.is_alive]
         for name in dead_units:
-            self.map.remove_unit(self.units[name])
+            self.military_manager.remove_unit(self.units[name])
             del self.units[name]
         if dead_units:
             msgs.append(f"\n  💀 {len(dead_units)} dead unit(s) removed from game")
