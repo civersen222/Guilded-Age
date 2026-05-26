@@ -57,6 +57,9 @@ class Game:
     """Main game class that orchestrates all systems"""
     
     def __init__(self, player_civ: Civilization, ai_civs: Optional[List[Civilization]] = None, map_width: int = 16, map_height: int = 16):
+        if not ai_civs:
+            ai_civs = ["Rome", "Greece"]
+        
         # Game state
         self.state = GameState()
         
@@ -73,6 +76,8 @@ class Game:
         self.civilizations: Dict[str, Civilization] = {player_civ.name: self.player_civ}
         if ai_civs:
             for civ in ai_civs:
+                if isinstance(civ, str):
+                    civ = CIVILIZATIONS[civ]
                 self.civilizations[civ.name] = civ
         
         # Systems
