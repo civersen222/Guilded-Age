@@ -1,32 +1,36 @@
 [llama-cpp] Binary: C:\Users\civer\.cynco\bin\llama-server.exe
 [llama-cpp] Model: C:\Users\civer\.cynco\models\qwen3.6\Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
 [llama-cpp] Starting: C:\Users\civer\.cynco\bin\llama-server.exe --model C:\Users\civer\.cynco\models\qwen3.6\Qwen3.6-35B-A3B-UD-Q4_K_M.gguf --port 8081 --host 127.0.0.1 --ctx-size 32768 --n-gpu-layers 999 --batch-size 2048 --flash-attn on
+[llama-server] ggml_cuda_init: found 1 CUDA devices (Total VRAM: 32606 MiB):
+  Device 0: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32606 MiB
+load_backend: loaded CUDA backend from C:\Users\civer\.cynco\bin\ggml-cuda.dll
 [llama-server] load_backend: loaded RPC backend from C:\Users\civer\.cynco\bin\ggml-rpc.dll
 [llama-server] load_backend: loaded CPU backend from C:\Users\civer\.cynco\bin\ggml-cpu-zen4.dll
 [llama-server] main: n_parallel is set to auto, using n_parallel = 4 and kv_unified = true
 [llama-server] build_info: b9009-0754b7b6f
-system_info: n_threads = 16 (n_threads_batch = 16) / 32 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+[llama-server] system_info: n_threads = 16 (n_threads_batch = 16) / 32 | CUDA : ARCHS = 500,610,700,750,800,860,890 | USE_GRAPHS = 1 | PEER_MAX_BATCH_SIZE = 128 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
 Running without SSL
-[llama-server] init: using 31 threads for HTTP server
+init: using 31 threads for HTTP server
 [llama-server] start: binding port with default address family
 [llama-server] main: loading model
 srv    load_model: loading model 'C:\Users\civer\.cynco\models\qwen3.6\Qwen3.6-35B-A3B-UD-Q4_K_M.gguf'
 [llama-server] common_init_result: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on
 common_params_fit_impl: getting device memory data for initial parameters:
-[llama-server] common_memory_breakdown_print: | memory breakdown [MiB] | total   free     self   model   context   compute    unaccounted |
-common_memory_breakdown_print: |   - Host               |                 10970 =  9578 +     891 +     501                |
-common_memory_breakdown_print: |   - CPU_REPACK         |                 11520 = 11520 +       0 +       0                |
-[llama-server] common_params_fit_impl: projected to use 10970 MiB of host memory vs. 65080 MiB of total host memory
-common_params_fit_impl: will leave 54109 >= 1024 MiB of system memory, no changes needed
-[llama-server] common_fit_params: successfully fit params to free device memory
-common_fit_params: fitting params to free memory took 0.32 seconds
+[llama-server] common_memory_breakdown_print: | memory breakdown [MiB] | total    free     self   model   context   compute    unaccounted |
+common_memory_breakdown_print: |   - CUDA0 (RTX 5090)   | 32606 = 30675 + (21967 = 20583 +     891 +     493) +      -20036 |
+common_memory_breakdown_print: |   - Host               |                    587 =   515 +       0 +      72                |
+[llama-server] common_params_fit_impl: projected to use 21967 MiB of device memory vs. 30675 MiB of free device memory
+common_params_fit_impl: will leave 8707 >= 1024 MiB of free device memory, no changes needed
+common_fit_params: successfully fit params to free device memory
+common_fit_params: fitting params to free memory took 0.34 seconds
+[llama-server] llama_model_load_from_file_impl: using device CUDA0 (NVIDIA GeForce RTX 5090) (0000:01:00.0) - 30927 MiB free
 [llama-server] llama_model_loader: loaded meta data with 54 key-value pairs and 733 tensors from C:\Users\civer\.cynco\models\qwen3.6\Qwen3.6-35B-A3B-UD-Q4_K_M.gguf (version GGUF V3 (latest))
 llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
 llama_model_loader: - kv   0:                       general.architecture str              = qwen35moe
 llama_model_loader: - kv   1:                               general.type str              = model
 llama_model_loader: - kv   2:                     general.sampling.top_k i32              = 20
 llama_model_loader: - kv   3:                     general.sampling.top_p f32              = 0.950000
-llama_model_loader: - kv   4:                      general.sampling.temp f32              = 1.000000
+[llama-server] llama_model_loader: - kv   4:                      general.sampling.temp f32              = 1.000000
 llama_model_loader: - kv   5:                               general.name str              = Qwen3.6-35B-A3B
 llama_model_loader: - kv   6:                           general.basename str              = Qwen3.6-35B-A3B
 llama_model_loader: - kv   7:                       general.quantized_by str              = Unsloth
@@ -39,7 +43,7 @@ llama_model_loader: - kv  13:                  general.base_model.0.name str    
 llama_model_loader: - kv  14:          general.base_model.0.organization str              = Qwen
 llama_model_loader: - kv  15:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3.6-3...
 llama_model_loader: - kv  16:                               general.tags arr[str,3]       = ["qwen3_5_moe", "qwen", "image-text-t...
-[llama-server] llama_model_loader: - kv  17:                      qwen35moe.block_count u32              = 40
+llama_model_loader: - kv  17:                      qwen35moe.block_count u32              = 40
 llama_model_loader: - kv  18:                   qwen35moe.context_length u32              = 262144
 llama_model_loader: - kv  19:                 qwen35moe.embedding_length u32              = 2048
 llama_model_loader: - kv  20:             qwen35moe.attention.head_count u32              = 16
@@ -78,12 +82,12 @@ llama_model_loader: - kv  52:             quantize.imatrix.entries_count u32    
 llama_model_loader: - kv  53:              quantize.imatrix.chunks_count u32              = 76
 llama_model_loader: - type  f32:  361 tensors
 llama_model_loader: - type q8_0:  251 tensors
-llama_model_loader: - type q4_K:   80 tensors
+[llama-server] llama_model_loader: - type q4_K:   80 tensors
 llama_model_loader: - type q5_K:   37 tensors
 llama_model_loader: - type q6_K:    4 tensors
 print_info: file format = GGUF V3 (latest)
 print_info: file type   = Q4_K - Medium
-[llama-server] print_info: file size   = 20.60 GiB (5.11 BPW)
+print_info: file size   = 20.60 GiB (5.11 BPW)
 [llama-server] load: 0 unused tokens
 [llama-server] load: printing all EOG tokens:
 load:   - 248044 ('<|endoftext|>')
@@ -95,7 +99,7 @@ load:   - 248065 ('<|file_sep|>')
 [llama-server] load: token to piece cache size = 1.7581 MB
 print_info: arch                  = qwen35moe
 print_info: vocab_only            = 0
-print_info: no_alloc              = 0
+[llama-server] print_info: no_alloc              = 0
 print_info: n_ctx_train           = 262144
 print_info: n_embd                = 2048
 print_info: n_embd_inp            = 2048
@@ -116,7 +120,7 @@ print_info: f_clamp_kqv           = 0.0e+00
 print_info: f_max_alibi_bias      = 0.0e+00
 print_info: f_logit_scale         = 0.0e+00
 print_info: f_attn_scale          = 0.0e+00
-[llama-server] print_info: n_ff                  = 0
+print_info: n_ff                  = 0
 print_info: n_expert              = 256
 print_info: n_expert_used         = 8
 print_info: n_expert_groups       = 0
@@ -164,21 +168,9 @@ load_tensors: loading model tensors, this can take a while... (mmap = true, dire
 [llama-server] load_tensors: offloading output layer to GPU
 load_tensors: offloading 39 repeating layers to GPU
 load_tensors: offloaded 41/41 layers to GPU
-load_tensors:   CPU_Mapped model buffer size = 21098.65 MiB
-load_tensors:   CPU_REPACK model buffer size = 11520.00 MiB
-..
-[llama-server] .......
-[llama-server] .
-[llama-server] .
-[llama-server] .
-[llama-server] .
-[llama-server] .
-[llama-server] .
-[llama-server] .
-[llama-server] ...
-[llama-server] .
-[llama-server] .
-[llama-server] ..
+load_tensors:   CPU_Mapped model buffer size =   515.31 MiB
+load_tensors:        CUDA0 model buffer size = 20583.34 MiB
+.
 [llama-server] .
 [llama-server] .
 [llama-server] .
@@ -192,7 +184,30 @@ load_tensors:   CPU_REPACK model buffer size = 11520.00 MiB
 [llama-server] .
 [llama-server] .
 [llama-server] .
-[llama-server] ..
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
+[llama-server] .
 [llama-server] .
 [llama-server] .
 [llama-server] .
@@ -270,21 +285,22 @@ llama_context: kv_unified    = true
 llama_context: freq_base     = 10000000.0
 llama_context: freq_scale    = 1
 llama_context: n_ctx_seq (32768) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
-[llama-server] llama_context:        CPU  output buffer size =     3.79 MiB
-[llama-server] llama_kv_cache:        CPU KV buffer size =   640.00 MiB
+[llama-server] llama_context:  CUDA_Host  output buffer size =     3.79 MiB
+[llama-server] llama_kv_cache:      CUDA0 KV buffer size =   640.00 MiB
 [llama-server] llama_kv_cache: size =  640.00 MiB ( 32768 cells,  10 layers,  4/1 seqs), K (f16):  320.00 MiB, V (f16):  320.00 MiB
 llama_kv_cache: attn_rot_k = 0, n_embd_head_k_all = 256
 llama_kv_cache: attn_rot_v = 0, n_embd_head_k_all = 256
-[llama-server] llama_memory_recurrent:        CPU RS buffer size =   251.25 MiB
+[llama-server] llama_memory_recurrent:      CUDA0 RS buffer size =   251.25 MiB
 llama_memory_recurrent: size =  251.25 MiB (     4 cells,  40 layers,  4 seqs), R (f32):   11.25 MiB, S (f32):  240.00 MiB
 sched_reserve: reserving ...
 [llama-server] sched_reserve: resolving fused Gated Delta Net support:
 [llama-server] sched_reserve: fused Gated Delta Net (autoregressive) enabled
 [llama-server] sched_reserve: fused Gated Delta Net (chunked) enabled
-[llama-server] sched_reserve:        CPU compute buffer size =   501.00 MiB
+[llama-server] sched_reserve:      CUDA0 compute buffer size =   493.00 MiB
+sched_reserve:  CUDA_Host compute buffer size =    72.02 MiB
 sched_reserve: graph nodes  = 3729
-sched_reserve: graph splits = 1
-sched_reserve: reserve took 4.90 ms, sched copies = 1
+sched_reserve: graph splits = 2
+sched_reserve: reserve took 9.62 ms, sched copies = 1
 [llama-server] common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
 [llama-server] srv    load_model: initializing slots, n_slots = 4
 [llama-server] common_context_can_seq_rm: the target context does not support partial sequence removal
@@ -325,16 +341,82 @@ srv  update_slots: all slots are idle
 [localcode] LSP servers: typescript, python, sql
 [training] Decision journal initialized: ~/.cynco/training/
 [v2] 0 sessions — collecting data (next milestone: 50)
-[ws] Port 9160 in use, using 9161 instead
 [audit] Initialized: C:\Users\civer\.cynco\audit-log (session=session-, project=bc98b855b990)
 [vsm] GovernanceDB initialized
 [snapshot] Initialized workspace snapshot
-[session] Journal: C:\Users\civer\.cynco\sessions\session-1777782188922.jsonl
+[session] Journal: C:\Users\civer\.cynco\sessions\session-1778182730593.jsonl
 [localcode] Ready. Waiting for TUI connection on ws://localhost:9160
 [localcode] llama-cpp is reachable
 [index] sqlite-vec loaded — vector search enabled (dim=768)
-[localcode] Index up to date: Index: 1093 chunks from 53 files (model: nomic-embed-text, last: 2026-05-03T04:13:13.384Z)
-[localcode] WS command received: {"type":"session.end"}
-[localcode] Received session.end — writing handoff
-[localcode] Handoff written successfully
-[audit] Session outcome written (tools=0, gov=0, alg=0)
+[localcode] Index up to date: Index: 1456 chunks from 109 files (model: nomic-embed-text, last: 2026-05-07T19:36:22.296Z)
+[localcode] WS command received: {"type":"command","command":"/tools","args":""}
+[localcode] Slash command: /tools 
+[llama-cpp] llama-server exited with code 1
+[localcode] WS command received: {"type":"user.message","text":"Create a file at .cynco/test-output.txt with the content \"hello from CynCo governance test\". Just write the file, nothing else."}
+[localcode] User message: "Create a file at .cynco/test-output.txt with the content "hello from CynCo gover"
+[loop] Handling message: "Create a file at .cynco/test-output.txt with the content "hello from CynCo gover..."
+[index] sqlite-vec loaded — vector search enabled (dim=768)
+[index] Injected 5 relevant chunks as system context
+[s5] Priority: balanced | performance health: critical (productivity ratio 0.80)
+[scouts] Proactive dispatch triggered: exploration=false complex=false first=true planning=false
+[localcode] Emitting: s2.decision
+[vsm] GovernanceDB initialized
+[scouts] Dispatched scout scout-3fe845: "Survey the project at C:\Users\civer\civkings. FIRST use the CodeIndex tool to s..."
+[localcode] Emitting: subagent.spawned
+[callModel] Step 7b: session lifecycle check (messages=1)
+[callModel] Step 7c: memory recall
+[callModel] Streaming from provider with 1 messages, 7 tools
+[index] sqlite-vec loaded — vector search enabled (dim=768)
+[localcode] Emitting: subagent.tool
+[localcode] Emitting: subagent.tool
+[localcode] Emitting: subagent.tool
+[localcode] Emitting: subagent.tool
+[callModel] Step 7b: session lifecycle check (messages=3)
+[callModel] Step 7c: memory recall
+[callModel] Streaming from provider with 3 messages, 7 tools
+[localcode] Emitting: subagent.tool
+[localcode] Emitting: subagent.tool
+[localcode] Emitting: subagent.tool
+[localcode] Emitting: subagent.tool
+[callModel] Step 7b: session lifecycle check (messages=5)
+[callModel] Step 7c: memory recall
+[callModel] Streaming from provider with 5 messages, 7 tools
+[localcode] Emitting: subagent.complete
+[scouts] Scout scout-3fe845 completed: 3 turns, 1508 chars
+[scouts] Injected 1 scout results as context
+[loop] Model call iteration 1 | messages: 3 | last: user/text
+[callModel] Step 7b: session lifecycle check (messages=3)
+[callModel] Step 7c: memory recall
+[callModel] Streaming from provider with 3 messages, 19 tools
+[localcode] Emitting: tool.start
+[loop] message_stop, tokens=0, stop=tool_use
+[localcode] Emitting: governance.status
+[localcode] Emitting: context.status
+[governance] status=healthy s3s4=balanced tools=1.00 stuck=0
+[loop] Executing tool: Write
+[localcode] Emitting: tool.start
+[localcode] Emitting: approval.request
+[localcode] WS command received: {"type":"user.message","text":"Read the file engine/s5/types.ts and tell me how many lines it has. Be brief."}
+[localcode] User message: "Read the file engine/s5/types.ts and tell me how many lines it has. Be brief."
+[loop] Already processing, ignoring message
+[localcode] WS command received: {"type":"command","command":"/research"}
+[localcode] Slash command: /research 
+[localcode] WS command received: {"type":"command","command":"/cancel"}
+[localcode] Slash command: /cancel 
+[localcode] Emitting: workflow.status
+[loop] Tool result: Write isError=true
+[localcode] Emitting: tool.complete
+[localcode] Emitting: governance.alert
+[vsm] Mid-session perturbation: mag=0.1, breached=tool_error_rate
+[loop] Model call iteration 2 | messages: 5 | last: user/tool_result
+[callModel] Step 7b: session lifecycle check (messages=5)
+[callModel] Step 7c: memory recall
+[callModel] Streaming from provider with 5 messages, 19 tools
+[localcode] Emitting: tool.start
+[loop] message_stop, tokens=0, stop=tool_use
+[localcode] Emitting: governance.status
+[localcode] Emitting: context.status
+[governance] status=warning s3s4=balanced tools=0.00 stuck=0
+[loop] Executing tool: Write
+[localcode] Emitting: tool.start
+[localcode] Emitting: approval.request
