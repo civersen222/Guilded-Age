@@ -65,6 +65,14 @@ class StabilitySystem:
     def government_base(self) -> int:
         return self.GOVERNMENT_BASE.get(self.government_type, 50)
 
+    def apply_change(self, amount: float) -> float:
+        """Apply a raw stability change (no event type required)."""
+        old_stability = self.stability
+        self.stability = max(0, min(100, self.stability + amount))
+        if amount < 0:
+            self.unrest += abs(amount)
+        return self.stability - old_stability
+
     def apply_event_modifier(self, event_type: str, amount: Optional[float] = None) -> float:
         """Apply stability modifier from an event."""
         if event_type not in self.EVENT_MODIFIERS:
