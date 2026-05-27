@@ -89,6 +89,7 @@ class Game:
         # Per-player state
         self.players: Dict[str, Civilization] = {}
         self.gold: Dict[str, int] = {}
+        self.faith_points: Dict[str, int] = {}
         self.research: Dict[str, TechManager] = {}
         
         # Ruler tracking: civ_name -> Character
@@ -171,6 +172,7 @@ class Game:
             self.cities[city.name] = city
             self.map.add_city(city)
             self.gold[civ_name] = 100
+            self.faith_points[civ_name] = 0
             self.research[civ_name] = TechManager()
             for tn in civ.starting_tech:
                 if tn in TECHNOLOGIES:
@@ -261,6 +263,7 @@ class Game:
         # Initialize per-player data
         self.players[self.player_civ.name] = self.player_civ
         self.gold[self.player_civ.name] = 100
+        self.faith_points[self.player_civ.name] = 0
         # Each player gets their own TechManager instance
         self.research[self.player_civ.name] = TechManager()
         
@@ -724,6 +727,7 @@ class Game:
             "cities": {n: _serialize(c) for n, c in self.cities.items()},
             "units": {n: _serialize(u) for n, u in self.units.items()},
             "gold": {k: v for k, v in self.gold.items()},
+            "faith_points": {k: v for k, v in self.faith_points.items()},
             "characters": [_serialize(c) for c in self.characters],
             "dynasty": _serialize(self.dynasty),
             "court": _serialize(self.court),
