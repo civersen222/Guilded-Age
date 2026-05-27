@@ -90,6 +90,7 @@ class ResourceBar:
         yields = game.city_manager.get_total_yields(civ_name, game.map.tiles)
         gold_total = game.gold.get(civ_name, 0)
         gold_income = yields.get("gold", 0)
+        faith = getattr(game, 'faith_points', {}).get(civ_name, 0)
         turn = game.state.turn
 
         self._labels["civ_name"].set_text(f"Civ: {civ_name}")
@@ -104,7 +105,7 @@ class ResourceBar:
         self._labels["culture"].set_text(self._format_yield(
             "Culture", yields.get('culture', 0), RESOURCE_ICONS.get("culture", "")))
         self._labels["faith"].set_text(self._format_yield(
-            "Faith", yields.get('stability', 0), RESOURCE_ICONS.get("faith", "")))
+            "Faith", faith, RESOURCE_ICONS.get("faith", "")))
         self._labels["turn"].set_text(f"Turn {turn}")
 
     def draw(self, surface: pygame.Surface, game: Any) -> None:
