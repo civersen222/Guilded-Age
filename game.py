@@ -951,6 +951,15 @@ class Game:
             f"Phase: {self.state.phase} | Over: {self.state.game_over}"
         )
 
+    def gather_intel(self, spy_unit, target_city):
+        """Gather intelligence on a foreign city."""
+        return {
+            "city": target_city.name,
+            "production": [b.name for b in getattr(target_city, 'build_queue', [])],
+            "garrison": len([u for u in self.military_manager.units
+                           if u.civ == target_city.civ and u.position == target_city.position]),
+        }
+
 
 def main():
     """Main game loop"""
