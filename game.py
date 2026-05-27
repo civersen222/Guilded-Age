@@ -957,7 +957,7 @@ class Game:
             "city": target_city.name,
             "production": [b.name for b in getattr(target_city, 'build_queue', [])],
             "garrison": len([u for u in self.military_manager.units
-                           if u.civ == target_city.civ and u.position == target_city.position]),
+                           if u.owner == target_city.civ and u.position == target_city.position]),
         }
 
 
