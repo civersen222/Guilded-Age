@@ -18,6 +18,7 @@ from pygame_app.panels.unit_panel import UnitPanel
 from pygame_app.panels.event_log import EventLog
 from pygame_app.panels.turn_summary import TurnSummary
 from pygame_app.panels.action_bar import ActionBar
+from pygame_app.popups.combat_popup import CombatPopup
 
 
 class GameScreen(BaseScreen):
@@ -138,6 +139,11 @@ class GameScreen(BaseScreen):
             hx, hy = self._hex_renderer.screen_to_hex(mx - MAP_X, my - MAP_Y)
             self._hex_renderer.selected_hex = (hx, hy)
             if self._selected_unit and (hx, hy) in self._hex_renderer.move_range:
+                # Check for enemy unit on clicked tile
+                enemy_units = [u for u in self.game.military_manager.units if u.position == (hx, hy) and u.civ != self._selected_unit.civ]
+                if enemy_units:
+                    self.combat_popup = CombatPopup(self.ui_manager, self._selected_unit, enemy_units[0], self.game)
+                    return
                 self._move_unit(game, hx, hy)
                 return
             if self._try_select_unit_at_hex(game, hx, hy): return
