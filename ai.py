@@ -86,8 +86,8 @@ class AIPlayer:
         if len(cities) > 5:
             adj["economy"] += 0.1
             adj["expansion"] -= 0.1
-        if num_cities < 4:
-            adj["expansion"] += max(0, 0.8 - 0.2 * num_cities)
+        if len(cities) < 4:
+            adj["expansion"] += max(0, 0.8 - 0.2 * len(cities))
         if gold > 150:
             adj["science"] += 0.1
         if len(researched) < 3:
