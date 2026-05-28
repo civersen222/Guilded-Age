@@ -504,7 +504,7 @@ class AIPlayer:
         }
         adj = self.priorities
         if adj["military"] > 0.4 and military_strength < 50:
-            action["build"] = self._choose_military_unit()
+            action["build"] = self._choose_military_unit(set(current_tech))
         elif adj["economy"] > 0.3:
             action["build"] = "Worker"
         elif adj["expansion"] > 0.3 and cities_count < 5:
@@ -515,9 +515,11 @@ class AIPlayer:
         self.last_action = action["type"]
         return action
 
-    def _choose_military_unit(self) -> str:
-        """Choose military unit based on current threats and era."""
-        pool = ["Swordsman", "Archer", "Legion", "Knight"]
+    def _choose_military_unit(self, researched: Set[str]) -> str:
+        """Choose military unit based on researched tech and current threats."""
+        pool = self._get_available_military(researched)
+        if not pool:
+            pool = ["Swordsman", "Archer"]
         return random.choice(pool)
 
     # ── State helpers ───────────────────────────────────────────────────────
