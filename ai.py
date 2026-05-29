@@ -364,10 +364,11 @@ class AIPlayer:
         other_civs = [n for n in game.civilizations if n != self.civ_name]
 
         for target in other_civs:
+            stance = self._evaluate_diplomacy_stance(target, game)
             strength = self.known_enemy_strength.get(target, 0)
             trust = self.trust_level.get(target, 50)
 
-            # Declare war if strong and target is weak
+            # Declare war if aggressive and stance is hostile
             if (self.aggression > 0.6 and strength < 30
                     and target not in self.allied_civs
                     and not self._is_at_war(game, target)):
@@ -380,12 +381,21 @@ class AIPlayer:
                         "turn": game.state.turn,
                     })
 
-            # Form alliance if peaceful and trust is high
-            elif self.aggression < 0.4 and trust > 40:
-                if target not in self.allied_civs:
-                    game.diplomacy_manager.propose_alliance(self.civ_name, target)
-                    self.allied_civs.add(target)
-                    msgs.append(f"    🤝 {self.civ_name} allies with {target}")
+            # Form alliance if stance is friendly
+            elif stance == "friendly" and target not in self.allied_civs:
+                game.diplomacy_manager.propose_alliance(self.civ_name, target)
+                self.allied_civs.add(target)
+                msgs.append(f"    🤝 {self.civ_name} forms an alliance with {target}!")
+                self.diplomacy_history.append({
+                    "action": "alliance", "target": target,
+                    "turn": game.state.turn,
+                })
+
+            # Trade if stance is neutral or friendly
+            elif stance in ("neutral", "friendly") and not self._is_at_war(game, target):
+                if random.random() < 0.3:
+                    game.diplomacy_manager.sign_trade_agreement(self.civ_name, target, 10)
+                    msgs.append(f"    💰 {self.civ_name} trades with {target}")
 
             # Trade agreement if gold surplus
             elif game.gold.get(self.civ_name, 0) > 100 and trust > 0:
@@ -398,6 +408,45 @@ class AIPlayer:
     def _is_at_war(self, game, target: str) -> bool:
         relations = game.diplomacy_manager.relations.get(self.civ_name, {})
         return relations.get(target) == "war"
+
+    def _evaluate_diplomacy_stance(self, other_civ: str, game_state) -> str:
+        """Evaluate stance toward another civ: 'friendly', 'neutral', or 'hostile'.
+
+        Considers: trust_level, active treaties, military strength comparison, grudges.
+        """
+        trust = self.trust_level.get(other_civ, 50)
+        grudges = self.grudges.get(other_civ, 0)
+        relations = game_state.diplomacy_manager.relations.get(self.civ_name, {})
+        relation_status = relations.get(other_civ, "neutral")
+
+        # Active treaty overrides
+        if relation_status == "war":
+            return "hostile"
+        if relation_status == "alliance":
+            return "friendly"
+
+        # Grudges push toward hostile
+        stance_score = 0.0
+        stance_score += trust  # trust ranges -100..100, centered at 50 default
+        stance_score -= grudges * 25  # each grudge subtracts 25 points
+
+        # Military strength comparison
+        our_strength = sum(
+            u.hp for u in game_state.units.values()
+            if u.owner == self.civ_name
+        ) if hasattr(game_state, 'units') else 0
+        their_strength = self.known_enemy_strength.get(other_civ, 0)
+        if our_strength > 0 and their_strength > 0:
+            if our_strength > their_strength * 1.5:
+                stance_score += 15  # we're stronger, slightly more aggressive
+            elif their_strength > our_strength * 1.5:
+                stance_score -= 15  # they're stronger, more cautious
+
+        if stance_score > 30:
+            return "friendly"
+        elif stance_score < -10:
+            return "hostile"
+        return "neutral"
 
     # ── City expansion ──────────────────────────────────────────────────────
 
