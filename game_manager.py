@@ -17,7 +17,6 @@ from simulation import Character, Dynasty
 from tech import TechManager
 from events import EventManager
 from plots import PlotManager
-from military import Army
 
 
 class GameManager:

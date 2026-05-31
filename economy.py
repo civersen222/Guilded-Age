@@ -2,7 +2,21 @@
 CivKings - Economy Management System
 Handles gold, science, resources, and trade
 """
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
+
+
+@dataclass
+class TradeRoute:
+    """Represents a trade route between two cities."""
+    source_city: str
+    dest_city: str
+    gold_per_turn: int
+    turns_active: int = 0
+
+    def tick(self) -> None:
+        """Advance the trade route by one turn."""
+        self.turns_active += 1
 
 
 class EconomyManager:
@@ -43,36 +57,41 @@ class EconomyManager:
             self.gold -= amount
             return True
         return False
-    
-    def create_trade_route(self, source: str, destination: str, cargo: str = "gold") -> bool:
-        """Create a trade route between two locations"""
-        route = {
-            "source": source,
-            "destination": destination,
-            "cargo": cargo,
-            "yield": 0
-        }
+
+    def create_trade_route(self, source: str, destination: str, gold: int) -> bool:
+        """Create a trade route between two cities.
         
-        # Calculate trade yield
-        if cargo == "gold":
-            route["yield"] = 5
-            self.add_gold(5, "trade_route")
-        elif cargo == "food":
-            route["yield"] = 3
-            self.add_food(3, "trade_route")
-        elif cargo == "science":
-            route["yield"] = 4
-            self.add_science(4, "trade_route")
+        Args:
+            source: The source city name.
+            destination: The destination city name.
+            gold: Gold per turn the route generates.
         
+        Returns:
+            True if the route was created successfully.
+        """
+        route = TradeRoute(
+            source_city=source,
+            dest_city=destination,
+            gold_per_turn=gold,
+            turns_active=1,
+        )
         self.trade_routes.append(route)
         return True
-    
+
     def process_trade_routes(self) -> int:
-        """Process all active trade routes"""
-        total_yield = 0
+        """Process all active trade routes and collect gold.
+        
+        Returns:
+            Total gold collected from all trade routes.
+        """
+        total_gold = 0
         for route in self.trade_routes:
-            total_yield += route["yield"]
-        return total_yield
+            total_gold += route.gold_per_turn
+            route.tick()
+        self.add_gold(total_gold, source="trade_routes")
+        return total_gold
+
+ 
     
     def get_resource(self, resource_name: str) -> int:
         """Get amount of a resource"""
