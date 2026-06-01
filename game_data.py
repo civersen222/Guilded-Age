@@ -670,6 +670,9 @@ class Civilization:
     starting_traits: List[str] = field(default_factory=lambda: ["Charismatic", "Warrior"])
     cities: List = field(default_factory=list)
     characters: List = field(default_factory=list)
+    gold: int = 0
+    science: int = 0
+    culture: int = 0
 
 
 CIVILIZATIONS = {
@@ -741,11 +744,11 @@ class EventCategory(Enum):
 # ── Victory Conditions ───────────────────────────────────────────────────────
 
 VICTORY_CONDITIONS = {
-    "Domination": {"type": "control", "value": 0.5, "description": "Control 50% of starting cities"},
-    "Science":    {"type": "era", "value": Era.MODERN, "description": "Reach Modern Era"},
-    "Culture":    {"type": "culture", "value": 1000, "description": "Accumulate 1000 culture points"},
-    "Diplomacy":  {"type": "alliance", "value": 5, "description": "Have 5 allied civilizations"},
-    "Dynasty":    {"type": "generations", "value": 10, "description": "Survive 10 generations"},
+    "domination": {"type": "control", "value": 0.5, "description": "Control 50% of starting cities"},
+    "science":    {"type": "era", "value": Era.MODERN, "description": "Reach Modern Era"},
+    "culture":    {"type": "culture", "value": 1000, "description": "Accumulate 1000 culture points"},
+    "diplomacy":  {"type": "alliance", "value": 5, "description": "Have 5 allied civilizations"},
+    "dynasty":    {"type": "generations", "value": 10, "description": "Survive 10 generations"},
 }
 
 

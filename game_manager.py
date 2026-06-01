@@ -144,28 +144,39 @@ class GameManager:
         """Check if any civilization has achieved victory."""
         for civ in self.civilizations.values():
             # Domination victory
-            if len(civ.cities) >= VICTORY_CONDITIONS["domination"]:
-                self.victory = "Domination"
-                self.victory_reason = f"{civ.name} controls {len(civ.cities)} cities"
-                self.game_over = True
-                return
+            domination_value = VICTORY_CONDITIONS["domination"]["value"]
+            if VICTORY_CONDITIONS["domination"]["type"] == "control":
+                if len(civ.cities) >= int(domination_value * 10):  # 50% of 10 starting civs
+                    self.victory = "Domination"
+                    self.victory_reason = f"{civ.name} controls {len(civ.cities)} cities"
+                    self.game_over = True
+                    return
+            elif VICTORY_CONDITIONS["domination"]["type"] == "percent":
+                total_cities = sum(len(c.cities) for c in self.civilizations.values())
+                if total_cities > 0 and len(civ.cities) / total_cities >= domination_value:
+                    self.victory = "Domination"
+                    self.victory_reason = f"{civ.name} controls {domination_value*100:.0f}% of cities"
+                    self.game_over = True
+                    return
 
             # Science victory
-            if self.tech_manager.science_pool >= VICTORY_CONDITIONS["science"]:
-                self.victory = "Science"
-                self.victory_reason = f"{civ.name} has collected enough science"
-                self.game_over = True
-                return
+            science_value = VICTORY_CONDITIONS["science"]["value"]
+            if VICTORY_CONDITIONS["science"]["type"] == "era":
+                if civ.science >= science_value.value:
+                    self.victory = "Science"
+                    self.victory_reason = f"{civ.name} has reached {science_value.name} Era"
+                    self.game_over = True
+                    return
 
             # Cultural victory
-            if civ.culture >= VICTORY_CONDITIONS["culture"]:
+            if civ.culture >= VICTORY_CONDITIONS["culture"]["value"]:
                 self.victory = "Culture"
                 self.victory_reason = f"{civ.name} has reached {civ.culture} culture"
                 self.game_over = True
                 return
 
             # Diplomatic victory
-            if civ.diplomacy >= VICTORY_CONDITIONS["diplomacy"]:
+            if civ.diplomacy >= VICTORY_CONDITIONS["diplomacy"]["value"]:
                 self.victory = "Diplomacy"
                 self.victory_reason = f"{civ.name} has reached {civ.diplomacy} diplomacy"
                 self.game_over = True
