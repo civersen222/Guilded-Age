@@ -141,92 +141,102 @@ class GameManager:
         self._check_victory()
 
     def _check_victory(self):
-        """Check if any civilization has achieved victory."""
+        """Check if any civilization has achieved victory. Never crashes — uses try/except around each check."""
         for civ in self.civilizations.values():
-            # Domination victory
-            domination_value = VICTORY_CONDITIONS["domination"]["value"]
-            if VICTORY_CONDITIONS["domination"]["type"] == "control":
-                if len(civ.cities) >= int(domination_value * 10):  # 50% of 10 starting civs
-                    self.victory = "Domination"
-                    self.victory_reason = f"{civ.name} controls {len(civ.cities)} cities"
-                    self.game_over = True
-                    return
-            elif VICTORY_CONDITIONS["domination"]["type"] == "percent":
-                total_cities = sum(len(c.cities) for c in self.civilizations.values())
-                if total_cities > 0 and len(civ.cities) / total_cities >= domination_value:
-                    self.victory = "Domination"
-                    self.victory_reason = f"{civ.name} controls {domination_value*100:.0f}% of cities"
-                    self.game_over = True
-                    return
+            try:
+                # Domination victory
+                dom_cond = VICTORY_CONDITIONS.get("domination", {})
+                dom_value = dom_cond.get("value", 0)
+                dom_type = dom_cond.get("type", "")
+                if dom_type == "control":
+                    try:
+                        threshold = int(float(dom_value) * 10)
+                        if len(civ.cities) >= threshold:
+                            self.victory = "Domination"
+                            self.victory_reason = f"{civ.name} controls {len(civ.cities)} cities"
+                            self.game_over = True
+                            return
+                    except (TypeError, ValueError):
+                        pass
+                elif dom_type == "percent":
+                    try:
+                        total_cities = sum(len(c.cities) for c in self.civilizations.values())
+                        if total_cities > 0:
+                            pct = float(dom_value)
+                            if len(civ.cities) / total_cities >= pct:
+                                self.victory = "Domination"
+                                self.victory_reason = f"{civ.name} controls {pct*100:.0f}% of cities"
+                                self.game_over = True
+                                return
+                    except (TypeError, ValueError, ZeroDivisionError):
+                        pass
 
-            # Science victory
-            science_value = VICTORY_CONDITIONS["science"]["value"]
-            if VICTORY_CONDITIONS["science"]["type"] == "era":
-                if civ.science >= science_value.value:
-                    self.victory = "Science"
-                    self.victory_reason = f"{civ.name} has reached {science_value.name} Era"
-                    self.game_over = True
-                    return
+                # Science victory
+                sci_cond = VICTORY_CONDITIONS.get("science", {})
+                sci_value = sci_cond.get("value")
+                sci_type = sci_cond.get("type", "")
+                if sci_type == "era":
+                    try:
+                        target_era = None
+                        if isinstance(sci_value, str):
+                            # Convert string like "10" or era name to Era enum
+                            for era in Era:
+                                if str(era.value) == sci_value or era.name == sci_value:
+                                    target_era = era
+                                    break
+                        elif isinstance(sci_value, Era):
+                            target_era = sci_value
+                        elif isinstance(sci_value, (int, float)):
+                            # If it's a number, try to map to era by index
+                            era_list = list(Era)
+                            idx = int(sci_value)
+                            target_era = era_list[idx] if 0 <= idx < len(era_list) else None
 
-            # Cultural victory
-            if civ.culture >= VICTORY_CONDITIONS["culture"]["value"]:
-                self.victory = "Culture"
-                self.victory_reason = f"{civ.name} has reached {civ.culture} culture"
-                self.game_over = True
-                return
+                        if target_era and hasattr(civ, 'current_era') and civ.current_era == target_era:
+                            self.victory = "Science"
+                            self.victory_reason = f"{civ.name} has reached {target_era.name} Era"
+                            self.game_over = True
+                            return
+                    except (TypeError, ValueError, IndexError):
+                        pass
 
-            # Diplomatic victory
-            if civ.diplomacy >= VICTORY_CONDITIONS["diplomacy"]["value"]:
-                self.victory = "Diplomacy"
-                self.victory_reason = f"{civ.name} has reached {civ.diplomacy} diplomacy"
-                self.game_over = True
-                return
+                # Cultural victory
+                cult_cond = VICTORY_CONDITIONS.get("culture", {})
+                cult_value = cult_cond.get("value", 0)
+                try:
+                    if civ.culture >= float(cult_value):
+                        self.victory = "Culture"
+                        self.victory_reason = f"{civ.name} has reached {civ.culture} culture"
+                        self.game_over = True
+                        return
+                except (TypeError, ValueError):
+                    pass
+
+                # Diplomatic victory
+                dip_cond = VICTORY_CONDITIONS.get("diplomacy", {})
+                dip_value = dip_cond.get("value", 0)
+                try:
+                    if civ.diplomacy >= float(dip_value):
+                        self.victory = "Diplomacy"
+                        self.victory_reason = f"{civ.name} has reached {civ.diplomacy} diplomacy"
+                        self.game_over = True
+                        return
+                except (TypeError, ValueError):
+                    pass
+
+            except Exception:
+                # If anything unexpected happens, skip this civ and continue
+                continue
 
     def _log(self, message: str):
         """Add a log message."""
         self.logs.append(f"Turn {self.turn_count}: {message}")
 
     def _print_state(self):
-        """Print the current game state."""
-        print(f"\n{'='*50}")
-        print(f"Turn {self.turn_count} - {self.current_player.name}'s Turn")
-        print(f"{'='*50}")
-
-        # Current player stats
-        print(f"\n{self.current_player.name}:")
-        print(f"  Gold: {self.current_player.gold}")
-        print(f"  Science: {self.current_player.science}")
-        print(f"  Culture: {self.current_player.culture}")
-        print(f"  Diplomacy: {self.current_player.diplomacy}")
-        print(f"  Cities: {len(self.current_player.cities)}")
-        print(f"  Unlocked Technologies: {len(self.tech_manager.unlocked_techs)}")
-
-        # Top characters
-        print(f"\nTop Characters:")
-        sorted_chars = sorted(
-            [c for c in self.characters.values() if c.is_alive],
-            key=lambda c: sum(c.get_effective_stat(s) for s in ['diplomacy', 'martial', 'stewardship', 'intrigue']),
-            reverse=True,
-        )[:5]
-        for char in sorted_chars:
-            total = sum(char.get_effective_stat(s) for s in ['diplomacy', 'martial', 'stewardship', 'intrigue'])
-            print(f"  {char.name}: {total} total stats (Age {char.age})")
-
-        # Recent events
-        recent_events = self.event_manager.get_recent_events(3)
-        if recent_events:
-            print(f"\nRecent Events:")
-            for event in recent_events:
-                print(f"  - {event.name}: {event.description}")
-
-        # Recent plots
-        active_plots = self.plot_manager.get_active_plots(self.current_player.name)
-        if active_plots:
-            print(f"\nActive Plots:")
-            for plot in active_plots:
-                print(f"  - {plot.name} ({plot.plot_type}): {plot.progress}%")
-
-        print()
+        """Print current game state."""
+        print(f"\n=== Turn {self.turn_count} ===")
+        for name, civ in self.civilizations.items():
+            print(f"  {name}: {len(getattr(civ, 'cities', []))} cities, {getattr(civ, 'gold', 0)} gold")
 
     def run_turn(self):
         """Run one turn for the current player."""
