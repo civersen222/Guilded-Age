@@ -4,6 +4,7 @@ Orchestrates the game loop, turn management, and state
 """
 import random
 from typing import List, Dict, Optional, Tuple
+from types import SimpleNamespace
 from dataclasses import dataclass, field
 from game_data import (
     TerrainType, VICTORY_CONDITIONS,
@@ -356,53 +357,25 @@ class GameManager:
             self._log(f"Event: {event_name} - {description}")
 
     def get_state(self) -> Dict:
-        """Get the current game state."""
         return {
             "turn": self.turn_count,
-            "current_player": self.current_player.name,
-            "game_over": self.game_over,
-            "victory": self.victory,
-            "victory_reason": self.victory_reason,
-            "players": {
-                name: {
-                    "gold": civ.gold,
-                    "science": civ.science,
-                    "culture": civ.culture,
-                    "diplomacy": civ.diplomacy,
-                    "cities": len(civ.cities),
-                    "characters": len([c for c in civ.characters if c.is_alive]),
+            "civilizations": [
+                {
+                    "name": name,
+                    "cities": [c.name for c in getattr(civ, "cities", [])],
+                    "gold": getattr(civ, "starting_gold", 0),
                 }
                 for name, civ in self.civilizations.items()
-            },
-            "technology": {
-                "unlocked": list(self.tech_manager.unlocked_techs),
-                "current_research": self.tech_manager.current_research,
-                "science_pool": self.tech_manager.science_pool,
-            },
+            ],
         }
-
     def print_state(self):
-        """Print the current game state."""
-        state = self.get_state()
-        print(f"\n{'='*50}")
-        print(f"Turn {state['turn']} - {state['current_player']}'s Turn")
-        print(f"{'='*50}")
-
-        if state['game_over']:
-            print(f"\nGame Over! {state['victory']} Victory!")
-            print(f"Reason: {state['victory_reason']}")
-            return
-
-        print(f"\nPlayers:")
-        for name, stats in state['players'].items():
-            print(f"  {name}:")
-            for stat, value in stats.items():
-                print(f"    {stat}: {value}")
-
-        print(f"\nTechnology:")
-        print(f"  Unlocked: {', '.join(state['technology']['unlocked'])}")
-        print(f"  Current Research: {state['technology']['current_research']}")
-        print(f"  Science Pool: {state['technology']['science_pool']}")
+        print(f"Turn {self.turn_count}")
+        for name, civ in self.civilizations.items():
+            print(f"  {name}: {len(getattr(civ, 'cities', []))} cities")
+    @property
+    def state(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(turn=self.turn_count)
 
     def run_game(self, turns: int = 10):
         """Run the game for a specified number of turns."""
