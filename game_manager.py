@@ -415,55 +415,9 @@ class GameManager:
 
 def create_sample_game() -> GameManager:
     """Create a sample game with default civilizations."""
-    # Create civilizations
-    civs = [
-        Civilization(
-            name="Rome",
-            starting_gold=100,
-            starting_science=50,
-            starting_culture=25,
-            starting_diplomacy=25,
-            starting_stats={
-                "diplomacy": 10,
-                "martial": 12,
-                "stewardship": 11,
-                "intrigue": 8,
-            },
-            starting_traits=["Warrior", "Diplomat"],
-        ),
-        Civilization(
-            name="Greece",
-            starting_gold=80,
-            starting_science=70,
-            starting_culture=40,
-            starting_diplomacy=30,
-            starting_stats={
-                "diplomacy": 12,
-                "martial": 9,
-                "stewardship": 10,
-                "intrigue": 11,
-            },
-            starting_traits=["Scholar", "Diplomat"],
-        ),
-        Civilization(
-            name="Egypt",
-            starting_gold=120,
-            starting_science=40,
-            starting_culture=30,
-            starting_diplomacy=20,
-            starting_stats={
-                "diplomacy": 8,
-                "martial": 11,
-                "stewardship": 13,
-                "intrigue": 9,
-            },
-            starting_traits=["Industrious", "Warrior"],
-        ),
-    ]
-
+    from game_data import CIVILIZATIONS
+    civs = [CIVILIZATIONS["Rome"], CIVILIZATIONS["Greece"], CIVILIZATIONS["Mesopotamia"]]
     return GameManager(civs)
-
-
 if __name__ == "__main__":
     game = create_sample_game()
     game.run_game(turns=5)
