@@ -53,27 +53,22 @@ class GameManager:
 
     def _initialize_cities(self):
         """Create starting cities for each civilization."""
-        for civ in self.civilizations:
+        for civ in self.civilizations.values():
             # Create a starting city on a favorable terrain
             starting_terrain = random.choice([TerrainType.PLAINS, TerrainType.GRASSLAND])
             city = City(
                 name=f"{civ.name} Capital",
                 owner=civ.name,
                 position=(0, 0),
-                terrain=starting_terrain,
                 population=10,
                 gold=civ.starting_gold,
-                science=civ.starting_science,
-                culture=civ.starting_culture,
-                food=0,
-                production=0,
             )
             self.cities.append(city)
             civ.cities.append(city)
 
     def _initialize_characters(self):
         """Create starting ruler for each civilization."""
-        for civ in self.civilizations:
+        for civ in self.civilizations.values():
             # Create ruler character
             ruler = Character(
                 name=civ.name + " Ruler",
@@ -147,7 +142,7 @@ class GameManager:
 
     def _check_victory(self):
         """Check if any civilization has achieved victory."""
-        for civ in self.civilizations:
+        for civ in self.civilizations.values():
             # Domination victory
             if len(civ.cities) >= VICTORY_CONDITIONS["domination"]:
                 self.victory = "Domination"

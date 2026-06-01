@@ -668,6 +668,8 @@ class Civilization:
         "diplomacy": 10, "martial": 10, "stewardship": 10, "intrigue": 10
     })
     starting_traits: List[str] = field(default_factory=lambda: ["Charismatic", "Warrior"])
+    cities: List = field(default_factory=list)
+    characters: List = field(default_factory=list)
 
 
 CIVILIZATIONS = {

@@ -317,6 +317,23 @@ class City:
                 base += 10
         return base
 
+    def calculate_production(self) -> int:
+        """Calculate production output for the current turn."""
+        base = int(self.production_capacity * 0.1)
+        # Encampment district gives +1 production
+        if "Encampment" in self.districts:
+            base += 1
+        # Fortress district gives +2 production
+        if "Fortress" in self.districts:
+            base += 2
+        # Buildings that boost production
+        for building in self.buildings.values():
+            if building.name == "Armory":
+                base += 1
+            elif building.name == "Weapon Workshop":
+                base += 2
+        return base
+
     def get_production_cost(self, item: str) -> Optional[int]:
         """Look up production cost from game data."""
         if item in UNIT_TYPES:
