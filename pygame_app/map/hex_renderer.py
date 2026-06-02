@@ -487,7 +487,7 @@ class HexRenderer:
         player_name = game.player_civ.name
         cities = getattr(game, "cities", {})
         for city_id, city in cities.items():
-            city_hex = getattr(city, "hex", (0, 0))
+            city_hex = getattr(city, "position", (0, 0))
             hx, hy = city_hex
             if (hx, hy) not in visible:
                 continue

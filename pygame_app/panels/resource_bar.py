@@ -86,27 +86,40 @@ class ResourceBar:
 
     def refresh(self, game: Any) -> None:
         """Update all label text from current game state."""
-        civ_name = game.player_civ.name
-        yields = game.city_manager.get_total_yields(civ_name, game.map.tiles)
-        gold_total = game.gold.get(civ_name, 0)
-        gold_income = yields.get("gold", 0)
-        faith = getattr(game, 'faith_points', {}).get(civ_name, 0)
-        turn = game.state.turn
+        try:
+            civ_name = getattr(game, 'player_civ', None)
+            if civ_name:
+                civ_name = getattr(civ_name, 'name', 'Unknown')
+            else:
+                civ_name = 'Unknown'
 
-        self._labels["civ_name"].set_text(f"Civ: {civ_name}")
-        self._labels["food"].set_text(self._format_yield(
-            "Food", yields.get('food', 0), RESOURCE_ICONS.get("food", "")))
-        self._labels["production"].set_text(self._format_yield(
-            "Prod", yields.get('production', 0), RESOURCE_ICONS.get("production", "")))
-        self._labels["gold"].set_text(
-            f"{RESOURCE_ICONS.get('gold', '')} Gold: {gold_total} ({int(gold_income)}/t)")
-        self._labels["science"].set_text(self._format_yield(
-            "Sci", yields.get('science', 0), RESOURCE_ICONS.get("science", "")))
-        self._labels["culture"].set_text(self._format_yield(
-            "Culture", yields.get('culture', 0), RESOURCE_ICONS.get("culture", "")))
-        self._labels["faith"].set_text(self._format_yield(
-            "Faith", faith, RESOURCE_ICONS.get("faith", "")))
-        self._labels["turn"].set_text(f"Turn {turn}")
+            city_manager = getattr(game, 'city_manager', None)
+            if city_manager is not None:
+                yields = city_manager.get_total_yields(civ_name, getattr(game, 'map', None))
+            else:
+                yields = {"food": 0, "production": 0, "gold": 0, "science": 0, "culture": 0}
+
+            gold_total = getattr(game, 'gold', {}).get(civ_name, 0)
+            gold_income = yields.get("gold", 0)
+            faith = getattr(game, 'faith_points', {}).get(civ_name, 0)
+            turn = getattr(game.state, 'turn', 1)
+
+            self._labels["civ_name"].set_text(f"Civ: {civ_name}")
+            self._labels["food"].set_text(self._format_yield(
+                "Food", yields.get('food', 0), RESOURCE_ICONS.get("food", "")))
+            self._labels["production"].set_text(self._format_yield(
+                "Prod", yields.get('production', 0), RESOURCE_ICONS.get("production", "")))
+            self._labels["gold"].set_text(
+                f"{RESOURCE_ICONS.get('gold', '')} Gold: {gold_total} ({int(gold_income)}/t)")
+            self._labels["science"].set_text(self._format_yield(
+                "Sci", yields.get('science', 0), RESOURCE_ICONS.get("science", "")))
+            self._labels["culture"].set_text(self._format_yield(
+                "Culture", yields.get('culture', 0), RESOURCE_ICONS.get("culture", "")))
+            self._labels["faith"].set_text(self._format_yield(
+                "Faith", faith, RESOURCE_ICONS.get("faith", "")))
+            self._labels["turn"].set_text(f"Turn {turn}")
+        except Exception as e:
+            print(f"[ResourceBar.refresh] Error updating display: {e}")
 
     def draw(self, surface: pygame.Surface, game: Any) -> None:
         """Draw the polished resource bar background and text."""
@@ -118,7 +131,16 @@ class ResourceBar:
                          (SCREEN_WIDTH, RESOURCE_BAR_HEIGHT - 1))
 
         # Draw custom text with color coding
-        yields = game.city_manager.get_total_yields(game.player_civ.name, game.map.tiles)
+        civ_name = getattr(game, 'player_civ', None)
+        if civ_name:
+            civ_name = getattr(civ_name, 'name', 'Unknown')
+        else:
+            civ_name = 'Unknown'
+        city_manager = getattr(game, 'city_manager', None)
+        if city_manager is not None:
+            yields = city_manager.get_total_yields(civ_name, getattr(game, 'map', None))
+        else:
+            yields = {"food": 0, "production": 0, "gold": 0, "science": 0, "culture": 0}
         gold_income = yields.get("gold", 0)
 
         bar_w = SCREEN_WIDTH
