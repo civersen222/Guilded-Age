@@ -834,10 +834,10 @@ class HexMap:
 
     def add_city(self, city) -> None:
         """Add a city to the map"""
-        city.position = self.get_starting_tile()
-        self.tiles[(city.position[0], city.position[1])].city = city.name
+        pos = getattr(city, 'position', self.get_starting_tile())
+        self.tiles[(pos[0], pos[1])].city = city.name
 
     def add_unit(self, unit) -> None:
         """Add a unit to the map"""
-        unit.position = self.get_starting_tile()
-        self.tiles[(unit.position[0], unit.position[1])].unit = unit.unit_type
+        pos = getattr(unit, 'position', self.get_starting_tile())
+        self.tiles[(pos[0], pos[1])].unit = unit.unit_type
