@@ -463,20 +463,7 @@ class AIPlayer:
             settler = settlers[0]
             tile = self._find_expansion_tile(game, settler.position)
             if tile:
-                from city import City
-                from game_data import get_climate_for_row
-                is_coastal = game.map.tiles[tile].terrain.value in ("Coast", "Ocean")
-                new_city = City(
-                    name=f"{self.civ_name} City {len(cities) + 1}",
-                    owner=self.civ_name, position=tile,
-                    population=3, gold=50,
-                    climate_zone=get_climate_for_row(tile[1], game.map.height),
-                    is_coastal=is_coastal,
-                )
-                game.cities[new_city.name] = new_city
-                game.map.add_city(new_city)
-                game.gold[self.civ_name] = game.gold.get(self.civ_name, 0) - 100
-                settler.moves_left = 0
+                new_city = game.found_city(settler)
                 self.city_expansion_history.append((game.state.turn, len(cities) + 1))
                 msgs.append(f"    🏛️ Founded {new_city.name} at {tile}")
 

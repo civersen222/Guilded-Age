@@ -50,17 +50,29 @@ class ProductionPopup:
         left_w = self.WIDTH // 2 - self.MARGIN
         items = []
 
+        # Get buildable items from city
+        researched_techs = None
+        owned_resources = None
+        if self._game and hasattr(self._game, "tech_manager"):
+            tm = self._game.tech_manager
+            researched_techs = set(getattr(tm, "unlocked_techs", {}).keys())
+        if self._game and hasattr(self._game, "economy"):
+            owned_resources = set(getattr(self._game.economy, "resources", {}).keys())
+
+        buildable_units = city.get_buildable_units(researched_techs=researched_techs, owned_resources=owned_resources)
+        buildable_buildings = city.get_buildable_buildings(researched_techs=researched_techs)
+
         # Units section
         items.append(("-- UNITS --", ""))
-        for utype_name, utype in sorted(UNIT_TYPES.items(), key=lambda x: x[1].production_cost):
+        for utype_name in sorted(buildable_units, key=lambda n: UNIT_TYPES[n].production_cost):
+            utype = UNIT_TYPES[utype_name]
             items.append((f"{utype.name} ({utype.production_cost} prod)", utype_name))
 
         # Buildings section
         items.append(("-- BUILDINGS --", ""))
-        city_buildings = getattr(city, "buildings", {})
-        for bname, btype in sorted(BUILDINGS.items(), key=lambda x: x[1].production_cost):
-            if bname not in city_buildings:
-                items.append((f"{btype.name} ({btype.production_cost} prod)", bname))
+        for bname in sorted(buildable_buildings, key=lambda n: BUILDINGS[n].production_cost):
+            btype = BUILDINGS[bname]
+            items.append((f"{btype.name} ({btype.production_cost} prod)", bname))
 
         self.selection_list = pygame_gui.elements.UISelectionList(
             relative_rect=pygame.Rect(

@@ -552,6 +552,41 @@ class Game:
         if dead_units:
             msgs.append(f"\n  💀 {len(dead_units)} dead unit(s) removed from game")
         
+    def found_city(self, settler: Unit) -> City:
+        """Found a new city at the settler's position. Removes the settler unit."""
+        from city import City
+        from game_data import get_climate_for_row
+        
+        tile = settler.position
+        civ_name = settler.owner
+        is_coastal = self.map.tiles[tile].terrain.value in ("Coast", "Ocean")
+        city_count = len([c for c in self.cities.values() if c.owner == civ_name])
+        
+        new_city = City(
+            name=f"{civ_name} City {city_count + 1}",
+            owner=civ_name, position=tile,
+            population=3, gold=50,
+            climate_zone=get_climate_for_row(tile[1], self.map.height),
+            is_coastal=is_coastal,
+        )
+        self.cities[new_city.name] = new_city
+        self.map.add_city(new_city)
+        self.gold[civ_name] = self.gold.get(civ_name, 0) - 100
+        
+        # Remove the settler unit
+        if settler.name in self.units:
+            del self.units[settler.name]
+        
+        return new_city
+
+    def _check_victory(self):
+        """Check victory conditions."""
+        return None
+
+    def _check_victory(self):
+        """Check victory conditions."""
+        pass
+
         # Check victory conditions
         victory_msg = self._check_victory()
         if victory_msg:

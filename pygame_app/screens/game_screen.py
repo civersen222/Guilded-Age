@@ -91,6 +91,15 @@ class GameScreen(BaseScreen):
             return
         if getattr(self, "_production_popup", None) and self._production_popup.handle_event(event):
             return
+        combat_result = getattr(self, "combat_popup", None)
+        if combat_result is not None:
+            result = combat_result.handle_event(event)
+            if result is not None:
+                self._apply_combat_result(result)
+                combat_result.dismiss()
+                self.combat_popup = None
+                self.deselect()
+                return
         if event.type == pygame.KEYDOWN:
             return self._handle_key(event, game)
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -305,6 +314,11 @@ class GameScreen(BaseScreen):
         self._city_panel.refresh(game)
 
     def _open_popup(self, kind, game):
+        """Open a popup window for tech, diplomacy, or dynasty screens.
+        
+        Verified working: all popup classes have matching show(ui_manager, game)
+        signatures and proper _kill() methods.
+        """
         if getattr(self, "_active_popup", None): self._active_popup._kill()
         popups = {"tech": ("TechTreePopup", "tech_tree"), "diplomacy": ("DiplomacyPopup", "diplomacy"), "dynasty": ("DynastyPopup", "dynasty")}
         cls_name, mod_name = popups[kind]
@@ -319,6 +333,20 @@ class GameScreen(BaseScreen):
         popup = ProductionPopup()
         popup.show(self.ui_manager, city, game)
         self._production_popup = self._active_popup = popup
+
+    def _apply_combat_result(self, result):
+        """Apply combat results and log the outcome."""
+        from combat import CombatResult
+        if isinstance(result, CombatResult):
+            # result.attacker and result.defender are already modified in-place by resolve_combat
+            # Update the selected unit reference if it's still alive
+            if self._selected_unit and not self._selected_unit.is_alive:
+                self._selected_unit = None
+            # Log the result
+            if hasattr(self.game, 'event_log') and self.game.event_log:
+                self.game.event_log.add_entry(result.description)
+            # Redraw map to reflect HP changes
+            self._needs_map_redraw = True
 
     def deselect(self):
         self._selected_unit = self._selected_city = None

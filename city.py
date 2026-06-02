@@ -370,6 +370,46 @@ class City:
             "capacity": self.production_capacity,
         }
 
+    def get_buildable_units(self, researched_techs: Optional[set] = None, owned_resources: Optional[set] = None) -> List[str]:
+        """Return list of unit names that this city can currently build."""
+        available = []
+        for uname, utype in UNIT_TYPES.items():
+            # Check tech requirement
+            if utype.requires_tech and researched_techs and utype.requires_tech not in researched_techs:
+                continue
+            # Check resource requirement
+            if utype.resource_required and owned_resources and utype.resource_required not in owned_resources:
+                continue
+            # Check already in queue or current
+            if uname in self.production_queue or uname == self.current_production:
+                continue
+            available.append(uname)
+        return available
+
+    def get_buildable_buildings(self, researched_techs: Optional[set] = None) -> List[str]:
+        """Return list of building names that this city can currently build."""
+        available = []
+        for bname, btype in BUILDINGS.items():
+            # Check district requirement
+            if btype.requires_district:
+                if btype.requires_district not in self.buildings:
+                    # Check if the district itself exists
+                    district_found = False
+                    for existing_b in self.buildings.values():
+                        if existing_b.district_type == btype.requires_district:
+                            district_found = True
+                            break
+                    if not district_found:
+                        continue
+            # Check tech requirement
+            if btype.requires_tech and researched_techs and btype.requires_tech not in researched_techs:
+                continue
+            # Check already built or in queue
+            if bname in self.buildings or bname in self.production_queue or bname == self.current_production:
+                continue
+            available.append(bname)
+        return available
+
     def assign_production(self, item: str, researched_techs: Optional[set] = None, owned_resources: Optional[set] = None) -> bool:
         """Assign an item to production queue with validation. Returns True if successfully assigned."""
         if item in self.production_queue or item == self.current_production:
