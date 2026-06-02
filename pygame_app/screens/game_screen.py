@@ -208,7 +208,9 @@ class GameScreen(BaseScreen):
         game.fog.update_visibility(sources)
 
     def _process_next_turn(self, game):
+        print(f"[game_screen] _process_next_turn called, turn before={game.state.turn}")
         game.process_turn()
+        print(f"[game_screen] process_turn done, turn after={game.state.turn}")
         self._update_fog(game)
         if game.tech_manager.current_research is None:
             available = game.tech_manager.get_available_techs()
