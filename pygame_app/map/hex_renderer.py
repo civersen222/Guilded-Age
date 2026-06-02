@@ -370,7 +370,10 @@ class HexRenderer:
 
         # --- Build civ ownership map ---
         civ_hexes: Dict[str, set] = {}
-        for city in game.cities.values():
+        cities_for_territory = game.cities
+        if not cities_for_territory and hasattr(game, "city_manager"):
+            cities_for_territory = {c.name: c for c in getattr(game.city_manager, "cities", [])}
+        for city in cities_for_territory.values():
             owner = getattr(city, "owner", "")
             if not owner:
                 continue
@@ -485,7 +488,9 @@ class HexRenderer:
 
         # --- 4. City markers ---
         player_name = game.player_civ.name
-        cities = getattr(game, "cities", {})
+        cities = game.cities
+        if not cities and hasattr(game, "city_manager"):
+            cities = {c.name: c for c in getattr(game.city_manager, "cities", [])}
         for city_id, city in cities.items():
             city_hex = getattr(city, "position", (0, 0))
             hx, hy = city_hex

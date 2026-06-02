@@ -173,5 +173,16 @@ class TestReligionManager(unittest.TestCase):
         self.assertEqual(rm.faith["Rome"], 25)
 
 
+class TestTurnStability(unittest.TestCase):
+    """Test long-run game stability."""
+
+    def test_100_turn_stability(self):
+        from game_manager import create_sample_game
+        g = create_sample_game()
+        g.run_game(100)
+        assert g.state.turn >= 100
+        assert not g.state.game_over
+
+
 if __name__ == "__main__":
     unittest.main()

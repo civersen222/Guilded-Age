@@ -74,8 +74,13 @@ class GameScreen(BaseScreen):
             factor = 1.15 if event.y > 0 else 1 / 1.15
             self._camera.zoom_at(mx - MAP_X, my - MAP_Y, factor)
             return
-        if self._turn_summary and self._turn_summary.is_visible and self._turn_summary.handle_event(event):
-            return
+        if self._turn_summary and self._turn_summary.is_visible:
+            if event.type in (pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN):
+                self._turn_summary._kill()
+                self._turn_summary = None
+                return
+            if self._turn_summary.handle_event(event):
+                return
         action = self._action_bar.handle_event(event)
         if action is not None:
             self._handle_action(action, game)
@@ -140,14 +145,14 @@ class GameScreen(BaseScreen):
             self._hex_renderer.selected_hex = (hx, hy)
             if self._selected_unit and (hx, hy) in self._hex_renderer.move_range:
                 # Check for enemy unit on clicked tile
-                enemy_units = [u for u in self.game.military_manager.units if u.position == (hx, hy) and u.civ != self._selected_unit.civ]
+                enemy_units = [u for u in self.game.military_manager.units if u.position == (hx, hy) and u.owner != self._selected_unit.owner]
                 if enemy_units:
                     self.combat_popup = CombatPopup(self.ui_manager, self._selected_unit, enemy_units[0], self.game)
                     return
                 self._move_unit(game, hx, hy)
                 return
-            if self._try_select_unit_at_hex(game, hx, hy): return
             if self._try_select_city_at_hex(game, hx, hy): return
+            if self._try_select_unit_at_hex(game, hx, hy): return
             self.deselect()
             return
         if self._minimap and self._minimap.handle_click(mx, my, SCREEN_HEIGHT): return
