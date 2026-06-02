@@ -172,22 +172,24 @@ class NewGameDialog(BaseScreen):
 
         # Pick AI civs (exclude player civ)
         from game_data import CIVILIZATIONS as ALL_CIVS
-        ai_civ_names = [n for n in ALL_CIVS if n != civ_name][:ai_count]
+        import random
+        all_civ_names = [n for n in ALL_CIVS if n != civ_name]
+        if ai_count > 0:
+            ai_civ_names = random.sample(all_civ_names, min(ai_count, len(all_civ_names)))
+        else:
+            ai_civ_names = []
+        ai_civs = [ALL_CIVS[name] for name in ai_civ_names]
 
-        # Create game engine
+        # Create game engine with AI civs
         from game import Game
-        self.app.game = Game(civ, map_width=map_size, map_height=map_size)
+        self.app.game = Game(civ, ai_civs=ai_civs, map_width=map_size, map_height=map_size)
 
-        # Add AI players and their civs
-        from game_data import CIVILIZATIONS as ALL_CIVS
+        # Add AI players and their tech managers
         from ai import AIPlayer
         from tech import TechManager
         for ai_name in ai_civ_names:
             self.app.game.ai_players[ai_name] = AIPlayer(ai_name, difficulty.lower())
-            ai_civ = ALL_CIVS.get(ai_name)
-            if ai_civ:
-                self.app.game.civilizations[ai_name] = ai_civ
-                self.app.game.research[ai_name] = TechManager()
+            self.app.game.research[ai_name] = TechManager()
 
         # Switch to game screen
         from pygame_app.screens.game_screen import GameScreen
