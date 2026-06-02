@@ -78,8 +78,6 @@ class CityPanel:
         # Draw each city entry
         for btn, city in self.city_buttons.items():
             rect = btn.get_abs_rect().copy()
-            rect.x += self.panel.get_abs_rect().x
-            rect.y += self.panel.get_abs_rect().y
 
             # Button background
             pygame.draw.rect(surface, BTN_BG, rect, border_radius=3)

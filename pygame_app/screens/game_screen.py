@@ -76,8 +76,10 @@ class GameScreen(BaseScreen):
             return
         if self._turn_summary and self._turn_summary.is_visible:
             if event.type in (pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN):
-                self._turn_summary._kill()
-                self._turn_summary = None
+                self._turn_summary.window.kill()
+                self._turn_summary.window = None
+                self._turn_summary.text_box = None
+                self._turn_summary.dismiss_btn = None
                 return
             if self._turn_summary.handle_event(event):
                 return

@@ -43,7 +43,7 @@ class TurnSummary:
     @property
     def is_visible(self) -> bool:
         """Return whether the popup window exists and is alive."""
-        return self.window is not None and self.window.alive()
+        return self.window is not None
 
     def show(self, ui_manager: pygame_gui.UIManager, events: List[str], turn: int) -> None:
         """Show the turn summary popup. If no events, do nothing."""
