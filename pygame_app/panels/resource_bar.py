@@ -103,15 +103,14 @@ class ResourceBar:
         except Exception:
             gold_total = 0
 
-        # Science from game.tech_manager.science_pool
+        # Science and culture from city yields
         try:
-            tm = getattr(game, 'tech_manager', None)
-            if tm is not None:
-                science = getattr(tm, 'science_pool', 0.0)
-            else:
-                science = 0.0
+            yields = game.city_manager.get_total_yields(civ_name, game.map.tiles)
+            science = yields.get('science', 0.0)
+            culture = yields.get('culture', 0.0)
         except Exception:
             science = 0.0
+            culture = 0.0
 
         # Culture safe default
         culture = 0

@@ -196,9 +196,9 @@ class City:
         yields = {
             "food": 2.0,
             "gold": 1.0,
-            "science": 0.0,
+            "science": self.population * 0.5,
             "production": 3.0,
-            "culture": 0.0,
+            "culture": self.population * 0.2,
         }
 
         # Add yields from districts with adjacency bonuses
