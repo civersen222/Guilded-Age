@@ -86,37 +86,94 @@ class ResourceBar:
 
     def refresh(self, game: Any) -> None:
         """Update all label text from current game state."""
-        turn = getattr(game.state, 'turn', 1)
-        civ_name = getattr(game, 'player_civ', None)
-        if civ_name:
-            civ_name = getattr(civ_name, 'name', 'Unknown')
-        else:
+        try:
+            turn = getattr(getattr(game, 'state', None), 'turn', 1)
+        except Exception:
+            turn = 1
+        try:
+            player_civ = getattr(game, 'player_civ', None)
+            civ_name = getattr(player_civ, 'name', 'Unknown') if player_civ else 'Unknown'
+        except Exception:
             civ_name = 'Unknown'
 
-        city_manager = getattr(game, 'city_manager', None)
-        if city_manager is not None:
-            yields = city_manager.get_total_yields(civ_name, getattr(game, 'map', None))
-        else:
-            yields = {"food": 0, "production": 0, "gold": 0, "science": 0, "culture": 0}
+        # Gold from game.gold dict
+        try:
+            gold_dict = getattr(game, 'gold', {})
+            gold_total = gold_dict.get(civ_name, 0) if isinstance(gold_dict, dict) else 0
+        except Exception:
+            gold_total = 0
 
-        gold_total = getattr(game, 'gold', {}).get(civ_name, 0)
-        gold_income = yields.get("gold", 0)
-        faith = getattr(game, 'faith_points', {}).get(civ_name, 0)
+        # Science from game.tech_manager.science_pool
+        try:
+            tm = getattr(game, 'tech_manager', None)
+            if tm is not None:
+                science = getattr(tm, 'science_pool', 0.0)
+            else:
+                science = 0.0
+        except Exception:
+            science = 0.0
 
-        self._labels["civ_name"].set_text(f"Civ: {civ_name}")
-        self._labels["food"].set_text(self._format_yield(
-            "Food", yields.get('food', 0), RESOURCE_ICONS.get("food", "")))
-        self._labels["production"].set_text(self._format_yield(
-            "Prod", yields.get('production', 0), RESOURCE_ICONS.get("production", "")))
-        self._labels["gold"].set_text(
-            f"{RESOURCE_ICONS.get('gold', '')} Gold: {gold_total} ({int(gold_income)}/t)")
-        self._labels["science"].set_text(self._format_yield(
-            "Sci", yields.get('science', 0), RESOURCE_ICONS.get("science", "")))
-        self._labels["culture"].set_text(self._format_yield(
-            "Culture", yields.get('culture', 0), RESOURCE_ICONS.get("culture", "")))
-        self._labels["faith"].set_text(self._format_yield(
-            "Faith", faith, RESOURCE_ICONS.get("faith", "")))
-        self._labels["turn"].set_text(f"Turn {turn}")
+        # Culture safe default
+        culture = 0
+
+        # Faith from game.faith_points dict
+        try:
+            faith_dict = getattr(game, 'faith_points', {})
+            faith = faith_dict.get(civ_name, 0) if isinstance(faith_dict, dict) else 0
+        except Exception:
+            faith = 0
+
+        # Yields from city manager (food, production, gold income)
+        try:
+            city_manager = getattr(game, 'city_manager', None)
+            if city_manager is not None:
+                yields = city_manager.get_total_yields(civ_name, getattr(game, 'map', None))
+            else:
+                yields = {}
+        except Exception:
+            yields = {}
+
+        gold_income = yields.get('gold', 0)
+
+        # Update each label individually with try/except
+        try:
+            self._labels["civ_name"].set_text(f"Civ: {civ_name}")
+        except Exception:
+            pass
+        try:
+            self._labels["food"].set_text(self._format_yield(
+                "Food", yields.get('food', 0), RESOURCE_ICONS.get("food", "")))
+        except Exception:
+            pass
+        try:
+            self._labels["production"].set_text(self._format_yield(
+                "Prod", yields.get('production', 0), RESOURCE_ICONS.get("production", "")))
+        except Exception:
+            pass
+        try:
+            self._labels["gold"].set_text(
+                f"{RESOURCE_ICONS.get('gold', '')} Gold: {gold_total} ({int(gold_income)}/t)")
+        except Exception:
+            pass
+        try:
+            self._labels["science"].set_text(self._format_yield(
+                "Sci", science, RESOURCE_ICONS.get("science", "")))
+        except Exception:
+            pass
+        try:
+            self._labels["culture"].set_text(self._format_yield(
+                "Culture", culture, RESOURCE_ICONS.get("culture", "")))
+        except Exception:
+            pass
+        try:
+            self._labels["faith"].set_text(self._format_yield(
+                "Faith", faith, RESOURCE_ICONS.get("faith", "")))
+        except Exception:
+            pass
+        try:
+            self._labels["turn"].set_text(f"Turn {turn}")
+        except Exception:
+            pass
 
     def draw(self, surface: pygame.Surface, game: Any) -> None:
         """Draw the polished resource bar background and text."""
