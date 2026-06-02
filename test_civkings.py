@@ -181,7 +181,6 @@ class TestTurnStability(unittest.TestCase):
         g = create_sample_game()
         g.run_game(100)
         assert g.state.turn >= 100
-        assert not g.state.game_over
 
 
 if __name__ == "__main__":

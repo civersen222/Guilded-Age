@@ -551,7 +551,8 @@ class Game:
             del self.units[name]
         if dead_units:
             msgs.append(f"\n  💀 {len(dead_units)} dead unit(s) removed from game")
-        
+        return self.state.turn_events
+
     def found_city(self, settler: Unit) -> City:
         """Found a new city at the settler's position. Removes the settler unit."""
         from city import City
