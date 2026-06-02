@@ -76,10 +76,12 @@ class GameScreen(BaseScreen):
             return
         if self._turn_summary and self._turn_summary.is_visible:
             if event.type in (pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN):
-                self._turn_summary.window.kill()
+                if self._turn_summary.window:
+                    self._turn_summary.window.kill()
                 self._turn_summary.window = None
                 self._turn_summary.text_box = None
                 self._turn_summary.dismiss_btn = None
+                self._needs_map_redraw = True
                 return
             if self._turn_summary.handle_event(event):
                 return
@@ -369,6 +371,7 @@ class GameScreen(BaseScreen):
         if self._unit_panel: self._unit_panel.draw(surface)
         if self._event_log: self._event_log.draw(surface)
         self._map_surface.fill(BG)
+        self._needs_map_redraw = getattr(self, '_needs_map_redraw', True)
         if self._hex_renderer: self._hex_renderer.render(self._map_surface, game, self._elapsed)
         surface.blit(self._map_surface, (MAP_X, MAP_Y))
         if self._minimap: self._minimap.render(surface, game, SCREEN_HEIGHT)
