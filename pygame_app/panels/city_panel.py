@@ -61,7 +61,7 @@ class CityPanel:
                     LEFT_PANEL_WIDTH - self.MARGIN * 2,
                     self.CITY_BTN_HEIGHT,
                 ),
-                text="",
+                text=f"{name} (Pop {pop}) [{prod_name}]",
                 manager=self.ui_manager,
                 container=self.panel,
             )
