@@ -77,6 +77,7 @@ class DiplomacyPopup:
             ("Declare War", "war"),
             ("Propose Alliance", "alliance"),
             ("Trade Agreement", "trade"),
+            ("Close", "close"),
         ]
         start_x = (WIDTH - BUTTON_SPACING * len(actions) - 10) // 2
         for i, (label, action) in enumerate(actions):
