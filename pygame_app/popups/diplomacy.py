@@ -88,6 +88,14 @@ class DiplomacyPopup:
                 container=self.window,
             )
 
+        # Status label
+        self._status_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(MARGIN, btn_y - 25, WIDTH - MARGIN * 2, 20),
+            text="",
+            manager=ui_manager,
+            container=self.window,
+        )
+
         if civs:
             self._refresh_info(civs[0])
 
@@ -188,6 +196,9 @@ class DiplomacyPopup:
             dm.sign_trade_agreement(self._player_civ, target_civ, 5)
 
         self._refresh_info(target_civ)
+        labels = {"war": "War declared!", "alliance": "Alliance proposed!", "trade": "Trade agreement signed!"}
+        if hasattr(self, "_status_label") and self._status_label:
+            self._status_label.set_text(labels.get(action, ""))
         return True
 
     def handle_event(self, event) -> bool:
@@ -199,7 +210,10 @@ class DiplomacyPopup:
                 return self._on_action("alliance")
             if event.ui_element == self._buttons.get("trade"):
                 return self._on_action("trade")
-            # Close button (if added) or any other button kills window
+            if event.ui_element == self._buttons.get("close"):
+                self._kill()
+                return True
+            # Any other button kills window
             self._kill()
             return True
 
@@ -214,7 +228,7 @@ class DiplomacyPopup:
 
     def _kill(self) -> None:
         """Kill all child elements and the window."""
-        for elem in [self.civ_list, self.info_textbox] + list(self._buttons.values()):
+        for elem in [self.civ_list, self.info_textbox, self._status_label] + list(self._buttons.values()):
             if elem is not None:
                 elem.kill()
         self.civ_list = None
