@@ -19,6 +19,7 @@ from pygame_app.panels.event_log import EventLog
 from pygame_app.panels.turn_summary import TurnSummary
 from pygame_app.panels.action_bar import ActionBar
 from pygame_app.popups.combat_popup import CombatPopup
+from pygame_app.popups.event_choice import EventChoicePopup
 
 
 class GameScreen(BaseScreen):
@@ -30,6 +31,7 @@ class GameScreen(BaseScreen):
         self._resource_bar = self._city_panel = self._event_log = self._turn_summary = None
         self._action_bar = self._next_turn_btn = self._unit_panel = None
         self._selected_unit = self._selected_city = self._active_popup = None
+        self._event_choice_popup = EventChoicePopup()
         self._dragging_middle = False
         self._drag_start = (0, 0)
         self.show_yields = False
@@ -91,6 +93,9 @@ class GameScreen(BaseScreen):
             return
         if getattr(self, "_production_popup", None) and self._production_popup.handle_event(event):
             return
+        if getattr(self, "_event_choice_popup", None) and self._event_choice_popup.is_visible:
+            if self._event_choice_popup.handle_event(event):
+                return
         combat_result = getattr(self, "combat_popup", None)
         if combat_result is not None:
             result = combat_result.handle_event(event)

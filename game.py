@@ -3,7 +3,7 @@ CivKings - Main Game Class
 Orchestrates the game loop, turn management, and state
 """
 import random
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union, Any
 from dataclasses import dataclass
 from game_data import (
     TerrainType, VICTORY_CONDITIONS,
@@ -47,10 +47,65 @@ class GameState:
     victory: Optional[str] = None
     turn_events: List[str] = None
     current_player: str = "Player"
+    pending_ck_event: Any = None
 
     def __post_init__(self):
         if self.turn_events is None:
             self.turn_events = []
+
+
+class CKEvent:
+    """Structured CK-style event with player choices that have gameplay effects."""
+
+    def __init__(self, name: str, description: str, choices: List[Dict]):
+        self.name = name
+        self.description = description
+        self.choices = choices
+
+    def _set_game(self, game: Any) -> None:
+        """Set the game reference for effect evaluation."""
+        self._game = game
+
+    def evaluate_choice(self, choice: Dict) -> None:
+        """Apply the effects of the chosen option."""
+        effects = choice.get("effects", {})
+        for effect_type, value in effects.items():
+            self._apply_effect(effect_type, value)
+        print(f"  📜 [{self.name}] Chose: {choice.get('name', '')}")
+
+    def _apply_effect(self, effect_type: str, value: Union[int, float]) -> None:
+        ruler = self._get_ruler()
+        if effect_type == "gold":
+            if ruler:
+                ruler.gold_reserve += value
+        elif effect_type == "prestige":
+            if ruler:
+                ruler.prestige += value
+        elif effect_type == "morale":
+            if ruler:
+                ruler.morale = min(100, ruler.morale + value)
+        elif effect_type == "martial":
+            if ruler and "martial" not in ruler.skills:
+                ruler.skills["martial"] = 0
+            ruler.skills["martial"] += value
+        elif effect_type == "stewardship":
+            if ruler and "stewardship" not in ruler.skills:
+                ruler.skills["stewardship"] = 0
+            ruler.skills["stewardship"] += value
+        elif effect_type == "intrigue":
+            if ruler and "intrigue" not in ruler.skills:
+                ruler.skills["intrigue"] = 0
+            ruler.skills["intrigue"] += value
+        elif effect_type == "diplomacy":
+            if ruler and "diplomacy" not in ruler.skills:
+                ruler.skills["diplomacy"] = 0
+            ruler.skills["diplomacy"] += value
+
+    def _get_ruler(self):
+        game = self._game if hasattr(self, "_game") else None
+        if game:
+            return game.rulers.get(game.player_civ.name)
+        return None
 
 
 class Game:
@@ -555,22 +610,115 @@ class Game:
         # --- CK-style character events ---
         ruler = self.rulers.get(self.player_civ.name)
         if ruler and random.random() < 0.3:
-            ck_events = [
-                f"Your ruler {ruler.name} gains the trait 'Ambitious'!",
-                f"A rival courtier challenges {ruler.name}'s authority.",
-                f"Your heir has come of age and demands a position at court.",
-                f"{ruler.name} hosts a grand feast — morale improves.",
-                f"A foreign dignitary arrives seeking an audience with {ruler.name}.",
-                f"{ruler.name} falls ill but recovers after rest.",
-                f"Court intrigue: your Spymaster uncovers a plot against {ruler.name}.",
-                f"A marriage proposal arrives for {ruler.name}'s dynasty.",
-                f"{ruler.name} goes on a hunt — gains the trait 'Hunter'.",
-                f"A religious scholar arrives at {ruler.name}'s court.",
-            ]
-            event = random.choice(ck_events)
-            self.state.turn_events.append(event)
+            event = self._generate_ck_event(ruler)
+            if event:
+                self.state.pending_ck_event = event
+                self.state.turn_events.append(f"⚔️  {event.name}: {event.description}")
 
         return self.state.turn_events
+
+    def _generate_ck_event(self, ruler: Character) -> Optional[CKEvent]:
+        """Generate a CK-style interactive event with choices."""
+        events = [
+            self._grand_feast_event(ruler),
+            self._rival_courtier_event(ruler),
+            self._marriage_proposal_event(ruler),
+            self._hunt_event(ruler),
+            self._court_intrigue_event(ruler),
+        ]
+        return random.choice(events)
+
+    def _grand_feast_event(self, ruler: Character) -> CKEvent:
+        return CKEvent(
+            "Grand Feast",
+            f"{ruler.name} considers hosting a grand feast to boost morale and prestige. How lavish should it be?",
+            [
+                {
+                    "name": "Lavish Feast (-50 gold, +10 prestige)",
+                    "effects": {"gold": -50, "prestige": 10},
+                },
+                {
+                    "name": "Modest Feast (+5 morale)",
+                    "effects": {"morale": 5},
+                },
+                {
+                    "name": "Cancel the feast",
+                    "effects": {},
+                },
+            ],
+        )
+
+    def _rival_courtier_event(self, ruler: Character) -> CKEvent:
+        rival_names = ["Marcus", "Cassia", "Titus", "Livia", "Drusus", "Octavia"]
+        rival = random.choice(rival_names)
+        return CKEvent(
+            "Rival Courtier",
+            f"A rival courtier, {rival}, challenges {ruler.name}'s authority at court. How should {ruler.name} respond?",
+            [
+                {
+                    "name": f"Imprison {rival} (-10 morale, +5 intrigue)",
+                    "effects": {"morale": -10, "intrigue": 5},
+                },
+                {
+                    "name": "Negotiate peacefully (+5 diplomacy)",
+                    "effects": {"diplomacy": 5},
+                },
+                {
+                    "name": "Ignore the provocation",
+                    "effects": {},
+                },
+            ],
+        )
+
+    def _marriage_proposal_event(self, ruler: Character) -> CKEvent:
+        suitor_names = ["Princess Helena of Egypt", "Duke Alessandro of Venice", "Lady Yuki of the Eastern Isles"]
+        suitor = random.choice(suitor_names)
+        return CKEvent(
+            "Marriage Proposal",
+            f"A noble, {suitor}, proposes marriage to strengthen alliances. How should {ruler.name} respond?",
+            [
+                {
+                    "name": "Accept the proposal (+15 prestige, +10 diplomacy)",
+                    "effects": {"prestige": 15, "diplomacy": 10},
+                },
+                {
+                    "name": "Decline politely",
+                    "effects": {},
+                },
+            ],
+        )
+
+    def _hunt_event(self, ruler: Character) -> CKEvent:
+        return CKEvent(
+            "Royal Hunt",
+            f"The royal hunt begins. {ruler.name} can either join the chase or remain at court.",
+            [
+                {
+                    "name": "Join the hunt (+3 martial)",
+                    "effects": {"martial": 3},
+                },
+                {
+                    "name": "Stay at court (+3 stewardship)",
+                    "effects": {"stewardship": 3},
+                },
+            ],
+        )
+
+    def _court_intrigue_event(self, ruler: Character) -> CKEvent:
+        return CKEvent(
+            "Court Intrigue",
+            f"Whispers of conspiracy reach {ruler.name}'s ears. A shadowy plot is unfolding within the court walls.",
+            [
+                {
+                    "name": "Investigate the plot (+5 intrigue, costs a turn)",
+                    "effects": {"intrigue": 5},
+                },
+                {
+                    "name": "Ignore the whispers",
+                    "effects": {},
+                },
+            ],
+        )
 
     def found_city(self, settler: Unit) -> City:
         """Found a new city at the settler's position. Removes the settler unit."""

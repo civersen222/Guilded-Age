@@ -33,6 +33,9 @@ class EventChoicePopup:
         """Show the event choice popup."""
         self._event = event
         self._game = game
+        # Pass game reference to event for effect evaluation
+        if hasattr(event, "_set_game"):
+            event._set_game(game)
 
         cx = (SCREEN_WIDTH - WIDTH) // 2
         cy = (SCREEN_HEIGHT - HEIGHT) // 2
