@@ -96,7 +96,7 @@ class GameScreen(BaseScreen):
             result = combat_result.handle_event(event)
             if result is not None:
                 self._apply_combat_result(result)
-                combat_result.dismiss()
+                combat_result.hide()
                 self.combat_popup = None
                 self.deselect()
                 return
@@ -348,6 +348,17 @@ class GameScreen(BaseScreen):
                 self.game.event_log.add_entry(result.description)
             # Redraw map to reflect HP changes
             self._needs_map_redraw = True
+
+            # Remove dead units from game
+            if hasattr(self.game, "military_manager"):
+                dead = [u for u in self.game.military_manager.units if not getattr(u, "is_alive", True)]
+                for u in dead:
+                    self.game.military_manager.units.remove(u)
+                    pos = getattr(u, "position", None)
+                    if pos and hasattr(self.game, "hex_map"):
+                        tile = self.game.hex_map.tiles.get(pos)
+                        if tile and getattr(tile, "unit", None) == getattr(u, "unit_type", ""):
+                            tile.unit = None
 
     def deselect(self):
         self._selected_unit = self._selected_city = None
