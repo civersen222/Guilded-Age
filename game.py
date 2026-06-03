@@ -551,6 +551,25 @@ class Game:
             del self.units[name]
         if dead_units:
             msgs.append(f"\n  💀 {len(dead_units)} dead unit(s) removed from game")
+
+        # --- CK-style character events ---
+        ruler = self.rulers.get(self.player_civ.name)
+        if ruler and random.random() < 0.3:
+            ck_events = [
+                f"Your ruler {ruler.name} gains the trait 'Ambitious'!",
+                f"A rival courtier challenges {ruler.name}'s authority.",
+                f"Your heir has come of age and demands a position at court.",
+                f"{ruler.name} hosts a grand feast — morale improves.",
+                f"A foreign dignitary arrives seeking an audience with {ruler.name}.",
+                f"{ruler.name} falls ill but recovers after rest.",
+                f"Court intrigue: your Spymaster uncovers a plot against {ruler.name}.",
+                f"A marriage proposal arrives for {ruler.name}'s dynasty.",
+                f"{ruler.name} goes on a hunt — gains the trait 'Hunter'.",
+                f"A religious scholar arrives at {ruler.name}'s court.",
+            ]
+            event = random.choice(ck_events)
+            self.state.turn_events.append(event)
+
         return self.state.turn_events
 
     def found_city(self, settler: Unit) -> City:
