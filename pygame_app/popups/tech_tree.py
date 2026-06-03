@@ -28,14 +28,17 @@ BUTTON_H = 30
 
 
 class TechTreePopup:
-    """Popup showing all technologies organized by era."""
+    """Popup showing all technologies organized by era with clickable selection."""
 
     def __init__(self):
         self.window: Optional[pygame_gui.elements.UIWindow] = None
         self.info_textbox: Optional[pygame_gui.elements.UITextBox] = None
+        self.tech_list: Optional[pygame_gui.elements.UISelectionList] = None
+        self.details_textbox: Optional[pygame_gui.elements.UITextBox] = None
         self.research_btn: Optional[pygame_gui.elements.UIButton] = None
         self.close_btn: Optional[pygame_gui.elements.UIButton] = None
         self._game: Any = None
+        self._selected_tech_name: Optional[str] = None
 
     @property
     def is_visible(self) -> bool:
@@ -45,6 +48,7 @@ class TechTreePopup:
     def show(self, ui_manager: pygame_gui.UIManager, game: Any) -> None:
         """Show the technology tree popup."""
         self._game = game
+        self._selected_tech_name = None
 
         cx = (SCREEN_WIDTH - WIDTH) // 2
         cy = (SCREEN_HEIGHT - HEIGHT) // 2
@@ -55,11 +59,37 @@ class TechTreePopup:
             window_display_title="Technology Tree",
         )
 
-        # Build HTML content
-        html = self._build_html(game)
+        # Top status section — HTML display of all techs (researched/locked)
+        status_h = 120
         self.info_textbox = pygame_gui.elements.UITextBox(
-            relative_rect=pygame.Rect(MARGIN, MARGIN, WIDTH - MARGIN * 2, HEIGHT - MARGIN * 2 - BUTTON_H),
-            html_text=html,
+            relative_rect=pygame.Rect(MARGIN, MARGIN, WIDTH - MARGIN * 2, status_h),
+            html_text=self._build_status_html(game),
+            manager=ui_manager,
+            container=self.window,
+        )
+
+        # LEFT: UISelectionList of available techs
+        list_w = WIDTH // 2 - MARGIN * 2
+        list_x = MARGIN
+        list_y = status_h + MARGIN * 2
+        list_h = HEIGHT - list_y - BUTTON_H - MARGIN * 2
+
+        self.tech_list = pygame_gui.elements.UISelectionList(
+            relative_rect=pygame.Rect(list_x, list_y, list_w, list_h),
+            starting_options=[],
+            manager=ui_manager,
+            container=self.window,
+        )
+
+        # RIGHT: UITextBox showing details of selected tech
+        details_x = list_x + list_w + MARGIN * 2
+        details_y = list_y
+        details_w = list_w
+        details_h = list_h
+
+        self.details_textbox = pygame_gui.elements.UITextBox(
+            relative_rect=pygame.Rect(details_x, details_y, details_w, details_h),
+            html_text='<font color="#888888">Select a technology to view details</font>',
             manager=ui_manager,
             container=self.window,
         )
@@ -83,12 +113,15 @@ class TechTreePopup:
             container=self.window,
         )
 
-    def _build_html(self, game: Any) -> str:
-        """Build HTML content for the tech tree display."""
+        # Populate the selection list
+        self._populate_list(game)
+
+    def _get_tech_status(self, game: Any) -> Dict[str, str]:
+        """Return a dict mapping tech name -> status: 'done', 'researching', 'available', 'locked'."""
         tech_manager = getattr(game, "tech_manager", None)
         researched = set()
         current_research = None
-        available = {}
+        available = set()
 
         if tech_manager:
             researched = set(getattr(tech_manager, "researched", {}))
@@ -96,13 +129,29 @@ class TechTreePopup:
             avail_list = getattr(tech_manager, "get_available_techs", None)
             if callable(avail_list):
                 avail = avail_list()
-                available = {getattr(t, "name", t): t for t in avail} if avail else {}
+                available = {getattr(t, "name", t) for t in avail} if avail else set()
 
+        statuses: Dict[str, str] = {}
+        for tech in TECHNOLOGIES.values():
+            name = tech.name
+            if name in researched:
+                statuses[name] = "done"
+            elif name == current_research:
+                statuses[name] = "researching"
+            elif name in available:
+                statuses[name] = "available"
+            else:
+                statuses[name] = "locked"
+        return statuses
+
+    def _build_status_html(self, game: Any) -> str:
+        """Build HTML content for the top status bar (all techs shown compactly)."""
+        statuses = self._get_tech_status(game)
         parts: List[str] = []
 
         for era in ERA_ORDER:
             label = ERA_LABELS[era]
-            parts.append(f"<h2>=== {label.upper()} ERA ===</h2><br>")
+            parts.append(f"<h3>{label.upper()} ERA</h3><br>")
 
             era_techs = sorted(
                 [t for t in TECHNOLOGIES.values() if t.era == era],
@@ -113,41 +162,95 @@ class TechTreePopup:
                 name = tech.name
                 cost = tech.cost
                 prereqs = tech.prerequisites
+                status = statuses.get(name, "locked")
 
-                if name in researched:
-                    parts.append(f'<font color="{COLOR_DONE}">[DONE] {name}</font><br>')
-                elif name == current_research:
+                if status == "done":
+                    parts.append(f'<font color="{COLOR_DONE}">[✓] {name}</font>  ')
+                elif status == "researching":
                     progress = getattr(tech_manager, "current_research_progress", 0)
                     parts.append(
                         f'<font color="{COLOR_RESEARCHING}">'
                         f"[RESEARCHING] {name} ({progress}/{cost})"
-                        f"</font><br>"
+                        f"</font>  "
                     )
-                elif name in available:
+                elif status == "available":
                     prereq_str = ", ".join(prereqs) if prereqs else "None"
                     parts.append(
                         f'<font color="{COLOR_AVAILABLE}">'
-                        f"[AVAILABLE] {name} - Cost: {cost} - Requires: {prereq_str}"
-                        f"</font><br>"
+                        f"[{name}] ({cost})"
+                        f"</font>  "
                     )
                 else:
                     prereq_str = ", ".join(prereqs) if prereqs else "None"
                     parts.append(
                         f'<font color="{COLOR_LOCKED}">'
-                        f"[LOCKED] {name} - Requires: {prereq_str}"
-                        f"</font><br>"
+                        f"[{name}] Req: {prereq_str}"
+                        f"</font>  "
                     )
 
             parts.append("<br>")
 
         return "".join(parts)
 
+    def _populate_list(self, game: Any) -> None:
+        """Populate the selection list with available techs."""
+        if self.tech_list is None:
+            return
+
+        statuses = self._get_tech_status(game)
+        # Collect available techs sorted by cost then name
+        available_techs = [
+            t for t in TECHNOLOGIES.values()
+            if statuses.get(t.name) == "available"
+        ]
+        available_techs.sort(key=lambda t: (t.cost, t.name))
+
+        # Clear and rebuild options
+        self.tech_list.clear_options()
+        for tech in available_techs:
+            option_text = f"{tech.name} — {tech.cost} gold"
+            self.tech_list.add_option(
+                text=option_text,
+                object_id=f"#tech_{tech.name}",
+                selected_object=tech,
+            )
+
+    def _on_tech_selected(self, tech: Any) -> None:
+        """Build and display details for the selected tech."""
+        if self.details_textbox is None:
+            return
+
+        name = getattr(tech, "name", str(tech))
+        cost = getattr(tech, "cost", "?")
+        prereqs = getattr(tech, "prerequisites", [])
+        effects = getattr(tech, "effects", "")
+        era = getattr(tech, "era", None)
+
+        era_label = ERA_LABELS.get(era, str(era)) if era else "Unknown"
+        prereq_str = ", ".join(prereqs) if prereqs else "None"
+
+        details_html = f"""
+        <b>{name}</b><br>
+        <br>
+        <b>Era:</b> {era_label}<br>
+        <b>Cost:</b> {cost} gold<br>
+        <b>Prerequisites:</b> {prereq_str}<br>
+        <br>
+        <b>Effects:</b><br>
+        {effects if effects else "No additional effects listed."}
+        """
+        self.details_textbox.html_text = details_html
+        self.details_textbox.rebuild()
+
     def _refresh(self) -> None:
         """Refresh the popup display."""
-        if self.info_textbox is not None and self._game is not None:
-            html = self._build_html(self._game)
-            self.info_textbox.html_text = html
+        if self._game is None:
+            return
+        if self.info_textbox is not None:
+            self.info_textbox.html_text = self._build_status_html(self._game)
             self.info_textbox.rebuild()
+        if self.tech_list is not None:
+            self._populate_list(self._game)
 
     def handle_event(self, event) -> bool:
         """Handle events from the popup. Returns True if handled."""
@@ -158,38 +261,38 @@ class TechTreePopup:
             if event.ui_element == self.research_btn and self._game is not None:
                 return self._on_research()
             return True
+        if event.type == pygame_gui.UI_SELECTION_LIST_CHANGED:
+            if event.ui_element == self.tech_list and event.selected_object is not None:
+                self._selected_tech_name = getattr(event.selected_object, "name", str(event.selected_object))
+                self._on_tech_selected(event.selected_object)
+                return True
+            return True
         return False
 
     def _on_research(self) -> bool:
-        """Start researching the first available tech."""
+        """Start researching the SELECTED tech."""
+        if self._selected_tech_name is None:
+            return True
+
         tech_manager = getattr(self._game, "tech_manager", None)
         if tech_manager is None:
             return True
 
-        avail_list = getattr(tech_manager, "get_available_techs", None)
-        if not callable(avail_list):
-            return True
-
-        available = avail_list()
-        if not available:
-            return True
-
-        # Pick lowest cost available tech
-        best = min(available, key=lambda t: getattr(t, "cost", 0))
-        tech_name = getattr(best, "name", None) if hasattr(best, "name") else best
         start = getattr(tech_manager, "start_research", None)
         if callable(start):
-            start(tech_name)
+            start(self._selected_tech_name)
 
         self._refresh()
         return True
 
     def _kill(self) -> None:
         """Kill all child elements and the window."""
-        for elem in [self.info_textbox, self.research_btn, self.close_btn]:
+        for elem in [self.info_textbox, self.tech_list, self.details_textbox, self.research_btn, self.close_btn]:
             if elem is not None:
                 elem.kill()
         self.info_textbox = None
+        self.tech_list = None
+        self.details_textbox = None
         self.research_btn = None
         self.close_btn = None
         if self.window is not None:
