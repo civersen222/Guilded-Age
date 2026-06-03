@@ -138,6 +138,11 @@ class GameScreen(BaseScreen):
         if event.key == pygame.K_t: self._open_popup("tech", game)
         elif event.key == pygame.K_d: self._open_popup("diplomacy", game)
         elif event.key == pygame.K_y: self._open_popup("dynasty", game)
+        elif event.key == pygame.K_r:
+            from pygame_app.popups.religion_popup import ReligionPopup
+            player_name = getattr(game.player_civ, "name", "")
+            self._active_popup = ReligionPopup(self.ui_manager, game, player_name)
+            return
         elif event.key == pygame.K_p: self._open_production_popup_for(game, self._selected_city)
         elif event.key == pygame.K_f and self._selected_unit:
             self._selected_unit.is_fortified = True
