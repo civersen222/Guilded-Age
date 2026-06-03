@@ -179,8 +179,9 @@ class GameScreen(BaseScreen):
             self._camera.center_on(wx, wy)
 
     def _try_select_unit_at_hex(self, game, hx, hy):
+        """Find a player-owned unit at the clicked hex and select it."""
         for unit in game.units.values():
-            if getattr(unit, "is_alive", False) and getattr(unit, "owner", "") == game.player_civ.name and getattr(unit, "position", None) == (hx, hy):
+            if unit.is_alive and unit.owner == game.player_civ.name and unit.position == (hx, hy):
                 self._select_unit(game, unit)
                 return True
         return False
