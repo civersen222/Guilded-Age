@@ -240,6 +240,15 @@ class GameScreen(BaseScreen):
         print(f"[game_screen] _process_next_turn called, turn before={game.state.turn}")
         game.process_turn()
         print(f"[game_screen] process_turn done, turn after={game.state.turn}")
+
+        # Check for victory/game over
+        if getattr(game.state, "game_over", False):
+            winner = getattr(game.state, "winner", "Unknown")
+            victory_type = getattr(game.state, "victory_type", "Domination")
+            is_player_win = (winner == getattr(game.player_civ, "name", ""))
+            title = "VICTORY!" if is_player_win else "DEFEAT"
+            msg = f"{winner} wins by {victory_type}!"
+            self._event_log.add_event(f"{title}: {msg}", "critical")
         self._update_fog(game)
         if game.tech_manager.current_research is None:
             available = game.tech_manager.get_available_techs()

@@ -19667,3 +19667,32 @@ The AI methods already return messages that ARE extended into `turn_events` at g
 So AI actions are ALREADY being logged to `turn_events`. The tests pass. I'll commit with the requested message.
 
 
+
+--- Iteration 24 | tokens=0 reasoning=0 stop=tool_use ---
+
+
+--- Iteration 25 | tokens=73 reasoning=0 stop=tool_use ---
+The commit only captured `.cynco-stream.log` — a log file, not actual code. The AI actions are already being logged via `ai_msgs` returned from `take_turn()` and extended into `turn_events` at game.py:397. No code changes were needed.
+
+Let me verify there are no actual code changes to commit:
+
+
+
+--- Iteration 26 | tokens=40 reasoning=0 stop=end_turn ---
+Confirmed — no code changes at all. The AI actions are already being logged to `turn_events` via the existing code path. The commit accidentally captured a log file. Let me fix the commit:
+
+--- Iteration 27 | tokens=0 reasoning=0 stop=tool_use ---
+
+
+--- Iteration 28 | tokens=148 reasoning=0 stop=end_turn ---
+The task is complete. AI actions are **already being logged** to `turn_events` via the existing code path:
+
+- `game.py:397` extends `turn_events` with AI messages from `_process_ai_turn()`
+- `ai.py:500` `take_turn()` returns messages for research, production, military, diplomacy, and expansion
+- Existing log messages include:
+  - `"🔬 Researched: {tech}"`
+  - `"{city}: produced {item}"`
+  - `"🏛️ Founded {city}"`
+  - `"{civ} declares war on {target}!"`
+
+Tests pass (21 passed). No code changes were needed.
