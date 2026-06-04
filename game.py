@@ -1135,20 +1135,24 @@ class Game:
 
         return game
 
-    def save_game(self, filename: Optional[str] = None) -> str:
-        """Save game to JSON file. Returns the file path."""
-        import save_system
-        return save_system.save_game(self, filename)
-
+    def save_game(self, filepath):
+        """Save game state to JSON file."""
+        import json
+        state = {
+            "turn": self.state.turn,
+            "player_civ": self.player_civ.name,
+            "cities": {name: {"position": list(c.position), "population": c.population, "owner": c.owner} for name, c in self.cities.items()},
+            "units": {name: {"position": list(u.position), "type": u.unit_type, "owner": u.owner, "hp": getattr(u, "hp", 100)} for name, u in self.units.items()},
+        }
+        with open(filepath, "w") as f:
+            json.dump(state, f, indent=2)
     @staticmethod
-    def load_game(filepath: str) -> Optional['Game']:
-        """Load game from JSON file."""
-        import save_system
-        data = save_system.load_game(filepath)
-        if not data:
-            return None
-        return Game.from_dict(data)
-
+    @classmethod
+    def load_game(cls, filepath):
+        """Load game state from JSON file. Returns partial state dict."""
+        import json
+        with open(filepath) as f:
+            return json.load(f)
     def get_game_status(self) -> str:
         """Get current game state as a formatted string"""
         player_gold = self.gold.get(self.player_civ.name, 0)
