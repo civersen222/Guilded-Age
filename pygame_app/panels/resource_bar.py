@@ -37,6 +37,26 @@ POS_COLOR = (58, 178, 78)
 NEG_COLOR = (178, 58, 58)
 
 
+def turn_to_year(turn: int) -> str:
+    """Convert a turn number to a calendar year starting at 4000 BC.
+
+    Early turns advance quickly (40 years/turn), slowing over time.
+    """
+    year = -4000
+    remaining = turn
+    brackets = [(100, 40), (100, 20), (100, 10), (100, 5)]
+    for count, step in brackets:
+        if remaining <= 0:
+            break
+        use = min(remaining, count)
+        year += use * step
+        remaining -= use
+    year += remaining * 2
+    if year <= 0:
+        return f"{abs(year)} BC"
+    return f"{year} AD"
+
+
 class ResourceBar:
     """Top bar showing civ name, yields, gold, and turn counter."""
 
@@ -170,7 +190,7 @@ class ResourceBar:
         except Exception:
             pass
         try:
-            self._labels["turn"].set_text(f"Turn {turn}")
+            self._labels["turn"].set_text(f"Turn {turn} | {turn_to_year(turn)}")
         except Exception:
             pass
 
