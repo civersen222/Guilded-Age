@@ -484,7 +484,12 @@ class CivKingsGUI:
                     cam_q = int(self.map_canvas.zoom_pan.offset[0])
                     cam_r = int(self.map_canvas.zoom_pan.offset[1])
         
-        self.minimap_renderer.render_minimap(tiles, (cam_q, cam_r, cam_w, cam_h))
+        self.minimap_renderer.render_minimap(
+            tiles, (cam_q, cam_r, cam_w, cam_h),
+            cities=self.game.cities,
+            units=self.game.units,
+            player_name=self.game.player_civ.name
+        )
     
     def _top_bar(self) -> None:
         bar = tk.Frame(self.root, bg=PANEL_BG2, height=48)

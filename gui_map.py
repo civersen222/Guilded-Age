@@ -283,8 +283,11 @@ class MinimapRenderer:
         self.camera_rect: Optional[int] = None
         
     def render_minimap(self, tiles: Dict[Tuple[int, int], HexTile],
-                      camera_view: Tuple[int, int, int, int] = (0, 0, 100, 100)):
-        """Render the minimap with camera view rectangle."""
+                      camera_view: Tuple[int, int, int, int] = (0, 0, 100, 100),
+                      cities: Optional[Dict] = None,
+                      units: Optional[Dict] = None,
+                      player_name: str = ""):
+        """Render the minimap with camera view rectangle, city and unit markers."""
         self.canvas.delete("all")
         self.minimap_items.clear()
         
@@ -311,6 +314,36 @@ class MinimapRenderer:
                 x, y, x + scale, y + scale,
                 fill=color, outline="#000000", width=0
             )
+            
+        # Draw city markers on minimap
+        if cities:
+            for name, city in cities.items():
+                pos = getattr(city, "position", None)
+                if pos:
+                    owner = getattr(city, "owner", None)
+                    owner_name = getattr(owner, "name", "") if owner else ""
+                    color = "#0064ff" if owner_name == player_name else "#ff3232"
+                    cx = pos[0] * scale + scale / 2
+                    cy = pos[1] * scale + scale / 2
+                    self.minimap_items[name] = self.canvas.create_oval(
+                        cx - 3, cy - 3, cx + 3, cy + 3,
+                        fill=color, outline="", width=0
+                    )
+        
+        # Draw unit markers on minimap
+        if units:
+            for name, unit in units.items():
+                pos = getattr(unit, "position", None)
+                if pos:
+                    owner = getattr(unit, "owner", None)
+                    owner_name = getattr(owner, "name", "") if owner else ""
+                    color = "#00c800" if owner_name == player_name else "#ff9600"
+                    ux = pos[0] * scale + scale / 2
+                    uy = pos[1] * scale + scale / 2
+                    self.minimap_items[name] = self.canvas.create_oval(
+                        ux - 2, uy - 2, ux + 2, uy + 2,
+                        fill=color, outline="", width=0
+                    )
             
         # Draw camera view rectangle
         cam_q, cam_r, cam_w, cam_h = camera_view
