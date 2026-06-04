@@ -745,6 +745,7 @@ class Game:
         if settler.name in self.units:
             del self.units[settler.name]
         
+        self.state.turn_events.append(f"🏛️  {civ_name} founded {new_city.name} at ({tile[0]}, {tile[1]})")
         return new_city
 
     def _check_victory(self):

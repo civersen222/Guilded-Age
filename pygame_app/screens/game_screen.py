@@ -316,19 +316,9 @@ class GameScreen(BaseScreen):
         if not tile or tile.terrain in (TerrainType.WATER_COAST, TerrainType.OCEAN):
             self._event_log.add_event("Cannot settle on water tiles", "error")
             return
-        from game_data import get_climate_for_row
-        from city import City
-        name = game.player_civ.name + " Colony"
-        counter = 1
-        while name in game.cities:
-            counter += 1
-            name = f"{game.player_civ.name} Colony {counter}"
-        city = City(name=name, owner=game.player_civ.name, position=pos, population=1, gold=0, climate_zone=get_climate_for_row(pos[1], game.map.height), is_coastal=tile.terrain == TerrainType.WATER_COAST)
-        game.cities[city.name] = city
-        game.map.add_city(city)
+        unit.owner = game.player_civ.name
+        city = game.found_city(unit)
         game.city_manager.cities = list(game.cities.values())
-        game.military_manager.remove_unit(unit)
-        game.units.pop(unit.name, None)
         self._event_log.add_event(f"Founded {city.name}!", "success")
         self.deselect()
         self._city_panel.refresh(game)
