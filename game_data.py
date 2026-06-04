@@ -434,6 +434,7 @@ class BuildingType:
     gold: float = 0
     science: float = 0
     faith: float = 0
+    culture: float = 0
     happiness: float = 0
     defense_bonus: int = 0
     requires_district: Optional[str] = None
@@ -441,12 +442,12 @@ class BuildingType:
 
 
 BUILDINGS = {
-    "Granary": BuildingType("Granary", "City Center", 60, food=3),
-    "Market": BuildingType("Market", "Commercial Hub", 50, gold=3, requires_district="Commercial Hub"),
+    "Granary": BuildingType("Granary", "City Center", 60, food=2),
+    "Market": BuildingType("Market", "Commercial Hub", 50, gold=2, requires_district="Commercial Hub"),
     "Bank": BuildingType("Bank", "Commercial Hub", 100, gold=5, requires_district="Commercial Hub", requires_tech="Coinage"),
-    "Temple": BuildingType("Temple", "Holy Site", 50, faith=4, requires_district="Holy Site"),
+    "Temple": BuildingType("Temple", "Holy Site", 50, faith=2, requires_district="Holy Site"),
     "Shrine": BuildingType("Shrine", "Holy Site", 25, faith=2, requires_district="Holy Site"),
-    "Library": BuildingType("Library", "Campus", 50, science=3, requires_district="Campus"),
+    "Library": BuildingType("Library", "Campus", 50, science=2, requires_district="Campus"),
     "University": BuildingType("University", "Campus", 100, science=5, requires_district="Campus", requires_tech="Education"),
     "Barracks": BuildingType("Barracks", "Encampment", 40, defense_bonus=10, requires_district="Encampment"),
     "Stable": BuildingType("Stable", "Encampment", 60, production=2, requires_district="Encampment", requires_tech="Horsemanship"),
@@ -454,7 +455,8 @@ BUILDINGS = {
     "Aqueduct": BuildingType("Aqueduct", "City Center", 80, food=4, requires_tech="Engineering"),
     "Wall": BuildingType("Wall", "City Center", 60, defense_bonus=20, requires_district="City Center"),
     "Theater": BuildingType("Theater", "Entertainment", 60, happiness=3, gold=1, requires_district="Entertainment"),
-    "Monument": BuildingType("Monument", "City Center", 30, science=1),
+    "Monument": BuildingType("Monument", "City Center", 30, culture=2),
+    "Workshop": BuildingType("Workshop", "City Center", 50, production=2),
 }
 
 

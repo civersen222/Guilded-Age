@@ -199,6 +199,7 @@ class City:
             "science": self.population * 0.5,
             "production": 3.0,
             "culture": self.population * 0.2,
+            "faith": 0.0,
         }
 
         # Add yields from districts with adjacency bonuses
@@ -234,7 +235,9 @@ class City:
             if building.production > 0:
                 yields["production"] += building.production
             if building.faith > 0:
-                yields["culture"] += building.faith
+                yields["faith"] = yields.get("faith", 0) + building.faith
+            if hasattr(building, "culture") and building.culture > 0:
+                yields["culture"] += building.culture
             if building.happiness > 0:
                 self.happiness += building.happiness
 
