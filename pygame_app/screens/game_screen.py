@@ -36,6 +36,8 @@ class GameScreen(BaseScreen):
         self._drag_start = (0, 0)
         self.show_yields = False
         self._elapsed = 0.0
+        self._hovered_hex = None
+        self._tooltip_font = pygame.font.SysFont("arial", 14)
 
     def enter(self):
         game = self.app.game
@@ -442,6 +444,52 @@ class GameScreen(BaseScreen):
         self._hex_renderer.move_range.clear()
         self._hex_renderer.attack_range.clear()
 
+    def _draw_tooltip(self, surface, game):
+        if not self._hovered_hex:
+            return
+        hx, hy = self._hovered_hex
+        lines = []
+        # Terrain type
+        tile = game.hex_map.tiles.get((hx, hy))
+        if tile:
+            lines.append(getattr(tile, "terrain", "Unknown") or "Unknown")
+        # City name
+        for city in game.cities.values():
+            if getattr(city, "position", None) == (hx, hy):
+                lines.append(f"City: {city.name}")
+                break
+        # Unit
+        for unit in game.units.values():
+            if getattr(unit, "position", None) == (hx, hy) and getattr(unit, "is_alive", True):
+                lines.append(f"Unit: {unit.name} ({getattr(unit, 'unit_type', '')})")
+                break
+        if not lines:
+            return
+        # Render tooltip
+        mx, my = pygame.mouse.get_pos()
+        padding = 6
+        line_height = 18
+        bg_color = (30, 30, 40, 220)
+        text_color = (240, 240, 240)
+        surf_texts = [self._tooltip_font.render(line, True, text_color) for line in lines]
+        max_w = max(t.get_width() for t in surf_texts)
+        total_h = len(lines) * line_height
+        rect_w = max_w + padding * 2
+        rect_h = total_h + padding * 2
+        rect_x = mx + 16
+        rect_y = my - rect_h - 8
+        if rect_x + rect_w > SCREEN_WIDTH:
+            rect_x = mx - rect_w - 16
+        if rect_y < 0:
+            rect_y = my + 16
+        bg_surf = pygame.Surface((rect_w, rect_h), pygame.SRCALPHA)
+        bg_surf.fill(bg_color)
+        surface.blit(bg_surf, (rect_x, rect_y))
+        y = rect_y + padding
+        for t in surf_texts:
+            surface.blit(t, (rect_x + padding, y))
+            y += line_height
+
     def update(self, dt):
         game = self.app.game
         keys = pygame.key.get_pressed()
@@ -462,6 +510,12 @@ class GameScreen(BaseScreen):
             self._elapsed += dt
         if self._city_panel: self._city_panel.refresh(game)
         if self._unit_panel: self._unit_panel.refresh(game)
+        mx, my = pygame.mouse.get_pos()
+        if MAP_X <= mx <= MAP_X + MAP_W and MAP_Y <= my <= MAP_Y + MAP_H:
+            hx, hy = self._hex_renderer.screen_to_hex(mx - MAP_X, my - MAP_Y)
+            self._hovered_hex = (hx, hy)
+        else:
+            self._hovered_hex = None
 
     def draw(self, surface):
         game = self.app.game
@@ -490,4 +544,5 @@ class GameScreen(BaseScreen):
         self._needs_map_redraw = getattr(self, '_needs_map_redraw', True)
         if self._hex_renderer: self._hex_renderer.render(self._map_surface, game, self._elapsed)
         surface.blit(self._map_surface, (MAP_X, MAP_Y))
+        self._draw_tooltip(surface, game)
         if self._minimap: self._minimap.render(surface, game, SCREEN_HEIGHT)
