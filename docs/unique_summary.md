@@ -1,0 +1,3 @@
+# What Makes CivKings Unique
+
+CivKings blends Civilization-style empire-building with Crusader Kings–style dynasty mechanics. On a hex-based world, players expand cities, research tech, and wage war — but what sets it apart is that bloodline matters as much as territory. Rulers carry personal traits, stats, and court positions; family trees grow across generations; succession laws determine heirs when monarchs fall. Vassalage lets lieges tax subordinate lords, while political plots and random crises threaten even the strongest empires. Beyond traditional domination, science, and culture victories, CivKings offers a unique Dynasty victory: build a lasting bloodline whose legacy echoes through history.
