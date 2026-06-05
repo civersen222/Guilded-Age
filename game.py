@@ -523,7 +523,10 @@ class Game:
                 yields = city.calculate_yields()
                 
                 # Population growth
+                old_pop = city.population
                 city.grow()
+                if city.population > old_pop:
+                    self.state.turn_events.append(f"{city.name} has grown to population {city.population}!")
                 
                 # Process production for each city
                 if city.production_queue:
