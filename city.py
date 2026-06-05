@@ -187,6 +187,14 @@ class City:
 
         return 1.0 + total
 
+    def grow(self):
+        """Population growth each turn based on food surplus."""
+        yields = self.calculate_yields()
+        food = yields.get("food", 0)
+        consumption = self.population * 2
+        if food > consumption and self.population < 20:
+            self.population += 1
+
     def calculate_yields(self, tiles: Optional[Dict[tuple, Any]] = None) -> Dict[str, float]:
         """Calculate total yields for the city, including adjacency bonuses."""
         # Compute adjacency if map tiles are available

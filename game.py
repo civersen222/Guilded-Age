@@ -522,6 +522,9 @@ class Game:
                 # Calculate yields
                 yields = city.calculate_yields()
                 
+                # Population growth
+                city.grow()
+                
                 # Process production for each city
                 if city.production_queue:
                     item = city.production_queue[0]
