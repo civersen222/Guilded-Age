@@ -170,7 +170,10 @@ class Game:
         self.improvement_manager = ImprovementManager()
         self.great_people_manager = GreatPeopleManager()
         self.era_system = EraSystem()
-        
+
+        # Spy network: {(source_civ, target_civ): level} where level 0-3
+        self.spy_network: Dict[Tuple[str, str], int] = {}
+
         # Economy sub-systems
         self.tax_system = TaxSystem()
         self.happiness_system = HappinessSystem()
@@ -770,6 +773,32 @@ class Game:
         
         self.state.turn_events.append(f"🏛️  {civ_name} founded {new_city.name} at ({tile[0]}, {tile[1]})")
         return new_city
+
+    def spy_on(self, source_civ: str, target_civ: str) -> str:
+        """Send spies to a target civilization. Costs 100 gold, increases spy level 0-3."""
+        if source_civ not in self.civilizations:
+            return f"Unknown civilization: {source_civ}"
+        if target_civ not in self.civilizations:
+            return f"Unknown civilization: {target_civ}"
+        if source_civ == target_civ:
+            return "Cannot spy on yourself."
+
+        if self.gold.get(source_civ, 0) < 100:
+            return f"{source_civ} needs 100 gold to fund a spy mission."
+
+        key = (source_civ, target_civ)
+        current_level = self.spy_network.get(key, 0)
+        if current_level >= 3:
+            return f"{source_civ} already has maximum spy coverage on {target_civ} (level 3)."
+
+        self.gold[source_civ] -= 100
+        new_level = current_level + 1
+        self.spy_network[key] = new_level
+
+        level_names = {1: "Basic", 2: "Enhanced", 3: "Complete"}
+        msg = f"🕵️  {source_civ} sends spies to {target_civ} ({level_names[new_level]} coverage, level {new_level}/3)"
+        self.state.turn_events.append(msg)
+        return msg
 
     def _check_victory(self):
         """Check victory conditions."""
