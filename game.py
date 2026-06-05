@@ -108,10 +108,19 @@ class CKEvent:
         return None
 
 
+WORLD_WONDERS: Dict[str, Dict[str, Union[str, int]]] = {
+    "Pyramids of Giza":       {"cost": 100, "production_bonus": 3},
+    "Great Library":          {"cost": 100, "science_bonus": 5},
+    "Colosseum":              {"cost": 100, "culture_bonus": 3},
+    "Stonehenge":             {"cost": 100, "faith_bonus": 3},
+}
+
+
 class Game:
     """Main game class that orchestrates all systems"""
-    
+
     def __init__(self, player_civ: Civilization, ai_civs: Optional[List[Civilization]] = None, map_width: int = 16, map_height: int = 16):
+        self.wonders_built: Dict[str, str] = {}  # wonder_name -> civ_name
         if not ai_civs:
             ai_civs = ["Rome", "Greece"]
         
@@ -199,7 +208,47 @@ class Game:
     def fog(self):
         """Expose fog of war."""
         return self._fog
-    
+
+    def build_wonder(self, civ_name: str, wonder_name: str) -> str:
+        """Attempt to build a world wonder for a civilization.
+
+        Returns a status message. Wonders can only be built once globally.
+        """
+        if wonder_name not in WORLD_WONDERS:
+            return f"Unknown wonder: {wonder_name}"
+        if wonder_name in self.wonders_built:
+            owner = self.wonders_built[wonder_name]
+            return f"{wonder_name} already built by {owner}"
+        if civ_name not in self.civilizations:
+            return f"Unknown civilization: {civ_name}"
+
+        civ = self.civilizations[civ_name]
+        wonder = WORLD_WONDERS[wonder_name]
+        cost = wonder["cost"]
+
+        if civ.gold_reserve < cost:
+            return f"{civ_name} needs {cost} gold to build {wonder_name} (has {civ.gold_reserve})"
+
+        civ.gold_reserve -= cost
+        self.wonders_built[wonder_name] = civ_name
+
+        # Apply bonuses
+        bonus_parts = []
+        if "production_bonus" in wonder:
+            civ.production_bonus += wonder["production_bonus"]
+            bonus_parts.append(f"+{wonder['production_bonus']} production")
+        if "science_bonus" in wonder:
+            civ.science_bonus += wonder["science_bonus"]
+            bonus_parts.append(f"+{wonder['science_bonus']} science")
+        if "culture_bonus" in wonder:
+            civ.culture_bonus += wonder["culture_bonus"]
+            bonus_parts.append(f"+{wonder['culture_bonus']} culture")
+        if "faith_bonus" in wonder:
+            civ.faith_bonus += wonder["faith_bonus"]
+            bonus_parts.append(f"+{wonder['faith_bonus']} faith")
+
+        return f"{civ_name} built {wonder_name}! Bonuses: {', '.join(bonus_parts)}"
+
     def _find_safe_tile(self, min_dist: int = 5) -> Optional[Tuple[int, int]]:
         """Find a tile at least min_dist hexes away from all existing cities."""
         city_positions = [c.position for c in self.cities.values()]
