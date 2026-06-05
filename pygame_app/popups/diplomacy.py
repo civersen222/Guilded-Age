@@ -77,6 +77,7 @@ class DiplomacyPopup:
             ("Declare War", "war"),
             ("Propose Alliance", "alliance"),
             ("Trade Agreement", "trade"),
+            ("Send Spy", "spy"),
             ("Close", "close"),
         ]
         start_x = (WIDTH - BUTTON_SPACING * len(actions) - 10) // 2
@@ -194,9 +195,12 @@ class DiplomacyPopup:
             dm.propose_alliance(self._player_civ, target_civ)
         elif action == "trade":
             dm.sign_trade_agreement(self._player_civ, target_civ, 5)
+        elif action == "spy":
+            if hasattr(self._game, "spy_on") and target_civ:
+                self._game.spy_on(target_civ)
 
         self._refresh_info(target_civ)
-        labels = {"war": "War declared!", "alliance": "Alliance proposed!", "trade": "Trade agreement signed!"}
+        labels = {"war": "War declared!", "alliance": "Alliance proposed!", "trade": "Trade agreement signed!", "spy": "Spy sent!"}
         if hasattr(self, "_status_label") and self._status_label:
             self._status_label.set_text(labels.get(action, ""))
         return True
