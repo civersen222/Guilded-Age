@@ -1,3 +1,4 @@
+# CivKings Game Engine
 """
 CivKings - Main Game Class
 Orchestrates the game loop, turn management, and state
