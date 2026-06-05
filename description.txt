@@ -1,0 +1,7 @@
+CivKings is a hybrid strategy game that merges the empire-building grandeur of Civilization with the dynasty-driven intrigue of Crusader Kings. Set on a hex-based world map, players guide their civilization from ancient settlements to modern empires — but unlike traditional 4X games, legacy and bloodline matter as much as territory.
+
+Each turn, you manage cities, districts, and wonders; research technologies spanning multiple eras; raise armies for conquest or defense; and negotiate alliances, trade routes, and treaties with AI opponents. The economy runs on food, production, gold, science, and faith — all balanced through taxation and district planning.
+
+What sets CivKings apart is its deep dynasty system. Rulers are characters with personal traits, stats, and court positions. Family trees grow across generations, with succession laws like Primogeniture or Gavelkind determining who inherits when a monarch falls. Vassalage mechanics let lieges collect taxes from subordinate lords, while political plots, random events, and faction rivalries keep even the most powerful empires on edge.
+
+Victory is not one-size-fits-all. Players can achieve Domination through conquest, Science through advancement, Culture through influence, Diplomacy through alliances — or Dynasty victory by building a lasting bloodline that endures across generations. With multiple AI difficulty levels, dynamic crises, and a rich blend of strategy and role-playing elements, CivKings offers a living world where every decision echoes through history.
