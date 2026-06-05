@@ -144,6 +144,27 @@ class GameScreen(BaseScreen):
             self._active_popup = ReligionPopup(self.ui_manager, game, player_name)
             return
         elif event.key == pygame.K_p: self._open_production_popup_for(game, self._selected_city)
+        elif event.key in (pygame.K_h, pygame.K_F1):
+            import pygame_gui
+            w, h = 400, 350
+            cx = (getattr(self, "screen_w", 1280) - w) // 2
+            cy = (getattr(self, "screen_h", 720) - h) // 2
+            win = pygame_gui.elements.UIWindow(pygame.Rect(cx, cy, w, h), manager=self.ui_manager, window_display_title="Keyboard Shortcuts")
+            pygame_gui.elements.UITextBox(
+                "<b>Keyboard Shortcuts</b><br><br>"
+                "<b>T</b> - Technology Tree<br>"
+                "<b>D</b> - Diplomacy<br>"
+                "<b>Y</b> - Dynasty<br>"
+                "<b>R</b> - Religion<br>"
+                "<b>P</b> - Production (city)<br>"
+                "<b>TAB</b> - Cycle Units<br>"
+                "<b>SPACE</b> - Skip Unit<br>"
+                "<b>ENTER</b> - End Turn<br>"
+                "<b>ESC</b> - Close / Deselect<br>"
+                "<b>H / F1</b> - This Help<br>",
+                pygame.Rect(8, 8, w-16, h-16), manager=self.ui_manager, container=win)
+            self._active_popup = type("HelpPopup", (), {"_kill": lambda s: win.kill(), "is_visible": property(lambda s: win.alive()), "handle_event": lambda s,e: False})()
+            return
         elif event.key == pygame.K_f and self._selected_unit:
             self._selected_unit.is_fortified = True
             self._event_log.add_event(f"{self._selected_unit.unit_type} fortified", "info")
@@ -156,6 +177,8 @@ class GameScreen(BaseScreen):
         elif event.key == pygame.K_g:
             self.show_yields = not self.show_yields
             self._event_log.add_event("Yield overlay ON" if self.show_yields else "Yield overlay OFF", "info")
+        elif event.key in (pygame.K_h, pygame.K_F1):
+            self._show_help_popup()
 
     def _handle_mouse_down(self, event, game):
         mx, my = event.pos
@@ -322,6 +345,51 @@ class GameScreen(BaseScreen):
         self._event_log.add_event(f"Founded {city.name}!", "success")
         self.deselect()
         self._city_panel.refresh(game)
+
+    def _show_help_popup(self):
+        """Show a keyboard shortcuts help overlay."""
+        if getattr(self, "_active_popup", None):
+            self._active_popup._kill()
+        container = pygame_gui.elements.UIContainer(
+            relative_rect=pygame.Rect(0, 0, 420, 310),
+            relative_pos=(0.5, 0.5),
+            manager=self.ui_manager,
+        )
+        container.set_relative_position((0.5, 0.5))
+        title = pygame_gui.elements.UIText(
+            relative_rect=pygame.Rect(10, 8, 400, 30),
+            text="Keyboard Shortcuts",
+            object_id="#help_title",
+            manager=self.ui_manager,
+            parent=container,
+        )
+        title.font = pygame.font.SysFont("arial", 18, bold=True)
+        lines = [
+            "T  - Technology Tree",
+            "D  - Diplomacy",
+            "Y  - Dynasty",
+            "R  - Religion",
+            "P  - Production (city selected)",
+            "TAB - Cycle Units",
+            "SPACE - Skip Unit",
+            "ENTER - End Turn",
+            "ESC - Close / Deselect",
+            "H / F1 - This Help",
+        ]
+        text = "\n".join(lines)
+        pygame_gui.elements.UITextBox(
+            html_text=text,
+            relative_rect=pygame.Rect(10, 40, 400, 230),
+            manager=self.ui_manager,
+            parent=container,
+        )
+        close_btn = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect(150, 270, 120, 30),
+            text="Close",
+            manager=self.ui_manager,
+            parent=container,
+        )
+        self._active_popup = container
 
     def _open_popup(self, kind, game):
         """Open a popup window for tech, diplomacy, or dynasty screens.
