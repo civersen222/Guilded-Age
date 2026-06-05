@@ -184,6 +184,7 @@ class Game:
         self.spy_network: Dict[Tuple[str, str], int] = {}
         self.trade_routes = []  # list of (city1_name, city2_name, gold_per_turn)
         self.great_people_points = {}  # {civ_name: {"scientist": float, "artist": float, "general": float, "engineer": float}}
+        self.golden_ages = {}  # {civ_name: turns_remaining}
 
         # Economy sub-systems
         self.tax_system = TaxSystem()
@@ -449,6 +450,9 @@ class Game:
             msgs.extend(ai_msgs)
             
             self.state.turn_events.extend(ai_msgs)
+        
+        # Process golden ages
+        self.process_golden_ages()
         
         # Process events
         event = self.event_manager.generate_event()
@@ -983,6 +987,27 @@ class Game:
                 pass
         
         return None
+
+    def trigger_golden_age(self, civ: str, turns: int = 10):
+        """Start or extend a golden age for a civilization."""
+        self.golden_ages[civ] = self.golden_ages.get(civ, 0) + turns
+        print(f"  ✨ {civ} has entered a Golden Age for {turns} turns!")
+
+    def process_golden_ages(self):
+        """Decrement golden age timers and apply bonuses."""
+        to_remove = []
+        for civ_name, turns_left in self.golden_ages.items():
+            if turns_left > 0:
+                self.golden_ages[civ_name] = turns_left - 1
+                # Golden age bonus: +10% gold and science
+                if civ_name in self.gold:
+                    self.gold[civ_name] += int(self.gold[civ_name] * 0.1)
+                if turns_left - 1 == 0:
+                    print(f"  🌅 The Golden Age of {civ_name} has ended.")
+            else:
+                to_remove.append(civ_name)
+        for civ_name in to_remove:
+            del self.golden_ages[civ_name]
 
     def _process_ai_turn(self, civ_name: str, civ: Civilization) -> List[str]:
         """Process one turn for an AI civilization and return messages."""
