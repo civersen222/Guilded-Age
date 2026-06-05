@@ -173,6 +173,7 @@ class Game:
 
         # Spy network: {(source_civ, target_civ): level} where level 0-3
         self.spy_network: Dict[Tuple[str, str], int] = {}
+        self.trade_routes = []  # list of (city1_name, city2_name, gold_per_turn)
 
         # Economy sub-systems
         self.tax_system = TaxSystem()
@@ -854,7 +855,28 @@ class Game:
                 else:
                     unit.moves_left = 1
         
+        self.process_trade_routes()
         return msgs
+
+    def create_trade_route(self, city1_name, city2_name, gold_per_turn=5):
+        """Create a trade route between two cities."""
+        route = (city1_name, city2_name, gold_per_turn)
+        if route not in self.trade_routes:
+            self.trade_routes.append(route)
+            self.state.turn_events.append(f"Trade route established: {city1_name} <-> {city2_name} (+{gold_per_turn} gold/turn)")
+            return True
+        return False
+
+    def process_trade_routes(self):
+        """Process trade income from all routes. Call from process_turn."""
+        for city1, city2, gold in self.trade_routes:
+            owner1 = None
+            owner2 = None
+            for name, city in self.cities.items():
+                if name == city1: owner1 = getattr(city, "owner", None)
+                if name == city2: owner2 = getattr(city, "owner", None)
+            if owner1: self.gold[owner1] = self.gold.get(owner1, 0) + gold
+            if owner2: self.gold[owner2] = self.gold.get(owner2, 0) + gold
 
     def _check_victory(self) -> Optional[str]:
         """Check if any victory condition is met"""
