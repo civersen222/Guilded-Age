@@ -174,6 +174,7 @@ class Game:
         # Spy network: {(source_civ, target_civ): level} where level 0-3
         self.spy_network: Dict[Tuple[str, str], int] = {}
         self.trade_routes = []  # list of (city1_name, city2_name, gold_per_turn)
+        self.great_people_points = {}  # {civ_name: {"scientist": float, "artist": float, "general": float, "engineer": float}}
 
         # Economy sub-systems
         self.tax_system = TaxSystem()
@@ -856,6 +857,7 @@ class Game:
                     unit.moves_left = 1
         
         self.process_trade_routes()
+        self.process_great_people(msgs)
         return msgs
 
     def create_trade_route(self, city1_name, city2_name, gold_per_turn=5):
@@ -877,6 +879,33 @@ class Game:
                 if name == city2: owner2 = getattr(city, "owner", None)
             if owner1: self.gold[owner1] = self.gold.get(owner1, 0) + gold
             if owner2: self.gold[owner2] = self.gold.get(owner2, 0) + gold
+
+    def process_great_people(self, msgs: List[str]):
+        """Accumulate great people points per civilization based on city populations.
+
+        Rates per city: scientist +0.5*pop, artist +0.3*pop, general +0.2*pop, engineer +0.4*pop.
+        When any category reaches 100 points, spawn a Great Person event and reset that category.
+        """
+        for civ_name in self.civilizations:
+            if civ_name not in self.great_people_points:
+                self.great_people_points[civ_name] = {"scientist": 0.0, "artist": 0.0, "general": 0.0, "engineer": 0.0}
+
+            points = self.great_people_points[civ_name]
+            total_pop = 0
+            for city in self.cities.values():
+                if getattr(city, "owner", None) == civ_name:
+                    total_pop += getattr(city, "population", 0)
+
+            points["scientist"] += total_pop * 0.5
+            points["artist"] += total_pop * 0.3
+            points["general"] += total_pop * 0.2
+            points["engineer"] += total_pop * 0.4
+
+            for gp_type in ["scientist", "artist", "general", "engineer"]:
+                while points[gp_type] >= 100:
+                    points[gp_type] -= 100
+                    msgs.append(f"  ⭐ Great {gp_type} has appeared in {civ_name}'s civilization!")
+                    self.state.turn_events.append(f"Great {gp_type} spawned for {civ_name}")
 
     def _check_victory(self) -> Optional[str]:
         """Check if any victory condition is met"""
