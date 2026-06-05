@@ -359,49 +359,54 @@ class AIPlayer:
     # ── Diplomacy management ────────────────────────────────────────────────
 
     def _manage_diplomacy(self, game) -> List[str]:
-        """Propose treaties when beneficial, declare war when strong."""
+        """AI diplomatic decisions based on relation scores each turn."""
         msgs = []
         other_civs = [n for n in game.civilizations if n != self.civ_name]
 
         for target in other_civs:
-            stance = self._evaluate_diplomacy_stance(target, game)
-            strength = self.known_enemy_strength.get(target, 0)
-            trust = self.trust_level.get(target, 50)
+            relation = game.diplomacy_manager.get_relation(self.civ_name, target)
+            at_war = self._is_at_war(game, target)
+            allied = target in self.allied_civs
+            trading = target in self.trade_partners
 
-            # Declare war if aggressive and stance is hostile
-            if (self.aggression > 0.6 and strength < 30
-                    and target not in self.allied_civs
-                    and not self._is_at_war(game, target)):
-                if random.random() < self.aggression * 0.3:
+            # Relation < -30 and not at war: 20% chance declare war
+            if relation < -30 and not at_war:
+                if random.random() < 0.2:
                     game.diplomacy_manager.declare_war(self.civ_name, target)
                     self.war_targets.append(target)
-                    msgs.append(f"    ⚔️ {self.civ_name} declares war on {target}!")
+                    msg = f"⚔️ {self.civ_name} declares war on {target} (relation {relation})"
+                    msgs.append(f"    {msg}")
+                    game.state.turn_events.append(msg)
                     self.diplomacy_history.append({
                         "action": "declare_war", "target": target,
                         "turn": game.state.turn,
                     })
 
-            # Form alliance if stance is friendly
-            elif stance == "friendly" and target not in self.allied_civs:
-                game.diplomacy_manager.propose_alliance(self.civ_name, target)
-                self.allied_civs.add(target)
-                msgs.append(f"    🤝 {self.civ_name} forms an alliance with {target}!")
-                self.diplomacy_history.append({
-                    "action": "alliance", "target": target,
-                    "turn": game.state.turn,
-                })
+            # Relation > 30 and not allied: 15% chance propose alliance
+            elif relation > 30 and not allied and not at_war:
+                if random.random() < 0.15:
+                    game.diplomacy_manager.propose_alliance(self.civ_name, target)
+                    self.allied_civs.add(target)
+                    msg = f"🤝 {self.civ_name} forms alliance with {target} (relation {relation})"
+                    msgs.append(f"    {msg}")
+                    game.state.turn_events.append(msg)
+                    self.diplomacy_history.append({
+                        "action": "alliance", "target": target,
+                        "turn": game.state.turn,
+                    })
 
-            # Trade if stance is neutral or friendly
-            elif stance in ("neutral", "friendly") and not self._is_at_war(game, target):
-                if random.random() < 0.3:
+            # Relation > 10, no trade: 10% chance sign trade
+            elif relation > 10 and not trading and not at_war:
+                if random.random() < 0.1:
                     game.diplomacy_manager.sign_trade_agreement(self.civ_name, target, 10)
-                    msgs.append(f"    💰 {self.civ_name} trades with {target}")
-
-            # Trade agreement if gold surplus
-            elif game.gold.get(self.civ_name, 0) > 100 and trust > 0:
-                game.diplomacy_manager.propose_trade_agreement(self.civ_name, target)
-                self.trade_partners.add(target)
-                msgs.append(f"    💰 {self.civ_name} trades with {target}")
+                    self.trade_partners.add(target)
+                    msg = f"💰 {self.civ_name} signs trade with {target} (relation {relation})"
+                    msgs.append(f"    {msg}")
+                    game.state.turn_events.append(msg)
+                    self.diplomacy_history.append({
+                        "action": "trade", "target": target,
+                        "turn": game.state.turn,
+                    })
 
         return msgs
 
