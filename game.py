@@ -161,6 +161,9 @@ class Game:
         # Succession law per civ
         self.succession_laws: Dict[str, str] = {}
         
+        # Happiness: civ_name -> happiness value
+        self.happiness: Dict[str, int] = {}
+        
         # AI players
         self.ai_players: Dict[str, AIPlayer] = {}
         
@@ -453,6 +456,10 @@ class Game:
         
         # Process golden ages
         self.process_golden_ages()
+        
+        # Calculate happiness for all civilizations
+        for civ_name in self.civilizations:
+            self._calculate_happiness(civ_name, msgs)
         
         # Process events
         event = self.event_manager.generate_event()
@@ -1008,6 +1015,42 @@ class Game:
                 to_remove.append(civ_name)
         for civ_name in to_remove:
             del self.golden_ages[civ_name]
+
+    def _calculate_happiness(self, civ_name: str, msgs: List[str]) -> None:
+        """Calculate happiness for a civilization each turn and trigger revolts if negative."""
+        civ_cities = [city for city in self.cities.values() if city.owner == civ_name]
+        
+        # +2 per city population
+        pop_bonus = sum(city.population for city in civ_cities) * 2
+        
+        # +1 per luxury resource (count tiles with luxury resources adjacent to cities)
+        luxury_count = 0
+        for city in civ_cities:
+            pos = getattr(city, "position", (0, 0))
+            for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]:
+                tile = self.map.tiles.get((pos[0] + dx, pos[1] + dy))
+                if tile and getattr(tile, "resource", None) in ("ivory", "spices", "silk", "coffee", "sugar", "cocoa", "dyes", "gems"):
+                    luxury_count += 1
+        luxury_bonus = luxury_count
+        
+        # -1 per city over 3 cities
+        num_cities = len(civ_cities)
+        empire_strain = 0
+        if num_cities > 3:
+            empire_strain = (num_cities - 3) * -1
+        
+        # +3 per colosseum wonder
+        wonder_bonus = 0
+        if self.wonders_built.get("Colosseum") == civ_name:
+            wonder_bonus = 3
+        
+        happiness = pop_bonus + luxury_bonus + empire_strain + wonder_bonus
+        self.happiness[civ_name] = happiness
+        
+        if happiness < 0:
+            revolt_msg = f"  ⚠️ {civ_name} is in revolt! Happiness: {happiness}"
+            msgs.append(revolt_msg)
+            self.state.turn_events.append(f"Revolt in {civ_name}: happiness {happiness}")
 
     def _process_ai_turn(self, civ_name: str, civ: Civilization) -> List[str]:
         """Process one turn for an AI civilization and return messages."""
