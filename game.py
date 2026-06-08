@@ -775,15 +775,16 @@ class Game:
                 city_pos = city.position
                 # Get adjacent hex tiles
                 adjacent = self.map.get_neighbors(city_pos[0], city_pos[1])
-                for pos in adjacent:
-                    if pos in self.culture_borders:
+                for tile in adjacent:
+                    tile_pos = (tile.x, tile.y)
+                    if tile_pos in self.culture_borders:
                         continue
-                    distance = abs(pos[0] - city_pos[0]) + abs(pos[1] - city_pos[1])
+                    distance = abs(tile.x - city_pos[0]) + abs(tile.y - city_pos[1])
                     if distance == 0:
                         distance = 1
                     if culture_output > 10 * distance:
-                        self.culture_borders[pos] = civ_name
-                        msgs.append(f"  🏛️ {city.name} expanded culture to ({pos[0]},{pos[1]})")
+                        self.culture_borders[tile_pos] = civ_name
+                        msgs.append(f"  🏛️ {city.name} expanded culture to ({tile.x},{tile.y})")
 
     def _generate_ck_event(self, ruler: Character) -> Optional[CKEvent]:
         """Generate a CK-style interactive event with choices."""
