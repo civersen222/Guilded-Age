@@ -11,15 +11,7 @@ from combat import CombatResult
 class Unit:
     """Represents a military unit on the map"""
     
-    # Promotion levels: (XP threshold, label, bonuses)
-    PROMOTION_TIERS = [
-        (50, "Novice", {"attack": 5}),
-        (150, "Skilled", {"defense": 10}),
-        (300, "Veteran", {"movement": 1}),
-        (500, "Elite", {"attack": 15}),
-        (750, "Champion", {"defense": 20}),
-        (1000, "Grand Champion", {"attack": 10, "defense": 10}),
-    ]
+    XP_PER_PROMOTION = 10  # XP needed for each promotion level
     
     def __init__(self, unit_type: str, owner: str, position: tuple, moves_left: Optional[int] = None):
         self.unit_type = unit_type
@@ -28,7 +20,7 @@ class Unit:
         self.position = position
         self.xp = 0
         self.level = 1
-        self.promotions: List[int] = []  # XP thresholds we've unlocked
+        self.promotions: List[Dict[str, int]] = []  # e.g. [{"attack": 1}, {"defense": 1}]
         self.is_fortified = False
         self.hp = 100
         self.max_hp = 100
@@ -47,41 +39,44 @@ class Unit:
         self.max_moves = self.base_move
         
         self.moves_left = moves_left if moves_left is not None else self.base_move
-        
-        # Check and apply promotions
-        self.check_promotions()
-        self._apply_promotion_bons()
     
-    def _apply_promotion_bons(self) -> None:
-        """Recalculate attack/defense/moves from base + active promotions."""
+   def _apply_promotions(self) -> None:
+        """Re-apply stat bonuses from all earned promotions."""
         base = self.get_base_stats()
         self.attack = base["attack"]
         self.defense = base["defense"]
         self.max_moves = self.base_move
-        
-        for xp_thresh, _, bonuses in self.PROMOTION_TIERS:
-            if xp_thresh in self.promotions:
-                for stat, val in bonuses.items():
-                    if stat == "attack":
-                        self.attack += val
-                    elif stat == "defense":
-                        self.defense += val
-                    elif stat == "movement":
-                        self.max_moves += val
-    
-    def check_promotions(self) -> List[str]:
-        """Check if unit qualifies for new promotions based on accumulated XP.
-        Returns list of new promotion labels unlocked this call."""
-        new_labels = []
-        for xp_thresh, label, _ in self.PROMOTION_TIERS:
-            if xp_thresh <= self.xp and xp_thresh not in self.promotions:
-                self.promotions.append(xp_thresh)
-                new_labels.append(label)
-        if new_labels:
-            self._apply_promotion_bons()
-            self.level = len(self.promotions) + 1
-        return new_labels
-    
+
+        for bonus in self.promotions:
+            for stat, val in bonus.items():
+                if stat == "attack":
+                    self.attack += val
+                elif stat == "defense":
+                    self.defense += val
+                elif stat == "movement":
+                    self.max_moves += val
+  def gain_xp(self, amount: int) -> None:
+        """Gain XP and check for promotion eligibility."""
+        self.xp += amount
+        if self.xp >= self.XP_PER_PROMOTION * self.level:
+            self._offer_promotion()
+
+    def _offer_promotion(self) -> None:
+        """Grant a random promotion (+1 attack, +1 defense, or +1 movement)."""
+        choices = [{"attack": 1}, {"defense": 1}, {"movement": 1}]
+        choice = random.choice(choices)
+        self.promotions.append(choice)
+        self.level += 1
+        self._apply_promotions()
+        label = f"+1 {list(choice.keys())[0]}"
+        print(f"[PROMOTION] {self.name} ({self.owner}) promoted: {label} "
+              f"(XP: {self.xp}, Level: {self.level})")
+    def get_promotion_title(self) -> str:
+        """Get current promotion title based on level."""
+        titles = ["Conscript", "Trained", "Veteran", "Elite", "Champion", "Legendary"]
+        idx = min(self.level - 1, len(titles) - 1)
+        return titles[idx]
+
     def get_base_stats(self) -> Dict[str, int]:
         """Get base unit stats without promotions."""
         if self.unit_type in UNIT_TYPES:
@@ -212,6 +207,7 @@ class MilitaryManager:
             defender.deal_damage(damage)
             if def_was_alive and not defender.is_alive:
                 attacker.kills += 1
+            attacker.gain_xp(10)
             result.description = f"Attacker wins! {defender.unit_type} destroyed. (+{damage} dmg)"
         elif def_power > atk_power:
             damage = max(5, def_power - atk_power)
@@ -219,6 +215,7 @@ class MilitaryManager:
             defender.deal_damage(0)  # defender takes no damage on win
             if att_was_alive and not attacker.is_alive:
                 defender.kills += 1
+            defender.gain_xp(10)
             result.description = f"Defender wins! {attacker.unit_type} destroyed. (+{damage} dmg)"
         else:
             # Draw - both take small damage
