@@ -239,6 +239,13 @@ class Game:
         # Cultural borders: (x, y) -> civ_name
         self.culture_borders: Dict[Tuple[int, int], str] = {}
 
+        # City-states
+        self.city_states: List[Dict] = [
+            {"name": "Sparta", "type": "Militaristic", "influence": {}, "relationship": {}},
+            {"name": "Athens", "type": "Cultural", "influence": {}, "relationship": {}},
+            {"name": "Tyre", "type": "Maritime", "influence": {}, "relationship": {}},
+        ]
+
         # Initialize game
         self._initialize_game()
         
@@ -1516,6 +1523,34 @@ class Game:
             "garrison": len([u for u in self.military_manager.units
                            if u.owner == target_city.civ and u.position == target_city.position]),
         }
+
+    def send_envoy(self, civ: str, city_state_name: str) -> str:
+        """Send an envoy to a city-state, increasing influence and relationship."""
+        city_state = None
+        for cs in self.city_states:
+            if cs["name"] == city_state_name:
+                city_state = cs
+                break
+
+        if not city_state:
+            return f"No city-state found named {city_state_name}."
+
+        if civ not in self.civilizations:
+            return f"No civilization found named {civ}."
+
+        city_state["relationship"].setdefault(civ, 0)
+        city_state["relationship"][civ] += 10
+        city_state["influence"].setdefault(civ, 0)
+        city_state["influence"][civ] += 1
+
+        bonus_type = city_state["type"]
+        if bonus_type == "Militaristic":
+            return f"Envoy sent to {city_state_name}. {civ} gains +1 Military Power per turn."
+        elif bonus_type == "Cultural":
+            return f"Envoy sent to {city_state_name}. {civ} gains +1 Culture per turn."
+        elif bonus_type == "Maritime":
+            return f"Envoy sent to {city_state_name}. {civ} gains +1 Gold per turn."
+        return f"Envoy sent to {city_state_name}."
 
 
 def main():
