@@ -774,7 +774,7 @@ class Game:
                     continue
                 city_pos = city.position
                 # Get adjacent hex tiles
-                adjacent = self.map.get_neighbors(city_pos)
+                adjacent = self.map.get_neighbors(city_pos[0], city_pos[1])
                 for pos in adjacent:
                     if pos in self.culture_borders:
                         continue

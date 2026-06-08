@@ -40,7 +40,7 @@ class Unit:
         
         self.moves_left = moves_left if moves_left is not None else self.base_move
     
-   def _apply_promotions(self) -> None:
+    def _apply_promotions(self) -> None:
         """Re-apply stat bonuses from all earned promotions."""
         base = self.get_base_stats()
         self.attack = base["attack"]
@@ -55,7 +55,7 @@ class Unit:
                     self.defense += val
                 elif stat == "movement":
                     self.max_moves += val
-  def gain_xp(self, amount: int) -> None:
+    def gain_xp(self, amount: int) -> None:
         """Gain XP and check for promotion eligibility."""
         self.xp += amount
         if self.xp >= self.XP_PER_PROMOTION * self.level:
