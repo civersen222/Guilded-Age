@@ -198,7 +198,8 @@ class Game:
         self.gold_management = GoldManagement()
         self.external_trade = ExternalTradeRoutes()
         self.faction_manager = FactionManager(self.player_civ.name)
-        
+        self.war_weariness: Dict[str, int] = {}  # civ_name -> weariness level 0-100
+
         # Initialize game
         self._initialize_game()
         
@@ -457,6 +458,9 @@ class Game:
         
         # Process golden ages
         self.process_golden_ages()
+
+        # Process war weariness
+        self.process_war_weariness(msgs)
         
         # Calculate happiness for all civilizations
         for civ_name in self.civilizations:
@@ -1016,6 +1020,25 @@ class Game:
                 to_remove.append(civ_name)
         for civ_name in to_remove:
             del self.golden_ages[civ_name]
+
+    def process_war_weariness(self, msgs: List[str]) -> None:
+        """Process war weariness for all civilizations each turn."""
+        for civ_name in self.civilizations:
+            # Initialize weariness if not present
+            if civ_name not in self.war_weariness:
+                self.war_weariness[civ_name] = 0
+
+            # Check if civ is at war
+            enemy_list = self.diplomacy_manager.wars.get(civ_name, [])
+            is_at_war = len(enemy_list) > 0
+
+            if is_at_war:
+                # Increase weariness by 5 per turn while at war
+                self.war_weariness[civ_name] = min(100, self.war_weariness[civ_name] + 5)
+                msgs.append(f"  ⚔️ {civ_name} war weariness: {self.war_weariness[civ_name]}")
+            else:
+                # Decrease weariness by 10 per turn when at peace
+                self.war_weariness[civ_name] = max(0, self.war_weariness[civ_name] - 10)
 
     def _calculate_happiness(self, civ_name: str, msgs: List[str]) -> None:
         """Calculate happiness for a civilization each turn and trigger revolts if negative."""
