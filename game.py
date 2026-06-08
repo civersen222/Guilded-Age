@@ -39,6 +39,15 @@ from improvements import ImprovementManager
 from great_people import GreatPeopleManager
 from era_system import EraSystem
 
+RESOURCE_TYPES = {
+    "wheat": {"food": 2},
+    "iron": {"production": 2},
+    "gold_ore": {"gold": 3},
+    "gems": {"gold": 2, "happiness": 1},
+    "silk": {"gold": 1, "culture": 1},
+    "horses": {"production": 1, "military": 1},
+}
+
 
 @dataclass
 class GameState:
@@ -135,6 +144,13 @@ class Game:
         # Fog of war
         self._fog = ExponentialFogOfWar()
         self._fog.set_tiles(self.map.tiles)
+
+        # Resources on tiles
+        self.tile_resources: Dict[Tuple[int, int], str] = {}
+        resource_names = list(RESOURCE_TYPES.keys())
+        for pos in self.map.tiles:
+            if random.random() < 0.2:
+                self.tile_resources[pos] = random.choice(resource_names)
 
         # Player civilization
         self.player_civ = player_civ
@@ -1380,6 +1396,14 @@ class Game:
         import json
         with open(filepath) as f:
             return json.load(f)
+
+    def get_tile_yield(self, x: int, y: int) -> Dict[str, int]:
+        """Return yield bonuses from the resource on tile (x, y)."""
+        resource = self.tile_resources.get((x, y))
+        if resource:
+            return dict(RESOURCE_TYPES[resource])
+        return {}
+
     def get_game_status(self) -> str:
         """Get current game state as a formatted string"""
         player_gold = self.gold.get(self.player_civ.name, 0)
