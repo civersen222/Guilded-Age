@@ -125,6 +125,13 @@ WORLD_WONDERS: Dict[str, Dict[str, Union[str, int]]] = {
     "Stonehenge":             {"cost": 100, "faith_bonus": 3},
 }
 
+GOVERNMENT_TYPES: Dict[str, Dict[str, int]] = {
+    "Despotism":  {"production": 1, "gold": -1},
+    "Monarchy":   {"gold": 1, "military": 1},
+    "Republic":   {"science": 2, "gold": 1},
+    "Democracy":  {"gold": 2, "happiness": 2, "military": -1},
+}
+
 
 class Game:
     """Main game class that orchestrates all systems"""
@@ -215,6 +222,8 @@ class Game:
         self.external_trade = ExternalTradeRoutes()
         self.faction_manager = FactionManager(self.player_civ.name)
         self.war_weariness: Dict[str, int] = {}  # civ_name -> weariness level 0-100
+        self.governments: Dict[str, str] = {}  # civ_name -> government type (default: Despotism)
+        self.anarchy_turns: Dict[str, int] = {}  # civ_name -> remaining anarchy turns
 
         # Cultural borders: (x, y) -> civ_name
         self.culture_borders: Dict[Tuple[int, int], str] = {}
@@ -323,6 +332,26 @@ class Game:
             warrior.name = f"{civ_name} Militia"
             self.units[warrior.name] = warrior
             self.map.add_unit(warrior)
+
+    def change_government(self, civ_name: str, gov_type: str) -> str:
+        """Change government type for a civilization. Triggers 1 turn of anarchy.
+
+        Returns a status message.
+        """
+        if gov_type not in GOVERNMENT_TYPES:
+            return f"Unknown government type: {gov_type}"
+        if civ_name not in self.civilizations:
+            return f"Unknown civilization: {civ_name}"
+        if self.anarchy_turns.get(civ_name, 0) > 0:
+            return f"{civ_name} is currently in anarchy ({self.anarchy_turns[civ_name]} turns remaining)"
+
+        old_gov = self.governments.get(civ_name, "Despotism")
+        if old_gov == gov_type:
+            return f"{civ_name} already has {gov_type}"
+
+        self.governments[civ_name] = gov_type
+        self.anarchy_turns[civ_name] = 1
+        return f"{civ_name} transitions from {old_gov} to {gov_type}. 1 turn of anarchy."
 
     def _initialize_game(self):
         """Set up initial game state"""
