@@ -48,6 +48,16 @@ RESOURCE_TYPES = {
     "horses": {"production": 1, "military": 1},
 }
 
+PANTHEON_BELIEFS = {
+    "Ancient Pantheon":      {"faith_per_temple": 1, "description": "+1 Faith per Temple"},
+    "Dance of the Dead":     {"faith_per_city": 1, "description": "+1 Faith per city"},
+    "God of the Sea":        {"trade_bonus": 0.1, "description": "+10% gold from trade routes"},
+    "Hunters and Gatherers": {"food_bonus": 0.1, "description": "+10% food in cities"},
+    "Mother Goddess":        {"happiness_bonus": 1, "description": "+1 Happiness per city"},
+    "Pastoralism":           {"production_bonus": 0.1, "description": "+10% production"},
+    "Zealousness":           {"missionary_strength": 2, "description": "Missionaries have +2 strength"},
+}
+
 
 @dataclass
 class GameState:
@@ -178,6 +188,7 @@ class Game:
         self.players: Dict[str, Civilization] = {}
         self.gold: Dict[str, int] = {}
         self.faith_points: Dict[str, int] = {}
+        self.pantheons: Dict[str, str] = {}  # civ_name -> pantheon_name
         self.research: Dict[str, TechManager] = {}
         
         # Ruler tracking: civ_name -> Character
@@ -513,7 +524,17 @@ class Game:
         # Calculate happiness for all civilizations
         for civ_name in self.civilizations:
             self._calculate_happiness(civ_name, msgs)
-        
+
+        # Pantheon auto-founding: when faith >= 25 and no pantheon yet
+        for civ_name in self.civilizations:
+            if civ_name not in self.pantheons and self.faith_points.get(civ_name, 0) >= 25:
+                available = set(PANTHEON_BELIEFS.keys()) - set(self.pantheons.values())
+                if available:
+                    chosen = random.choice(list(available))
+                    self.pantheons[civ_name] = chosen
+                    msgs.append(f"  🏛️ {civ_name} has founded the {chosen} pantheon! ({PANTHEON_BELIEFS[chosen]['description']})")
+                    self.state.turn_events.append(f"{civ_name} founded the {chosen} pantheon")
+
         # Process events
         event = self.event_manager.generate_event()
         if event:
