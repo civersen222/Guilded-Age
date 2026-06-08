@@ -980,22 +980,14 @@ class Game:
         self.state.turn_events.append(msg)
         return msg
 
-    def _check_victory(self):
-        """Check victory conditions."""
-        return None
-
-    def _check_victory(self):
-        """Check victory conditions."""
-        pass
-
         # Check victory conditions
-        victory_msg = self._check_victory()
-        if victory_msg:
+        victory = self._check_victory()
+        if victory:
             self.state.game_over = True
-            self.state.victory = victory_msg
-            self.victory_tracker.record_victory(self.player_civ.name, victory_msg, self.state.turn)
+            self.state.victory = f"{victory['winner']} wins by {victory['type']}"
+            self.victory_tracker.record_victory(victory['winner'], self.state.victory, self.state.turn)
             msgs.append(f"\n{'='*60}")
-            msgs.append(f"GAME OVER - {victory_msg}")
+            msgs.append(f"GAME OVER - {victory['winner']} wins by {victory['type']}")
             msgs.append(f"{'='*60}")
             return msgs
         
@@ -1085,34 +1077,45 @@ class Game:
                     msgs.append(f"  ⭐ Great {gp_type} has appeared in {civ_name}'s civilization!")
                     self.state.turn_events.append(f"Great {gp_type} spawned for {civ_name}")
 
-    def _check_victory(self) -> Optional[str]:
-        """Check if any victory condition is met"""
-        # Domination victory
-        if len(self.cities) >= 10:
-            return f"{self.player_civ.name} achieves Domination Victory!"
-        
-        # Science victory
-        if self.player_civ.name in self.research:
-            try:
-                player_tech = self.research[self.player_civ.name]
-                if hasattr(player_tech, 'reached_era'):
-                    if player_tech.reached_era(Era.MODERN, self.player_civ.name):
-                        return f"{self.player_civ.name} achieves Science Victory!"
-            except Exception:
-                pass
-        
-        # Dynasty victory
-        if self.dynasty:
-            try:
-                members = self.dynasty.get_all_members()
-                living = [m for m in members if getattr(m, 'is_alive', True)]
-                if len(living) >= 10:
-                    return f"{self.player_civ.name} achieves Dynasty Victory!"
-            except Exception:
-                pass
-        
-        return None
+    def _check_victory(self) -> Optional[Dict[str, str]]:
+        """Check if any victory condition is met.
 
+        Returns {"winner": civ_name, "type": victory_type} or None.
+        """
+        # Check all civilizations
+        for civ_name, civ in self.civilizations.items():
+            civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
+
+            # Domination: 10+ cities
+            if len(civ_cities) >= 10:
+                return {"winner": civ_name, "type": "Domination"}
+
+            # Science: reached Modern era
+            if civ_name in self.research:
+                try:
+                    player_tech = self.research[civ_name]
+                    if hasattr(player_tech, 'reached_era'):
+                        if player_tech.reached_era(Era.MODERN, civ_name):
+                            return {"winner": civ_name, "type": "Science"}
+                except Exception:
+                    pass
+
+            # Culture: 500+ culture points
+            culture_points = getattr(civ, 'culture_points', 0)
+            if culture_points >= 500:
+                return {"winner": civ_name, "type": "Culture"}
+
+            # Religion: 60% of all cities
+            total_cities = len(self.cities)
+            if total_cities > 0 and len(civ_cities) >= total_cities * 0.6:
+                return {"winner": civ_name, "type": "Religion"}
+
+            # Dynasty: 1000+ prestige
+            prestige = getattr(civ, 'prestige', 0)
+            if prestige >= 1000:
+                return {"winner": civ_name, "type": "Dynasty"}
+
+        return None
     def trigger_golden_age(self, civ: str, turns: int = 10):
         """Start or extend a golden age for a civilization."""
         self.golden_ages[civ] = self.golden_ages.get(civ, 0) + turns
