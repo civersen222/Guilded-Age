@@ -216,6 +216,9 @@ class Game:
         self.faction_manager = FactionManager(self.player_civ.name)
         self.war_weariness: Dict[str, int] = {}  # civ_name -> weariness level 0-100
 
+        # Cultural borders: (x, y) -> civ_name
+        self.culture_borders: Dict[Tuple[int, int], str] = {}
+
         # Initialize game
         self._initialize_game()
         
@@ -699,6 +702,9 @@ class Game:
         if dead_units:
             msgs.append(f"\n  💀 {len(dead_units)} dead unit(s) removed from game")
 
+        # --- Expand cultural borders ---
+        self.expand_borders(msgs)
+
         # --- CK-style character events ---
         ruler = self.rulers.get(self.player_civ.name)
         if ruler and random.random() < 0.3:
@@ -725,6 +731,30 @@ class Game:
                     self.state.turn_events.append(f"{ruler.name} died at {ruler.age} with no heir.")
 
         return self.state.turn_events
+
+    def expand_borders(self, msgs: List[str] = None) -> None:
+        """Expand cultural borders from each city based on culture output."""
+        if msgs is None:
+            msgs = []
+        for civ_name, civ in self.civilizations.items():
+            civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
+            for city in civ_cities:
+                yields = city.calculate_yields()
+                culture_output = yields.get("culture", 0)
+                if culture_output <= 0:
+                    continue
+                city_pos = city.position
+                # Get adjacent hex tiles
+                adjacent = self.map.get_neighbors(city_pos)
+                for pos in adjacent:
+                    if pos in self.culture_borders:
+                        continue
+                    distance = abs(pos[0] - city_pos[0]) + abs(pos[1] - city_pos[1])
+                    if distance == 0:
+                        distance = 1
+                    if culture_output > 10 * distance:
+                        self.culture_borders[pos] = civ_name
+                        msgs.append(f"  🏛️ {city.name} expanded culture to ({pos[0]},{pos[1]})")
 
     def _generate_ck_event(self, ruler: Character) -> Optional[CKEvent]:
         """Generate a CK-style interactive event with choices."""
