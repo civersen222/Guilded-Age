@@ -218,6 +218,12 @@ class Game:
         self.great_people_manager = GreatPeopleManager()
         self.era_system = EraSystem()
 
+        # Era progression: civ_name -> era string
+        self.current_era: Dict[str, str] = {}
+        self.ERA_ORDER = ["Ancient", "Classical", "Medieval", "Renaissance", "Industrial", "Modern"]
+        for civ in self.civilizations:
+            self.current_era[civ] = "Ancient"
+
         # Spy network: {(source_civ, target_civ): level} where level 0-3
         self.spy_network: Dict[Tuple[str, str], int] = {}
         self.trade_routes = []  # list of (city1_name, city2_name, gold_per_turn)
@@ -550,6 +556,9 @@ class Game:
             msgs.append(f"  {event_desc}")
             self.state.turn_events.append(f"{event_name}: {event_desc}")
         
+        # Check era advancement for all civilizations
+        self.check_era_advancement(msgs)
+
         # Check eureka conditions
         civ_name = self.player_civ.name
         eureka_ctx = {
@@ -1124,6 +1133,32 @@ class Game:
                 to_remove.append(civ_name)
         for civ_name in to_remove:
             del self.golden_ages[civ_name]
+
+    def check_era_advancement(self, msgs: List[str]) -> None:
+        """Check if any civilization should advance to the next era based on techs researched."""
+        for civ_name in self.civilizations:
+            if civ_name not in self.current_era:
+                self.current_era[civ_name] = "Ancient"
+            if civ_name not in self.research:
+                continue
+            tech_mgr = self.research[civ_name]
+            current = self.current_era[civ_name]
+            if current not in self.ERA_ORDER:
+                continue
+            current_idx = self.ERA_ORDER.index(current)
+            if current_idx >= len(self.ERA_ORDER) - 1:
+                continue
+            next_era = self.ERA_ORDER[current_idx + 1]
+            # Count researched techs belonging to the next era
+            next_era_count = 0
+            for tech_name in tech_mgr.researched:
+                tech_data = TECHNOLOGIES.get(tech_name)
+                if tech_data and tech_data.era == Era(next_era):
+                    next_era_count += 1
+            if next_era_count >= 3:
+                self.current_era[civ_name] = next_era
+                msgs.append(f"  🏛️ {civ_name} has advanced to the {next_era} Era!")
+                self.state.turn_events.append(f"{civ_name} advanced to the {next_era} Era")
 
     def process_war_weariness(self, msgs: List[str]) -> None:
         """Process war weariness for all civilizations each turn."""
