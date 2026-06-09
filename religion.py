@@ -101,3 +101,24 @@ class ReligionManager:
             if civ in religion.followers:
                 religion_count += 1
         return religion_count > 1
+
+    def spread_to_adjacent(self, source_city_pos: Tuple[int, int], source_civ: str, adjacent_positions: List[Tuple[int, int]], cities_by_pos: Dict[Tuple[int, int], str]) -> List[str]:
+        """Spread religion from a city with religious buildings to adjacent cities.
+        Returns list of (target_city_pos, target_civ) tuples where religion spread."""
+        spread_results = []
+        # Find source civ's religion
+        source_religion = None
+        for rname, rel in self.religions.items():
+            if source_civ in rel.followers:
+                source_religion = rname
+                break
+        if not source_religion:
+            return spread_results
+
+        for pos in adjacent_positions:
+            target_civ = cities_by_pos.get(pos)
+            if target_civ and target_civ != source_civ:
+                if target_civ not in self.religions[source_religion].followers:
+                    self.spread_religion(source_religion, target_civ, 5)
+                    spread_results.append((pos, target_civ, source_religion))
+        return spread_results

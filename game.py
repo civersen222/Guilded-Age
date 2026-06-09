@@ -796,6 +796,10 @@ class Game:
                 else:
                     self.state.turn_events.append(f"{ruler.name} died at {ruler.age} with no heir.")
 
+        # Religion spread: cities with temples/shrines spread to adjacent enemy cities
+        religion_spread_msgs = self._process_religion_spread(msgs)
+        msgs.extend(religion_spread_msgs)
+
         return self.state.turn_events
 
     def expand_borders(self, msgs: List[str] = None) -> None:
@@ -822,6 +826,35 @@ class Game:
                     if culture_output > 10 * distance:
                         self.culture_borders[tile_pos] = civ_name
                         msgs.append(f"  🏛️ {city.name} expanded culture to ({tile.x},{tile.y})")
+
+    def _process_religion_spread(self, msgs: List[str]) -> List[str]:
+        """Cities with religious buildings spread faith to adjacent cities of other civs."""
+        spread_msgs = []
+        for city in self.cities.values():
+            civ_name = city.owner
+            # Check if city has religious buildings
+            has_religious = any(b in city.buildings for b in ("Temple", "Shrine", "Cathedral", "Monastery"))
+            if not has_religious:
+                continue
+            # Determine this civ's religion
+            civ_religion = None
+            for rname, rel in self.religion_manager.religions.items():
+                if civ_name in rel.followers:
+                    civ_religion = rname
+                    break
+            if not civ_religion:
+                continue
+            # Spread to adjacent cities
+            adjacent = self.map.get_neighbors(city.position[0], city.position[1])
+            for tile in adjacent:
+                tile_pos = (tile.x, tile.y)
+                target = next((c for c in self.cities.values() if c.position == tile_pos), None)
+                if target and target.owner != civ_name:
+                    if target.owner not in self.religion_manager.religions[civ_religion].followers:
+                        self.religion_manager.spread_religion(civ_religion, target.owner, 5)
+                        spread_msgs.append(f"  ✝️ {civ_religion} spread from {city.name} to {target.name} ({target.owner})")
+                        self.state.turn_events.append(f"{civ_religion} spread to {target.name}")
+        return spread_msgs
 
     def _generate_ck_event(self, ruler: Character) -> Optional[CKEvent]:
         """Generate a CK-style interactive event with choices."""
