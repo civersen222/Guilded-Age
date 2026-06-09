@@ -294,7 +294,10 @@ def execute_succession(
         else:
             # No children — fall back to SENIORITY
             new_ruler = _seniority_pick(living_heirs)
-            events.append(f"No heir apparent. SENIORITY picks {new_ruler.name} from the dynasty.")
+            if new_ruler:
+                events.append(f"No heir apparent. SENIORITY picks {new_ruler.name} from the dynasty.")
+            else:
+                events.append(f"No heir apparent. Dynasty has collapsed.")
 
     elif succession_law == 'GAVELKIND':
         # Split realm: eldest gets capital, rest distributed
@@ -316,7 +319,10 @@ def execute_succession(
                         lost_cities.append(city.name)
         else:
             new_ruler = _seniority_pick(living_heirs)
-            events.append(f"No heirs. SENIORITY fallback picks {new_ruler.name}.")
+            if new_ruler:
+                events.append(f"No heirs. SENIORITY fallback picks {new_ruler.name}.")
+            else:
+                events.append(f"No heirs. Dynasty has collapsed.")
 
     elif succession_law == 'SENIORITY':
         # Oldest living dynasty member inherits

@@ -805,6 +805,10 @@ class Game:
         religion_spread_msgs = self._process_religion_spread(msgs)
         msgs.extend(religion_spread_msgs)
 
+        # Increment turn
+        self.state.turn += 1
+        self.state.phase = "Player"
+
         return self.state.turn_events
 
     def expand_borders(self, msgs: List[str] = None) -> None:
