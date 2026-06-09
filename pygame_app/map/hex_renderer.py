@@ -459,6 +459,36 @@ class HexRenderer:
                 verts = self._screen_hex_points(hx, hy)
                 self._draw_hex_outline(surface, verts, territory_colors[owner], width=1)
 
+        # --- 1d. Culture borders ---
+        culture_borders = getattr(game, "culture_borders", {})
+        if culture_borders:
+            # Build color map: player civ → blue, AI civs → red
+            culture_colors: Dict[str, Tuple[int, int, int]] = {}
+            for civ_name in culture_borders.values():
+                if civ_name == player_civ:
+                    culture_colors[civ_name] = (30, 144, 255)  # dodger blue
+                else:
+                    culture_colors[civ_name] = (220, 40, 40)   # red
+
+            HEX_DIRS = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]
+
+            for (hx, hy), owner in culture_borders.items():
+                if (hx, hy) not in visible:
+                    continue
+                color = culture_colors.get(owner)
+                if not color:
+                    continue
+                verts = self._screen_hex_points(hx, hy)  # (x0,y0, x1,y1, ..., x5,y5)
+                for i in range(6):
+                    nx, ny = hx + HEX_DIRS[i][0], hy + HEX_DIRS[i][1]
+                    neighbor_owner = culture_borders.get((nx, ny))
+                    if neighbor_owner != owner:
+                        x1 = verts[2 * i]
+                        y1 = verts[2 * i + 1]
+                        x2 = verts[2 * ((i + 1) % 6)]
+                        y2 = verts[2 * ((i + 1) % 6) + 1]
+                        pygame.draw.line(surface, color, (x1, y1), (x2, y2), 2)
+
         # --- 2. Resource icons ---
         for hx, hy in visible:
             tile = self.hex_map.get_tile(hx, hy)
