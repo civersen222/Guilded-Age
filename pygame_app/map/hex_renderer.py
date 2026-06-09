@@ -489,6 +489,33 @@ class HexRenderer:
                         y2 = verts[2 * ((i + 1) % 6) + 1]
                         pygame.draw.line(surface, color, (x1, y1), (x2, y2), 2)
 
+        # --- 1e. Trade route lines ---
+        trade_routes = getattr(game, "trade_routes", None)
+        if not trade_routes:
+            econ = getattr(game, "economy", None)
+            if econ:
+                trade_routes = getattr(econ, "trade_routes", None)
+        if trade_routes:
+            cities_dict = game.cities
+            if not cities_dict and hasattr(game, "city_manager"):
+                cities_dict = {c.name: c for c in getattr(game.city_manager, "cities", [])}
+            for route in trade_routes:
+                from_name = route.get("from") or route.get("from_city")
+                to_name = route.get("to") or route.get("to_city")
+                from_city = cities_dict.get(from_name) if from_name else None
+                to_city = cities_dict.get(to_name) if to_name else None
+                if not from_city or not to_city:
+                    continue
+                from_hex = getattr(from_city, "hex", None) or getattr(from_city, "position", None)
+                to_hex = getattr(to_city, "hex", None) or getattr(to_city, "position", None)
+                if from_hex is None or to_hex is None:
+                    continue
+                wx1, wy1 = self.hex_to_world(*from_hex)
+                sx1, sy1 = self.camera.world_to_screen(wx1, wy1)
+                wx2, wy2 = self.hex_to_world(*to_hex)
+                sx2, sy2 = self.camera.world_to_screen(wx2, wy2)
+                pygame.draw.line(surface, GOLD, (sx1, sy1), (sx2, sy2), 2)
+
         # --- 2. Resource icons ---
         for hx, hy in visible:
             tile = self.hex_map.get_tile(hx, hy)
