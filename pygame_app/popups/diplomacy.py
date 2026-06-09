@@ -158,6 +158,16 @@ class DiplomacyPopup:
 
         parts = [f"<b>Relations with {target_civ}:</b> {score}<br>"]
         parts.append(f"<b>Status:</b> {status}<br>")
+
+        # Spy network levels
+        spy_net = getattr(self._game, "spy_network", {})
+        our_spy = spy_net.get((self._player_civ, target_civ), 0)
+        their_spy = spy_net.get((target_civ, self._player_civ), 0)
+        spy_labels = {0: "None", 1: "Low", 2: "Medium", 3: "High"}
+        parts.append(f"<br><b>Spy Network:</b><br>")
+        parts.append(f"• Our spies in {target_civ}: {spy_labels.get(our_spy, our_spy)}<br>")
+        parts.append(f"• Their spies in our lands: {spy_labels.get(their_spy, their_spy)}<br>")
+
         parts.append(f"<br><b>Treaties:</b><br>")
         if treaties:
             for t in treaties:
