@@ -133,6 +133,8 @@ WORLD_WONDERS: Dict[str, Dict[str, Union[str, int]]] = {
     "Great Library":          {"cost": 100, "science_bonus": 5},
     "Colosseum":              {"cost": 100, "culture_bonus": 3},
     "Stonehenge":             {"cost": 100, "faith_bonus": 3},
+    "Hanging Gardens":        {"cost": 150, "gold": 3, "happiness": 2},
+    "Great Wall":             {"cost": 150, "military": 3},
 }
 
 GOVERNMENT_TYPES: Dict[str, Dict[str, int]] = {

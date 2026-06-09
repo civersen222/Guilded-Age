@@ -7,7 +7,7 @@ import pygame_gui
 
 from pygame_app.constants import SCREEN_HEIGHT, SCREEN_WIDTH
 from game_data import BUILDINGS, UNIT_TYPES
-from game import WORLD_WONDERS
+from game import Game, WORLD_WONDERS
 
 
 class ProductionPopup:
