@@ -98,6 +98,9 @@ class GameScreen(BaseScreen):
         if getattr(self, "_event_choice_popup", None) and self._event_choice_popup.is_visible:
             if self._event_choice_popup.handle_event(event):
                 return
+        if self._active_popup and getattr(self._active_popup, "is_visible", False):
+            if self._active_popup.handle_event(event):
+                return
         combat_result = getattr(self, "combat_popup", None)
         if combat_result is not None:
             result = combat_result.handle_event(event)
@@ -139,6 +142,11 @@ class GameScreen(BaseScreen):
             return
         if event.key == pygame.K_t: self._open_popup("tech", game)
         elif event.key == pygame.K_d: self._open_popup("diplomacy", game)
+        elif event.key == pygame.K_g:
+            from pygame_app.popups.government_popup import GovernmentPopup
+            self._active_popup = GovernmentPopup()
+            self._active_popup.show(self.ui_manager, game)
+            return
         elif event.key == pygame.K_y: self._open_popup("dynasty", game)
         elif event.key == pygame.K_r:
             from pygame_app.popups.religion_popup import ReligionPopup
