@@ -1155,9 +1155,9 @@ class Game:
             if total_cities > 0 and len(civ_cities) >= total_cities * 0.6:
                 return {"winner": civ_name, "type": "Religion"}
 
-            # Dynasty: 1000+ prestige
+            # Dynasty: 500+ prestige
             prestige = getattr(civ, 'prestige', 0)
-            if prestige >= 1000:
+            if prestige >= 500:
                 return {"winner": civ_name, "type": "Dynasty"}
 
         return None

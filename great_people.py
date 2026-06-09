@@ -9,27 +9,27 @@ from game_data import DISTRICTS, BuildingType, DistrictType
 GREAT_PERSON_TYPES = {
     "Great General": {
         "points_from": "Encampment",
-        "threshold": 100,
+        "threshold": 200,
         "effect": "combat_bonus",
     },
     "Great Scientist": {
         "points_from": "Campus",
-        "threshold": 100,
+        "threshold": 200,
         "effect": "free_tech_boost",
     },
     "Great Engineer": {
         "points_from": "Workshop",
-        "threshold": 100,
+        "threshold": 200,
         "effect": "rush_production",
     },
     "Great Merchant": {
         "points_from": "Market",
-        "threshold": 100,
+        "threshold": 200,
         "effect": "gold_bonus",
     },
     "Great Prophet": {
         "points_from": "Temple",
-        "threshold": 100,
+        "threshold": 200,
         "effect": "found_religion",
     },
 }
