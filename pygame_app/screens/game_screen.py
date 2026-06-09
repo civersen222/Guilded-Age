@@ -282,6 +282,9 @@ class GameScreen(BaseScreen):
             title = "VICTORY!" if is_player_win else "DEFEAT"
             msg = f"{winner} wins by {victory_type}!"
             self._event_log.add_event(f"{title}: {msg}", "critical")
+            from pygame_app.popups.victory_popup import VictoryPopup
+            self._active_popup = VictoryPopup()
+            self._active_popup.show(self.ui_manager, game)
         self._update_fog(game)
         if game.tech_manager.current_research is None:
             available = game.tech_manager.get_available_techs()
