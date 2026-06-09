@@ -489,7 +489,8 @@ class GameScreen(BaseScreen):
         hx, hy = self._hovered_hex
         lines = []
         # Terrain type
-        tile = game.hex_map.tiles.get((hx, hy))
+        game_map = getattr(game, "map", None)
+        tile = game_map.tiles.get((hx, hy)) if game_map else None
         if tile:
             lines.append(getattr(tile, "terrain", "Unknown") or "Unknown")
         # City name
