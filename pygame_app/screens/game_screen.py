@@ -20,6 +20,7 @@ from pygame_app.panels.turn_summary import TurnSummary
 from pygame_app.panels.action_bar import ActionBar
 from pygame_app.popups.combat_popup import CombatPopup
 from pygame_app.popups.event_choice import EventChoicePopup
+from pygame_app.popups.promotion_popup import PromotionPopup
 
 
 class GameScreen(BaseScreen):
@@ -32,6 +33,7 @@ class GameScreen(BaseScreen):
         self._action_bar = self._next_turn_btn = self._unit_panel = None
         self._selected_unit = self._selected_city = self._active_popup = None
         self._event_choice_popup = EventChoicePopup()
+        self._promotion_popup = None
         self._dragging_middle = False
         self._drag_start = (0, 0)
         self.show_yields = False
@@ -101,6 +103,15 @@ class GameScreen(BaseScreen):
         if self._active_popup and getattr(self._active_popup, "is_visible", False):
             if self._active_popup.handle_event(event):
                 return
+        if self._promotion_popup is not None:
+            choice = self._promotion_popup.handle_event(event)
+            if choice is not None:
+                unit = self._promotion_popup.unit
+                unit.accept_promotion(choice)
+                self._promotion_popup.hide()
+                self._promotion_popup = None
+                self._event_log.add_event(f"{unit.name} promoted: +1 {choice}", "military")
+                return
         combat_result = getattr(self, "combat_popup", None)
         if combat_result is not None:
             result = combat_result.handle_event(event)
@@ -108,7 +119,9 @@ class GameScreen(BaseScreen):
                 self._apply_combat_result(result)
                 combat_result.hide()
                 self.combat_popup = None
-                self.deselect()
+                self._check_pending_promotions(game)
+                if not self._promotion_popup:
+                    self.deselect()
                 return
         if event.type == pygame.KEYDOWN:
             return self._handle_key(event, game)
@@ -448,6 +461,21 @@ class GameScreen(BaseScreen):
                         tile = self.game.hex_map.tiles.get(pos)
                         if tile and getattr(tile, "unit", None) == getattr(u, "unit_type", ""):
                             tile.unit = None
+
+    def _check_pending_promotions(self, game):
+        """Check if any player unit has a pending promotion and show the popup."""
+        player = game.state.current_player
+        mgr = getattr(game, 'military_manager', None)
+        if mgr:
+            unit_list = mgr.units
+        elif hasattr(game, 'units'):
+            unit_list = list(game.units.values())
+        else:
+            unit_list = []
+        for u in unit_list:
+            if getattr(u, 'owner', None) == player and getattr(u, 'pending_promotion', False):
+                self._promotion_popup = PromotionPopup(self.ui_manager, u)
+                return
 
     def deselect(self):
         self._selected_unit = self._selected_city = None

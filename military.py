@@ -30,6 +30,7 @@ class Unit:
         self.is_busy = False
         self.busy_type: str = ""
         self.busy_target: str = ""
+        self.pending_promotion: bool = False  # True when player must choose a promotion
         
         # Base stats from unit type
         base = self.get_base_stats()
@@ -62,14 +63,23 @@ class Unit:
             self._offer_promotion()
 
     def _offer_promotion(self) -> None:
-        """Grant a random promotion (+1 attack, +1 defense, or +1 movement)."""
-        choices = [{"attack": 1}, {"defense": 1}, {"movement": 1}]
-        choice = random.choice(choices)
-        self.promotions.append(choice)
+        """Mark unit as having a pending promotion for player to choose."""
+        self.pending_promotion = True
+        print(f"[PROMOTION] {self.name} ({self.owner}) has a pending promotion "
+              f"(XP: {self.xp}, Level: {self.level})")
+
+    def accept_promotion(self, choice: str) -> None:
+        """Apply a player-chosen promotion. choice must be 'attack', 'defense', or 'movement'."""
+        if not self.pending_promotion:
+            return
+        if choice not in ('attack', 'defense', 'movement'):
+            return
+        bonus = {choice: 1}
+        self.promotions.append(bonus)
         self.level += 1
+        self.pending_promotion = False
         self._apply_promotions()
-        label = f"+1 {list(choice.keys())[0]}"
-        print(f"[PROMOTION] {self.name} ({self.owner}) promoted: {label} "
+        print(f"[PROMOTION] {self.name} ({self.owner}) promoted: +1 {choice} "
               f"(XP: {self.xp}, Level: {self.level})")
     def get_promotion_title(self) -> str:
         """Get current promotion title based on level."""
