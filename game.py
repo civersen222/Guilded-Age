@@ -252,6 +252,9 @@ class Game:
             {"name": "Tyre", "type": "Maritime", "influence": {}, "relationship": {}},
         ]
 
+        # End game statistics
+        self.stats = {"cities_founded": 0, "units_trained": 0, "wars_won": 0, "techs_researched": 0, "battles_won": 0, "turns_played": 0}
+
         # Initialize game
         self._initialize_game()
         
@@ -469,6 +472,7 @@ class Game:
 
     def process_turn(self) -> List[str]:
         """Process one turn and return messages. Does not block on input."""
+        self.stats["turns_played"] += 1
         msgs = []
         self.state.turn_events = []
         
@@ -716,6 +720,7 @@ class Game:
                                 new_unit.name = f"{civ_name} {completed_item} {len([u for u in self.units.values() if u.owner == civ_name and u.unit_type == completed_item])}"
                                 self.units[new_unit.name] = new_unit
                                 self.map.add_unit(new_unit)
+                                self.stats["units_trained"] += 1
                                 msgs.append(f"  🏭 City '{city.name}' completed: {completed_item}")
                             elif completed_item in BUILDINGS:
                                 # Add building to city
@@ -979,6 +984,7 @@ class Game:
         self.cities[new_city.name] = new_city
         self.map.add_city(new_city)
         self.gold[civ_name] = self.gold.get(civ_name, 0) - 100
+        self.stats["cities_founded"] += 1
         
         # Remove the settler unit
         if settler.name in self.units:

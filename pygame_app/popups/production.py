@@ -7,6 +7,7 @@ import pygame_gui
 
 from pygame_app.constants import SCREEN_HEIGHT, SCREEN_WIDTH
 from game_data import BUILDINGS, UNIT_TYPES
+from game import WORLD_WONDERS
 
 
 class ProductionPopup:
@@ -73,6 +74,20 @@ class ProductionPopup:
         for bname in sorted(buildable_buildings, key=lambda n: BUILDINGS[n].production_cost):
             btype = BUILDINGS[bname]
             items.append((f"{btype.name} ({btype.production_cost} prod)", bname))
+
+        # Wonders section
+        items.append(("-- WONDERS --", ""))
+        wonders_built = set(getattr(self._game, "wonders_built", {}).keys())
+        for wname in sorted(WORLD_WONDERS, key=lambda n: WORLD_WONDERS[n]["cost"]):
+            if wname not in wonders_built:
+                w = WORLD_WONDERS[wname]
+                bonus_descs = []
+                for k, v in w.items():
+                    if k == "cost":
+                        continue
+                    bonus_descs.append(f"{k}: +{v}")
+                bonus_str = ", ".join(bonus_descs) if bonus_descs else "no bonus"
+                items.append((f"{wname} ({w['cost']} gold) — {bonus_str}", f"wonder:{wname}"))
 
         self.selection_list = pygame_gui.elements.UISelectionList(
             relative_rect=pygame.Rect(
@@ -186,6 +201,20 @@ class ProductionPopup:
         owned_res = None
         if self._game and hasattr(self._game, "economy"):
             owned_res = set(getattr(self._game.economy, "resources", {}).keys())
+
+        if item_id.startswith("wonder:"):
+            wonder_name = item_id[len("wonder:"):]
+            civ_name = self._game.player_civ.name if hasattr(self._game, "player_civ") else None
+            if not civ_name:
+                civ_name = self._city.owner.name if self._city.owner else "Player"
+            result = self._game.build_wonder(civ_name, wonder_name)
+            if self.info_textbox is not None:
+                if "needs" in result.lower() or "already" in result.lower():
+                    self.info_textbox.html_text = f"[red]{result}[/red]" + self.info_textbox.html_text
+                else:
+                    self.info_textbox.html_text = f"[green]{result}[/green]" + self.info_textbox.html_text
+                self.info_textbox.rebuild()
+            return True
 
         success = self._city.assign_production(item_id, researched_techs=researched, owned_resources=owned_res)
         if success:
