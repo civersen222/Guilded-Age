@@ -129,12 +129,12 @@ class CKEvent:
 
 
 WORLD_WONDERS: Dict[str, Dict[str, Union[str, int]]] = {
-    "Pyramids of Giza":       {"cost": 100, "production_bonus": 3},
-    "Great Library":          {"cost": 100, "science_bonus": 5},
-    "Colosseum":              {"cost": 100, "culture_bonus": 3},
-    "Stonehenge":             {"cost": 100, "faith_bonus": 3},
-    "Hanging Gardens":        {"cost": 150, "gold": 3, "happiness": 2},
-    "Great Wall":             {"cost": 150, "military": 3},
+    "Pyramids of Giza":       {"cost": 300, "production_bonus": 3},
+    "Great Library":          {"cost": 300, "science_bonus": 5},
+    "Colosseum":              {"cost": 300, "culture_bonus": 3},
+    "Stonehenge":             {"cost": 300, "faith_bonus": 3},
+    "Hanging Gardens":        {"cost": 300, "gold": 3, "happiness": 2},
+    "Great Wall":             {"cost": 300, "military": 3},
 }
 
 GOVERNMENT_TYPES: Dict[str, Dict[str, int]] = {
@@ -1131,8 +1131,8 @@ class Game:
         for civ_name, civ in self.civilizations.items():
             civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
 
-            # Domination: 10+ cities
-            if len(civ_cities) >= 10:
+            # Domination: 8+ cities
+            if len(civ_cities) >= 8:
                 return {"winner": civ_name, "type": "Domination"}
 
             # Science: reached Modern era
@@ -1145,9 +1145,9 @@ class Game:
                 except Exception:
                     pass
 
-            # Culture: 500+ culture points
+            # Culture: 300+ culture points
             culture_points = getattr(civ, 'culture_points', 0)
-            if culture_points >= 500:
+            if culture_points >= 300:
                 return {"winner": civ_name, "type": "Culture"}
 
             # Religion: 60% of all cities
@@ -1220,8 +1220,8 @@ class Game:
             is_at_war = len(enemy_list) > 0
 
             if is_at_war:
-                # Increase weariness by 5 per turn while at war
-                self.war_weariness[civ_name] = min(100, self.war_weariness[civ_name] + 5)
+                # Increase weariness by 3 per turn while at war
+                self.war_weariness[civ_name] = min(100, self.war_weariness[civ_name] + 3)
                 msgs.append(f"  ⚔️ {civ_name} war weariness: {self.war_weariness[civ_name]}")
             else:
                 # Decrease weariness by 10 per turn when at peace
