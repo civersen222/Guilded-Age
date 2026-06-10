@@ -227,9 +227,7 @@ class DiplomacyPopup:
             if event.ui_element == self._buttons.get("close"):
                 self._kill()
                 return True
-            # Any other button kills window
-            self._kill()
-            return True
+            return False
 
         if event.type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
             if self.civ_list is not None:
