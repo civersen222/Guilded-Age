@@ -105,13 +105,13 @@ class GovernmentPopup:
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame_gui.UI_BUTTON_PRESSED:
-            gov = event.ui_element.text
-            if gov == "Close" or event.ui_element is self._buttons.get("__close__"):
+            if event.ui_element is self._buttons.get("__close__"):
                 self._kill()
                 return True
-            if gov in self._buttons and gov != "__close__":
-                self._switch_government(gov)
-                return True
+            for gov_name, btn in self._buttons.items():
+                if gov_name != "__close__" and event.ui_element is btn:
+                    self._switch_government(gov_name)
+                    return True
         return False
 
     def _switch_government(self, gov_name: str) -> None:
@@ -121,9 +121,9 @@ class GovernmentPopup:
         msg = game.change_government(self._player_civ, gov_name)
         if self._status_label:
             self._status_label.set_text(msg)
-        # Refresh to update highlights
+        manager = self.window.ui_manager
         self._kill()
-        # Re-show via the caller if needed; for simplicity just update status
+        self.show(manager, game)
 
     def _kill(self) -> None:
         for elem in list(self._buttons.values()):
