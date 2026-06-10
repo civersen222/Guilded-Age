@@ -49,7 +49,6 @@ class GovernmentPopup:
         y = MARGIN + 10
         for gov_name, bonuses in GOVERNMENT_TYPES.items():
             bg = (60, 60, 40) if gov_name == current_gov else (30, 30, 20)
-            self.window.set_alphas_to_subordinates(255)
 
             # bonus description
             bonus_parts = []
@@ -65,16 +64,12 @@ class GovernmentPopup:
                 manager=ui_manager,
                 container=self.window,
             )
-            label.set_colour([255, 220, 100] if gov_name == current_gov else [200, 200, 200])
-
             sub_label = pygame_gui.elements.UILabel(
                 relative_rect=pygame.Rect(MARGIN + 10, y + 18, WIDTH - MARGIN * 2 - 10, 18),
                 text=bonus_text,
                 manager=ui_manager,
                 container=self.window,
             )
-            sub_label.set_colour([180, 180, 180])
-
             # Switch button
             btn_rect = pygame.Rect(WIDTH - BUTTON_W - MARGIN, y + 2, BUTTON_W, BUTTON_H - 4)
             btn = pygame_gui.elements.UIButton(
@@ -83,7 +78,10 @@ class GovernmentPopup:
                 manager=ui_manager,
                 container=self.window,
             )
-            btn.set_enabled(gov_name != current_gov)
+            if gov_name != current_gov:
+                btn.enable()
+            else:
+                btn.disable()
             self._buttons[gov_name] = btn
 
             y += ROW_H
@@ -104,7 +102,6 @@ class GovernmentPopup:
             manager=ui_manager,
             container=self.window,
         )
-        self._status_label.set_colour([255, 100, 100])
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if event.type == pygame_gui.UI_BUTTON_PRESSED:

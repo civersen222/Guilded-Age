@@ -101,11 +101,6 @@ class DynastyPopup:
             container=self.window,
         )
 
-        # Connect button actions
-        self.host_feast_btn.set_action_id("host_feast")
-        self.appoint_btn.set_action_id("appoint_court")
-        self.marriage_btn.set_action_id("arrange_marriage")
-        self.close_btn.set_action_id("close_dynasty")
 
     def _build_html(self, game: Any) -> str:
         """Build HTML content for the dynasty popup."""
@@ -176,7 +171,7 @@ class DynastyPopup:
         if self.is_visible and self._game is not None:
             html = self._build_html(self._game)
             if self.info_textbox is not None:
-                self.info_textbox.set_html(html)
+                self.info_textbox.set_text(html)
             self.window.rebuild()
 
     def _set_status(self, message: str) -> None:
@@ -282,6 +277,22 @@ class DynastyPopup:
         dynasty.add_prestige(5)
         self._set_status(f"Marriage arranged for {heir.name}! +5 prestige.")
         self._refresh()
+
+    def handle_event(self, event) -> bool:
+        if event.type == pygame_gui.UI_BUTTON_PRESSED:
+            if event.ui_element == self.host_feast_btn:
+                self.handle_host_feast()
+                return True
+            if event.ui_element == self.appoint_btn:
+                self.handle_appoint_court()
+                return True
+            if event.ui_element == self.marriage_btn:
+                self.handle_arrange_marriage()
+                return True
+            if event.ui_element == self.close_btn:
+                self.kill()
+                return True
+        return False
 
     def handle_action(self, action_id: str) -> None:
         """Route action IDs to handlers."""

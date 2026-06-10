@@ -89,6 +89,8 @@ class ProductionPopup:
                 bonus_str = ", ".join(bonus_descs) if bonus_descs else "no bonus"
                 items.append((f"{wname} ({w['cost']} gold) — {bonus_str}", f"wonder:{wname}"))
 
+        self._id_by_label = {label: pid for label, pid in items}
+
         self.selection_list = pygame_gui.elements.UISelectionList(
             relative_rect=pygame.Rect(
                 self.MARGIN, self.MARGIN, left_w, self.HEIGHT - self.MARGIN * 2 - self.BUTTON_H - 10),
@@ -185,11 +187,11 @@ class ProductionPopup:
         if self.selection_list is None or self._city is None:
             return True
 
-        selected = self.selection_list.get_selected_item()
-        if selected is None:
+        label = self.selection_list.get_single_selection()
+        if label is None:
             return True
 
-        item_id = selected.id
+        item_id = getattr(self, "_id_by_label", {}).get(label, "")
         if not item_id:
             return True
 

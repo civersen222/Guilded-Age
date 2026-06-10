@@ -188,10 +188,10 @@ class DiplomacyPopup:
         """Execute a diplomatic action."""
         if self.civ_list is None or not self._player_civ:
             return True
-        selected = self.civ_list.get_selected_item()
+        selected = self.civ_list.get_single_selection()
         if not selected:
             return True
-        target_civ = selected.id
+        target_civ = selected
         if not target_civ:
             return True
 
@@ -233,9 +233,9 @@ class DiplomacyPopup:
 
         if event.type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
             if self.civ_list is not None:
-                selected = self.civ_list.get_selected_item()
-                if selected and selected.id:
-                    self._refresh_info(selected.id)
+                selected = self.civ_list.get_single_selection()
+                if selected:
+                    self._refresh_info(selected)
             return True
 
         return False

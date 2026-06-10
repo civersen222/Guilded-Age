@@ -16,6 +16,12 @@ BUTTON_H = 36
 class VictoryPopup:
     """Popup showing victory/defeat results."""
 
+    def handle_event(self, event) -> bool:
+        if event.type == pygame_gui.UI_BUTTON_PRESSED and event.ui_element == self.close_btn:
+            self.kill()
+            return True
+        return False
+
     def __init__(self):
         self.window: Optional[pygame_gui.elements.UIWindow] = None
         self.info_textbox: Optional[pygame_gui.elements.UITextBox] = None
@@ -67,5 +73,4 @@ class VictoryPopup:
             manager=ui_manager,
             container=self.window,
         )
-        self.close_btn.set_action_id("victory_return_to_menu")
 
