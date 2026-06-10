@@ -205,15 +205,14 @@ class TechTreePopup:
         ]
         available_techs.sort(key=lambda t: (t.cost, t.name))
 
-        # Clear and rebuild options
-        self.tech_list.clear_options()
+        # Rebuild options (real pygame_gui API: set_item_list)
+        self._tech_by_label = {}
+        labels = []
         for tech in available_techs:
-            option_text = f"{tech.name} — {tech.cost} gold"
-            self.tech_list.add_option(
-                text=option_text,
-                object_id=f"#tech_{tech.name}",
-                selected_object=tech,
-            )
+            label = f"{tech.name} — {tech.cost} gold"
+            labels.append(label)
+            self._tech_by_label[label] = tech
+        self.tech_list.set_item_list(labels)
 
     def _on_tech_selected(self, tech: Any) -> None:
         """Build and display details for the selected tech."""
@@ -261,10 +260,12 @@ class TechTreePopup:
             if event.ui_element == self.research_btn and self._game is not None:
                 return self._on_research()
             return True
-        if event.type == pygame_gui.UI_SELECTION_LIST_CHANGED:
-            if event.ui_element == self.tech_list and event.selected_object is not None:
-                self._selected_tech_name = getattr(event.selected_object, "name", str(event.selected_object))
-                self._on_tech_selected(event.selected_object)
+        if event.type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
+            if event.ui_element == self.tech_list and event.text:
+                tech = getattr(self, "_tech_by_label", {}).get(event.text)
+                if tech is not None:
+                    self._selected_tech_name = tech.name
+                    self._on_tech_selected(tech)
                 return True
             return True
         return False
