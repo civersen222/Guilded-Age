@@ -79,6 +79,8 @@ class GameApp:
             if self._current_screen:
                 self._current_screen.draw(self.screen)
             self.ui_manager.draw_ui(self.screen)
+            if self._current_screen and hasattr(self._current_screen, 'draw_overlay'):
+                self._current_screen.draw_overlay(self.screen)
             pygame.display.flip()
 
         pygame.quit()

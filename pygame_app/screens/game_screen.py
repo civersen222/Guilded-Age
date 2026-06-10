@@ -583,12 +583,17 @@ class GameScreen(BaseScreen):
         if self._action_bar:
             self._action_bar.set_needs_attention(any(u.owner == game.player_civ.name and getattr(u, "moves_left", 0) > 0 for u in game.units.values()))
             self._action_bar.draw(surface)
-        if self._city_panel: self._city_panel.draw(surface)
-        if self._unit_panel: self._unit_panel.draw(surface)
-        if self._event_log: self._event_log.draw(surface)
         self._map_surface.fill(BG)
         self._needs_map_redraw = getattr(self, '_needs_map_redraw', True)
         if self._hex_renderer: self._hex_renderer.render(self._map_surface, game, self._elapsed)
         surface.blit(self._map_surface, (MAP_X, MAP_Y))
         self._draw_tooltip(surface, game)
         if self._minimap: self._minimap.render(surface, game, SCREEN_HEIGHT)
+
+    def draw_overlay(self, surface):
+        if self._city_panel:
+            self._city_panel.draw(surface)
+        if self._unit_panel:
+            self._unit_panel.draw(surface)
+        if self._event_log:
+            self._event_log.draw(surface)
