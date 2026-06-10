@@ -43,7 +43,7 @@ class ReligionPopup:
         # Close button
         self.close_btn = pygame_gui.elements.UIButton(
             text="Close",
-            rect=pygame.Rect(WIDTH // 2 - 40, HEIGHT - MARGIN - BUTTON_H, 80, BUTTON_H),
+            relative_rect=pygame.Rect(WIDTH // 2 - 40, HEIGHT - MARGIN - BUTTON_H, 80, BUTTON_H),
             object_id="#close",
             container=self.window,
         )

@@ -91,7 +91,6 @@ class DynastyPopup:
             text="",
             manager=ui_manager,
             container=self.window,
-            starting_flat=True,
         )
 
         # Close button

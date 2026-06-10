@@ -42,7 +42,7 @@ class VictoryPopup:
         cy = (SCREEN_HEIGHT - HEIGHT) // 2
 
         self.window = pygame_gui.elements.UIWindow(
-            relative_rect=pygame.Rect(cx, cy, WIDTH, HEIGHT),
+            rect=pygame.Rect(cx, cy, WIDTH, HEIGHT),
             manager=ui_manager,
             window_display_title=title,
         )
@@ -55,10 +55,9 @@ class VictoryPopup:
         """
 
         self.info_textbox = pygame_gui.elements.UITextBox(
-            html_string=html,
+            html_text=html,
             relative_rect=pygame.Rect(MARGIN, 50, WIDTH - MARGIN * 2, 100),
             container=self.window,
-            starting_flat=True,
         )
 
         # Return to menu button

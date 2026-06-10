@@ -63,7 +63,7 @@ class CombatPopup:
         btn_y = HEIGHT - MARGIN - btn_h
         self.fight_btn = pygame_gui.elements.UIButton(
             text="Fight!",
-            rect=pygame.Rect(btn_x, btn_y, btn_w, btn_h),
+            relative_rect=pygame.Rect(btn_x, btn_y, btn_w, btn_h),
             container=self.window,
         )
 

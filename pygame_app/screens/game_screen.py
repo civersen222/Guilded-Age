@@ -406,13 +406,13 @@ class GameScreen(BaseScreen):
             html_text=text,
             relative_rect=pygame.Rect(10, 40, 400, 230),
             manager=self.ui_manager,
-            parent=container,
+            container=container,
         )
         close_btn = pygame_gui.elements.UIButton(
             relative_rect=pygame.Rect(150, 270, 120, 30),
             text="Close",
             manager=self.ui_manager,
-            parent=container,
+            container=container,
         )
         self._active_popup = container
 

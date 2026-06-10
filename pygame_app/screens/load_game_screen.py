@@ -43,7 +43,6 @@ class LoadGameScreen(BaseScreen):
                 relative_rect=pygame.Rect(cx - 200, y, 400, 30),
                 text="No saves found.",
                 manager=self.ui_manager,
-                text_color=SUBTLE,
             )
             self.elements.append(lbl)
             y += 50
@@ -68,7 +67,6 @@ class LoadGameScreen(BaseScreen):
                 relative_rect=pygame.Rect(cx - 280, y + 25, 260, 20),
                 text=ts,
                 manager=self.ui_manager,
-                text_color=SUBTLE,
             )
             self.elements.append(date_lbl)
 
