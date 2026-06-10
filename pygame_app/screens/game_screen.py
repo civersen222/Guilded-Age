@@ -511,7 +511,7 @@ class GameScreen(BaseScreen):
         line_height = 18
         bg_color = (30, 30, 40, 220)
         text_color = (240, 240, 240)
-        surf_texts = [self._tooltip_font.render(line, True, text_color) for line in lines]
+        surf_texts = [self._tooltip_font.render(str(line), True, text_color) for line in lines]
         max_w = max(t.get_width() for t in surf_texts)
         total_h = len(lines) * line_height
         rect_w = max_w + padding * 2
