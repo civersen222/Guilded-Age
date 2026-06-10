@@ -76,7 +76,7 @@ class TechTreePopup:
 
         self.tech_list = pygame_gui.elements.UISelectionList(
             relative_rect=pygame.Rect(list_x, list_y, list_w, list_h),
-            starting_options=[],
+            item_list= [],
             manager=ui_manager,
             container=self.window,
         )
