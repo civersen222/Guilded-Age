@@ -56,7 +56,7 @@ class ProductionPopup:
         owned_resources = None
         if self._game and hasattr(self._game, "tech_manager"):
             tm = self._game.tech_manager
-            researched_techs = set(getattr(tm, "unlocked_techs", {}).keys())
+            researched_techs = set(getattr(tm, "unlocked_techs", set()))
         if self._game and hasattr(self._game, "economy"):
             owned_resources = set(getattr(self._game.economy, "resources", {}).keys())
 

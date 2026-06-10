@@ -156,12 +156,14 @@ class GameScreen(BaseScreen):
         if event.key == pygame.K_t: self._open_popup("tech", game)
         elif event.key == pygame.K_d: self._open_popup("diplomacy", game)
         elif event.key == pygame.K_g:
+            if getattr(self, "_active_popup", None): self._active_popup._kill()
             from pygame_app.popups.government_popup import GovernmentPopup
             self._active_popup = GovernmentPopup()
             self._active_popup.show(self.ui_manager, game)
             return
         elif event.key == pygame.K_y: self._open_popup("dynasty", game)
         elif event.key == pygame.K_r:
+            if getattr(self, "_active_popup", None): self._active_popup._kill()
             from pygame_app.popups.religion_popup import ReligionPopup
             player_name = getattr(game.player_civ, "name", "")
             self._active_popup = ReligionPopup(self.ui_manager, game, player_name)
