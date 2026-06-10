@@ -93,7 +93,7 @@ class ProductionPopup:
 
         self.selection_list = pygame_gui.elements.UISelectionList(
             relative_rect=pygame.Rect(
-                self.MARGIN, self.MARGIN, left_w, self.HEIGHT - self.MARGIN * 2 - self.BUTTON_H - 10),
+                self.MARGIN, self.MARGIN, left_w, self.HEIGHT - self.MARGIN * 2 - self.BUTTON_H - 60),
             item_list=items,
             manager=ui_manager,
             container=self.window,
@@ -106,14 +106,14 @@ class ProductionPopup:
         html = self._build_queue_html(city)
         self.info_textbox = pygame_gui.elements.UITextBox(
             relative_rect=pygame.Rect(right_x, self.MARGIN, right_w,
-                                      self.HEIGHT - self.MARGIN * 2 - self.BUTTON_H - 10),
+                                      self.HEIGHT - self.MARGIN * 2 - self.BUTTON_H - 60),
             html_text=html,
             manager=ui_manager,
             container=self.window,
         )
 
         # Buttons row
-        btn_y = self.HEIGHT - self.BUTTON_H - self.MARGIN
+        btn_y = self.HEIGHT - self.BUTTON_H - self.MARGIN - 50
         btn_spacing = 110
         build_x = (self.WIDTH - btn_spacing * 2 - 20) // 2
         close_x = build_x + btn_spacing + 20
@@ -198,7 +198,7 @@ class ProductionPopup:
         researched = None
         if self._game and hasattr(self._game, "tech_manager"):
             tm = self._game.tech_manager
-            researched = set(getattr(tm, "researched", {}).keys())
+            researched = set(getattr(tm, "unlocked_techs", set()))
 
         owned_res = None
         if self._game and hasattr(self._game, "economy"):
@@ -212,9 +212,9 @@ class ProductionPopup:
             result = self._game.build_wonder(civ_name, wonder_name)
             if self.info_textbox is not None:
                 if "needs" in result.lower() or "already" in result.lower():
-                    self.info_textbox.html_text = f"[red]{result}[/red]" + self.info_textbox.html_text
+                    self.info_textbox.html_text = f"<font color='#FF4040'>{result}</font><br>" + self.info_textbox.html_text
                 else:
-                    self.info_textbox.html_text = f"[green]{result}[/green]" + self.info_textbox.html_text
+                    self.info_textbox.html_text = f"<font color='#7CFC00'>{result}</font><br>" + self.info_textbox.html_text
                 self.info_textbox.rebuild()
             return True
 
@@ -222,7 +222,7 @@ class ProductionPopup:
         if success:
             self._refresh()
             if self.info_textbox is not None:
-                self.info_textbox.html_text = f"[green]Building [bold]{item_id}[/bold]![/green]" + self.info_textbox.html_text
+                self.info_textbox.html_text = f"<font color='#7CFC00'>Building <b>{item_id}</b>!</font><br>" + self.info_textbox.html_text
                 self.info_textbox.rebuild()
         return True
 
