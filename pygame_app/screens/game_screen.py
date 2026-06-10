@@ -433,6 +433,9 @@ class GameScreen(BaseScreen):
         self._active_popup = popup
 
     def _open_production_popup_for(self, game, city):
+        if city is None:
+            self._event_log.add_event("Select a city first to open production", "info")
+            return
         if getattr(self, "_active_popup", None): self._active_popup._kill()
         from pygame_app.popups.production import ProductionPopup
         popup = ProductionPopup()
