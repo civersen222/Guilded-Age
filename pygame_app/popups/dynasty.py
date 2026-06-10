@@ -268,6 +268,13 @@ class DynastyPopup:
                 break
 
         if not heir:
+            # Fallback: pick first alive non-ruler
+            ruler = dynasty.root
+            for m in members:
+                if m.is_alive and m != ruler:
+                    heir = m
+                    break
+        if not heir:
             self._set_status("No living heir to arrange marriage for.")
             return
 

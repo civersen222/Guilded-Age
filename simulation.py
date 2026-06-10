@@ -66,7 +66,8 @@ class Character:
         # Section 6: Character deepening
         self.age_progress = AgeProgress(current_age=age, is_alive=True)
         self.lifestyle = LifestyleProgression()
-    
+        self.is_heir = False
+
     def age_up(self) -> Optional[str]:
         """Age character by one turn. Returns event message if significant."""
         if not self.is_alive:
@@ -145,6 +146,7 @@ class Dynasty:
     def __init__(self, root_ancestor: Character, all_characters: Dict[str, Character]):
         self.root = root_ancestor
         self.all_characters = all_characters
+        self.bonus_prestige = 0
 
     def add_member(self, character: Character, parent_id: str):
         """Add a new member to the dynasty."""
@@ -170,6 +172,9 @@ class Dynasty:
         traverse(self.root.id)
         return members
 
+    def add_prestige(self, amount: int):
+        self.bonus_prestige += amount
+
     def calculate_dynastic_prestige(self) -> float:
         members = self.get_all_members()
         living_members = [m for m in members if m.is_alive]
@@ -179,8 +184,8 @@ class Dynasty:
             for stat in ['diplomacy', 'martial', 'stewardship', 'intrigue']:
                 total_stats += m.get_effective_stat(stat)
         
-        # Prestige = (Living Count * 10) + Sum of all effective stats
-        return (len(living_members) * 10) + total_stats
+        # Prestige = (Living Count * 10) + Sum of all effective stats + bonus
+        return (len(living_members) * 10) + total_stats + self.bonus_prestige
 
 # Global Opinion Matrix
 # (char_id_a, char_id_b) -> value
