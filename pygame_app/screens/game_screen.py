@@ -214,9 +214,9 @@ class GameScreen(BaseScreen):
             self._hex_renderer.selected_hex = (hx, hy)
             if self._selected_unit and (hx, hy) in self._hex_renderer.move_range:
                 # Check for enemy unit on clicked tile
-                enemy_units = [u for u in self.game.military_manager.units if u.position == (hx, hy) and u.owner != self._selected_unit.owner]
+                enemy_units = [u for u in game.military_manager.units if u.position == (hx, hy) and u.owner != self._selected_unit.owner]
                 if enemy_units:
-                    self.combat_popup = CombatPopup(self.ui_manager, self._selected_unit, enemy_units[0], self.game)
+                    self.combat_popup = CombatPopup(self.ui_manager, self._selected_unit, enemy_units[0], game)
                     return
                 self._move_unit(game, hx, hy)
                 return
@@ -439,6 +439,7 @@ class GameScreen(BaseScreen):
 
     def _apply_combat_result(self, result):
         """Apply combat results and log the outcome."""
+        game = self.app.game
         from combat import CombatResult
         if isinstance(result, CombatResult):
             # result.attacker and result.defender are already modified in-place by resolve_combat
@@ -446,19 +447,19 @@ class GameScreen(BaseScreen):
             if self._selected_unit and not self._selected_unit.is_alive:
                 self._selected_unit = None
             # Log the result
-            if hasattr(self.game, 'event_log') and self.game.event_log:
-                self.game.event_log.add_entry(result.description)
+            if hasattr(game, 'event_log') and game.event_log:
+                game.event_log.add_entry(result.description)
             # Redraw map to reflect HP changes
             self._needs_map_redraw = True
 
             # Remove dead units from game
-            if hasattr(self.game, "military_manager"):
-                dead = [u for u in self.game.military_manager.units if not getattr(u, "is_alive", True)]
+            if hasattr(game, "military_manager"):
+                dead = [u for u in game.military_manager.units if not getattr(u, "is_alive", True)]
                 for u in dead:
-                    self.game.military_manager.units.remove(u)
+                    game.military_manager.units.remove(u)
                     pos = getattr(u, "position", None)
-                    if pos and hasattr(self.game, "hex_map"):
-                        tile = self.game.hex_map.tiles.get(pos)
+                    if pos and hasattr(game, "hex_map"):
+                        tile = game.hex_map.tiles.get(pos)
                         if tile and getattr(tile, "unit", None) == getattr(u, "unit_type", ""):
                             tile.unit = None
 
