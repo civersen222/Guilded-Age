@@ -16,9 +16,14 @@ BUTTON_H = 36
 class VictoryPopup:
     """Popup showing victory/defeat results."""
 
+    def _kill(self) -> None:
+        if self.window is not None:
+            self.window.kill()
+            self.window = None
+
     def handle_event(self, event) -> bool:
         if event.type == pygame_gui.UI_BUTTON_PRESSED and event.ui_element == self.close_btn:
-            self.kill()
+            self._kill()
             return True
         return False
 

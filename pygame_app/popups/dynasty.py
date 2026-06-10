@@ -285,6 +285,11 @@ class DynastyPopup:
         self._set_status(f"Marriage arranged for {heir.name}! +5 prestige.")
         self._refresh()
 
+    def _kill(self) -> None:
+        if self.window is not None:
+            self.window.kill()
+            self.window = None
+
     def handle_event(self, event) -> bool:
         if event.type == pygame_gui.UI_BUTTON_PRESSED:
             if event.ui_element == self.host_feast_btn:

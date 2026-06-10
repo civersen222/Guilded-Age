@@ -79,6 +79,9 @@ class CombatPopup:
             f"Atk: {atk} | Def: {_def} | HP: {hp}"
         )
 
+    def _kill(self) -> None:
+        self.hide()
+
     def handle_event(self, event: pygame.event.Event) -> Optional[Any]:
         """Return a CombatResult when Fight is pressed, else None."""
         if event.type == pygame_gui.UI_BUTTON_PRESSED and event.ui_element == self.fight_btn:

@@ -81,6 +81,9 @@ class ReligionPopup:
 
         return "\n".join(lines)
 
+    def _kill(self) -> None:
+        self.hide()
+
     def handle_event(self, event: pygame.event.Event) -> None:
         """Handle close button click."""
         if event.type == pygame_gui.UI_BUTTON_PRESSED and event.ui_element == self.close_btn:
