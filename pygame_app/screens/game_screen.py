@@ -498,7 +498,8 @@ class GameScreen(BaseScreen):
         game_map = getattr(game, "map", None)
         tile = game_map.tiles.get((hx, hy)) if game_map else None
         if tile:
-            lines.append(getattr(tile, "terrain", "Unknown") or "Unknown")
+            terrain = getattr(tile, "terrain", None)
+            lines.append(terrain.name.replace('_', ' ').title() if terrain is not None else "Unknown")
         # City name
         for city in game.cities.values():
             if getattr(city, "position", None) == (hx, hy):

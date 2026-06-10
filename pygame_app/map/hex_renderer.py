@@ -404,19 +404,26 @@ class HexRenderer:
                 continue
 
             terrain_name = tile.terrain.name
-            # Scale tile to match current zoom level
-            zoom_tag = self.tile_atlas._nearest_zoom(zoom)
-            target_size = max(8, int(HEX_SIZE * 3.0 * zoom))
-            cache_key = (terrain_name, zoom_tag)
+            tile_w = max(8, int(HEX_SIZE * 2 * zoom) + 2)
+            tile_h = max(8, int(HEX_SIZE * math.sqrt(3) * zoom) + 2)
+            cache_key = (terrain_name, tile_w)
             if cache_key in self._tile_zoom_cache:
                 tile_surface = self._tile_zoom_cache[cache_key]
             else:
                 base_tile = self.tile_atlas.get_tile(terrain_name, zoom)
                 if base_tile.get_width() < 10:
-                    # Error indicator from atlas
                     tile_surface = base_tile
                 else:
-                    tile_surface = pygame.transform.smoothscale(base_tile, (target_size, target_size))
+                    scaled = pygame.transform.smoothscale(base_tile, (tile_w, tile_h))
+                    masked = pygame.Surface((tile_w, tile_h), pygame.SRCALPHA)
+                    pts = []
+                    for i in range(6):
+                        ang = math.pi / 3 * i
+                        pts.append((tile_w / 2 + (tile_w / 2 - 1) * math.cos(ang),
+                                    tile_h / 2 + (tile_h / 2 - 1) * math.sin(ang) * (2 / math.sqrt(3))))
+                    pygame.draw.polygon(masked, (255, 255, 255, 255), pts)
+                    masked.blit(scaled, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+                    tile_surface = masked
                 self._tile_zoom_cache[cache_key] = tile_surface
 
             # Center tile on hex center using actual tile dimensions
@@ -527,7 +534,7 @@ class HexRenderer:
             if not (0 <= sx < surface.get_width() and 0 <= sy < surface.get_height()):
                 continue
 
-            short = resource.name[:4].lower()
+            short = resource.name.replace('_', ' ').title()
             self._blit_text(surface, short, (sx, sy - HEX_SIZE + 6),
                             font=self._font_small, colour=GOLD)
 
