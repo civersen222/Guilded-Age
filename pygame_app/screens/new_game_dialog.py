@@ -84,10 +84,10 @@ class NewGameDialog(BaseScreen):
         )
         self.elements.append(lbl)
 
-        map_sizes = ['Small (12x12)', 'Medium (16x16)', 'Large (24x24)', 'Huge (32x32)']
+        map_sizes = ['Small (40x40)', 'Medium (56x56)', 'Large (72x72)', 'Huge (96x96)']
         self.map_dropdown = UIDropDownMenu(
             options_list=map_sizes,
-            starting_option='Medium (16x16)',
+            starting_option='Medium (56x56)',
             relative_rect=pygame.Rect(cx - 60, y, dd_w, dd_h),
             manager=self.ui_manager,
         )
@@ -163,10 +163,10 @@ class NewGameDialog(BaseScreen):
         if isinstance(map_text, tuple):
             map_text = map_text[0]
         size_map = {
-            'Small (12x12)': 12, 'Medium (16x16)': 16,
-            'Large (24x24)': 24, 'Huge (32x32)': 32,
+            'Small (40x40)': 40, 'Medium (56x56)': 56,
+            'Large (72x72)': 72, 'Huge (96x96)': 96,
         }
-        map_size = size_map.get(map_text, 16)
+        map_size = size_map.get(map_text, 56)
 
         ai_count = int(self.ai_count_slider.get_current_value())
 
