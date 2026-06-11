@@ -1113,8 +1113,8 @@ class Game:
         for civ_name, civ in self.civilizations.items():
             civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
 
-            # Domination: 8+ cities
-            if len(civ_cities) >= 8:
+            # Domination: 12+ cities
+            if len(civ_cities) >= 12:
                 return {"winner": civ_name, "type": "Domination"}
 
             # Science: reached Modern era
@@ -1127,9 +1127,9 @@ class Game:
                 except Exception:
                     pass
 
-            # Culture: 300+ culture points
+            # Culture: 1000+ culture points
             culture_points = getattr(civ, 'culture', 0)
-            if culture_points >= 300:
+            if culture_points >= 1000:
                 return {"winner": civ_name, "type": "Culture"}
 
             # Religion: founded a religion followed by 60%+ of civs
@@ -1139,9 +1139,9 @@ class Game:
                     if total_civs > 0 and len(rel.followers) >= total_civs * 0.6:
                         return {"winner": civ_name, "type": "Religion"}
 
-            # Dynasty: 500+ prestige
+            # Dynasty: 1500+ prestige
             prestige = getattr(civ, 'prestige', 0)
-            if prestige >= 500:
+            if prestige >= 1500:
                 return {"winner": civ_name, "type": "Dynasty"}
 
         return None
