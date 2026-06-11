@@ -820,6 +820,25 @@ class Game:
                 p += self.dynasty.calculate_dynastic_prestige()
             civ_obj.prestige = p
 
+        # Check victory conditions
+        victory = self._check_victory()
+        if victory:
+            self.state.game_over = True
+            self.state.victory = f"{victory['winner']} wins by {victory['type']}"
+            self.victory_tracker.record_victory(victory['winner'], self.state.victory, self.state.turn)
+            self.state.turn_events.append(f"GAME OVER - {victory['winner']} wins by {victory['type']}")
+            return self.state.turn_events
+
+        # Era transition check
+        new_era = self.era_system.check_era_transition()
+        if new_era != self.era_system.current_era:
+            old_era = self.era_system.current_era
+            self.era_system.current_era = new_era
+            self.state.turn_events.append(f"ERA CHANGE: {old_era} Age -> {new_era} Age!")
+
+        self.process_trade_routes()
+        self.process_great_people(self.state.turn_events)
+
         # Increment turn
         self.state.turn += 1
         self.state.phase = "Player"
