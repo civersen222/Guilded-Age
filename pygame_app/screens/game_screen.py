@@ -194,10 +194,10 @@ class GameScreen(BaseScreen):
             self._selected_unit.is_fortified = True
             self._event_log.add_event(f"{self._selected_unit.unit_type} fortified", "info")
         elif event.key in (pygame.K_PLUS, pygame.K_EQUALS):
-            mx, my = event.pos
+            mx, my = getattr(event, "pos", pygame.mouse.get_pos())
             self._camera.zoom_at(mx - MAP_X, my - MAP_Y, 1.15)
         elif event.key == pygame.K_MINUS:
-            mx, my = event.pos
+            mx, my = getattr(event, "pos", pygame.mouse.get_pos())
             self._camera.zoom_at(mx - MAP_X, my - MAP_Y, 1 / 1.15)
         elif event.key == pygame.K_g:
             self.show_yields = not self.show_yields
@@ -206,7 +206,7 @@ class GameScreen(BaseScreen):
             self._show_help_popup()
 
     def _handle_mouse_down(self, event, game):
-        mx, my = event.pos
+        mx, my = getattr(event, "pos", pygame.mouse.get_pos())
         if event.button == 2:
             self._dragging_middle = True
             self._drag_start = (mx, my)
