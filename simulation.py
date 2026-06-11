@@ -74,6 +74,8 @@ class Character:
             return None
         event = self.age_progress.age_up()
         self.age = self.age_progress.current_age
+        if not self.age_progress.is_alive:
+            self.is_alive = False
         return event
     
     def train_skill(self, skill_type, amount: int = 1) -> Optional[str]:
@@ -195,7 +197,7 @@ def modify_opinion(char_a: Character, char_b: Character, amount: int, reason: st
     pair = (char_a.id, char_b.id)
     current = opinion_matrix.get(pair, 0)
     opinion_matrix[pair] = current + amount
-    print(f"Opinion: {char_a.name} -> {char_b.name} changed by {amount} ({reason}). New value: {opinion_matrix[pair]}")
+    return f"{char_a.name} -> {char_b.name}: {amount:+d} ({reason})"
 
 def generate_child(name: str, parent_a: Character, parent_b: Character) -> Character:
     # 1. Base stats: Average of parents + random fluctuation

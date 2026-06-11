@@ -19,6 +19,7 @@ from military import Unit
 from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager, execute_succession, SUCCESSION_LAWS
 from court import Court, CourtPosition
 from realms import create_realms
+from character_ai import tick_realms
 from city import CityManager
 from military import MilitaryManager
 from economy import EconomyManager
@@ -784,6 +785,11 @@ class Game:
 
         # --- Expand cultural borders ---
         self.expand_borders(msgs)
+
+        # --- Living world: every character acts (Phase B2) ---
+        for _msg in tick_realms(self):
+            msgs.append(f"  {_msg}")
+            self.state.turn_events.append(_msg)
 
         # --- CK-style character events ---
         ruler = self.rulers.get(self.player_civ.name)
