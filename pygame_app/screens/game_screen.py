@@ -378,7 +378,7 @@ class GameScreen(BaseScreen):
         signatures and proper _kill() methods.
         """
         if getattr(self, "_active_popup", None): self._active_popup._kill()
-        popups = {"tech": ("TechTreePopup", "tech_tree"), "diplomacy": ("DiplomacyPopup", "diplomacy"), "dynasty": ("DynastyPopup", "dynasty")}
+        popups = {"tech": ("TechTreePopup", "tech_tree"), "diplomacy": ("DiplomacyPopup", "diplomacy"), "dynasty": ("RealmPopup", "realm_popup")}
         cls_name, mod_name = popups[kind]
         mod = __import__(f"pygame_app.popups.{mod_name}", fromlist=[cls_name])
         popup = getattr(mod, cls_name)()
