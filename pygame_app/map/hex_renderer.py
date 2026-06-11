@@ -162,14 +162,21 @@ class HexRenderer:
 
     @staticmethod
     def world_to_hex(wx: float, wy: float) -> Tuple[int, int]:
-        """Inverse: approximate world pixel → axial hex coords."""
-        # Reconstruct axial from offset
-        ax = wx / (HEX_SIZE * 1.5)
-        ay = wy / (HEX_SIZE * math.sqrt(3))
-        # Undo odd-row offset: ay includes 0.5 * ax when ax is odd
-        ay_corrected = ay - 0.5 * (ax % 2) if ax >= 0 else ay + 0.5 * ((-ax) % 2)
-        hx = round(ax)
-        hy = round(ay_corrected)
+        """Inverse: world pixel -> offset hex coords via axial + cube rounding."""
+        q = (2.0 / 3.0) * wx / HEX_SIZE
+        r = (-1.0 / 3.0 * wx + math.sqrt(3) / 3.0 * wy) / HEX_SIZE
+        x, z = q, r
+        y = -x - z
+        rx, ry, rz = round(x), round(y), round(z)
+        dx, dy, dz = abs(rx - x), abs(ry - y), abs(rz - z)
+        if dx > dy and dx > dz:
+            rx = -ry - rz
+        elif dy > dz:
+            ry = -rx - rz
+        else:
+            rz = -rx - ry
+        hx = rx
+        hy = rz + (rx - (rx & 1)) // 2
         return hx, hy
 
     def screen_to_hex(self, sx: int, sy: int) -> Tuple[int, int]:
