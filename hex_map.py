@@ -705,8 +705,9 @@ class HexMap:
         """Generate the map with continent-based terrain and smoothing."""
         # Generate continent-based terrain - scale with map size, cap at 3 for small maps
         map_area = self.width * self.height
-        num_continents = max(2, min(3, map_area // 600))
-        continent_gen = ContinentGenerator(self.width, self.height, num_continents)
+        num_continents = max(2, min(6, map_area // 700))
+        from map_generation import ContinentGeneratorV2
+        continent_gen = ContinentGeneratorV2(self.width, self.height, num_continents)
         self.terrain_map = continent_gen.generate_continents()
         self.continents = continent_gen.continents
 
