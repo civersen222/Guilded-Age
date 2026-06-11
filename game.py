@@ -1057,56 +1057,6 @@ class Game:
         self.state.turn_events.append(msg)
         return msg
 
-        # Check victory conditions
-        victory = self._check_victory()
-        if victory:
-            self.state.game_over = True
-            self.state.victory = f"{victory['winner']} wins by {victory['type']}"
-            self.victory_tracker.record_victory(victory['winner'], self.state.victory, self.state.turn)
-            msgs.append(f"\n{'='*60}")
-            msgs.append(f"GAME OVER - {victory['winner']} wins by {victory['type']}")
-            msgs.append(f"{'='*60}")
-            return msgs
-        
-        # Increment turn
-        self.state.turn += 1
-        self.state.phase = "Player"
-        
-        # Era score check
-        new_era = self.era_system.check_era_transition()
-        if new_era != self.era_system.current_era:
-            old_era = self.era_system.current_era
-            self.era_system.current_era = new_era
-            msgs.append(f"\n  🌍 ERA CHANGE: {old_era} Age → {new_era} Age!")
-            bonuses = self.era_system.get_era_bonuses(new_era)
-            if bonuses:
-                bonus_parts = []
-                if 'loyalty' in bonuses:
-                    bonus_parts.append(f"loyalty {'+' if bonuses['loyalty'] > 0 else ''}{bonuses['loyalty']}")
-                if 'yields' in bonuses:
-                    bonus_parts.append(f"yields ×{bonuses['yields']}")
-                msgs.append(f"  Bonuses: {', '.join(bonus_parts)}")
-        
-        # Reset movement points for player units
-        for unit in self.units.values():
-            if unit.owner == self.player_civ.name:
-                utype = UNIT_TYPES.get(unit.unit_type)
-                if utype:
-                    if utype.category in (UnitCategory.SETTLER, UnitCategory.WORKER):
-                        unit.moves_left = 2
-                    elif utype.category == UnitCategory.CAVALRY:
-                        unit.moves_left = 2
-                    elif utype.category == UnitCategory.NAVAL:
-                        unit.moves_left = 2
-                    else:
-                        unit.moves_left = 1
-                else:
-                    unit.moves_left = 1
-        
-        self.process_trade_routes()
-        self.process_great_people(msgs)
-        return msgs
-
     def create_trade_route(self, city1_name, city2_name, gold_per_turn=5):
         """Create a trade route between two cities."""
         route = (city1_name, city2_name, gold_per_turn)
