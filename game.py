@@ -793,23 +793,6 @@ class Game:
                 self.state.pending_ck_event = event
                 self.state.turn_events.append(f"⚔️  {event.name}: {event.description}")
 
-        # Ruler aging and succession
-        ruler = self.rulers.get(self.player_civ.name) if hasattr(self, "rulers") else None
-        if ruler and getattr(ruler, "is_alive", True):
-            ruler.age = getattr(ruler, "age", 30) + 1
-            if ruler.age > 60 and random.random() < (ruler.age - 60) * 0.02:
-                ruler.is_alive = False
-                heir = None
-                dynasty = getattr(self, "dynasty", None)
-                if dynasty and hasattr(dynasty, "get_heir"):
-                    heir = dynasty.get_heir()
-                if heir:
-                    self.rulers[self.player_civ.name] = heir
-                    if dynasty: dynasty.root = heir
-                    self.state.turn_events.append(f"{ruler.name} died at {ruler.age}. {heir.name} takes the throne!")
-                else:
-                    self.state.turn_events.append(f"{ruler.name} died at {ruler.age} with no heir.")
-
         # Religion spread: cities with temples/shrines spread to adjacent enemy cities
         religion_spread_msgs = self._process_religion_spread(msgs)
         msgs.extend(religion_spread_msgs)
