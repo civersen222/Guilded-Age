@@ -18,6 +18,7 @@ from city import City
 from military import Unit
 from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager, execute_succession, SUCCESSION_LAWS
 from court import Court, CourtPosition
+from realms import create_realms
 from city import CityManager
 from military import MilitaryManager
 from economy import EconomyManager
@@ -469,6 +470,9 @@ class Game:
             if civ_name != self.player_civ.name:
                 self.ai_players[civ_name] = AIPlayer(civ_name, "medium")
         
+        # Every civ gets a ruler, dynasty, and court (Phase B1)
+        self.realms = create_realms(self)
+
         # Generate initial events
         self.event_manager.generate_events()
 
