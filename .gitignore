@@ -21,6 +21,7 @@ saves/
 *.json
 
 # Local code engine
+.cynco-*
 .localcode*/
 .claude/
 .cynco*/
