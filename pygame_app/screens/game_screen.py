@@ -199,11 +199,9 @@ class GameScreen(BaseScreen):
         elif event.key == pygame.K_MINUS:
             mx, my = getattr(event, "pos", pygame.mouse.get_pos())
             self._camera.zoom_at(mx - MAP_X, my - MAP_Y, 1 / 1.15)
-        elif event.key == pygame.K_g:
+        elif event.key == pygame.K_o:
             self.show_yields = not self.show_yields
             self._event_log.add_event("Yield overlay ON" if self.show_yields else "Yield overlay OFF", "info")
-        elif event.key in (pygame.K_h, pygame.K_F1):
-            self._show_help_popup()
 
     def _handle_mouse_down(self, event, game):
         mx, my = getattr(event, "pos", pygame.mouse.get_pos())
@@ -372,51 +370,6 @@ class GameScreen(BaseScreen):
         self._event_log.add_event(f"Founded {city.name}!", "success")
         self.deselect()
         self._city_panel.refresh(game)
-
-    def _show_help_popup(self):
-        """Show a keyboard shortcuts help overlay."""
-        if getattr(self, "_active_popup", None):
-            self._active_popup._kill()
-        container = pygame_gui.elements.UIContainer(
-            relative_rect=pygame.Rect(0, 0, 420, 310),
-            relative_pos=(0.5, 0.5),
-            manager=self.ui_manager,
-        )
-        container.set_relative_position((0.5, 0.5))
-        title = pygame_gui.elements.UIText(
-            relative_rect=pygame.Rect(10, 8, 400, 30),
-            text="Keyboard Shortcuts",
-            object_id="#help_title",
-            manager=self.ui_manager,
-            parent=container,
-        )
-        title.font = pygame.font.SysFont("arial", 18, bold=True)
-        lines = [
-            "T  - Technology Tree",
-            "D  - Diplomacy",
-            "Y  - Dynasty",
-            "R  - Religion",
-            "P  - Production (city selected)",
-            "TAB - Cycle Units",
-            "SPACE - Skip Unit",
-            "ENTER - End Turn",
-            "ESC - Close / Deselect",
-            "H / F1 - This Help",
-        ]
-        text = "\n".join(lines)
-        pygame_gui.elements.UITextBox(
-            html_text=text,
-            relative_rect=pygame.Rect(10, 40, 400, 230),
-            manager=self.ui_manager,
-            container=container,
-        )
-        close_btn = pygame_gui.elements.UIButton(
-            relative_rect=pygame.Rect(150, 270, 120, 30),
-            text="Close",
-            manager=self.ui_manager,
-            container=container,
-        )
-        self._active_popup = container
 
     def _open_popup(self, kind, game):
         """Open a popup window for tech, diplomacy, or dynasty screens.
