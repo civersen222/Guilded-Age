@@ -21,6 +21,7 @@ from court import Court, CourtPosition
 from realms import create_realms
 from character_ai import tick_realms
 from relationships import tick_relationships
+from marriages import tick_marriages
 from city import CityManager
 from military import MilitaryManager
 from economy import EconomyManager
@@ -796,6 +797,11 @@ class Game:
         for _rmsg in tick_relationships(self):
             msgs.append(f"  {_rmsg}")
             self.state.turn_events.append(_rmsg)
+
+        # --- Cross-civ marriages (Phase B4) ---
+        for _mmsg in tick_marriages(self):
+            msgs.append(f"  {_mmsg}")
+            self.state.turn_events.append(_mmsg)
 
         # --- CK-style character events ---
         ruler = self.rulers.get(self.player_civ.name)
