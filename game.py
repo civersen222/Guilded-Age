@@ -20,6 +20,7 @@ from simulation import Character, Dynasty, generate_child, modify_opinion, Dynas
 from court import Court, CourtPosition
 from realms import create_realms
 from character_ai import tick_realms
+from relationships import tick_relationships
 from city import CityManager
 from military import MilitaryManager
 from economy import EconomyManager
@@ -790,6 +791,11 @@ class Game:
         for _msg in tick_realms(self):
             msgs.append(f"  {_msg}")
             self.state.turn_events.append(_msg)
+
+        # --- Rivals, plots, factions (Phase B3) ---
+        for _rmsg in tick_relationships(self):
+            msgs.append(f"  {_rmsg}")
+            self.state.turn_events.append(_rmsg)
 
         # --- CK-style character events ---
         ruler = self.rulers.get(self.player_civ.name)
