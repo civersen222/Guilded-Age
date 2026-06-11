@@ -679,9 +679,12 @@ class Game:
         
         # 7. City Production
         for city in self.cities.values():
-            if city.owner == civ_name:
+            if (owner := city.owner) is not None:
                 # Calculate yields
                 yields = city.calculate_yields()
+                civ_obj = self.civilizations.get(owner)
+                if civ_obj is not None:
+                    civ_obj.culture += yields.get('culture', 0)
                 
                 # Population growth
                 old_pop = city.population
@@ -715,11 +718,11 @@ class Game:
                                 # Create new unit
                                 new_unit = Unit(
                                     unit_type=completed_item,
-                                    owner=civ_name,
+                                    owner=owner,
                                     position=city.position,
                                     moves_left=UNIT_TYPES[completed_item].movement
                                 )
-                                new_unit.name = f"{civ_name} {completed_item} {len([u for u in self.units.values() if u.owner == civ_name and u.unit_type == completed_item])}"
+                                new_unit.name = f"{owner} {completed_item} {len([u for u in self.units.values() if u.owner == owner and u.unit_type == completed_item])}"
                                 self.units[new_unit.name] = new_unit
                                 self.map.add_unit(new_unit)
                                 self.stats["units_trained"] += 1
@@ -806,6 +809,16 @@ class Game:
         # Religion spread: cities with temples/shrines spread to adjacent enemy cities
         religion_spread_msgs = self._process_religion_spread(msgs)
         msgs.extend(religion_spread_msgs)
+
+        # Sync prestige onto civilizations for victory checks
+        for cname, civ_obj in self.civilizations.items():
+            p = 0
+            r = self.rulers.get(cname)
+            if r is not None:
+                p += getattr(r, 'prestige', 0)
+            if cname == self.player_civ.name and self.dynasty is not None:
+                p += self.dynasty.calculate_dynastic_prestige()
+            civ_obj.prestige = p
 
         # Increment turn
         self.state.turn += 1
@@ -1146,14 +1159,16 @@ class Game:
                     pass
 
             # Culture: 300+ culture points
-            culture_points = getattr(civ, 'culture_points', 0)
+            culture_points = getattr(civ, 'culture', 0)
             if culture_points >= 300:
                 return {"winner": civ_name, "type": "Culture"}
 
-            # Religion: 60% of all cities
-            total_cities = len(self.cities)
-            if total_cities > 0 and len(civ_cities) >= total_cities * 0.6:
-                return {"winner": civ_name, "type": "Religion"}
+            # Religion: founded a religion followed by 60%+ of civs
+            for rname, rel in self.religion_manager.religions.items():
+                if getattr(rel, 'founder', None) == civ_name:
+                    total_civs = len(self.civilizations)
+                    if total_civs > 0 and len(rel.followers) >= total_civs * 0.6:
+                        return {"winner": civ_name, "type": "Religion"}
 
             # Dynasty: 500+ prestige
             prestige = getattr(civ, 'prestige', 0)
