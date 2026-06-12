@@ -49,6 +49,7 @@ class TurnSummary:
         """Show the turn summary popup. If no events, do nothing."""
         if not events:
             return
+        self._kill()
 
         # Build HTML text with color-coded events
         parts: List[str] = []

@@ -43,7 +43,7 @@ def build_realm_html(game: Any) -> str:
         return "<i>No realm established yet.</i>"
     parts: List[str] = []
     ruler = realm.ruler
-    parts.append(f"<h2>=== {ruler.name} ===</h2><br>")
+    parts.append(f"<font size=5><b>=== {ruler.name} ===</b></font><br>")
     parts.append(f"Age: {ruler.age}<br><br><b>Stats:</b><br>")
     for stat in ["diplomacy", "martial", "stewardship", "intrigue"]:
         color = STAT_COLORS.get(stat, "#cccccc")
@@ -52,14 +52,14 @@ def build_realm_html(game: Any) -> str:
     parts.append(f"<b>Dynasty Prestige:</b> {realm.dynasty.calculate_dynastic_prestige()}<br>")
 
     members = sorted(realm.dynasty.all_characters.values(), key=lambda c: (not c.is_alive, -c.age))
-    parts.append(f"<br><h3>Dynasty ({sum(1 for m in members if m.is_alive)} living)</h3>")
+    parts.append(f"<br><b><u>Dynasty ({sum(1 for m in members if m.is_alive)} living)</u></b><br>")
     for m in members[:12]:
         alive = "✓" if m.is_alive else "✗"
         wed = " ⚭" if m.id in marriage_mod._married_ids else ""
         role = "Ruler" if m.id == ruler.id else "Kin"
         parts.append(f"{alive} <b>{m.name}</b>{wed} (Age {m.age}) — {role} [{_stat_line(m)}]<br>")
 
-    parts.append(f"<br><h3>Royal Court ({realm.court.filled_count}/5)</h3>")
+    parts.append(f"<br><b><u>Royal Court ({realm.court.filled_count}/5)</u></b><br>")
     for pos in CourtPosition:
         char = realm.court.positions.get(pos)
         if char and char.is_alive:
@@ -71,7 +71,7 @@ def build_realm_html(game: Any) -> str:
               if c.is_alive and c.id != ruler.id and get_relation(c, ruler) == "rival"]
     friends = [c for c in realm.characters
                if c.is_alive and c.id != ruler.id and get_relation(c, ruler) == "friend"]
-    parts.append("<br><h3>Standing at Court</h3>")
+    parts.append("<br><b><u>Standing at Court</u></b><br>")
     parts.append(f'<font color="#44cc44">Friends:</font> ' + (", ".join(c.name for c in friends[:6]) or "none") + "<br>")
     parts.append(f'<font color="#ff4444">Rivals:</font> ' + (", ".join(c.name for c in rivals[:6]) or "none") + "<br>")
     brewing = sum(1 for p in game.plot_manager.plots if p.target == ruler.id)
@@ -80,7 +80,7 @@ def build_realm_html(game: Any) -> str:
 
     dm = game.diplomacy_manager
     pname = game.player_civ.name
-    parts.append("<br><h3>Foreign Realms</h3>")
+    parts.append("<br><b><u>Foreign Realms</u></b><br>")
     for civ_name, r in (getattr(game, "realms", None) or {}).items():
         if civ_name == pname:
             continue
