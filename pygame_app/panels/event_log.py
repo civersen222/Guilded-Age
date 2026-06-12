@@ -32,6 +32,15 @@ CATEGORIZE_HINTS: Dict[str, str] = {
     "food": "growth",
     "research": "science",
     "tech": "science",
+    "rival": "dynasty",
+    "plot": "dynasty",
+    "coup": "dynasty",
+    "weds": "dynasty",
+    "assassin": "dynasty",
+    "now rules": "dynasty",
+    "is born": "dynasty",
+    "feast": "dynasty",
+    "died": "dynasty",
 }
 
 
