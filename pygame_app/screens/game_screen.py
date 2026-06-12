@@ -310,8 +310,8 @@ class GameScreen(BaseScreen):
         self._city_panel.refresh(game)
         self._unit_panel.refresh(game)
         events = game.state.turn_events or []
-        for evt in events:
-            self._event_log.add_event(str(evt), "info")
+        if events:
+            self._event_log.add_turn_events([str(e) for e in events], game.state.turn)
         if events:
             self._turn_summary.show(self.ui_manager, events, game.state.turn)
 
