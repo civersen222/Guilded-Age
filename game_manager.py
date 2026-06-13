@@ -303,7 +303,7 @@ class GameManager:
             if "Diplomat" in char.traits and random.random() < 0.3:
                 # Diplomatic action
                 bonus = char.get_effective_stat("diplomacy")
-                self.current_player.diplomacy += bonus
+                self.current_player.starting_stats["diplomacy"] += bonus
                 self._log(f"{char.name} engaged in diplomacy (+{bonus} diplomacy)")
 
             if "Industrious" in char.traits and random.random() < 0.3:

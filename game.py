@@ -69,6 +69,8 @@ class GameState:
     phase: str = "Player"
     game_over: bool = False
     victory: Optional[str] = None
+    winner: Optional[str] = None
+    victory_type: Optional[str] = None
     turn_events: List[str] = None
     current_player: str = "Player"
     pending_ck_event: Any = None
@@ -830,6 +832,8 @@ class Game:
         if victory:
             self.state.game_over = True
             self.state.victory = f"{victory['winner']} wins by {victory['type']}"
+            self.state.winner = victory['winner']
+            self.state.victory_type = victory['type']
             self.victory_tracker.record_victory(victory['winner'], self.state.victory, self.state.turn)
             self.state.turn_events.append(f"GAME OVER - {victory['winner']} wins by {victory['type']}")
             return self.state.turn_events
