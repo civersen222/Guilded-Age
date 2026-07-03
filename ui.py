@@ -33,6 +33,7 @@ COMMAND_HELP = {
     "q": "Quit the game",
     "status": "Show empire overview",
     "info": "Show character/dynasty info",
+    "yields <city>": "Show detailed yield breakdown for a city",
 }
 
 
@@ -108,6 +109,9 @@ class CommandParser:
 
         if cmd == "info":
             return self._cmd_info()
+
+        if cmd == "yields":
+            return self._cmd_yields(parts)
 
         return f"Unknown command: '{cmd}'. Type 'help' for available commands."
 
@@ -260,6 +264,61 @@ class CommandParser:
             f"  Cities: {len([c for c in self.ui.game.cities.values() if c.owner_id == player])}\n"
             f"  Units: {len([u for u in self.ui.game.units.values() if u.owner_id == player])}"
         )
+
+    def _cmd_yields(self, parts: List[str]) -> str:
+        """Show detailed yield breakdown for a given city."""
+        if len(parts) < 2:
+            return "Usage: yields <city_name>"
+        city_name = " ".join(parts[1:]).lower()
+        target = None
+        for c in self.ui.game.cities.values():
+            if city_name in c.name.lower():
+                target = c
+                break
+        if not target:
+            return f"City matching '{' '.join(parts[1:])}' not found."
+        # Tile-level yields for surrounding tiles
+        tile_lines = []
+        if hasattr(self.ui.game, 'hex_map') and self.ui.game.hex_map:
+            hm = self.ui.game.hex_map
+            x0 = getattr(target, 'x', None)
+            y0 = getattr(target, 'y', None)
+            if x0 is not None and y0 is not None:
+                for dx in range(-1, 2):
+                    for dy in range(-1, 2):
+                        nx, ny = x0 + dx, y0 + dy
+                        tile = hm.get_tile(nx, ny)
+                        if tile:
+                            ty = tile.get_yields()
+                            parts_str = "+".join(f"{k}={v}" for k, v in sorted(ty.items()) if v)
+                            res = f" [{tile.resource}]" if tile.resource else ""
+                            imp = f" [{tile.improvement}]" if tile.improvement else ""
+                            tile_lines.append(f"    ({nx},{ny}) {tile.terrain.value:8s}{res}{imp} -> {parts_str}")
+        # City-level yields
+        cy = target.calculate_yields()
+        city_happiness = getattr(target, 'happiness', 0)
+        game_happiness = getattr(self.ui.game.happiness_system, 'current_happiness', 'N/A')
+        lines = [f"\n=== Yields for {target.name} (pop={target.population}) ==="]
+        lines.append(f"  Base: food=2 gold=1 prod=3 sci=pop*0.5 cul=pop*0.2 faith=0")
+        lines.append(f"  Population bonus: +{target.population*0.5:.1f} food, +{target.population*0.2:.1f} gold")
+        if target.districts:
+            lines.append(f"  Districts:")
+            for dn, d in target.districts.items():
+                dline = f"    {dn}: sci={d.science_bonus} gold={d.gold_bonus} faith={d.faith_bonus} happy={d.happiness_bonus}"
+                lines.append(dline)
+        if target.buildings:
+            lines.append(f"  Buildings:")
+            for bn, b in target.buildings.items():
+                bline = f"    {bn}: food={b.food} gold={b.gold} sci={b.science} prod={b.production} faith={b.faith}"
+                lines.append(bline)
+        lines.append(f"  City happiness: {city_happiness}  |  Empire happiness: {game_happiness}")
+        lines.append(f"  --- Total ---")
+        for k, v in sorted(cy.items()):
+            lines.append(f"    {k:>12s}: {v:>7.1f}")
+        if tile_lines:
+            lines.append(f"  --- Surrounding tiles ---")
+            lines.extend(tile_lines)
+        return "\n".join(lines)
 
 
 class GameUI:

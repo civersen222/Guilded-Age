@@ -1,5 +1,6 @@
 """Comprehensive test suite for CivKings game systems."""
 import unittest
+from unittest.mock import MagicMock
 
 
 class TestDiplomacyManager(unittest.TestCase):
@@ -181,6 +182,64 @@ class TestTurnStability(unittest.TestCase):
         g = create_sample_game()
         g.run_game(100)
         assert g.state.turn >= 100
+
+
+class TestYieldsCommand(unittest.TestCase):
+    """Test the yields debug command in ui.py."""
+
+    def _make_mock_game(self, city_name="TestCity", pop=3):
+        """Create a mock game with one city for testing."""
+        city = MagicMock()
+        city.name = city_name
+        city.owner_id = "TestPlayer"
+        city.population = pop
+        city.x = 5
+        city.y = 5
+        city.districts = {}
+        city.buildings = {}
+        city.happiness = 5
+        city.calculate_yields.return_value = {
+            "food": 5.5, "gold": 2.6, "production": 3.0,
+            "science": 1.5, "culture": 0.6, "faith": 0.0,
+        }
+        game = MagicMock()
+        game.cities = {city_name: city}
+        game.hex_map = None
+        game.happiness_system.current_happiness = 70
+        return game
+
+    def test_cmd_yields_usage(self):
+        """Calling 'yields' with no args returns usage message."""
+        from ui import CommandParser, GameUI
+        g = self._make_mock_game()
+        ui = GameUI(g)
+        parser = CommandParser(ui)
+        result = parser._cmd_yields(["yields"])
+        self.assertIn("Usage", result)
+
+    def test_cmd_yields_not_found(self):
+        """Calling 'yields <nonexistent>' returns not-found message."""
+        from ui import CommandParser, GameUI
+        g = self._make_mock_game()
+        ui = GameUI(g)
+        parser = CommandParser(ui)
+        result = parser._cmd_yields(["yields", "NonExistent"])
+        self.assertIn("not found", result)
+
+    def test_cmd_yields_basic(self):
+        """Calling 'yields <city>' returns yield breakdown with expected sections."""
+        from ui import CommandParser, GameUI
+        g = self._make_mock_game()
+        ui = GameUI(g)
+        parser = CommandParser(ui)
+        result = parser._cmd_yields(["yields", "TestCity"])
+        self.assertIn("Yields for TestCity", result)
+        self.assertIn("pop=3", result)
+        self.assertIn("Base", result)
+        self.assertIn("Population", result)
+        self.assertIn("Total", result)
+        self.assertIn("food", result)
+        self.assertIn("gold", result)
 
 
 if __name__ == "__main__":
