@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import random
 from game_data import (
     TECHNOLOGIES, UNIT_TYPES, BUILDINGS, CIVILIZATIONS,
-    UnitCategory, TechBranch, Era,
+    UnitCategory, TechBranch, Era, TerrainType,
 )
 from military import Unit
 from court import Court, CourtPosition
@@ -287,77 +287,73 @@ class AIPlayer:
     # ── Military management ─────────────────────────────────────────────────
 
     def _manage_military(self, game) -> List[str]:
-        """Move units toward threats, garrison cities."""
+        """Move units toward threats or garrison cities — units actually move."""
         msgs = []
         units = [u for u in game.units.values()
                  if u.owner == self.civ_name and u.is_alive and u.moves_left > 0]
         if not units:
             return msgs
 
-        # Find nearest enemy unit/city for each military unit
         enemy_units = [u for u in game.units.values()
                        if u.owner != self.civ_name and u.is_alive]
         enemy_cities = [c for c in game.cities.values() if c.owner != self.civ_name]
         enemy_targets = enemy_units + enemy_cities
 
+        def step_toward(unit, target_pos):
+            """Move one land tile toward target_pos. move_unit handles combat."""
+            best = None
+            best_d = game.map.get_distance(unit.position[0], unit.position[1],
+                                           target_pos[0], target_pos[1])
+            for n in game.map.get_neighbors(unit.position[0], unit.position[1]):
+                if n.terrain in (TerrainType.WATER_COAST, TerrainType.OCEAN):
+                    continue
+                d = game.map.get_distance(n.x, n.y, target_pos[0], target_pos[1])
+                if d < best_d:
+                    best_d = d
+                    best = (n.x, n.y)
+            if best is not None:
+                return game.military_manager.move_unit(unit, best)
+            return False
+
         for unit in units:
             utype = UNIT_TYPES.get(unit.unit_type)
             if not utype:
                 continue
-
-            # Workers don't fight, move toward friendly cities for improvements
-            if utype.category == UnitCategory.WORKER:
-                # Move toward unimproved tiles near cities (simplified: just stay put)
+            if utype.category in (UnitCategory.WORKER, UnitCategory.SETTLER):
                 continue
 
-            # Settlers don't fight, stay near cities
-            if utype.category == UnitCategory.SETTLER:
+            # Nearest enemy target
+            target = None
+            target_dist = float('inf')
+            for t in enemy_targets:
+                d = game.map.get_distance(unit.position[0], unit.position[1],
+                                          t.position[0], t.position[1])
+                if d < target_dist:
+                    target_dist = d
+                    target = t
+
+            if target is not None and self.aggression > 0.4 and target_dist <= 5:
+                if step_toward(unit, target.position):
+                    msgs.append(f"    ⚔️ {unit.unit_type} advances toward the enemy")
+                unit.moves_left = 0
                 continue
 
-            # Military units: move toward threats or garrison
-            if enemy_targets and self.aggression > 0.4:
-                # Find nearest enemy
-                best_target = None
-                best_dist = float('inf')
-                for t in enemy_targets:
+            # Garrison nearest own city
+            nearest = None
+            near_dist = float('inf')
+            for c in game.cities.values():
+                if c.owner == self.civ_name:
                     d = game.map.get_distance(unit.position[0], unit.position[1],
-                                              t.position[0], t.position[1])
-                    if d < best_dist:
-                        best_dist = d
-                        best_target = t
-
-                if best_target and best_dist <= 3:
-                    # Attack if close enough
-                    if best_target in enemy_units:
-                        msgs.append(f"    ⚔️ {unit.name} attacks {best_target.name}")
-                        # Simplified: just record intent, actual combat in game.py
-                    unit.moves_left = 0
-                    continue
-
-            # Move one tile toward nearest city or threat
-            if enemy_targets and best_dist <= 5:
-                # Move toward threat
-                pass  # Simplified: don't move for now, just garrison
-            else:
-                # Garrison nearest city
-                nearest = None
-                near_dist = float('inf')
-                for c in game.cities.values():
-                    if c.owner == self.civ_name:
-                        d = game.map.get_distance(unit.position[0], unit.position[1],
-                                                  c.position[0], c.position[1])
-                        if d < near_dist:
-                            near_dist = d
-                            nearest = c
-                if nearest and near_dist > 1:
-                    msgs.append(f"    🏰 {unit.name} garrisoning {nearest.name}")
-
+                                              c.position[0], c.position[1])
+                    if d < near_dist:
+                        near_dist = d
+                        nearest = c
+            if nearest is not None and near_dist > 1:
+                if step_toward(unit, nearest.position):
+                    msgs.append(f"    🏰 {unit.unit_type} moves to garrison {nearest.name}")
             unit.moves_left = 0
 
         return msgs
-
-    # ── Diplomacy management ────────────────────────────────────────────────
-
     def _manage_diplomacy(self, game) -> List[str]:
         """AI diplomatic decisions based on relation scores each turn."""
         msgs = []
