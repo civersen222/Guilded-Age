@@ -314,6 +314,10 @@ class GameScreen(BaseScreen):
             self._event_log.add_turn_events([str(e) for e in events], game.state.turn)
         if events:
             self._turn_summary.show(self.ui_manager, events, game.state.turn)
+        pending = getattr(game.state, "pending_ck_event", None)
+        if pending is not None:
+            self._event_choice_popup.show(self.ui_manager, pending, game)
+            game.state.pending_ck_event = None
 
     def _handle_action(self, action, game):
         if action == "Next Turn": self._process_next_turn(game)
