@@ -1118,6 +1118,11 @@ class Game:
 
         Returns {"winner": civ_name, "type": victory_type} or None.
         """
+        # Conquest: last civilization still owning any cities wins
+        civs_with_cities = {c.owner for c in self.cities.values() if c.owner in self.civilizations}
+        if len(self.civilizations) > 1 and len(civs_with_cities) == 1:
+            return {"winner": next(iter(civs_with_cities)), "type": "Conquest"}
+
         # Check all civilizations
         for civ_name, civ in self.civilizations.items():
             civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
