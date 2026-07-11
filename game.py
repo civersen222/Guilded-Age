@@ -101,31 +101,16 @@ class CKEvent:
 
     def _apply_effect(self, effect_type: str, value: Union[int, float]) -> None:
         ruler = self._get_ruler()
+        if ruler is None:
+            return
         if effect_type == "gold":
-            if ruler:
-                ruler.gold_reserve += value
+            ruler.gold_reserve += value
         elif effect_type == "prestige":
-            if ruler:
-                ruler.prestige += value
+            ruler.prestige = getattr(ruler, "prestige", 0) + value
         elif effect_type == "morale":
-            if ruler:
-                ruler.morale = min(100, ruler.morale + value)
-        elif effect_type == "martial":
-            if ruler and "martial" not in ruler.skills:
-                ruler.skills["martial"] = 0
-            ruler.skills["martial"] += value
-        elif effect_type == "stewardship":
-            if ruler and "stewardship" not in ruler.skills:
-                ruler.skills["stewardship"] = 0
-            ruler.skills["stewardship"] += value
-        elif effect_type == "intrigue":
-            if ruler and "intrigue" not in ruler.skills:
-                ruler.skills["intrigue"] = 0
-            ruler.skills["intrigue"] += value
-        elif effect_type == "diplomacy":
-            if ruler and "diplomacy" not in ruler.skills:
-                ruler.skills["diplomacy"] = 0
-            ruler.skills["diplomacy"] += value
+            ruler.morale = min(100, getattr(ruler, "morale", 100) + value)
+        elif effect_type in ("martial", "stewardship", "intrigue", "diplomacy"):
+            ruler.base_stats[effect_type] = ruler.base_stats.get(effect_type, 0) + value
 
     def _get_ruler(self):
         game = self._game if hasattr(self, "_game") else None
