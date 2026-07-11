@@ -339,7 +339,7 @@ class Game:
             self.research[civ_name] = TechManager()
             for tn in civ.starting_tech:
                 if tn in TECHNOLOGIES:
-                    self.research[civ_name].research(tn, civ_name)
+                    self.research[civ_name].researched[tn] = TECHNOLOGIES[tn]
             ai_neighbors = self.map.get_neighbors(tile[0], tile[1])
             ai_land_neighbors = [n for n in ai_neighbors if n.terrain not in (TerrainType.WATER_COAST, TerrainType.OCEAN)]
             ai_warrior_pos = (ai_land_neighbors[0].x, ai_land_neighbors[0].y) if ai_land_neighbors else tile
@@ -449,11 +449,13 @@ class Game:
         self.faith_points[self.player_civ.name] = 0
         # Each player gets their own TechManager instance
         self.research[self.player_civ.name] = TechManager()
+        # Player UI and engine share one TechManager
+        self.tech_manager = self.research[self.player_civ.name]
         
         # Give player starting tech
         for tech_name in self.player_civ.starting_tech:
             if tech_name in TECHNOLOGIES:
-                self.research[self.player_civ.name].research(tech_name, self.player_civ.name)
+                self.research[self.player_civ.name].researched[tech_name] = TECHNOLOGIES[tech_name]
         
         # Create AI players for each AI civ
         for civ_name, civ in self.civilizations.items():
@@ -679,6 +681,16 @@ class Game:
                 civ_obj = self.civilizations.get(owner)
                 if civ_obj is not None:
                     civ_obj.culture += yields.get('culture', 0)
+
+                # Science advances the owning civ's research
+                owner_mgr = self.research.get(city.owner)
+                if owner_mgr is not None:
+                    if owner_mgr.current_research is None:
+                        available = owner_mgr.get_available_technologies(city.owner)
+                        if available:
+                            cheapest = min(available, key=lambda t: TECHNOLOGIES[t].cost)
+                            owner_mgr.research(cheapest, city.owner)
+                    owner_mgr.add_research_progress(city.owner, yields.get('science', 0))
                 
                 # Population growth
                 old_pop = city.population
