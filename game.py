@@ -690,7 +690,12 @@ class Game:
                         if available:
                             cheapest = min(available, key=lambda t: TECHNOLOGIES[t].cost)
                             owner_mgr.research(cheapest, city.owner)
-                    owner_mgr.add_research_progress(city.owner, yields.get('science', 0))
+                            self.state.turn_events.append(
+                                f"🧪 {city.owner} began researching {cheapest}")
+                    completed = owner_mgr.add_research_progress(city.owner, yields.get('science', 0))
+                    if completed:
+                        self.state.turn_events.append(
+                            f"🔬 {city.owner} completed research: {completed}")
                 
                 # Population growth
                 old_pop = city.population

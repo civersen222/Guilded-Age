@@ -159,27 +159,27 @@ class TechManager:
         if tech_name in TECHNOLOGIES:
             self.current_research = tech_name
             self.current_research_progress = 0
-            print(f"Started researching: {tech_name}")
-    
     def add_research_progress(self, civ: str = "", amount: int = 0):
-        """Add research progress toward current technology"""
+        """Add research progress toward current technology.
+        Returns the name of a technology completed by this call, or None."""
         if self.current_research:
             self.current_research_progress += amount
             tech = TECHNOLOGIES[self.current_research]
-            
+
             if self.current_research_progress >= tech.cost:
-                self.complete_research()
-    
+                return self.complete_research()
+        return None
     def complete_research(self):
-        """Complete current research"""
+        """Complete current research. Returns the completed technology name, or None."""
         if self.current_research:
-            tech = TECHNOLOGIES[self.current_research]
-            self.researched[self.current_research] = tech
+            completed = self.current_research
+            tech = TECHNOLOGIES[completed]
+            self.researched[completed] = tech
             self.science_pool += tech.cost // 2
-            print(f"Researched: {self.current_research}")
             self.current_research = None
             self.current_research_progress = 0
-    
+            return completed
+        return None
     def auto_research(self, civ):
         """Automatically research the next available technology"""
         available = self.get_available_technologies(civ.name if hasattr(civ, 'name') else civ)
