@@ -242,5 +242,23 @@ class TestYieldsCommand(unittest.TestCase):
         self.assertIn("gold", result)
 
 
+class TestTaxStewardship(unittest.TestCase):
+    """Test that ruler stewardship boosts tax income."""
+
+    def test_stewardship_boosts_tax(self):
+        from tax_system import TaxSystem
+        from simulation import Character
+        ts = TaxSystem(base_tax_rate=30)
+        mock_city = MagicMock()
+        mock_city.population = 10
+        cities = {"city1": mock_city}
+        ruler = Character("TestRuler", stats={"stewardship": 50, "diplomacy": 10, "martial": 10, "intrigue": 10}, traits=[])
+        base = ts.process_tax_income(cities)
+        boosted = ts.process_tax_income(cities, ruler)
+        expected = int(base * (1.0 + 50 / 100.0))
+        self.assertEqual(boosted, expected)
+        self.assertGreater(boosted, base)
+
+
 if __name__ == "__main__":
     unittest.main()

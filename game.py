@@ -613,7 +613,8 @@ class Game:
             msgs.append(f"\n  Gold Maintenance: -{gold_maintenance_total}")
         
         # 1. Tax Income
-        tax_income = self.tax_system.process_tax_income(self.cities)
+        ruler = self.rulers.get(civ_name)
+        tax_income = self.tax_system.process_tax_income(self.cities, ruler)
         self.gold[civ_name] += tax_income
         msgs.append(f"  Tax Income: +{tax_income} gold")
         
