@@ -1163,7 +1163,7 @@ class Game:
     def trigger_golden_age(self, civ: str, turns: int = 10):
         """Start or extend a golden age for a civilization."""
         self.golden_ages[civ] = self.golden_ages.get(civ, 0) + turns
-        print(f"  ✨ {civ} has entered a Golden Age for {turns} turns!")
+        self.state.turn_events.append(f"✨ {civ} has entered a Golden Age for {turns} turns!")
 
     def process_golden_ages(self):
         """Decrement golden age timers and apply bonuses."""
@@ -1206,6 +1206,7 @@ class Game:
                 self.current_era[civ_name] = next_era
                 msgs.append(f"  🏛️ {civ_name} has advanced to the {next_era} Era!")
                 self.state.turn_events.append(f"{civ_name} advanced to the {next_era} Era")
+                self.trigger_golden_age(civ_name)
 
     def process_war_weariness(self, msgs: List[str]) -> None:
         """Process war weariness for all civilizations each turn."""
