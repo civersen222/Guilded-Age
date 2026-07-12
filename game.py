@@ -550,12 +550,12 @@ class Game:
                     self.state.turn_events.append(f"{civ_name} founded the {chosen} pantheon")
 
         # Process events
-        event = self.event_manager.generate_event()
+        event = self.event_manager.generate_event(self, self.player_civ.name)
         if event:
-            event_name, event_desc = (event, "") if isinstance(event, str) else event
+            event_name, event_desc = event
             msgs.append(f"\nEvent: {event_name}")
             msgs.append(f"  {event_desc}")
-            self.state.turn_events.append(f"{event_name}: {event_desc}")
+            self.state.turn_events.append(f"⚡ {event_name}: {event_desc}")
         
         # Check era advancement for all civilizations
         self.check_era_advancement(msgs)

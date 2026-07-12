@@ -19,11 +19,32 @@ class Event:
         self.weight = weight
         self.triggered = False
     
-    def apply_effects(self):
-        """Apply event effects"""
+    def apply_effects(self, game=None, civ_name: str = ""):
+        """Apply event effects to real game state.
+        Returns a list of applied-effect strings (e.g. 'gold +25')."""
+        applied = []
+        if game is None or not civ_name:
+            return applied
         for effect_type, value in self.effects.items():
-            print(f"  Effect: {effect_type} {value}")
-    
+            label = f"{effect_type} {'+' if value >= 0 else ''}{value}"
+            if effect_type == "gold" and civ_name in game.gold:
+                game.gold[civ_name] += value
+                applied.append(label)
+            elif effect_type == "faith" and civ_name in game.faith_points:
+                game.faith_points[civ_name] = max(0, game.faith_points[civ_name] + value)
+                applied.append(label)
+            elif effect_type == "science" and civ_name in game.research:
+                mgr = game.research[civ_name]
+                mgr.science_pool = max(0.0, mgr.science_pool + value)
+                applied.append(label)
+            elif effect_type in ("food", "production"):
+                cities = [c for c in game.cities.values() if c.owner == civ_name]
+                if cities:
+                    city = cities[0]
+                    setattr(city, effect_type, max(0, getattr(city, effect_type) + value))
+                    applied.append(label)
+        return applied
+
     def evaluate_choice(self, choice: Dict) -> bool:
         """Check if a choice is available (prerequisites met)"""
         if 'requirements' not in choice:
@@ -131,12 +152,14 @@ class EventManager:
         if faction_manager:
             self._register_faction_events(faction_manager)
     
-    def generate_event(self) -> Optional[Tuple[str, str]]:
-        """Generate a random event, weighted by category and faction state"""
+    def generate_event(self, game=None, civ_name: str = "") -> Optional[Tuple[str, str]]:
+        """Generate a random event, weighted by category and faction state.
+        If game and civ_name are given, the event's effects are applied to
+        real game state and summarized in the returned description."""
         pool = self.event_pool + self.faction_event_pool
         if not pool:
             return None
-        
+
         weighted = [(e, e.weight) for e in pool]
         total = sum(w for _, w in weighted)
         r = random.uniform(0, total)
@@ -149,11 +172,13 @@ class EventManager:
                 break
         if chosen is None:
             chosen = weighted[-1][0]
-        
-        chosen.apply_effects()
+
+        applied = chosen.apply_effects(game, civ_name)
+        description = chosen.description
+        if applied:
+            description = f"{description} ({', '.join(applied)})"
         self.event_history.append(chosen)
-        return (chosen.name, chosen.description)
-    
+        return (chosen.name, description)
     def add_event(self, event: Event):
         """Add an event to the pool"""
         self.event_pool.append(event)
