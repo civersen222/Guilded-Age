@@ -92,13 +92,12 @@ class CKEvent:
         """Set the game reference for effect evaluation."""
         self._game = game
 
-    def evaluate_choice(self, choice: Dict) -> None:
-        """Apply the effects of the chosen option."""
+    def evaluate_choice(self, choice: Dict) -> str:
+        """Apply the effects of the chosen option. Returns a feedback message."""
         effects = choice.get("effects", {})
         for effect_type, value in effects.items():
             self._apply_effect(effect_type, value)
-        print(f"  📜 [{self.name}] Chose: {choice.get('name', '')}")
-
+        return f"📜 [{self.name}] Chose: {choice.get('name', '')}"
     def _apply_effect(self, effect_type: str, value: Union[int, float]) -> None:
         ruler = self._get_ruler()
         if ruler is None:
@@ -1176,7 +1175,7 @@ class Game:
                 if civ_name in self.gold:
                     self.gold[civ_name] += int(self.gold[civ_name] * 0.1)
                 if turns_left - 1 == 0:
-                    print(f"  🌅 The Golden Age of {civ_name} has ended.")
+                    self.state.turn_events.append(f"🌅 The Golden Age of {civ_name} has ended.")
             else:
                 to_remove.append(civ_name)
         for civ_name in to_remove:

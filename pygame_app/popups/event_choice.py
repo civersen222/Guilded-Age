@@ -90,18 +90,17 @@ class EventChoicePopup:
                 if event.ui_element == btn:
                     if choices and i < len(choices):
                         choice = choices[i]
-                        self._event.evaluate_choice(choice)
+                        self.last_choice_message = self._event.evaluate_choice(choice)
                     elif not choices:
-                        # No choices — apply default effects if any
+                        # No choices — apply default effects through the same path
                         effects = getattr(self._event, "effects", {})
                         if effects:
-                            for effect_type, value in effects.items():
-                                print(f"  Effect: {effect_type} {value}")
+                            self.last_choice_message = self._event.evaluate_choice(
+                                {"effects": effects, "name": "OK"})
                     self._kill()
                     return True
             return True
         return False
-
     def _kill(self) -> None:
         """Kill all child elements and the window."""
         for elem in [self.desc_textbox] + self.choice_buttons:

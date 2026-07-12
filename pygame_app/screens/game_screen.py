@@ -99,6 +99,10 @@ class GameScreen(BaseScreen):
             return
         if getattr(self, "_event_choice_popup", None) and self._event_choice_popup.is_visible:
             if self._event_choice_popup.handle_event(event):
+                msg = getattr(self._event_choice_popup, "last_choice_message", None)
+                if msg:
+                    self._event_log.add_event(msg, "event")
+                    self._event_choice_popup.last_choice_message = None
                 return
         if self._active_popup and getattr(self._active_popup, "is_visible", False):
             if self._active_popup.handle_event(event):
