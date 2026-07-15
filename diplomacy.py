@@ -187,19 +187,26 @@ class DiplomacyManager:
                 return self.relations.get(pair, 0)
         return DiplomacyRelation(self.relations, civ)
     
-    def propose_peace(self, civ_a: str, civ_b: str) -> str:
-        """Propose peace treaty between two civilizations"""
-        self.sign_truce(civ_a, civ_b, 20)
-        self.modify_relation(civ_a, civ_b, 10)
-        return f"{civ_a} proposes peace to {civ_b}"
-    
-    def propose_alliance(self, civ_a: str, civ_b: str) -> str:
-        """Propose alliance between two civilizations"""
-        self.make_pact(civ_a, civ_b, "alliance")
-        return f"{civ_a} proposes alliance to {civ_b}"
-    
-    # ── Message Inbox ──
-    
+    def propose_peace(self, civ_a: str, civ_b: str, ruler=None) -> str:
+        """Propose peace. Acceptance depends on relations, boosted by the
+        proposer ruler's diplomacy stat (1 relation point per stat point)."""
+        bonus = ruler.get_effective_stat("diplomacy") if ruler is not None else 0
+        if self.get_relation(civ_a, civ_b) + bonus >= -30:
+            self.sign_truce(civ_a, civ_b, 20)
+            self.modify_relation(civ_a, civ_b, 10)
+            return f"🕊️ {civ_b} accepts peace with {civ_a}"
+        self.modify_relation(civ_a, civ_b, 2)
+        return f"⚔️ {civ_b} rejects {civ_a}'s peace offer — too much bad blood"
+
+    def propose_alliance(self, civ_a: str, civ_b: str, ruler=None) -> str:
+        """Propose alliance. Acceptance depends on relations, boosted by the
+        proposer ruler's diplomacy stat (1 relation point per stat point)."""
+        bonus = ruler.get_effective_stat("diplomacy") if ruler is not None else 0
+        if self.get_relation(civ_a, civ_b) + bonus >= 30:
+            self.make_pact(civ_a, civ_b, "alliance")
+            return f"🤝 {civ_b} accepts an alliance with {civ_a}!"
+        self.modify_relation(civ_a, civ_b, 2)
+        return f"🕊️ {civ_b} declines {civ_a}'s alliance — relations too cold (talks warm them slightly)"
     def send_message(self, from_civ: str, to_civ: str, msg_type: str,
                      subject: str, body: str, turn: int = 0) -> DiplomacyMessage:
         """Send a diplomatic message from one civ to another"""

@@ -199,22 +199,25 @@ class DiplomacyPopup:
         if not dm:
             return True
 
+        result_msg = ""
         if action == "war":
             dm.declare_war(self._player_civ, target_civ)
+            result_msg = "War declared!"
         elif action == "alliance":
-            dm.propose_alliance(self._player_civ, target_civ)
+            ruler = getattr(self._game, "rulers", {}).get(self._player_civ)
+            result_msg = dm.propose_alliance(self._player_civ, target_civ, ruler)
         elif action == "trade":
             dm.sign_trade_agreement(self._player_civ, target_civ, 5)
+            result_msg = "Trade agreement signed!"
         elif action == "spy":
             if hasattr(self._game, "spy_on") and target_civ:
                 self._game.spy_on(target_civ)
+            result_msg = "Spy sent!"
 
         self._refresh_info(target_civ)
-        labels = {"war": "War declared!", "alliance": "Alliance proposed!", "trade": "Trade agreement signed!", "spy": "Spy sent!"}
         if hasattr(self, "_status_label") and self._status_label:
-            self._status_label.set_text(labels.get(action, ""))
+            self._status_label.set_text(result_msg)
         return True
-
     def handle_event(self, event) -> bool:
         """Handle events from the popup. Returns True if handled."""
         if event.type == pygame_gui.UI_BUTTON_PRESSED:
