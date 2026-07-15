@@ -6,8 +6,8 @@ import pygame
 import pygame_gui
 
 from pygame_app.constants import SCREEN_HEIGHT, SCREEN_WIDTH
-from game_data import BUILDINGS, UNIT_TYPES
-from game import Game, WORLD_WONDERS
+from game_data import BUILDINGS, UNIT_TYPES, WONDERS, BUILT_WONDERS
+from game import Game
 
 
 class ProductionPopup:
@@ -77,17 +77,12 @@ class ProductionPopup:
 
         # Wonders section
         items.append(("-- WONDERS --", ""))
-        wonders_built = set(getattr(self._game, "wonders_built", {}).keys())
-        for wname in sorted(WORLD_WONDERS, key=lambda n: WORLD_WONDERS[n]["cost"]):
-            if wname not in wonders_built:
-                w = WORLD_WONDERS[wname]
-                bonus_descs = []
-                for k, v in w.items():
-                    if k == "cost":
-                        continue
-                    bonus_descs.append(f"{k}: +{v}")
-                bonus_str = ", ".join(bonus_descs) if bonus_descs else "no bonus"
-                items.append((f"{wname} ({w['cost']} gold) — {bonus_str}", f"wonder:{wname}"))
+        for wname in sorted(WONDERS, key=lambda n: WONDERS[n].cost):
+            if wname in BUILT_WONDERS:
+                continue
+            wtype = WONDERS[wname]
+            effect_str = ", ".join(f"{k}: {v}" for k, v in wtype.effects.items()) or "no bonus"
+            items.append((f"{wtype.name} ({wtype.cost} prod) — {effect_str}", f"wonder:{wname}"))
 
         self._id_by_label = {label: pid for label, pid in items}
 
@@ -206,16 +201,15 @@ class ProductionPopup:
 
         if item_id.startswith("wonder:"):
             wonder_name = item_id[len("wonder:"):]
-            civ_name = self._game.player_civ.name if hasattr(self._game, "player_civ") else None
-            if not civ_name:
-                civ_name = self._city.owner.name if self._city.owner else "Player"
-            result = self._game.build_wonder(civ_name, wonder_name)
+            success = self._city.assign_production(wonder_name, researched_techs=researched, owned_resources=owned_res)
             if self.info_textbox is not None:
-                if "needs" in result.lower() or "already" in result.lower():
-                    self.info_textbox.html_text = f"<font color='#FF4040'>{result}</font><br>" + self.info_textbox.html_text
+                if success:
+                    self.info_textbox.html_text = f"<font color='#7CFC00'>Building wonder <b>{wonder_name}</b>!</font><br>" + self.info_textbox.html_text
                 else:
-                    self.info_textbox.html_text = f"<font color='#7CFC00'>{result}</font><br>" + self.info_textbox.html_text
+                    self.info_textbox.html_text = f"<font color='#FF4040'>Cannot build {wonder_name} (already built, queued, or tech missing).</font><br>" + self.info_textbox.html_text
                 self.info_textbox.rebuild()
+            if success:
+                self._refresh()
             return True
 
         success = self._city.assign_production(item_id, researched_techs=researched, owned_resources=owned_res)
