@@ -51,22 +51,6 @@ class VassalageManager:
     def __init__(self, tax_rate: float = 0.1):
         self.tax_rate = tax_rate
 
-    def collect_taxes(self, cities: List[City], liege: Character):
-        total_tax = 0.0
-        for city in cities:
-            # If city owner is not the liege, they are a vassal
-            if city.owner and city.owner != liege:
-                # Only collect if the owner's liege is the specified liege
-                # (Assuming a simple 1-level vassalage for this simulation)
-                yields = city.calculate_total_yields()
-                tax = yields['gold'] * self.tax_rate
-                city.owner.gold_reserve -= tax
-                total_tax += tax
-                print(f"Collected {tax:.2f} gold from {city.owner.name} ({city.name})")
-        
-        liege.gold_reserve += total_tax
-        print(f"Liege {liege.name} received total taxes: {total_tax:.2f}")
-
 def found_city(settler_unit: Unit, character: Character, coords: Tuple[int, int], world_map: WorldMap) -> City:
     print(f"Character {character.name} is founding a city at {coords} using {settler_unit.name}!")
     new_city = City(f"{character.name}'s Landing", coords, world_map, character)
@@ -100,9 +84,7 @@ if __name__ == "__main__":
     
     cities = [capital, vassal_city]
     
-    # Tax collection
-    vm = VassalageManager(tax_rate=0.2)
-    vm.collect_taxes(cities, king)
+    # (tax-collection demo removed)
     
     # Succession
     sm = SuccessionManager(law='Primogeniture')
