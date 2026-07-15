@@ -1357,6 +1357,15 @@ class Game:
 
         return succession_msgs
 
+    @staticmethod
+    def _migrate_save(data: dict) -> dict:
+        """Migrate an older save dict up to the current schema version.
+        Unversioned (pre-v1) saves are stamped to save_version 1. Future
+        format changes add their steps here, gated on the incoming version."""
+        if data.get("save_version", 0) < 1:
+            data["save_version"] = 1
+        return data
+
     def to_dict(self) -> dict:
         """Serialize game state for saving."""
         def _serialize(obj):
@@ -1377,6 +1386,7 @@ class Game:
             return str(obj)
         return {
             "version": "1.0",
+            "save_version": 1,
             "turn": self.state.turn,
             "phase": self.state.phase,
             "game_over": self.state.game_over,
@@ -1400,6 +1410,7 @@ class Game:
     @staticmethod
     def from_dict(data: dict) -> 'Game':
         """Deserialize game state from a dict."""
+        data = Game._migrate_save(data)
         civ_name = data.get("player_civ", "Rome")
         civ = CIVILIZATIONS.get(civ_name, list(CIVILIZATIONS.values())[0])
         map_w = data.get("map_data", {}).get("width", 16)
