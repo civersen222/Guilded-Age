@@ -372,6 +372,21 @@ class Game:
         self.anarchy_turns[civ_name] = 1
         return f"{civ_name} transitions from {old_gov} to {gov_type}. 1 turn of anarchy."
 
+    def _apply_government_bonuses(self, civ_name: str, yields: Dict[str, float]) -> None:
+        """Apply a civ's government yield bonuses to a city's yield dict in place.
+        During anarchy, production/gold/science are halved and no bonus applies."""
+        if self.anarchy_turns.get(civ_name, 0) > 0:
+            for key in ("production", "gold", "science"):
+                if key in yields:
+                    yields[key] = yields.get(key, 0) * 0.5
+            return
+        bonuses = GOVERNMENT_TYPES.get(self.governments.get(civ_name, ""))
+        if not bonuses:
+            return
+        for key, delta in bonuses.items():
+            if key in yields:
+                yields[key] = yields.get(key, 0) + delta
+
     def _initialize_game(self):
         """Set up initial game state"""
         # Create player starting city
@@ -600,6 +615,11 @@ class Game:
         
         # Process economy systems
         civ_name = self.player_civ.name
+
+        # Government: tick down anarchy for every civ, once per turn
+        for _gov_civ in list(self.anarchy_turns.keys()):
+            if self.anarchy_turns[_gov_civ] > 0:
+                self.anarchy_turns[_gov_civ] -= 1
         
         # --- Gold maintenance for player units ---
         gold_maintenance_total = 0
@@ -678,6 +698,7 @@ class Game:
             if (owner := city.owner) is not None:
                 # Calculate yields
                 yields = city.calculate_yields()
+                self._apply_government_bonuses(owner, yields)
                 civ_obj = self.civilizations.get(owner)
                 if civ_obj is not None:
                     civ_obj.culture += yields.get('culture', 0)
