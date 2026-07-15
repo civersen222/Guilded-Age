@@ -479,11 +479,6 @@ class City:
 
                 return item
 
-        # Faith from religious buildings
-        faith = sum(2 for b in self.buildings if hasattr(b, 'name') and b.name in ("Temple", "Shrine", "Cathedral", "Monastery"))
-        if faith > 0 and hasattr(self.game, 'faith_points') and self.civ in self.game.faith_points:
-            self.game.faith_points[self.civ] += faith
-
         return None
 
     def _complete_wonder(self, wonder_name: str):

@@ -681,6 +681,8 @@ class Game:
                 civ_obj = self.civilizations.get(owner)
                 if civ_obj is not None:
                     civ_obj.culture += yields.get('culture', 0)
+                # Building faith (Temples, Shrines, ...) accrues to the owning civ
+                self.faith_points[owner] = self.faith_points.get(owner, 0) + yields.get('faith', 0)
 
                 # Science advances the owning civ's research
                 owner_mgr = self.research.get(city.owner)
