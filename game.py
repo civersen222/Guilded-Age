@@ -140,6 +140,7 @@ class Game:
 
     def __init__(self, player_civ: Civilization, ai_civs: Optional[List[Civilization]] = None, map_width: int = 16, map_height: int = 16):
         self.wonders_built: Dict[str, str] = {}  # wonder_name -> civ_name
+        self.speed_multiplier: float = 1.0  # global game pace; scales research + production yields
         if not ai_civs:
             ai_civs = ["Rome", "Greece"]
         
@@ -715,7 +716,7 @@ class Game:
                             owner_mgr.research(cheapest, city.owner)
                             self.state.turn_events.append(
                                 f"🧪 {city.owner} began researching {cheapest}")
-                    completed = owner_mgr.add_research_progress(city.owner, yields.get('science', 0))
+                    completed = owner_mgr.add_research_progress(city.owner, yields.get('science', 0) * self.speed_multiplier)
                     if completed:
                         self.state.turn_events.append(
                             f"🔬 {city.owner} completed research: {completed}")
@@ -735,7 +736,7 @@ class Game:
                             yields.get('food', 0),
                             yields.get('gold', 0),
                             yields.get('science', 0),
-                            yields.get('production', 0)
+                            yields.get('production', 0) * self.speed_multiplier
                         )
                         if completed_item:
                             # Handle tuple return (wonder) or string (unit/building)
