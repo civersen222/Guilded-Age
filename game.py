@@ -747,6 +747,11 @@ class Game:
                 # Science advances the owning civ's research
                 owner_mgr = self.research.get(city.owner)
                 if owner_mgr is not None:
+                    # Tall/wide tax (deep-systems spec 1.9): +5% tech cost
+                    # per city beyond the first.
+                    owner_city_count = sum(
+                        1 for c in self.cities.values() if c.owner == owner)
+                    owner_mgr.cost_multiplier = 1 + 0.05 * max(0, owner_city_count - 1)
                     if owner_mgr.current_research is None:
                         available = owner_mgr.get_available_technologies(city.owner)
                         if available:

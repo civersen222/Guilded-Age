@@ -50,7 +50,7 @@ class EurekaTracker:
                 # If this tech is currently being researched, add progress directly
                 if tech_manager.current_research == tech_name:
                     tech_manager.current_research_progress += boost
-                    if tech_manager.current_research_progress >= tech.cost:
+                    if tech_manager.current_research_progress >= tech_manager.get_cost(tech_name):
                         tech_manager.complete_research()
                 # Otherwise add to science_pool as a general boost
                 else:
@@ -95,6 +95,7 @@ class TechManager:
         self.current_research: Optional[str] = None
         self.current_research_progress: int = 0
         self.science_pool: float = 0.0
+        self.cost_multiplier: float = 1.0  # tall/wide tech tax (deep-systems spec 1.9)
         # Dict-like progress tracker for AI compatibility (tracks multiple techs)
         self._research_progress_dict: Dict[str, int] = {}
     
@@ -147,12 +148,13 @@ class TechManager:
         return True
     
     def get_cost(self, tech: Union[Technology, str]) -> int:
-        """Get the research cost of a technology"""
+        """Get the research cost of a technology, scaled by the tall/wide
+        city-count tax (deep-systems spec 1.9)."""
         if isinstance(tech, str):
             tech = TECHNOLOGIES.get(tech)
             if not tech:
                 return 0
-        return tech.cost
+        return int(round(tech.cost * self.cost_multiplier))
     
     def research(self, tech_name: str, civ: str = ""):
         """Start researching a technology"""
@@ -166,7 +168,7 @@ class TechManager:
             self.current_research_progress += amount
             tech = TECHNOLOGIES[self.current_research]
 
-            if self.current_research_progress >= tech.cost:
+            if self.current_research_progress >= self.get_cost(tech):
                 return self.complete_research()
         return None
     def complete_research(self):
