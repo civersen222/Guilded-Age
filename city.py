@@ -10,6 +10,7 @@ from game_data import (
     TerrainType, LandmarkType, LANDMARKS,
     UNIT_TYPES, UnitType,
     WONDERS, BUILT_WONDERS, WonderType,
+    TECHNOLOGIES, Era,
 )
 
 # Map adjacency_bonus keys to TerrainType enum values
@@ -487,6 +488,11 @@ class City:
         """Look up production cost from game data."""
         if item in UNIT_TYPES:
             cost = UNIT_TYPES[item].production_cost
+            req = UNIT_TYPES[item].requires_tech
+            if req and req in TECHNOLOGIES:
+                # Era cost curve (deep-systems spec 1.11): units double in
+                # cost each era past Ancient (buildings keep table costs).
+                cost = int(cost * (2 ** list(Era).index(TECHNOLOGIES[req].era)))
             if item == "Settler":
                 # Settler cost escalation (deep-systems spec 1.2): +30% per
                 # settler this civ already produced (factor set by Game).
@@ -617,7 +623,15 @@ class City:
                 if item in self.production_queue:
                     self.production_queue.remove(item)
                 self.current_production = None
-                self.production = 0
+                # Production overflow (deep-systems spec 1.11): carry the
+                # surplus into the next item, capped at one full cost.
+                overflow = self.production - cost
+                if self.production_queue:
+                    next_cost = self.get_production_cost(self.production_queue[0])
+                    cap = next_cost if next_cost is not None else cost
+                else:
+                    cap = cost
+                self.production = max(0.0, min(overflow, cap))
 
                 # Handle wonder completion
                 if item in WONDERS:

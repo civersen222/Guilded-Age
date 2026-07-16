@@ -1347,6 +1347,34 @@ class Game:
                 # Decrease weariness by 10 per turn when at peace
                 self.war_weariness[civ_name] = max(0, self.war_weariness[civ_name] - 10)
 
+    def purchase_production(self, city_name: str) -> str:
+        """Gold purchase (deep-systems spec 1.11): a city with a Market can
+        pay 4 gold per remaining production point to finish its current
+        item; the item then completes on the next production tick."""
+        city = self.cities.get(city_name)
+        if city is None:
+            return "No such city"
+        if "Market" not in city.buildings:
+            return f"{city_name} needs a Market to purchase production"
+        if not city.production_queue:
+            return f"{city_name} is not producing anything"
+        item = city.production_queue[0]
+        cost = city.get_production_cost(item)
+        if cost is None:
+            return f"{item} cannot be purchased"
+        remaining = cost - city.production
+        if remaining <= 0:
+            return f"{item} is already complete"
+        civ_name = city.owner
+        price = int(round(4 * remaining))
+        if self.gold.get(civ_name, 0) < price:
+            return f"Not enough gold: need {price}, have {self.gold.get(civ_name, 0)}"
+        self.gold[civ_name] -= price
+        city.production = cost
+        self.state.turn_events.append(
+            f"💰 {city_name} purchased {item} for {price} gold")
+        return f"Purchased {item} in {city_name} for {price} gold"
+
     def _process_city_maintenance(self, msgs: List[str]) -> None:
         """City maintenance (deep-systems spec 1.8): every city costs 2 gold
         per turn plus 0.15 per tile of Chebyshev distance from its civ's
