@@ -921,19 +921,17 @@ class Game:
                 culture_output = yields.get("culture", 0)
                 if culture_output <= 0:
                     continue
-                city_pos = city.position
-                # Get adjacent hex tiles
-                adjacent = self.map.get_neighbors(city_pos[0], city_pos[1])
-                for tile in adjacent:
-                    tile_pos = (tile.x, tile.y)
-                    if tile_pos in self.culture_borders:
-                        continue
-                    distance = abs(tile.x - city_pos[0]) + abs(tile.y - city_pos[1])
-                    if distance == 0:
-                        distance = 1
-                    if culture_output > 10 * distance:
-                        self.culture_borders[tile_pos] = civ_name
-                        msgs.append(f"  🏛️ {city.name} expanded culture to ({tile.x},{tile.y})")
+                # Register this city's territory in the global border registry
+                if not city.owned_tiles:
+                    city.initialize_borders()
+                for pos in city.owned_tiles:
+                    self.culture_borders.setdefault(pos, civ_name)
+                claimed = city.accumulate_culture(
+                    self.map.tiles, culture_output, self.culture_borders)
+                if claimed is not None:
+                    self.culture_borders[claimed] = civ_name
+                    msgs.append(
+                        f"  🏛️ {city.name}'s borders grew to ({claimed[0]},{claimed[1]})")
 
     def _process_religion_spread(self, msgs: List[str]) -> List[str]:
         """Cities with religious buildings spread faith to adjacent cities of other civs."""

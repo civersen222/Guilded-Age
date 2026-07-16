@@ -57,6 +57,10 @@ class City:
         self.climate_zone = climate_zone
         self.is_coastal = is_coastal
         self._adjacency_scores: Dict[str, Dict[str, float]] = {}
+        # Tile ownership & border growth (deep-systems spec 1.3/1.7)
+        self.owned_tiles: set = set()      # (x, y) positions this city owns and may work
+        self.culture_basket: float = 0.0   # culture stored toward the next tile claim
+        self.tiles_claimed: int = 0        # tiles claimed beyond the initial radius-1 ring
 
     def to_dict(self) -> dict:
         return {
@@ -195,6 +199,56 @@ class City:
         if food > consumption and self.population < 20:
             self.population += 1
 
+    def initialize_borders(self):
+        """Seed initial ownership: center tile plus the radius-1 ring
+        (Chebyshev metric, consistent with the Mission 19 tile economy)."""
+        cx, cy = self.position
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                self.owned_tiles.add((cx + dx, cy + dy))
+
+    def assign_citizens(self, tile_dict: Dict[tuple, Any]) -> List[Any]:
+        """Citizen assignment (deep-systems spec 1.3): the center tile is
+        worked for free; each point of population works the best remaining
+        owned tile (greedy by total yield). Returns the worked tiles."""
+        cx, cy = self.position
+        worked = []
+        center = tile_dict.get((cx, cy))
+        if center is not None:
+            worked.append(center)
+        candidates = [tile_dict[pos] for pos in self.owned_tiles
+                      if pos != (cx, cy) and pos in tile_dict]
+        candidates.sort(key=lambda t: -sum(t.get_yields().values()))
+        worked.extend(candidates[:max(0, int(self.population))])
+        return worked
+
+    def accumulate_culture(self, tile_dict: Dict[tuple, Any], culture_output: float,
+                           claimed_globally) -> Optional[tuple]:
+        """Border growth (deep-systems spec 1.7): culture fills a basket; at
+        the claim threshold the city claims the highest-yield tile within
+        radius 3 that nobody owns yet. Returns the claimed position or None."""
+        self.culture_basket += culture_output
+        threshold = 10 + 6 * (self.tiles_claimed ** 1.1)
+        if self.culture_basket < threshold:
+            return None
+        cx, cy = self.position
+        best_pos, best_val = None, -1.0
+        for (tx, ty), tile in tile_dict.items():
+            if abs(tx - cx) > 3 or abs(ty - cy) > 3:
+                continue
+            pos = (tx, ty)
+            if pos in self.owned_tiles or pos in claimed_globally:
+                continue
+            val = sum(tile.get_yields().values())
+            if val > best_val:
+                best_val, best_pos = val, pos
+        if best_pos is None:
+            return None
+        self.culture_basket -= threshold
+        self.owned_tiles.add(best_pos)
+        self.tiles_claimed += 1
+        return best_pos
+
     def calculate_yields(self, tiles: Optional[Dict[tuple, Any]] = None) -> Dict[str, float]:
         """Calculate total yields for the city, including adjacency bonuses."""
         # Compute adjacency if map tiles are available
@@ -216,15 +270,9 @@ class City:
                 "culture": self.population * 0.2,
                 "faith": 0.0,
             }
-            cx, cy = self.position
-            worked = []
-            center = tile_dict.get((cx, cy))
-            if center is not None:
-                worked.append(center)
-            nearby = [t for (tx, ty), t in tile_dict.items()
-                      if (tx, ty) != (cx, cy) and abs(tx - cx) <= 2 and abs(ty - cy) <= 2]
-            nearby.sort(key=lambda t: -sum(t.get_yields().values()))
-            worked.extend(nearby[:max(0, int(self.population))])
+            if not self.owned_tiles:
+                self.initialize_borders()
+            worked = self.assign_citizens(tile_dict)
             for tile in worked:
                 for key, val in tile.get_yields().items():
                     if key in yields:
