@@ -62,7 +62,7 @@ def _fill_player_court(game, realms):
         heir = max(adults, key=lambda c: c.age) if adults else (max(kin, key=lambda c: c.age) if kin else None)
         if heir is None:
             living = [c for c in realm.characters if c.is_alive and c.age >= 16]
-            heir = max(living, key=lambda c: c.get_effective_stat("diplomacy")) if living else None
+            heir = max(living, key=lambda c: c.get_effective_stat("statecraft")) if living else None
         if heir is None:
             heir = _make_character(realm.civ_name, realm.ruler.base_stats, [], 20, 35)
             realm.characters.append(heir)

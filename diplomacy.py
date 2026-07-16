@@ -189,8 +189,8 @@ class DiplomacyManager:
     
     def propose_peace(self, civ_a: str, civ_b: str, ruler=None) -> str:
         """Propose peace. Acceptance depends on relations, boosted by the
-        proposer ruler's diplomacy stat (1 relation point per stat point)."""
-        bonus = ruler.get_effective_stat("diplomacy") if ruler is not None else 0
+        proposer ruler's statecraft (1 relation point per attribute point)."""
+        bonus = ruler.get_effective_stat("statecraft") if ruler is not None else 0
         if self.get_relation(civ_a, civ_b) + bonus >= -30:
             self.sign_truce(civ_a, civ_b, 20)
             self.modify_relation(civ_a, civ_b, 10)
@@ -200,8 +200,8 @@ class DiplomacyManager:
 
     def propose_alliance(self, civ_a: str, civ_b: str, ruler=None) -> str:
         """Propose alliance. Acceptance depends on relations, boosted by the
-        proposer ruler's diplomacy stat (1 relation point per stat point)."""
-        bonus = ruler.get_effective_stat("diplomacy") if ruler is not None else 0
+        proposer ruler's statecraft (1 relation point per attribute point)."""
+        bonus = ruler.get_effective_stat("statecraft") if ruler is not None else 0
         if self.get_relation(civ_a, civ_b) + bonus >= 30:
             self.make_pact(civ_a, civ_b, "alliance")
             return f"🤝 {civ_b} accepts an alliance with {civ_a}!"

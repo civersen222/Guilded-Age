@@ -19,10 +19,12 @@ MARGIN = 8
 BUTTON_H = 30
 FEAST_COST = 50
 STAT_COLORS = {
-    "diplomacy": "#4499ff",
-    "martial": "#ff4444",
-    "stewardship": "#44cc44",
+    "statecraft": "#4499ff",
+    "command": "#ff4444",
+    "industry": "#44cc44",
     "intrigue": "#aa44ff",
+    "science": "#44cccc",
+    "resolve": "#ffaa44",
 }
 
 
@@ -32,8 +34,9 @@ def _player_realm(game: Any):
 
 
 def _stat_line(c: Any) -> str:
-    return (f"D:{c.get_effective_stat('diplomacy')} M:{c.get_effective_stat('martial')} "
-            f"S:{c.get_effective_stat('stewardship')} I:{c.get_effective_stat('intrigue')}")
+    return (f"St:{c.get_effective_stat('statecraft')} Cm:{c.get_effective_stat('command')} "
+            f"In:{c.get_effective_stat('industry')} Ig:{c.get_effective_stat('intrigue')} "
+            f"Sc:{c.get_effective_stat('science')} Rv:{c.get_effective_stat('resolve')}")
 
 
 def build_realm_html(game: Any) -> str:
@@ -45,7 +48,7 @@ def build_realm_html(game: Any) -> str:
     ruler = realm.ruler
     parts.append(f"<font size=5><b>=== {ruler.name} ===</b></font><br>")
     parts.append(f"Age: {ruler.age}<br><br><b>Stats:</b><br>")
-    for stat in ["diplomacy", "martial", "stewardship", "intrigue"]:
+    for stat in ["statecraft", "command", "industry", "intrigue", "science", "resolve"]:
         color = STAT_COLORS.get(stat, "#cccccc")
         parts.append(f'<font color="{color}">{stat.capitalize()}:</font> {ruler.get_effective_stat(stat)}<br>')
     parts.append("<br><b>Traits:</b> " + (", ".join(ruler.traits) if ruler.traits else "None") + "<br>")
