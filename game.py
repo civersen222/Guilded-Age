@@ -74,6 +74,13 @@ class GameState:
     turn_events: List[str] = None
     current_player: str = "Player"
     pending_ck_event: Any = None
+    # Map-scaled game clock (set from map size in Game.__init__):
+    # pace scales all "how long should this take" numbers; turn_budget is
+    # the expected full-game length; min_victory_turn is the earliest turn
+    # any victory may fire (consumed by Game._check_victory).
+    pace: float = 1.0
+    turn_budget: int = 250
+    min_victory_turn: int = 75
 
     def __post_init__(self):
         if self.turn_events is None:
@@ -146,6 +153,14 @@ class Game:
         
         # Game state
         self.state = GameState()
+
+        # Map-scaled game clock (deep-systems spec Part 0): a 24x24 map is
+        # the pace-1.0 reference; bigger maps run longer games and gate
+        # victories later. Floors keep degenerate tiny maps playable.
+        _map_area = map_width * map_height
+        self.state.pace = (_map_area / 576.0) ** 0.5
+        self.state.turn_budget = max(60, round(250 * self.state.pace))
+        self.state.min_victory_turn = max(30, round(0.30 * self.state.turn_budget))
         
         # Map
         self.map = HexMap(map_width, map_height)
@@ -1149,7 +1164,7 @@ class Game:
         be won trivially early. Thresholds are grouped as named constants
         below and tuned for a ~150-250 turn arc.
         """
-        MIN_VICTORY_TURN = 60           # no victory may fire before this turn
+        MIN_VICTORY_TURN = self.state.min_victory_turn  # map-scaled floor set in __init__
         MIN_VICTORY_ERA = Era.MEDIEVAL  # accumulation wins require at least this era
         DOMINATION_SHARE = 0.6          # own >= this fraction of all cities on the map
         DOMINATION_LEAD = 2             # and >= this multiple of the next-largest civ
