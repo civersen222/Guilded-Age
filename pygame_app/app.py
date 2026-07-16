@@ -34,11 +34,36 @@ class GameApp:
         self.running = True
         self._current_screen = None
         self._screens = {}
+        self.audio = self._build_audio()
 
         # Import screens lazily to avoid circular imports
         from pygame_app.screens.main_menu import MainMenuScreen
         self._screens['main_menu'] = MainMenuScreen(self)
         self.switch_screen('main_menu')
+
+    def _build_audio(self):
+        """Construct the per-turn AudioBundle. Fully defensive: audio must never
+        crash or block the game, so any failure yields an empty no-op bundle."""
+        from pygame_app.audio.turn_audio import AudioBundle
+        try:
+            from pygame_app.audio.sound_manager import SoundManager
+            from pygame_app.audio.music_manager import MusicManager
+            from tools.audio_foundry.integration import AudioService
+
+            def _play_voice(path):
+                try:
+                    pygame.mixer.Sound(str(path)).play()
+                except Exception:
+                    pass
+
+            return AudioBundle(
+                sound=SoundManager(),
+                music=MusicManager(),
+                audio=AudioService(),
+                play_voice=_play_voice,
+            )
+        except Exception:
+            return AudioBundle()
 
     def register_screen(self, name: str, screen):
         """Register a screen by name for switching."""

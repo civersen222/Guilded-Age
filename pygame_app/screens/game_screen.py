@@ -290,6 +290,8 @@ class GameScreen(BaseScreen):
         print(f"[game_screen] _process_next_turn called, turn before={game.state.turn}")
         game.process_turn()
         print(f"[game_screen] process_turn done, turn after={game.state.turn}")
+        from pygame_app.audio import turn_audio
+        turn_audio.on_turn(game, getattr(self.app, "audio", None) or turn_audio.AudioBundle())
 
         # Check for victory/game over
         if getattr(game.state, "game_over", False):
