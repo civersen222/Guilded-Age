@@ -752,7 +752,7 @@ class Game:
                 
                 # Population growth
                 old_pop = city.population
-                city.grow()
+                city.grow(self.map.tiles)
                 if city.population > old_pop:
                     self.state.turn_events.append(f"{city.name} has grown to population {city.population}!")
                 

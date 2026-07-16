@@ -61,6 +61,7 @@ class City:
         self.owned_tiles: set = set()      # (x, y) positions this city owns and may work
         self.culture_basket: float = 0.0   # culture stored toward the next tile claim
         self.tiles_claimed: int = 0        # tiles claimed beyond the initial radius-1 ring
+        self.growth_basket: float = 0.0    # food surplus stored toward the next citizen
 
     def to_dict(self) -> dict:
         return {
@@ -191,13 +192,56 @@ class City:
 
         return 1.0 + total
 
-    def grow(self):
-        """Population growth each turn based on food surplus."""
-        yields = self.calculate_yields()
+    def food_to_grow(self) -> float:
+        """Food needed in the basket for the next citizen (deep-systems
+        spec 1.5, Civ-V-style decelerating curve)."""
+        n = self.population
+        return 15 + 8 * (n - 1) + (n - 1) ** 1.5
+
+    def calculate_housing(self, tile_dict: Optional[Dict[tuple, Any]] = None) -> float:
+        """Housing cap (deep-systems spec 1.5): base 2, +3 fresh water from
+        any owned river tile, +2 Granary, +4 Aqueduct, +0.5 per improved
+        owned tile."""
+        housing = 2.0
+        if "Granary" in self.buildings:
+            housing += 2
+        if "Aqueduct" in self.buildings:
+            housing += 4
+        if tile_dict:
+            owned = [tile_dict[p] for p in self.owned_tiles if p in tile_dict]
+            if any(getattr(t, "has_river", False) for t in owned):
+                housing += 3
+            housing += sum(1 for t in owned if getattr(t, "improvement", None)) * 0.5
+        return housing
+
+    def grow(self, tiles: Optional[Dict[tuple, Any]] = None):
+        """Population growth from food surplus (deep-systems spec 1.5):
+        each citizen eats 2 food; surplus fills a growth basket against a
+        decelerating cost curve; deficits drain the basket and then starve
+        a citizen. Housing slows growth near the cap and halts it at it."""
+        yields = self.calculate_yields(tiles)
         food = yields.get("food", 0)
-        consumption = self.population * 1.5
-        if food > consumption and self.population < 20:
-            self.population += 1
+        surplus = food - 2.0 * self.population
+        if surplus >= 0:
+            tile_dict = None
+            if tiles is not None:
+                tile_dict = tiles.tiles if hasattr(tiles, 'tiles') else tiles
+            housing = self.calculate_housing(tile_dict)
+            if self.population >= housing:
+                return
+            if self.population >= housing - 1:
+                surplus *= 0.5
+            self.growth_basket += surplus
+            cost = self.food_to_grow()
+            if self.growth_basket >= cost:
+                self.growth_basket -= cost
+                self.population += 1
+        else:
+            self.growth_basket += surplus
+            if self.growth_basket < 0:
+                self.growth_basket = 0.0
+                if self.population > 1:
+                    self.population -= 1
 
     def initialize_borders(self):
         """Seed initial ownership: center tile plus the radius-1 ring
