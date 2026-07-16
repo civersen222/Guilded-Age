@@ -668,6 +668,9 @@ class Game:
         tax_income = self.tax_system.process_tax_income(self.cities, ruler)
         self.gold[civ_name] += tax_income
         msgs.append(f"  Tax Income: +{tax_income} gold")
+
+        # City maintenance (deep-systems spec 1.8): all civs pay upkeep
+        self._process_city_maintenance(msgs)
         
         # 2. Happiness & Stability
         self.happiness_system.update_city_count(len(self.cities))
@@ -1338,6 +1341,44 @@ class Game:
             else:
                 # Decrease weariness by 10 per turn when at peace
                 self.war_weariness[civ_name] = max(0, self.war_weariness[civ_name] - 10)
+
+    def _process_city_maintenance(self, msgs: List[str]) -> None:
+        """City maintenance (deep-systems spec 1.8): every city costs 2 gold
+        per turn plus 0.15 per tile of Chebyshev distance from its civ's
+        capital (the civ's first city). A treasury driven below zero triggers
+        the bankruptcy rule: disband the costliest-upkeep unit and clamp the
+        treasury to 0."""
+        for civ_name in self.civilizations:
+            civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
+            if not civ_cities:
+                continue
+            capital = civ_cities[0]
+            cap_x, cap_y = capital.position
+            maint_total = 0.0
+            for c in civ_cities:
+                dist = max(abs(c.position[0] - cap_x), abs(c.position[1] - cap_y))
+                maint_total += 2 + 0.15 * dist
+            maint = int(round(maint_total))
+            if maint <= 0:
+                continue
+            self.gold[civ_name] = self.gold.get(civ_name, 0) - maint
+            if civ_name == self.player_civ.name:
+                msgs.append(f"  City Maintenance: -{maint} gold")
+            if self.gold[civ_name] < 0:
+                # Bankruptcy (spec 1.8): disband the costliest-upkeep unit;
+                # the dead-unit sweep later this turn removes it from play.
+                worst, worst_cost = None, -1
+                for unit in self.units.values():
+                    if unit.owner == civ_name and unit.is_alive:
+                        utype = UNIT_TYPES.get(unit.unit_type)
+                        cost = utype.gold_maintenance if utype and utype.gold_maintenance else 0
+                        if cost > worst_cost:
+                            worst_cost, worst = cost, unit
+                if worst is not None:
+                    worst.is_alive = False
+                    self.state.turn_events.append(
+                        f"💸 {civ_name} is bankrupt: {worst.name} disbanded")
+                self.gold[civ_name] = 0
 
     def _calculate_happiness(self, civ_name: str, msgs: List[str]) -> None:
         """Empire happiness (deep-systems spec 1.6): palace base 9, +4 per
