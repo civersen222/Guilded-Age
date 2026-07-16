@@ -237,6 +237,7 @@ class Game:
         self.trade_routes = []  # list of (city1_name, city2_name, gold_per_turn)
         self.great_people_points = {}  # {civ_name: {"scientist": float, "artist": float, "general": float, "engineer": float}}
         self.golden_ages = {}  # {civ_name: turns_remaining}
+        self.settlers_produced: Dict[str, int] = {}  # civ -> settlers built (cost escalation, spec 1.2)
 
         # Economy sub-systems
         self.tax_system = TaxSystem()
@@ -790,6 +791,15 @@ class Game:
                                 self.units[new_unit.name] = new_unit
                                 self.map.add_unit(new_unit)
                                 self.stats["units_trained"] += 1
+                                if completed_item == "Settler":
+                                    # Settlers consume population and get
+                                    # dearer each time (deep-systems spec 1.2).
+                                    city.population = max(1, city.population - 1)
+                                    self.settlers_produced[owner] = self.settlers_produced.get(owner, 0) + 1
+                                    factor = 1 + 0.30 * self.settlers_produced[owner]
+                                    for c2 in self.cities.values():
+                                        if c2.owner == owner:
+                                            c2.settler_cost_factor = factor
                                 msgs.append(f"  🏭 City '{city.name}' completed: {completed_item}")
                             elif completed_item in BUILDINGS:
                                 # Add building to city
@@ -1078,13 +1088,14 @@ class Game:
         new_city = City(
             name=f"{civ_name} City {city_count + 1}",
             owner=civ_name, position=tile,
-            population=3, gold=50,
+            population=1, gold=50,
             climate_zone=get_climate_for_row(tile[1], self.map.height),
             is_coastal=is_coastal,
         )
         self.cities[new_city.name] = new_city
         self.map.add_city(new_city)
-        self.gold[civ_name] = self.gold.get(civ_name, 0) - 100
+        # Founding charges no gold (deep-systems spec 1.2): the settler's
+        # production cost and the emitted population ARE the price.
         self.stats["cities_founded"] += 1
         
         # Remove the settler unit

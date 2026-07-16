@@ -62,6 +62,7 @@ class City:
         self.culture_basket: float = 0.0   # culture stored toward the next tile claim
         self.tiles_claimed: int = 0        # tiles claimed beyond the initial radius-1 ring
         self.growth_basket: float = 0.0    # food surplus stored toward the next citizen
+        self.settler_cost_factor: float = 1.0  # per-civ settler cost escalation (spec 1.2)
 
     def to_dict(self) -> dict:
         return {
@@ -470,7 +471,12 @@ class City:
     def get_production_cost(self, item: str) -> Optional[int]:
         """Look up production cost from game data."""
         if item in UNIT_TYPES:
-            return UNIT_TYPES[item].production_cost
+            cost = UNIT_TYPES[item].production_cost
+            if item == "Settler":
+                # Settler cost escalation (deep-systems spec 1.2): +30% per
+                # settler this civ already produced (factor set by Game).
+                cost = int(round(cost * self.settler_cost_factor))
+            return cost
         if item in BUILDINGS:
             return BUILDINGS[item].production_cost
         if item in WONDERS:
@@ -507,6 +513,10 @@ class City:
         """Return list of unit names that this city can currently build."""
         available = []
         for uname, utype in UNIT_TYPES.items():
+            # Settlers consume population (deep-systems spec 1.2): a city at
+            # 1 population cannot afford to emit one.
+            if uname == "Settler" and self.population < 2:
+                continue
             # Check tech requirement
             if utype.requires_tech and researched_techs and utype.requires_tech not in researched_techs:
                 continue
