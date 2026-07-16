@@ -4,6 +4,7 @@ from tools.audio_foundry.game_paths import (
     era_music_filename,
     era_music_path,
     sfx_target,
+    voice_path,
 )
 
 
@@ -22,3 +23,8 @@ def test_sfx_target_shape():
     assert cat == "events"
     assert name == "battle_clash.wav"
     assert str(path).replace("\\", "/") == "assets/sounds/events/battle_clash.wav"
+
+
+def test_voice_path_shape():
+    p = str(voice_path("e1")).replace("\\", "/")
+    assert p == "assets/audio/voice/e1.wav"

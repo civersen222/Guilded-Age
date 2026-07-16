@@ -19,15 +19,11 @@ class AudioService:
 
     def narrate_event(self, event: dict, *, fallback: Path | None = None,
                       dry_run: bool = False) -> Path | None:
-        """Narration audio for an event.
-
-        Flag OFF -> pure Mode-A: return pre-baked `fallback` if present, else None.
-        Flag ON  -> try live Mode-B generation, else the same fallback. Never raises.
-        """
+        """Narration audio for an event. Flag OFF -> pre-baked only. Never raises."""
         return voice_event(
             event, self.settings.cache_dir,
             generate=self.settings.audio_runtime_enabled,
-            dry_run=dry_run, fallback=fallback,
+            dry_run=dry_run, fallback=fallback, host=self.host,
         )
 
     def narrate_chronicle(self, civ_id: str, text: str, *,
@@ -37,5 +33,5 @@ class AudioService:
         return voice_chronicle(
             civ_id, text, self.settings.cache_dir,
             generate=self.settings.audio_runtime_enabled,
-            dry_run=dry_run, fallback=fallback,
+            dry_run=dry_run, fallback=fallback, host=self.host,
         )
