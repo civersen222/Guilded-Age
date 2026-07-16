@@ -11,6 +11,7 @@ from character_deepening import (
     get_available_traits,
     apply_traits_to_stats,
 )
+from dispositions import initial_dispositions, labels_for
 
 # Six attributes (character-society spec 3.2) and legacy 4-stat compatibility
 ATTRIBUTES = ["statecraft", "command", "industry", "intrigue", "science", "resolve"]
@@ -70,7 +71,9 @@ class Character:
         self.name = name
         # Six attributes (spec 3.2); legacy 4-stat dicts are remapped.
         self.base_stats = normalize_stats(stats)
-        self.traits = traits
+        # Disposition spectrums (spec 3.3): 30 paired values in -100..+100.
+        self.dispositions: Dict[str, float] = initial_dispositions()
+        self.traits = traits  # goes through the property setter below
         self.parent_ids = parent_ids or []
         self.children_ids: List[str] = []
         self.is_alive = True
@@ -85,6 +88,21 @@ class Character:
         self.age_progress = AgeProgress(current_age=age, is_alive=True)
         self.lifestyle = LifestyleProgression()
         self.is_heir = False
+
+    @property
+    def traits(self) -> List[str]:
+        """Explicit traits plus labels derived live from dispositions."""
+        derived = labels_for(self.dispositions)
+        return self._explicit_traits + [t for t in derived if t not in self._explicit_traits]
+
+    @traits.setter
+    def traits(self, value) -> None:
+        self._explicit_traits = list(value or [])
+
+    def add_trait(self, trait: str) -> None:
+        """Add an explicit trait (use this instead of traits.append)."""
+        if trait not in self._explicit_traits:
+            self._explicit_traits.append(trait)
 
     def age_up(self) -> Optional[str]:
         """Age character by one turn. Returns event message if significant."""
@@ -225,9 +243,10 @@ def generate_child(name: str, parent_a: Character, parent_b: Character) -> Chara
         avg = (parent_a.base_stats.get(stat, 8) + parent_b.base_stats.get(stat, 8)) / 2
         stats[stat] = int(avg + random.randint(-2, 2))
 
-    # 2. Genetic Inheritance of traits
+    # 2. Genetic Inheritance of traits (explicit only; disposition labels
+    # are derived live from the child's own spectrums, never copied).
     child_traits = []
-    all_parent_traits = list(set(parent_a.traits + parent_b.traits))
+    all_parent_traits = list(set(parent_a._explicit_traits + parent_b._explicit_traits))
     for trait in all_parent_traits:
         # 30% base chance to inherit any parent trait
         if random.random() < 0.3:

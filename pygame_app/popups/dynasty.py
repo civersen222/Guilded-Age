@@ -280,7 +280,7 @@ class DynastyPopup:
 
         # Add "Betrothed" trait if not already present
         if "Betrothed" not in heir.traits:
-            heir.traits.append("Betrothed")
+            heir.add_trait("Betrothed")
         dynasty.add_prestige(5)
         self._set_status(f"Marriage arranged for {heir.name}! +5 prestige.")
         self._refresh()
