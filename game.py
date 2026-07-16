@@ -712,8 +712,8 @@ class Game:
         # 7. City Production
         for city in self.cities.values():
             if (owner := city.owner) is not None:
-                # Calculate yields
-                yields = city.calculate_yields()
+                # Calculate yields from the tiles the city actually works
+                yields = city.calculate_yields(self.map.tiles)
                 self._apply_government_bonuses(owner, yields)
                 civ_obj = self.civilizations.get(owner)
                 if civ_obj is not None:
@@ -902,7 +902,7 @@ class Game:
         for civ_name, civ in self.civilizations.items():
             civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
             for city in civ_cities:
-                yields = city.calculate_yields()
+                yields = city.calculate_yields(self.map.tiles)
                 culture_output = yields.get("culture", 0)
                 if culture_output <= 0:
                     continue

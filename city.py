@@ -201,14 +201,44 @@ class City:
         if tiles is not None:
             self.calculate_adjacency(tiles)
 
-        yields = {
-            "food": 2.0,
-            "gold": 1.0,
-            "science": self.population * 0.5,
-            "production": 3.0,
-            "culture": self.population * 0.2,
-            "faith": 0.0,
-        }
+        if tiles is not None:
+            # Handle HexMap objects (has .tiles dict) or plain dicts
+            tile_dict = tiles.tiles if hasattr(tiles, 'tiles') else tiles
+            # Tile economy (deep-systems spec 1.1): the city works its center
+            # tile plus its `population` best nearby tiles (radius 2), so city
+            # output is driven by the map instead of flat constants. Greedy
+            # pick is a stand-in until citizen assignment (Mission 21).
+            yields = {
+                "food": 0.0,
+                "gold": 0.0,
+                "science": self.population * 0.5,
+                "production": 0.0,
+                "culture": self.population * 0.2,
+                "faith": 0.0,
+            }
+            cx, cy = self.position
+            worked = []
+            center = tile_dict.get((cx, cy))
+            if center is not None:
+                worked.append(center)
+            nearby = [t for (tx, ty), t in tile_dict.items()
+                      if (tx, ty) != (cx, cy) and abs(tx - cx) <= 2 and abs(ty - cy) <= 2]
+            nearby.sort(key=lambda t: -sum(t.get_yields().values()))
+            worked.extend(nearby[:max(0, int(self.population))])
+            for tile in worked:
+                for key, val in tile.get_yields().items():
+                    if key in yields:
+                        yields[key] += val
+        else:
+            # Legacy callers/tests without a map: keep the old flat baseline.
+            yields = {
+                "food": 2.0,
+                "gold": 1.0,
+                "science": self.population * 0.5,
+                "production": 3.0,
+                "culture": self.population * 0.2,
+                "faith": 0.0,
+            }
 
         # Add yields from districts with adjacency bonuses
         for district_name, district in self.districts.items():
