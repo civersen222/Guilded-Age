@@ -1363,6 +1363,10 @@ class Game:
             for c in civ_cities:
                 dist = max(abs(c.position[0] - cap_x), abs(c.position[1] - cap_y))
                 maint_total += 2 + 0.15 * dist
+                # Building upkeep (deep-systems spec 1.10)
+                maint_total += sum(
+                    getattr(b, "gold_maintenance", 0) or 0
+                    for b in c.buildings.values())
             maint = int(round(maint_total))
             if maint <= 0:
                 continue

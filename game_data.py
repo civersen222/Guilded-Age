@@ -437,26 +437,33 @@ class BuildingType:
     culture: float = 0
     happiness: float = 0
     defense_bonus: int = 0
+    # Deep-systems spec 1.10: multiplicative yields, housing, upkeep
+    production_pct: float = 0
+    gold_pct: float = 0
+    science_pct: float = 0
+    housing: float = 0
+    gold_maintenance: int = 0
     requires_district: Optional[str] = None
     requires_tech: Optional[str] = None
 
 
 BUILDINGS = {
-    "Granary": BuildingType("Granary", "City Center", 60, food=2),
-    "Market": BuildingType("Market", "Commercial Hub", 50, gold=2, requires_district="Commercial Hub"),
-    "Bank": BuildingType("Bank", "Commercial Hub", 100, gold=5, requires_district="Commercial Hub", requires_tech="Coinage"),
-    "Temple": BuildingType("Temple", "Holy Site", 50, faith=2, requires_district="Holy Site"),
+    "Granary": BuildingType("Granary", "City Center", 60, food=2, housing=2, gold_maintenance=1, requires_tech="Pottery"),
+    "Market": BuildingType("Market", "Commercial Hub", 50, gold_pct=0.25, requires_district="Commercial Hub", requires_tech="Coinage"),
+    "Bank": BuildingType("Bank", "Commercial Hub", 100, gold_pct=0.25, gold_maintenance=2, requires_district="Commercial Hub", requires_tech="Printing Press"),
+    "Temple": BuildingType("Temple", "Holy Site", 50, faith=2, happiness=2, gold_maintenance=1, requires_district="Holy Site", requires_tech="Philosophy"),
     "Shrine": BuildingType("Shrine", "Holy Site", 25, faith=2, requires_district="Holy Site"),
-    "Library": BuildingType("Library", "Campus", 50, science=2, requires_district="Campus"),
-    "University": BuildingType("University", "Campus", 100, science=5, requires_district="Campus", requires_tech="Education"),
+    "Library": BuildingType("Library", "Campus", 50, science_pct=0.25, gold_maintenance=1, requires_district="Campus", requires_tech="Astronomy"),
+    "University": BuildingType("University", "Campus", 100, science_pct=0.33, gold_maintenance=2, requires_district="Campus", requires_tech="Education"),
     "Barracks": BuildingType("Barracks", "Encampment", 40, defense_bonus=10, requires_district="Encampment"),
     "Stable": BuildingType("Stable", "Encampment", 60, production=2, requires_district="Encampment", requires_tech="Horsemanship"),
     "Lighthouse": BuildingType("Lighthouse", "Harbor", 60, science=2, gold=2, requires_district="Harbor"),
-    "Aqueduct": BuildingType("Aqueduct", "City Center", 80, food=4, requires_tech="Engineering"),
+    "Aqueduct": BuildingType("Aqueduct", "City Center", 80, housing=4, gold_maintenance=1, requires_tech="Engineering"),
     "Wall": BuildingType("Wall", "City Center", 60, defense_bonus=20, requires_district="City Center"),
-    "Theater": BuildingType("Theater", "Entertainment", 60, happiness=3, gold=1, requires_district="Entertainment"),
+    "Theater": BuildingType("Theater", "Entertainment", 60, happiness=3, gold=1, gold_maintenance=1, requires_district="Entertainment"),
     "Monument": BuildingType("Monument", "City Center", 30, culture=2),
-    "Workshop": BuildingType("Workshop", "City Center", 50, production=2),
+    "Workshop": BuildingType("Workshop", "City Center", 50, production_pct=0.25, gold_maintenance=1, requires_tech="Iron Working"),
+    "Factory": BuildingType("Factory", "Industrial", 180, production_pct=0.50, gold_maintenance=3, requires_tech="Steel"),
 }
 
 

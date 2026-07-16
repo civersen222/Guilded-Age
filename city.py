@@ -200,14 +200,12 @@ class City:
         return 15 + 8 * (n - 1) + (n - 1) ** 1.5
 
     def calculate_housing(self, tile_dict: Optional[Dict[tuple, Any]] = None) -> float:
-        """Housing cap (deep-systems spec 1.5): base 2, +3 fresh water from
-        any owned river tile, +2 Granary, +4 Aqueduct, +0.5 per improved
-        owned tile."""
+        """Housing cap (deep-systems spec 1.5/1.10): base 2, +3 fresh water
+        from any owned river tile, + each building's housing field
+        (Granary 2, Aqueduct 4), +0.5 per improved owned tile."""
         housing = 2.0
-        if "Granary" in self.buildings:
-            housing += 2
-        if "Aqueduct" in self.buildings:
-            housing += 4
+        for b in self.buildings.values():
+            housing += getattr(b, "housing", 0) or 0
         if tile_dict:
             owned = [tile_dict[p] for p in self.owned_tiles if p in tile_dict]
             if any(getattr(t, "has_river", False) for t in owned):
@@ -376,6 +374,18 @@ class City:
                 yields["culture"] += building.culture
             if building.happiness > 0:
                 self.happiness += building.happiness
+
+        # Building percentage multipliers (deep-systems spec 1.10): flat
+        # adds first (above), then the multiplicative stack, before any
+        # later pipeline stages.
+        pct_totals = {"production": 0.0, "gold": 0.0, "science": 0.0}
+        for building in self.buildings.values():
+            pct_totals["production"] += getattr(building, "production_pct", 0) or 0
+            pct_totals["gold"] += getattr(building, "gold_pct", 0) or 0
+            pct_totals["science"] += getattr(building, "science_pct", 0) or 0
+        for key, pct in pct_totals.items():
+            if pct:
+                yields[key] *= (1 + pct)
 
         # Population bonuses
         yields["food"] += self.population * 0.5
