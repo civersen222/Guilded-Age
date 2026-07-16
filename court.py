@@ -19,11 +19,11 @@ class Court:
     """Manages the ruler's court positions and their bonuses."""
 
     POSITION_STATS: Dict[CourtPosition, str] = {
-        CourtPosition.MARSHAL: "martial",
+        CourtPosition.MARSHAL: "command",
         CourtPosition.SPYMASTER: "intrigue",
-        CourtPosition.CHANCELLOR: "diplomacy",
-        CourtPosition.STEWARD: "stewardship",
-        CourtPosition.CHAPLAIN: "diplomacy",
+        CourtPosition.CHANCELLOR: "statecraft",
+        CourtPosition.STEWARD: "industry",
+        CourtPosition.CHAPLAIN: "statecraft",
     }
 
     def __init__(self, ruler: Character):

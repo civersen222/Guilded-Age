@@ -118,12 +118,12 @@ class TaxSystem:
 
     def process_tax_income(self, cities: Dict, ruler=None) -> int:
         """Calculate and return tax income from all cities.
-        A ruler's stewardship boosts income by 1% per point."""
+        A ruler's industry attribute boosts income by 1% per point."""
         total_income = 0
         for city in cities.values():
             base_income = city.population * 2  # 2 gold per citizen
             total_income += int(base_income * self.gold_multiplier)
         if ruler is not None:
-            stewardship = ruler.get_effective_stat("stewardship")
-            total_income = int(total_income * (1.0 + stewardship / 100.0))
+            industry = ruler.get_effective_stat("industry")
+            total_income = int(total_income * (1.0 + industry / 100.0))
         return total_income

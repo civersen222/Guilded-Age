@@ -163,8 +163,8 @@ def resolve_combat(
     dmg_log: List[str] = []
 
     terrain_mod = _terrain_defense_mod(tile)
-    att_ruler_bonus = 1.0 + attacker_ruler.get_effective_stat("martial") / 100.0
-    def_ruler_bonus = 1.0 + defender_ruler.get_effective_stat("martial") / 100.0
+    att_ruler_bonus = 1.0 + attacker_ruler.get_effective_stat("command") / 100.0
+    def_ruler_bonus = 1.0 + defender_ruler.get_effective_stat("command") / 100.0
 
     att_units = [u for u in attacker_army if u.is_alive]
     def_units = [u for u in defender_army if u.is_alive]

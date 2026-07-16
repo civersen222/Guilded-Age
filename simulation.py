@@ -202,7 +202,7 @@ class Dynasty:
         
         total_stats = 0
         for m in living_members:
-            for stat in ['diplomacy', 'martial', 'stewardship', 'intrigue']:
+            for stat in ATTRIBUTES:
                 total_stats += m.get_effective_stat(stat)
         
         # Prestige = (Living Count * 10) + Sum of all effective stats + bonus
@@ -361,8 +361,7 @@ def execute_succession(
         if living_heirs:
             weights = []
             for h in living_heirs:
-                w = h.get_effective_stat('diplomacy') + h.get_effective_stat('martial') + \
-                    h.get_effective_stat('stewardship') + h.get_effective_stat('intrigue')
+                w = sum(h.get_effective_stat(a) for a in ATTRIBUTES)
                 weights.append(max(w, 1))
             total = sum(weights)
             # Weighted random
