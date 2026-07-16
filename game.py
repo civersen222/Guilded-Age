@@ -16,7 +16,7 @@ from game_data import (
 from hex_map import HexMap, HexTile, ExponentialFogOfWar
 from city import City
 from military import Unit
-from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager, execute_succession, SUCCESSION_LAWS
+from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager, execute_succession, SUCCESSION_LAWS, STAT_COMPAT
 from court import Court, CourtPosition
 from realms import create_realms
 from character_ai import tick_realms
@@ -115,8 +115,10 @@ class CKEvent:
             ruler.prestige = getattr(ruler, "prestige", 0) + value
         elif effect_type == "morale":
             ruler.morale = min(100, getattr(ruler, "morale", 100) + value)
-        elif effect_type in ("martial", "stewardship", "intrigue", "diplomacy"):
-            ruler.base_stats[effect_type] = ruler.base_stats.get(effect_type, 0) + value
+        elif effect_type in ("martial", "stewardship", "intrigue", "diplomacy",
+                             "statecraft", "command", "industry", "science", "resolve"):
+            key = STAT_COMPAT.get(effect_type, effect_type)
+            ruler.base_stats[key] = ruler.base_stats.get(key, 0) + value
 
     def _get_ruler(self):
         game = self._game if hasattr(self, "_game") else None

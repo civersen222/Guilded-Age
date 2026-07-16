@@ -12,15 +12,32 @@ from character_deepening import (
     apply_traits_to_stats,
 )
 
-# Trait Database: Maps traits to stat bonuses
+# Six attributes (character-society spec 3.2) and legacy 4-stat compatibility
+ATTRIBUTES = ["statecraft", "command", "industry", "intrigue", "science", "resolve"]
+STAT_COMPAT = {"diplomacy": "statecraft", "martial": "command", "stewardship": "industry"}
+
+
+def normalize_stats(stats: Dict[str, int]) -> Dict[str, int]:
+    """Map a possibly-legacy stat dict onto the six attributes; seed any
+    missing attribute (notably science/resolve) with 8 +/- 3 jitter."""
+    norm: Dict[str, int] = {}
+    for key, val in (stats or {}).items():
+        norm[STAT_COMPAT.get(key, key)] = val
+    for attr in ATTRIBUTES:
+        if attr not in norm:
+            norm[attr] = max(1, 8 + random.randint(-3, 3))
+    return norm
+
+
+# Trait Database: Maps traits to attribute bonuses
 TRAIT_DATABASE = {
-    "Industrious": {"stewardship": 2},
-    "Brave": {"martial": 2},
-    "Charismatic": {"diplomacy": 2},
+    "Industrious": {"industry": 2},
+    "Brave": {"command": 2, "resolve": 1},
+    "Charismatic": {"statecraft": 2},
     "Cunning": {"intrigue": 2},
-    "Scholar": {"stewardship": 1, "diplomacy": 1},
-    "Warrior": {"martial": 3},
-    "Diplomat": {"diplomacy": 3},
+    "Scholar": {"industry": 1, "statecraft": 1, "science": 2},
+    "Warrior": {"command": 3},
+    "Diplomat": {"statecraft": 3},
     "Spymaster": {"intrigue": 3},
 }
 
@@ -51,7 +68,8 @@ class Character:
     def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18, gender: str = "Male"):
         self.id = str(uuid.uuid4())[:8]
         self.name = name
-        self.base_stats = stats  # {'diplomacy', 'martial', 'stewardship', 'intrigue'}
+        # Six attributes (spec 3.2); legacy 4-stat dicts are remapped.
+        self.base_stats = normalize_stats(stats)
         self.traits = traits
         self.parent_ids = parent_ids or []
         self.children_ids: List[str] = []
@@ -86,6 +104,7 @@ class Character:
         return None
     
     def get_effective_stat(self, stat_name: str) -> int:
+        stat_name = STAT_COMPAT.get(stat_name, stat_name)  # legacy names OK
         skill_base = self.lifestyle.get_effective_stat(stat_name, self.base_stats.get(stat_name, 0))
         bonus = 0
         for trait in self.traits:
@@ -200,10 +219,10 @@ def modify_opinion(char_a: Character, char_b: Character, amount: int, reason: st
     return f"{char_a.name} -> {char_b.name}: {amount:+d} ({reason})"
 
 def generate_child(name: str, parent_a: Character, parent_b: Character) -> Character:
-    # 1. Base stats: Average of parents + random fluctuation
+    # 1. Base stats: Average of parents + random fluctuation (six attributes)
     stats = {}
-    for stat in ['diplomacy', 'martial', 'stewardship', 'intrigue']:
-        avg = (parent_a.base_stats[stat] + parent_b.base_stats[stat]) / 2
+    for stat in ATTRIBUTES:
+        avg = (parent_a.base_stats.get(stat, 8) + parent_b.base_stats.get(stat, 8)) / 2
         stats[stat] = int(avg + random.randint(-2, 2))
 
     # 2. Genetic Inheritance of traits

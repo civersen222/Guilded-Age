@@ -3,7 +3,7 @@
 import random
 from typing import List, Optional
 
-from simulation import generate_child, modify_opinion
+from simulation import generate_child, modify_opinion, ATTRIBUTES
 from realms import MALE_NAMES, FEMALE_NAMES, _make_character
 
 FEAST_INTERVAL = 12
@@ -144,6 +144,6 @@ def _courtier_action(realm, char, in_court: bool) -> Optional[str]:
     if others and random.random() < 0.4:
         modify_opinion(random.choice(others), char, random.randint(1, 5), "friendship")
     elif random.random() < 0.15:
-        stat = random.choice(["diplomacy", "martial", "stewardship", "intrigue"])
-        char.base_stats[stat] = min(20, char.base_stats[stat] + 1)
+        stat = random.choice(ATTRIBUTES)
+        char.base_stats[stat] = min(20, char.base_stats.get(stat, 8) + 1)
     return None
