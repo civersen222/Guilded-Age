@@ -403,6 +403,20 @@ class Game:
             if key in yields:
                 yields[key] = yields.get(key, 0) + delta
 
+    def _finalize_yields(self, civ_name: str, yields: Dict[str, float]) -> None:
+        """Final stages of the yield pipeline (deep-systems spec 1.4), in order:
+        government bonuses (incl. anarchy halving), golden-age modifier, then
+        the global speed multiplier. Mutates the yield dict in place so every
+        downstream consumer sees fully modified numbers exactly once."""
+        self._apply_government_bonuses(civ_name, yields)
+        if self.golden_ages.get(civ_name, 0) > 0:
+            for key in ("production", "gold", "science", "culture"):
+                if key in yields:
+                    yields[key] = yields.get(key, 0) * 1.2
+        for key in ("food", "production", "gold", "science", "culture", "faith"):
+            if key in yields:
+                yields[key] = yields.get(key, 0) * self.speed_multiplier
+
     def _initialize_game(self):
         """Set up initial game state"""
         # Create player starting city
@@ -714,7 +728,7 @@ class Game:
             if (owner := city.owner) is not None:
                 # Calculate yields from the tiles the city actually works
                 yields = city.calculate_yields(self.map.tiles)
-                self._apply_government_bonuses(owner, yields)
+                self._finalize_yields(owner, yields)
                 civ_obj = self.civilizations.get(owner)
                 if civ_obj is not None:
                     civ_obj.culture += yields.get('culture', 0)
@@ -731,7 +745,7 @@ class Game:
                             owner_mgr.research(cheapest, city.owner)
                             self.state.turn_events.append(
                                 f"🧪 {city.owner} began researching {cheapest}")
-                    completed = owner_mgr.add_research_progress(city.owner, yields.get('science', 0) * self.speed_multiplier)
+                    completed = owner_mgr.add_research_progress(city.owner, yields.get('science', 0))
                     if completed:
                         self.state.turn_events.append(
                             f"🔬 {city.owner} completed research: {completed}")
@@ -751,7 +765,7 @@ class Game:
                             yields.get('food', 0),
                             yields.get('gold', 0),
                             yields.get('science', 0),
-                            yields.get('production', 0) * self.speed_multiplier
+                            yields.get('production', 0)
                         )
                         if completed_item:
                             # Handle tuple return (wonder) or string (unit/building)
@@ -903,6 +917,7 @@ class Game:
             civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
             for city in civ_cities:
                 yields = city.calculate_yields(self.map.tiles)
+                self._finalize_yields(civ_name, yields)
                 culture_output = yields.get("culture", 0)
                 if culture_output <= 0:
                     continue
