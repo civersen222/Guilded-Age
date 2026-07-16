@@ -730,6 +730,11 @@ class Game:
                 # Calculate yields from the tiles the city actually works
                 yields = city.calculate_yields(self.map.tiles)
                 self._finalize_yields(owner, yields)
+                # Empire happiness effects (deep-systems spec 1.6):
+                # deep unhappiness saps production.
+                net_happiness = self.happiness.get(owner, 0)
+                if net_happiness <= -10 and "production" in yields:
+                    yields["production"] *= 0.75
                 civ_obj = self.civilizations.get(owner)
                 if civ_obj is not None:
                     civ_obj.culture += yields.get('culture', 0)
@@ -753,7 +758,13 @@ class Game:
                 
                 # Population growth
                 old_pop = city.population
-                city.grow(self.map.tiles)
+                if net_happiness <= -10:
+                    growth_mod = 0.0
+                elif net_happiness < 0:
+                    growth_mod = 0.25
+                else:
+                    growth_mod = 1.0
+                city.grow(self.map.tiles, growth_mod)
                 if city.population > old_pop:
                     self.state.turn_events.append(f"{city.name} has grown to population {city.population}!")
                 
@@ -1329,40 +1340,41 @@ class Game:
                 self.war_weariness[civ_name] = max(0, self.war_weariness[civ_name] - 10)
 
     def _calculate_happiness(self, civ_name: str, msgs: List[str]) -> None:
-        """Calculate happiness for a civilization each turn and trigger revolts if negative."""
+        """Empire happiness (deep-systems spec 1.6): palace base 9, +4 per
+        DISTINCT luxury resource on owned territory, building and government
+        happiness, minus amenity demand of (3 + population) per city."""
         civ_cities = [city for city in self.cities.values() if city.owner == civ_name]
-        
-        # +2 per city population
-        pop_bonus = sum(city.population for city in civ_cities) * 2
-        
-        # +1 per luxury resource (count tiles with luxury resources adjacent to cities)
-        luxury_count = 0
+
+        # +4 per distinct luxury resource type on tiles the civ's cities own
+        luxuries = set()
         for city in civ_cities:
-            pos = getattr(city, "position", (0, 0))
-            for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]:
-                tile = self.map.tiles.get((pos[0] + dx, pos[1] + dy))
-                if tile and getattr(tile, "resource", None) in ("ivory", "spices", "silk", "coffee", "sugar", "cocoa", "dyes", "gems"):
-                    luxury_count += 1
-        luxury_bonus = luxury_count
-        
-        # -1 per city over 3 cities
-        num_cities = len(civ_cities)
-        empire_strain = 0
-        if num_cities > 3:
-            empire_strain = (num_cities - 3) * -1
-        
-        # +3 per colosseum wonder
-        wonder_bonus = 0
-        if self.wonders_built.get("Colosseum") == civ_name:
-            wonder_bonus = 3
-        
-        happiness = pop_bonus + luxury_bonus + empire_strain + wonder_bonus
+            for pos in getattr(city, "owned_tiles", ()):
+                tile = self.map.tiles.get(pos)
+                res = getattr(tile, "resource", None) if tile is not None else None
+                if res is not None and getattr(res, "value", ("",))[0] == "Luxury":
+                    luxuries.add(res)
+        luxury_bonus = 4 * len(luxuries)
+
+        # Building happiness (Theater etc.); wonders without the field count 0
+        building_bonus = sum(
+            getattr(b, "happiness", 0) or 0
+            for city in civ_cities for b in city.buildings.values())
+
+        # Government happiness (e.g. Democracy +2)
+        gov_bonus = GOVERNMENT_TYPES.get(
+            self.governments.get(civ_name, ""), {}).get("happiness", 0)
+
+        # Amenity demand: each city costs 3 plus 1 per citizen
+        demand = sum(3 + city.population for city in civ_cities)
+
+        happiness = int(9 + luxury_bonus + building_bonus + gov_bonus - demand)
         self.happiness[civ_name] = happiness
-        
+
         if happiness < 0:
-            revolt_msg = f"  ⚠️ {civ_name} is in revolt! Happiness: {happiness}"
-            msgs.append(revolt_msg)
-            self.state.turn_events.append(f"Revolt in {civ_name}: happiness {happiness}")
+            msgs.append(f"  ⚠️ {civ_name} is unhappy ({happiness:+d})")
+            if happiness <= -10:
+                self.state.turn_events.append(
+                    f"Unrest in {civ_name}: happiness {happiness}, growth halted and production suffers")
 
     def _process_ai_turn(self, civ_name: str, civ: Civilization) -> List[str]:
         """Process one turn for an AI civilization and return messages."""

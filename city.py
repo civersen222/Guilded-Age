@@ -215,15 +215,20 @@ class City:
             housing += sum(1 for t in owned if getattr(t, "improvement", None)) * 0.5
         return housing
 
-    def grow(self, tiles: Optional[Dict[tuple, Any]] = None):
+    def grow(self, tiles: Optional[Dict[tuple, Any]] = None, growth_modifier: float = 1.0):
         """Population growth from food surplus (deep-systems spec 1.5):
         each citizen eats 2 food; surplus fills a growth basket against a
         decelerating cost curve; deficits drain the basket and then starve
-        a citizen. Housing slows growth near the cap and halts it at it."""
+        a citizen. Housing slows growth near the cap and halts it at it.
+        growth_modifier scales positive surplus (empire unhappiness,
+        deep-systems spec 1.6); at 0 or below, growth halts entirely."""
         yields = self.calculate_yields(tiles)
         food = yields.get("food", 0)
         surplus = food - 2.0 * self.population
         if surplus >= 0:
+            if growth_modifier <= 0:
+                return
+            surplus *= growth_modifier
             tile_dict = None
             if tiles is not None:
                 tile_dict = tiles.tiles if hasattr(tiles, 'tiles') else tiles
