@@ -200,6 +200,15 @@ class TechManager:
             if tech.era == era:
                 return True
         return False
+
+    def completed_era(self, era: Era, civ: str = "") -> bool:
+        """Return True only if EVERY technology in the given era has been
+        researched. Used to gate the Science victory behind full completion
+        of the Modern tree rather than a single Modern-tagged tech."""
+        era_techs = [name for name, tech in TECHNOLOGIES.items() if tech.era == era]
+        if not era_techs:
+            return False
+        return all(name in self.researched for name in era_techs)
     
     def get_current_era(self, civ: str = "") -> Era:
         """Get the current era of a civilization"""

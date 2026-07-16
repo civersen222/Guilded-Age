@@ -1143,45 +1143,82 @@ class Game:
         """Check if any victory condition is met.
 
         Returns {"winner": civ_name, "type": victory_type} or None.
+
+        All victories are gated behind a minimum turn floor and (for the
+        accumulation victories) a minimum-era requirement so the game cannot
+        be won trivially early. Thresholds are grouped as named constants
+        below and tuned for a ~150-250 turn arc.
         """
+        MIN_VICTORY_TURN = 60           # no victory may fire before this turn
+        MIN_VICTORY_ERA = Era.MEDIEVAL  # accumulation wins require at least this era
+        DOMINATION_SHARE = 0.6          # own >= this fraction of all cities on the map
+        DOMINATION_LEAD = 2             # and >= this multiple of the next-largest civ
+
+        if self.state.turn < MIN_VICTORY_TURN:
+            return None
+
+        def _reached_min_era(name: str) -> bool:
+            tm = self.research.get(name)
+            if tm is None or not hasattr(tm, 'get_current_era'):
+                return False
+            try:
+                return tm.get_current_era(name).value >= MIN_VICTORY_ERA.value
+            except Exception:
+                return False
+
         # Conquest: last civilization still owning any cities wins
         civs_with_cities = {c.owner for c in self.cities.values() if c.owner in self.civilizations}
         if len(self.civilizations) > 1 and len(civs_with_cities) == 1:
             return {"winner": next(iter(civs_with_cities)), "type": "Conquest"}
 
+        # Precompute city counts per civ for the Domination check
+        total_cities = len([c for c in self.cities.values() if c.owner in self.civilizations])
+        city_counts: Dict[str, int] = {}
+        for c in self.cities.values():
+            if c.owner in self.civilizations:
+                city_counts[c.owner] = city_counts.get(c.owner, 0) + 1
+
         # Check all civilizations
         for civ_name, civ in self.civilizations.items():
             civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
 
-            # Domination: 12+ cities
-            if len(civ_cities) >= 12:
+            # Domination: dominate the map rather than hit a flat city count.
+            # Requires owning a super-majority of all cities AND a decisive lead
+            # over the next-largest civ, and having reached the mid-game era.
+            own = len(civ_cities)
+            others = [n for n in city_counts if n != civ_name]
+            next_largest = max((city_counts[n] for n in others), default=0)
+            if (total_cities >= 6 and own >= total_cities * DOMINATION_SHARE
+                    and own >= max(1, next_largest) * DOMINATION_LEAD
+                    and _reached_min_era(civ_name)):
                 return {"winner": civ_name, "type": "Domination"}
 
-            # Science: reached Modern era
+            # Science: research the ENTIRE Modern era, not just one Modern tech.
             if civ_name in self.research:
                 try:
                     player_tech = self.research[civ_name]
-                    if hasattr(player_tech, 'reached_era'):
-                        if player_tech.reached_era(Era.MODERN, civ_name):
+                    if hasattr(player_tech, 'completed_era'):
+                        if player_tech.completed_era(Era.MODERN, civ_name):
                             return {"winner": civ_name, "type": "Science"}
                 except Exception:
                     pass
 
-            # Culture: 1000+ culture points
+            # Culture: 1000+ culture points (mid-game era gate applies)
             culture_points = getattr(civ, 'culture', 0)
-            if culture_points >= 1000:
+            if culture_points >= 1000 and _reached_min_era(civ_name):
                 return {"winner": civ_name, "type": "Culture"}
 
             # Religion: founded a religion followed by 60%+ of civs
             for rname, rel in self.religion_manager.religions.items():
                 if getattr(rel, 'founder', None) == civ_name:
                     total_civs = len(self.civilizations)
-                    if total_civs > 0 and len(rel.followers) >= total_civs * 0.6:
+                    if (total_civs > 0 and len(rel.followers) >= total_civs * 0.6
+                            and _reached_min_era(civ_name)):
                         return {"winner": civ_name, "type": "Religion"}
 
-            # Dynasty: 1500+ prestige
+            # Dynasty: 1500+ prestige (mid-game era gate applies)
             prestige = getattr(civ, 'prestige', 0)
-            if prestige >= 1500:
+            if prestige >= 1500 and _reached_min_era(civ_name):
                 return {"winner": civ_name, "type": "Dynasty"}
 
         return None
