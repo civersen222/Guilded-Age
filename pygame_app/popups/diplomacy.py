@@ -168,6 +168,13 @@ class DiplomacyPopup:
         parts.append(f"• Our spies in {target_civ}: {spy_labels.get(our_spy, our_spy)}<br>")
         parts.append(f"• Their spies in our lands: {spy_labels.get(their_spy, their_spy)}<br>")
 
+        # War weariness (P5): visible whenever we are at war with them
+        ww = getattr(self._game, "war_weariness", {}) or {}
+        if dm is not None and dm.is_at_war(self._player_civ, target_civ):
+            parts.append(f"<br><b>War Weariness:</b><br>")
+            parts.append(f"• {self._player_civ}: {ww.get(self._player_civ, 0)}/100<br>")
+            parts.append(f"• {target_civ}: {ww.get(target_civ, 0)}/100<br>")
+
         parts.append(f"<br><b>Treaties:</b><br>")
         if treaties:
             for t in treaties:
