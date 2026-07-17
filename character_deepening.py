@@ -6,39 +6,44 @@ from enum import Enum
 from typing import Dict, List, Set, Tuple
 
 
-class LifestyleProgression:
-    """Character lifestyle progression."""
-    def __init__(self, lifestyle_name: str = "Scholar"):
-        self.lifestyle_name = lifestyle_name
+# Focus (M51, spec 3.6): one Focus per attribute line; a small passive,
+# a themed event stream, and slow growth. Switching resets progress.
+FOCUSES = {
+    "statecraft": "The Chairman's Table",
+    "command": "The Officer's Path",
+    "industry": "Captain of Industry",
+    "intrigue": "The Long Game",
+    "science": "The Laboratory",
+    "resolve": "The Inner Citadel",
+}
+
+FOCUS_MILESTONE = 10  # focused turns per +1 attribute point
+
+
+class Focus:
+    """One adult Focus (M51): which attribute line, and progress along it."""
+
+    def __init__(self, attribute=None):
+        self.attribute = attribute    # one of the six attributes, or None
         self.progress = 0
-        self.skills = {
-            "diplomacy": 0,
-            "martial": 0,
-            "stewardship": 0,
-            "intrigue": 0,
-            "scholarship": 0,
-            "combat": 0,
-        }
 
-    def train_skill(self, skill_type, amount: int = 1):
-        """Train a skill. Returns new level name if leveled up."""
-        if hasattr(skill_type, 'value'):
-            skill_name = skill_type.value
-        else:
-            skill_name = str(skill_type)
-        if skill_name in self.skills:
-            self.skills[skill_name] += amount
-            level = self.skills[skill_name] // 10
-            return f"Level {level}"
-        return None
+    def set(self, attribute):
+        """Pick a Focus line. Switching resets progress; re-picking the
+        same line is a no-op."""
+        if attribute != self.attribute:
+            self.attribute = attribute
+            self.progress = 0
 
-    def get_effective_stat(self, stat_name: str, base_value: int) -> int:
-        """Get effective stat including lifestyle bonuses."""
-        bonus = self.skills.get(stat_name, 0) // 10
-        return base_value + bonus
+    def passive(self, stat_name: str) -> int:
+        """+1 effective in the focused line while held."""
+        return 1 if self.attribute is not None and self.attribute == stat_name else 0
 
-    def advance(self, amount: int = 1) -> None:
-        self.progress += amount
+    def advance(self) -> bool:
+        """One focused turn. True on each FOCUS_MILESTONE-turn milestone."""
+        if self.attribute is None:
+            return False
+        self.progress += 1
+        return self.progress % FOCUS_MILESTONE == 0
 
 
 class AgeProgress:

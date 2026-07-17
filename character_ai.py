@@ -121,6 +121,12 @@ def _tick_realm(game, realm, turn) -> List[str]:
         if not c.is_alive or c.age < 16 or c.id not in relevant:
             continue
         c.decay_stress()
+        # Focus (M51, spec 3.6): every adult holds one Focus line.
+        if c.focus.attribute is None:
+            c.focus.set(max(ATTRIBUTES, key=lambda a: c.base_stats.get(a, 0)))
+        fm = c.tick_focus()
+        if fm:
+            msgs.append(fm)
         if c.id == realm.ruler.id:
             if not is_player:
                 m = _ruler_action(game, realm, c, turn)

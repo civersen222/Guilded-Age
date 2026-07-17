@@ -2,7 +2,8 @@ from typing import Dict, List, Tuple, Set, Optional
 import random
 import uuid
 from character_deepening import (
-    LifestyleProgression,
+    Focus,
+    FOCUSES,
     AgeProgress,
     LifeStage,
     TRAIT_DATABASE as EXTENDED_TRAIT_DATABASE,
@@ -117,7 +118,7 @@ class Character:
         
         # Section 6: Character deepening
         self.age_progress = AgeProgress(current_age=age, is_alive=True)
-        self.lifestyle = LifestyleProgression()
+        self.focus = Focus()  # one Focus per adult (M51, spec 3.6)
         self.is_heir = False
 
         # Guardian & education (M50, spec 3.6): childhood slots.
@@ -150,16 +151,23 @@ class Character:
             self.is_alive = False
         return event
     
-    def train_skill(self, skill_type, amount: int = 1) -> Optional[str]:
-        """Train a skill. Returns new level name if leveled up."""
-        new_level = self.lifestyle.train_skill(skill_type, amount)
-        if new_level:
-            return f"Leveled up {skill_type.value} to {new_level.value}"
-        return None
+    def tick_focus(self) -> Optional[str]:
+        """Focus (M51, spec 3.6): slow growth along the focused line.
+        Returns a themed milestone line every FOCUS_MILESTONE focused
+        turns, else None."""
+        attr = self.focus.attribute
+        if attr is None or not self.is_alive:
+            return None
+        if not self.focus.advance():
+            return None
+        self.base_stats[attr] = min(20, self.base_stats.get(attr, 8) + 1)
+        from event_engine import Situation, render
+        return render(Situation("focus_milestone", actors={"subject": self},
+                                data={"focus": FOCUSES[attr], "attr": attr}))
     
     def get_effective_stat(self, stat_name: str) -> int:
         stat_name = STAT_COMPAT.get(stat_name, stat_name)  # legacy names OK
-        skill_base = self.lifestyle.get_effective_stat(stat_name, self.base_stats.get(stat_name, 0))
+        skill_base = self.base_stats.get(stat_name, 0) + self.focus.passive(stat_name)
         bonus = 0
         for trait in self.traits:
             bonus += TRAIT_DATABASE.get(trait, {}).get(stat_name, 0)

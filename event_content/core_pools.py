@@ -7,6 +7,7 @@ Every template must only use slots the wiring guarantees for its kind:
     plot_assassination: target, civ
     plot_uncovered:     target, civ
     plot_executed:      mastermind, civ
+    focus_milestone:    subject, focus, attr
 Content pack 1 (M42): every pool has 4+ variants.
 """
 
@@ -48,5 +49,11 @@ TEMPLATE_POOLS = {
         "{mastermind} gambled against the crown of {civ} and paid with their head",
         "The headsman of {civ} works at dawn; {mastermind}'s conspiracy ends on the block",
         "{mastermind} is dragged before the throne of {civ} - the sentence is death",
+    ],
+    "focus_milestone": [
+        "{subject}'s devotion to {focus} bears fruit - their {attr} sharpens",
+        "Years on {focus} leave their mark: {subject} grows in {attr}",
+        "{subject} reaches a new plateau on {focus}; the {attr} gains are plain to see",
+        "The long hours tell: {subject}'s {attr} climbs another rung on {focus}",
     ],
 }
