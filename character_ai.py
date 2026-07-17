@@ -127,7 +127,8 @@ def _ruler_action(game, realm, ruler, turn) -> Optional[str]:
     if cunning and rivals and random.random() < 0.25:
         target = random.choice(rivals)
         modify_opinion(target, ruler, -random.randint(4, 10), "scheme")
-        ruler.add_stress(5)
+        # Scheming against one's honest nature costs extra (spec 3.5).
+        ruler.add_stress(5 + ruler.check_stress_action("scheme"))
         # Habitual scheming corrodes honesty (spec 3.4 drift).
         drift = apply_drift(ruler, "honest_deceitful", 5.0, "scheming")
         base = f"{ruler.name} schemes against {target.name}"

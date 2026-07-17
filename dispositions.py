@@ -137,3 +137,33 @@ def inherit_dispositions(parent_a: Dict[str, float],
         else:
             disp[key] = max(-100.0, min(100.0, random.gauss(0.0, 10.0)))
     return disp
+
+
+# Spec 3.5: acting against your own entrenched nature is what stresses you.
+# action -> ((pair_key, conflicting_sign), ...): sign +1 means the HIGH side
+# of the spectrum conflicts with the action, -1 the LOW side.
+ACTION_CONFLICTS: Dict[str, tuple] = {
+    "execute": (("cruel_compassionate", 1),),
+    "show_mercy": (("cruel_compassionate", -1), ("forgiving_vengeful", 1)),
+    "scheme": (("honest_deceitful", -1),),
+    "plot": (("honest_deceitful", -1),),
+    "break_treaty": (("honest_deceitful", -1), ("principled_pragmatic", -1)),
+    "declare_war": (("militarist_pacifist", 1),),
+    "raise_taxes": (("generous_greedy", -1),),
+    "accept_unfavorable_peace": (("ambitious_content", -1),),
+}
+
+
+def contradiction_stress(dispositions: Dict[str, float], action_type: str) -> int:
+    """Stress from acting against entrenched spectrum positions (spec 3.5).
+
+    Positions past the +/-50 label line on the conflicting side add
+    |value|/5 stress each; dead-zone characters act freely."""
+    total = 0.0
+    for pair_key, sign in ACTION_CONFLICTS.get(action_type, ()):
+        v = dispositions.get(pair_key, 0.0)
+        if sign > 0 and v >= LABEL_THRESHOLD:
+            total += v / 5.0
+        elif sign < 0 and v <= -LABEL_THRESHOLD:
+            total += -v / 5.0
+    return int(total)

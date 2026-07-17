@@ -11,7 +11,7 @@ from character_deepening import (
     get_available_traits,
     apply_traits_to_stats,
 )
-from dispositions import initial_dispositions, labels_for, inherit_dispositions
+from dispositions import initial_dispositions, labels_for, inherit_dispositions, contradiction_stress
 
 # Six attributes (character-society spec 3.2) and legacy 4-stat compatibility
 ATTRIBUTES = ["statecraft", "command", "industry", "intrigue", "science", "resolve"]
@@ -40,7 +40,15 @@ TRAIT_DATABASE = {
     "Warrior": {"command": 3},
     "Diplomat": {"statecraft": 3},
     "Spymaster": {"intrigue": 3},
+    # Coping vices (spec 3.5): picked up at a mental break; each drags stats.
+    "Drunkard": {"resolve": -2, "command": -1},
+    "Gambler": {"industry": -2, "statecraft": -1},
+    "Callous": {"statecraft": -2, "resolve": -1},
+    "Recluse": {"statecraft": -2, "intrigue": -1},
 }
+
+# Vices a character may adopt when stress breaks them (spec 3.5).
+COPING_VICES = ("Drunkard", "Gambler", "Callous", "Recluse")
 
 # Personality traits (for stress system)
 PERSONALITY_TRAITS = {
@@ -130,13 +138,24 @@ class Character:
         return skill_base + bonus
 
     def add_stress(self, amount: int) -> Optional[str]:
-        """Increase stress by amount. Returns threshold message if crossed."""
+        """Increase stress by amount. Returns threshold message if crossed.
+
+        Crossing into Overwhelmed or Breaking Point triggers a mental
+        break (spec 3.5): the character adopts a coping vice (once) and
+        vents 100 stress."""
         if not self.is_alive:
             return None
         old_level = self.get_stress_level()
         self.stress = min(self.stress + amount, 300)
         new_level = self.get_stress_level()
         if new_level != old_level and new_level:
+            if (new_level in ("Overwhelmed", "Breaking Point")
+                    and not any(v in self._explicit_traits for v in COPING_VICES)):
+                vice = random.choice(COPING_VICES)
+                self.add_trait(vice)
+                self.stress = max(self.stress - 100, 0)
+                return (f"{self.name} suffers a mental break and becomes "
+                        f"{vice} (stress: {self.stress})")
             return f"{self.name} is now '{new_level}' (stress: {self.stress})"
         return None
 
@@ -145,13 +164,16 @@ class Character:
         self.stress = max(self.stress - amount, 0)
 
     def check_stress_action(self, action_type: str) -> int:
-        """Check personality traits against action, return stress gain."""
+        """Stress cost of an action: disposition contradiction (spec 3.5)
+        plus the first matching legacy trait trigger."""
+        total = contradiction_stress(self.dispositions, action_type)
         for trait in self.traits:
             if trait in PERSONALITY_TRAITS:
                 key = (trait, action_type)
                 if key in STRESS_TRIGGERS:
-                    return STRESS_TRIGGERS[key]
-        return 0
+                    total += STRESS_TRIGGERS[key]
+                    break
+        return total
 
     def get_stress_level(self) -> Optional[str]:
         """Return current stress threshold label."""
