@@ -97,6 +97,33 @@ def initial_dispositions() -> Dict[str, float]:
     return disp
 
 
+def apply_drift(char, pair_key: str, amount: float, reason: str = "") -> Optional[str]:
+    """Push one of a character's spectrums by `amount` (spec 3.4 drift).
+
+    Returns a log line when the move crosses a label boundary (e.g.
+    "Livia has become Vengeful (passed over)"), else None."""
+    old_v = char.dispositions.get(pair_key, 0.0)
+    new_v = max(-100.0, min(100.0, old_v + amount))
+    char.dispositions[pair_key] = new_v
+    old_label = label_for(pair_key, old_v)
+    new_label = label_for(pair_key, new_v)
+    if new_label != old_label and new_label is not None:
+        why = f" ({reason})" if reason else ""
+        return f"{char.name} has become {new_label}{why}"
+    return None
+
+
+def witness_drift(char, pair_key: str, magnitude: float, reason: str = "") -> Optional[str]:
+    """A life event pushes a witness along a spectrum, in a direction
+    weighted by where they already stand - the entrenched entrench
+    (spec 3.4: ignored disaster drifts toward Callous OR snaps toward
+    Reformist, weighted by existing temperament)."""
+    v = char.dispositions.get(pair_key, 0.0)
+    p_high = 0.5 + 0.3 * (v / 100.0)   # 50/50 at 0, 80/20 at +/-100
+    direction = 1.0 if random.random() < p_high else -1.0
+    return apply_drift(char, pair_key, direction * abs(magnitude), reason)
+
+
 def inherit_dispositions(parent_a: Dict[str, float],
                          parent_b: Dict[str, float]) -> Dict[str, float]:
     """Conception-time spectrums (spec 3.3): Bloodline blends the parents'

@@ -17,6 +17,7 @@ from hex_map import HexMap, HexTile, ExponentialFogOfWar
 from city import City
 from military import Unit
 from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager, execute_succession, SUCCESSION_LAWS, STAT_COMPAT
+from dispositions import apply_drift
 from court import Court, CourtPosition
 from realms import create_realms
 from character_ai import tick_realms
@@ -105,7 +106,7 @@ class CKEvent:
         for effect_type, value in effects.items():
             self._apply_effect(effect_type, value)
         return f"📜 [{self.name}] Chose: {choice.get('name', '')}"
-    def _apply_effect(self, effect_type: str, value: Union[int, float]) -> None:
+    def _apply_effect(self, effect_type: str, value: Union[int, float, dict]) -> None:
         ruler = self._get_ruler()
         if ruler is None:
             return
@@ -119,6 +120,12 @@ class CKEvent:
                              "statecraft", "command", "industry", "science", "resolve"):
             key = STAT_COMPAT.get(effect_type, effect_type)
             ruler.base_stats[key] = ruler.base_stats.get(key, 0) + value
+        elif effect_type == "drift":
+            # value: {spectrum_key: amount}; label crossings hit the event log.
+            for pk, amt in dict(value).items():
+                m = apply_drift(ruler, pk, amt, self.name)
+                if m and getattr(self, "_game", None) is not None:
+                    self._game.state.turn_events.append(f"\U0001F3AD {m}")
 
     def _get_ruler(self):
         game = self._game if hasattr(self, "_game") else None
@@ -1033,11 +1040,13 @@ class Game:
             [
                 {
                     "name": f"Imprison {rival} (-10 morale, +5 intrigue)",
-                    "effects": {"morale": -10, "intrigue": 5},
+                    "effects": {"morale": -10, "intrigue": 5,
+                                "drift": {"cruel_compassionate": -10, "trusting_paranoid": 8}},
                 },
                 {
                     "name": "Negotiate peacefully (+5 diplomacy)",
-                    "effects": {"diplomacy": 5},
+                    "effects": {"diplomacy": 5,
+                                "drift": {"forgiving_vengeful": -8}},
                 },
                 {
                     "name": "Ignore the provocation",
