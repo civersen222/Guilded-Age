@@ -9,13 +9,13 @@ from pygame_app.constants import SCREEN_HEIGHT, SCREEN_WIDTH
 from game_data import TECHNOLOGIES, Era
 
 ERA_ORDER = [Era.ANCIENT, Era.CLASSICAL, Era.MEDIEVAL, Era.RENAISSANCE, Era.INDUSTRIAL, Era.MODERN]
-ERA_LABELS = {
-    Era.ANCIENT: "Ancient",
-    Era.CLASSICAL: "Classical",
-    Era.MEDIEVAL: "Medieval",
-    Era.RENAISSANCE: "Renaissance",
-    Era.INDUSTRIAL: "Industrial",
-    Era.MODERN: "Modern",
+ERA_LABELS = {  # industrial-century phases (M52) - Era enum values unchanged
+    Era.ANCIENT: "Age of Steam",
+    Era.CLASSICAL: "Age of Steel",
+    Era.MEDIEVAL: "Age of Current",
+    Era.RENAISSANCE: "Age of Wireless",
+    Era.INDUSTRIAL: "Age of Flight",
+    Era.MODERN: "Age of the Atom",
 }
 COLOR_DONE = "#44cc44"
 COLOR_RESEARCHING = "#4499ff"

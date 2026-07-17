@@ -699,6 +699,28 @@ CIVILIZATIONS = {
     "Ottoman": Civilization("Ottoman", "", "Janissary", "Gunpowder units cost 20% less", "Theocracy", ["Gunpowder", "Feudalism"], "teal", 105, 45, 25, {"diplomacy": 10, "martial": 12, "stewardship": 10, "intrigue": 8}, ["Warrior", "Industrious"]),
 }
 
+# Great Houses (M52): display names for the fictional-1900 setting. The
+# CIVILIZATIONS keys above remain the internal IDs - never rename them.
+HOUSE_NAMES = {
+    "Rome": "House Aurelian",
+    "Greece": "House Argyros",
+    "Mesopotamia": "House Alluvane",
+    "Egypt": "House Meridian",
+    "Persia": "House Sarvane",
+    "China": "House Celestine",
+    "Mongol": "House Khareth",
+    "Viking": "House Norvath",
+    "India": "House Suravel",
+    "Byzantium": "House Porphyry",
+    "England": "House Albric",
+    "Ottoman": "House Osmarin",
+}
+
+
+def house_name(civ_key: str) -> str:
+    """Display name of a Great House; falls back to the raw key."""
+    return HOUSE_NAMES.get(civ_key, civ_key)
+
 
 # ── Unit Promotions ──────────────────────────────────────────────────────────
 

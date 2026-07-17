@@ -9,6 +9,7 @@ from pygame_app.constants import (
     SCREEN_WIDTH, RESOURCE_BAR_HEIGHT,
     GOLD as GOLD_COLOR, PANEL_BG, TEXT, GREEN, RED,
 )
+from game_data import house_name
 
 
 # Unicode icons for each resource type
@@ -38,23 +39,9 @@ NEG_COLOR = (178, 58, 58)
 
 
 def turn_to_year(turn: int) -> str:
-    """Convert a turn number to a calendar year starting at 4000 BC.
-
-    Early turns advance quickly (40 years/turn), slowing over time.
-    """
-    year = -4000
-    remaining = turn
-    brackets = [(100, 40), (100, 20), (100, 10), (100, 5)]
-    for count, step in brackets:
-        if remaining <= 0:
-            break
-        use = min(remaining, count)
-        year += use * step
-        remaining -= use
-    year += remaining * 2
-    if year <= 0:
-        return f"{abs(year)} BC"
-    return f"{year} AD"
+    """Calendar for the fictional industrial century (M52): the game opens
+    in 1900 and each turn spans ~1.5 years."""
+    return str(1900 + (turn * 3) // 2)
 
 
 class ResourceBar:
@@ -156,7 +143,7 @@ class ResourceBar:
 
         # Update each label individually with try/except
         try:
-            self._labels["civ_name"].set_text(f"Civ: {civ_name}")
+            self._labels["civ_name"].set_text(house_name(civ_name))
         except Exception:
             pass
         try:
