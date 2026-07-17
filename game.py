@@ -288,6 +288,8 @@ class Game:
         # Update managers with actual data
         self.city_manager.cities = list(self.cities.values())
         self.military_manager.units = list(self.units.values())
+        self.military_manager.map = self.map
+        self.military_manager.game = self  # ruler lookups for tactical combat (M29)
     
     @property
     def fog(self):

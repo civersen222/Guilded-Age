@@ -162,14 +162,24 @@ def resolve_combat(
     result = CombatResult()
     dmg_log: List[str] = []
 
-    terrain_mod = _terrain_defense_mod(tile)
-    att_ruler_bonus = 1.0 + attacker_ruler.get_effective_stat("command") / 100.0
-    def_ruler_bonus = 1.0 + defender_ruler.get_effective_stat("command") / 100.0
+    # None-safe modifiers (M29): callers may pass no tile or a non-Character
+    # ruler; treat those as neutral (no bonus) instead of crashing.
+    terrain_mod = _terrain_defense_mod(tile) if tile is not None else 1.0
+    att_ruler_bonus = 1.0
+    if attacker_ruler is not None and hasattr(attacker_ruler, "get_effective_stat"):
+        att_ruler_bonus += attacker_ruler.get_effective_stat("command") / 100.0
+    def_ruler_bonus = 1.0
+    if defender_ruler is not None and hasattr(defender_ruler, "get_effective_stat"):
+        def_ruler_bonus += defender_ruler.get_effective_stat("command") / 100.0
 
     att_units = [u for u in attacker_army if u.is_alive]
     def_units = [u for u in defender_army if u.is_alive]
 
-    while att_units and def_units:
+    # Round cap (M29): evenly matched armies (0 damage both ways, e.g. a
+    # ranged attacker against a sturdier defender) previously looped forever.
+    rounds = 0
+    while att_units and def_units and rounds < 100:
+        rounds += 1
         att = random.choice(att_units)
         def_ = random.choice(def_units)
 
@@ -224,9 +234,9 @@ def resolve_combat(
 
         # Apply damage
         if dmg_to_def > 0:
-            att.deal_damage(dmg_to_def)
+            def_.deal_damage(dmg_to_def)
         if dmg_to_att > 0:
-            def_.deal_damage(dmg_to_att)
+            att.deal_damage(dmg_to_att)
 
         att.hp = max(0, att.hp)
         def_.hp = max(0, def_.hp)
@@ -243,11 +253,17 @@ def resolve_combat(
             att.is_alive = False
             result.attacker_casualties.append(att.casualty)
             att_units.remove(att)
+            if hasattr(def_, "gain_xp"):
+                def_.kills = getattr(def_, "kills", 0) + 1
+                def_.gain_xp(10)
 
         if def_.hp <= 0:
             def_.is_alive = False
             result.defender_casualties.append(def_.casualty)
             def_units.remove(def_)
+            if hasattr(att, "gain_xp"):
+                att.kills = getattr(att, "kills", 0) + 1
+                att.gain_xp(10)
 
         dmg_log.append(
             f"  {att.unit_type} vs {def_.unit_type}: "
@@ -266,12 +282,12 @@ def resolve_combat(
     if attacker_army:
         alive = [u for u in attacker_army if u.is_alive]
         result.attacker_hp_after = alive[-1].hp if alive else 0
-        result.attacker_xp = alive[-1].xp
+        result.attacker_xp = alive[-1].xp if alive else 0
         result.attacker_victory = not any(u.is_alive for u in defender_army)
     if defender_army:
         alive = [u for u in defender_army if u.is_alive]
         result.defender_hp_after = alive[-1].hp if alive else 0
-        result.defender_xp = alive[-1].xp
+        result.defender_xp = alive[-1].xp if alive else 0
         result.defender_victory = not any(u.is_alive for u in attacker_army)
 
     result.bonuses_applied = bonuses
