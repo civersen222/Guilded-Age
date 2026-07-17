@@ -53,6 +53,7 @@ def build_realm_html(game: Any) -> str:
         parts.append(f'<font color="{color}">{stat.capitalize()}:</font> {ruler.get_effective_stat(stat)}<br>')
     parts.append("<br><b>Traits:</b> " + (", ".join(ruler.traits) if ruler.traits else "None") + "<br>")
     parts.append(f"<b>Dynasty Prestige:</b> {realm.dynasty.calculate_dynastic_prestige()}<br>")
+    parts.append(f"<b>Personal Treasury:</b> {ruler.gold_reserve:.0f} gold<br>")
 
     members = sorted(realm.dynasty.all_characters.values(), key=lambda c: (not c.is_alive, -c.age))
     parts.append(f"<br><b><u>Dynasty ({sum(1 for m in members if m.is_alive)} living)</u></b><br>")
@@ -60,7 +61,7 @@ def build_realm_html(game: Any) -> str:
         alive = "✓" if m.is_alive else "✗"
         wed = " ⚭" if m.id in marriage_mod._married_ids else ""
         role = "Ruler" if m.id == ruler.id else "Kin"
-        parts.append(f"{alive} <b>{m.name}</b>{wed} (Age {m.age}) — {role} [{_stat_line(m)}]<br>")
+        parts.append(f"{alive} <b>{m.name}</b>{wed} (Age {m.age}) — {role}, {m.gold_reserve:.0f}g [{_stat_line(m)}]<br>")
 
     parts.append(f"<br><b><u>Royal Court ({realm.court.filled_count}/5)</u></b><br>")
     for pos in CourtPosition:
@@ -69,6 +70,20 @@ def build_realm_html(game: Any) -> str:
             parts.append(f"<b>{pos.value}:</b> {char.name} (+{realm.court.get_bonus(pos)})<br>")
         else:
             parts.append(f"<b>{pos.value}:</b> VACANT<br>")
+
+    ents = getattr(realm, "enterprises", []) or []
+    parts.append(f"<br><b><u>House Enterprises ({len(ents)})</u></b><br>")
+    if ents:
+        total_yield = sum(e.base_yield for e in ents)
+        ruler_cut = sum(e.base_yield * e.ledger.get(ruler.id, 0.0) / 100.0 for e in ents)
+        parts.append(f"House yield: {total_yield} gold/turn — ruler's dividends: {ruler_cut:.1f}/turn<br>")
+        for e in ents[:8]:
+            stake = e.ledger.get(ruler.id, 0.0)
+            parts.append(f"<b>{e.name}</b> ({e.sector}, {e.city_name}) — {e.base_yield}/turn, ruler stake {stake:.0f}%, {len(e.ledger)} holder(s)<br>")
+        if len(ents) > 8:
+            parts.append(f"...and {len(ents) - 8} more<br>")
+    else:
+        parts.append("None founded.<br>")
 
     rivals = [c for c in realm.characters
               if c.is_alive and c.id != ruler.id and get_relation(c, ruler) == "rival"]
