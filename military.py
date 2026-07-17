@@ -4,7 +4,7 @@ Handles units, combat, movement, and military organization
 """
 import random
 from typing import List, Dict, Optional, Tuple
-from game_data import UNIT_TYPES, UnitType, TERRAIN_DEFENSE_BONUS, TerrainType
+from game_data import UNIT_TYPES, UnitType, TERRAIN_DEFENSE_BONUS, TerrainType, UnitCategory
 from combat import CombatResult, resolve_combat
 
 
@@ -224,6 +224,52 @@ class MilitaryManager:
             if city.owner == unit.owner and unit.position in getattr(city, "owned_tiles", set()):
                 return True
         return False
+
+    def attack_city(self, unit, city) -> Optional[str]:
+        """One unit assaults a city (M31). Returns a message, or None if invalid.
+
+        Ranged/siege grind the city's HP and cannot capture; a melee or
+        cavalry attack that drops the city to 0 HP captures it.
+        """
+        if not unit.is_alive or unit.moves_left <= 0 or city.owner == unit.owner:
+            return None
+
+        utype = UNIT_TYPES.get(unit.unit_type)
+        category = utype.category if utype else UnitCategory.MELEE
+        if category in (UnitCategory.SETTLER, UnitCategory.WORKER):
+            return None
+
+        strength = city.combat_strength()
+        siege_mult = 2.0 if category == UnitCategory.SIEGE else 1.0
+        dmg = max(1, int(unit.attack * siege_mult - strength * 0.5))
+        city.hp -= dmg
+        city.was_attacked = True
+        unit.moves_left = 0
+        unit.has_fought = True
+
+        # The city strikes back at attackers storming the walls; ranged and
+        # siege units batter from a distance and take nothing.
+        if category in (UnitCategory.MELEE, UnitCategory.CAVALRY, UnitCategory.HELD):
+            unit.deal_damage(int(strength * 0.5))
+
+        if city.hp <= 0:
+            if category in (UnitCategory.MELEE, UnitCategory.CAVALRY) and unit.is_alive:
+                return self._capture_city(unit, city)
+            city.hp = 1  # cannot capture; the city holds at the brink
+            return f"{city.name} teeters at the brink of falling to {unit.owner}!"
+        return (f"{unit.unit_type} of {unit.owner} assaults {city.name}: "
+                f"-{dmg} (city HP {max(city.hp, 0)}/{city.city_max_hp()})")
+
+    def _capture_city(self, unit, city) -> str:
+        """Melee capture (M31): ownership flips, population drops, occupation."""
+        old_owner = city.owner
+        city.owner = unit.owner
+        city.owner_id = unit.owner
+        city.population = max(1, int(city.population * 0.75))
+        city.hp = city.city_max_hp() // 2
+        city.occupied_turns = 10
+        unit.position = city.position
+        return f"{city.name} has FALLEN! {unit.owner} seizes it from {old_owner}"
     
     def add_unit(self, unit: Unit):
         self.units.append(unit)

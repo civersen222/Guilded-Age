@@ -64,6 +64,21 @@ class City:
         self.tiles_claimed: int = 0        # tiles claimed beyond the initial radius-1 ring
         self.growth_basket: float = 0.0    # food surplus stored toward the next citizen
         self.settler_cost_factor: float = 1.0  # per-civ settler cost escalation (spec 1.2)
+        # City combat (M31, spec 3.3): cities are multi-turn siege objectives
+        self.hp: int = 200
+        self.occupied_turns: int = 0     # >0 right after capture; extra unhappiness
+        self.was_attacked: bool = False  # suppresses city healing this turn
+
+    def city_max_hp(self) -> int:
+        """Walls add an HP tier (M31)."""
+        return 200 + (100 if "Wall" in self.buildings else 0)
+
+    def combat_strength(self) -> float:
+        """Defense strength: scales with population and Walls (M31)."""
+        strength = 10.0 + 2.0 * self.population
+        if "Wall" in self.buildings:
+            strength += 10.0
+        return strength
 
     def to_dict(self) -> dict:
         return {

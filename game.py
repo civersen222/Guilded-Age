@@ -892,6 +892,15 @@ class Game:
         self.military_manager.units = list(self.units.values())
         self.military_manager.process_turn()
 
+        # --- City siege recovery (M31): cities heal when not under attack ---
+        for _city in self.cities.values():
+            if _city.was_attacked:
+                _city.was_attacked = False
+            elif _city.hp < _city.city_max_hp():
+                _city.hp = min(_city.city_max_hp(), _city.hp + 20)
+            if _city.occupied_turns > 0:
+                _city.occupied_turns -= 1
+
         # --- Clean up dead units ---
         dead_units = [name for name, unit in self.units.items() if not unit.is_alive]
         for name in dead_units:
@@ -1473,8 +1482,10 @@ class Game:
         gov_bonus = GOVERNMENT_TYPES.get(
             self.governments.get(civ_name, ""), {}).get("happiness", 0)
 
-        # Amenity demand: each city costs 3 plus 1 per citizen
-        demand = sum(3 + city.population for city in civ_cities)
+        # Amenity demand: each city costs 3 plus 1 per citizen; occupied
+        # cities (M31) seethe with +5 extra unrest until occupation ends
+        demand = sum(3 + city.population + (5 if getattr(city, "occupied_turns", 0) > 0 else 0)
+                     for city in civ_cities)
 
         happiness = int(9 + luxury_bonus + building_bonus + gov_bonus - demand)
         self.happiness[civ_name] = happiness

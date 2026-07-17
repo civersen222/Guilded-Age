@@ -332,6 +332,17 @@ class AIPlayer:
                     target_dist = d
                     target = t
 
+            # Siege (M31): adjacent enemy city while at war -> assault it
+            if (target is not None and hasattr(target, "population")
+                    and target_dist <= 1
+                    and game.diplomacy_manager.is_at_war(self.civ_name, target.owner)):
+                result = game.military_manager.attack_city(unit, target)
+                if result:
+                    msgs.append(f"    {result}")
+                    game.state.turn_events.append(result)
+                    unit.moves_left = 0
+                    continue
+
             if target is not None and self.aggression > 0.4 and target_dist <= 5:
                 if step_toward(unit, target.position):
                     msgs.append(f"    ⚔️ {unit.unit_type} advances toward the enemy")
