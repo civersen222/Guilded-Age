@@ -70,3 +70,43 @@ def create_realms(game) -> Dict[str, Realm]:
         game.succession_laws[civ_name] = 'PRIMOGENITURE'
         game.characters.extend(realm.characters)
     return realms
+
+
+DOMAIN_CAP = 4  # personal domain (spec 2): cities beyond this need a Director
+
+
+def tick_directors(game) -> List[str]:
+    """Enfeoffment (M47, spec 4.4): every city beyond a realm's domain cap
+    gets a Director drawn from the realm's characters (best industry, adult,
+    not the ruler, not on the council, not already a Director), paid a 10%
+    shares salary from the ruler's stake in the city's enterprise."""
+    from shares import transfer_shares
+    events: List[str] = []
+    realms = getattr(game, "realms", None) or {}
+    for civ_name, realm in realms.items():
+        cities = [c for c in game.cities.values() if c.owner == civ_name]
+        taken = {c.director.id for c in cities
+                 if c.director is not None and c.director.is_alive}
+        court_ids = {ch.id for ch in realm.court.positions.values() if ch}
+        for city in cities[DOMAIN_CAP:]:
+            if city.director is not None and city.director.is_alive:
+                continue
+            pool = [ch for ch in realm.characters
+                    if ch.is_alive and ch.age >= 16 and ch.id != realm.ruler.id
+                    and ch.id not in taken and ch.id not in court_ids]
+            if not pool:
+                continue
+            director = max(pool, key=lambda ch: ch.get_effective_stat("industry"))
+            city.director = director
+            taken.add(director.id)
+            for ent in realm.enterprises:
+                if ent.city_name == city.name:
+                    moved = transfer_shares(ent, realm.ruler.id, director.id, 10.0)
+                    if moved > 0:
+                        events.append(f"{director.name} is enfeoffed as Director of {city.name} ({moved:.0f}% shares salary)")
+                    else:
+                        events.append(f"{director.name} is appointed Director of {city.name}")
+                    break
+            else:
+                events.append(f"{director.name} is appointed Director of {city.name}")
+    return events

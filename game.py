@@ -19,7 +19,7 @@ from military import Unit
 from simulation import Character, Dynasty, generate_child, modify_opinion, DynastyManager, execute_succession, SUCCESSION_LAWS, STAT_COMPAT
 from dispositions import apply_drift
 from court import Court, CourtPosition
-from realms import create_realms
+from realms import create_realms, tick_directors
 from shares import found_enterprises, pay_dividends, partition_shares
 from character_ai import tick_realms
 from event_engine import Situation, render
@@ -944,6 +944,11 @@ class Game:
             msgs.append(f"  {_msg}")
             self.state.turn_events.append(_msg)
 
+        # --- Directors (M47): enfeoff governors beyond the domain cap ---
+        for _dmsg in tick_directors(self):
+            msgs.append(f"  {_dmsg}")
+            self.state.turn_events.append(_dmsg)
+
         # --- Rivals, plots, factions (Phase B3) ---
         for _rmsg in tick_relationships(self):
             msgs.append(f"  {_rmsg}")
@@ -1534,6 +1539,7 @@ class Game:
         # Amenity demand: each city costs 3 plus 1 per citizen; occupied
         # cities (M31) seethe with +5 extra unrest until occupation ends
         demand = sum(3 + city.population + (5 if getattr(city, "occupied_turns", 0) > 0 else 0)
+                     + city.director_unrest()
                      for city in civ_cities)
 
         # War weariness (M33, spec 3.4): -1 happiness per 10 weariness

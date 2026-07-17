@@ -69,6 +69,44 @@ class City:
         self.hp: int = 200
         self.occupied_turns: int = 0     # >0 right after capture; extra unhappiness
         self.was_attacked: bool = False  # suppresses city healing this turn
+        # Director (M47, spec 4.4): the city's governor character, or None.
+        self.director: Optional[Any] = None
+
+    def _director(self):
+        """The living director, or None (dead/vacant = neutral)."""
+        d = self.director
+        return d if d is not None and getattr(d, "is_alive", False) else None
+
+    def director_production_multiplier(self) -> float:
+        """Industry (M47): +0.5% city production per point of the Director's industry."""
+        d = self._director()
+        if d is None:
+            return 1.0
+        return 1.0 + d.get_effective_stat("industry") / 200.0
+
+    def director_profit_multiplier(self) -> float:
+        """Convictions (M47): a Callous squeeze raises profit, Reformist rule eases it."""
+        d = self._director()
+        if d is None:
+            return 1.0
+        v = d.dispositions.get("cruel_compassionate", 0.0)
+        return 1.0 - v / 500.0
+
+    def director_unrest(self) -> int:
+        """Convictions (M47): Callous rule breeds unrest; Reformist rule calms it."""
+        d = self._director()
+        if d is None:
+            return 0
+        v = d.dispositions.get("cruel_compassionate", 0.0)
+        return int(-v // 25)
+
+    def director_accident_rate(self) -> float:
+        """Convictions (M47): accident-rate coefficient (consumed in Wave PE)."""
+        d = self._director()
+        if d is None:
+            return 0.0
+        v = d.dispositions.get("cruel_compassionate", 0.0)
+        return max(0.0, -v) / 500.0
 
     def city_max_hp(self) -> int:
         """Walls add an HP tier (M31)."""
@@ -403,6 +441,11 @@ class City:
         for key, pct in pct_totals.items():
             if pct:
                 yields[key] *= (1 + pct)
+
+        # Director (M47, spec 4.4): Industry scales production; Convictions
+        # trade profit vs unrest (unrest lands in empire happiness).
+        yields["production"] *= self.director_production_multiplier()
+        yields["gold"] *= self.director_profit_multiplier()
 
         # Population bonuses
         yields["food"] += self.population * 0.5
