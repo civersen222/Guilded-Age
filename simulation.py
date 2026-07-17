@@ -11,7 +11,7 @@ from character_deepening import (
     get_available_traits,
     apply_traits_to_stats,
 )
-from dispositions import initial_dispositions, labels_for
+from dispositions import initial_dispositions, labels_for, inherit_dispositions
 
 # Six attributes (character-society spec 3.2) and legacy 4-stat compatibility
 ATTRIBUTES = ["statecraft", "command", "industry", "intrigue", "science", "resolve"]
@@ -260,7 +260,10 @@ def generate_child(name: str, parent_a: Character, parent_b: Character) -> Chara
             child_traits.append("Industrious")
 
     child = Character(name, stats, child_traits, parent_ids=[parent_a.id, parent_b.id])
-    
+    # 4. Genetics (spec 3.3): Bloodline spectrums blend from the parents
+    # with mutation; Temperament/Conviction re-seed near neutral.
+    child.dispositions = inherit_dispositions(parent_a.dispositions, parent_b.dispositions)
+
     # Update parents' children lists
     parent_a.children_ids.append(child.id)
     parent_b.children_ids.append(child.id)

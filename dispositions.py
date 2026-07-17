@@ -95,3 +95,18 @@ def initial_dispositions() -> Dict[str, float]:
         sigma = 20.0 if pair.family == "bloodline" else 30.0
         disp[key] = max(-100.0, min(100.0, random.gauss(0.0, sigma)))
     return disp
+
+
+def inherit_dispositions(parent_a: Dict[str, float],
+                         parent_b: Dict[str, float]) -> Dict[str, float]:
+    """Conception-time spectrums (spec 3.3): Bloodline blends the parents'
+    values with mutation jitter (Houses can breed for talent); Temperament
+    and Conviction start near neutral - childhood shapes them (drift, M38)."""
+    disp: Dict[str, float] = {}
+    for key, pair in PAIRS.items():
+        if pair.family == "bloodline":
+            mid = (parent_a.get(key, 0.0) + parent_b.get(key, 0.0)) / 2.0
+            disp[key] = max(-100.0, min(100.0, mid + random.gauss(0.0, 12.0)))
+        else:
+            disp[key] = max(-100.0, min(100.0, random.gauss(0.0, 10.0)))
+    return disp
