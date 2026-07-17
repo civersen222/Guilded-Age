@@ -113,6 +113,32 @@ def build_realm_html(game: Any) -> str:
             tags.append("⚭ blood tie")
         tag_s = (" — " + ", ".join(tags)) if tags else ""
         parts.append(f"<b>{civ_name}:</b> {fr.name} (Age {fr.age}), relation {rel:+d}{tag_s}<br>")
+    unions = [rec for rec in marriage_mod._marriages if pname in (rec[1], rec[3])]
+    parts.append(f"<br><b><u>Marriage Contracts ({len(unions)})</u></b><br>")
+    if unions:
+        chars = {c.id: c for r in (getattr(game, "realms", None) or {}).values() for c in r.characters}
+        for a_id, civ_a, b_id, civ_b in unions[:6]:
+            ca, cb = chars.get(a_id), chars.get(b_id)
+            names = f"{ca.name if ca else '?'} ⚭ {cb.name if cb else '?'}"
+            contract = marriage_mod._contracts.get((a_id, b_id))
+            if contract is None:
+                terms = "traditional match (no formal terms)"
+            else:
+                bits = []
+                if contract.alliance:
+                    bits.append("alliance")
+                if contract.dowry_gold > 0:
+                    bits.append(f"dowry {contract.dowry_gold:.0f}g")
+                if contract.dowry_shares_pct > 0:
+                    bits.append(f"{contract.dowry_shares_pct:.0f}% shares")
+                if contract.matrilineal:
+                    bits.append("matrilineal")
+                if contract.board_seat:
+                    bits.append("board seat")
+                terms = ", ".join(bits) if bits else "no special terms"
+            parts.append(f"{names} ({civ_a}-{civ_b}) — {terms}<br>")
+    else:
+        parts.append("No unions bind this house to another.<br>")
     return "\n".join(parts)
 
 
