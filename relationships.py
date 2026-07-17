@@ -6,6 +6,7 @@ from typing import List
 from simulation import opinion_matrix, modify_opinion
 from realms import _make_character
 from dispositions import apply_drift
+from event_engine import Situation, render
 
 RIVAL_AT = -25
 FRIEND_AT = 25
@@ -230,21 +231,29 @@ def _advance_plots(game, realms) -> List[str]:
                 game.rulers[trealm.civ_name] = mast
                 if mast.id not in trealm.dynasty.all_characters:
                     trealm.dynasty.all_characters[mast.id] = mast
-                mast.add_stress(20)
-                msgs.append(f"COUP in {trealm.civ_name}! {mast.name} seizes the throne from {targ.name}")
+                note = mast.add_stress(20)
+                msgs.append(render(Situation("plot_coup", {"mastermind": mast, "target": targ},
+                                             data={"civ": trealm.civ_name})))
+                if note and "mental break" in note:
+                    msgs.append(render(Situation("mental_break", {"subject": mast})))
             else:
                 targ.is_alive = False
                 targ.age_progress.is_alive = False
-                msgs.append(f"{targ.name} of {trealm.civ_name} has been assassinated!")
+                msgs.append(render(Situation("plot_assassination", {"target": targ},
+                                             data={"civ": trealm.civ_name})))
         else:
             modify_opinion(targ, mast, -40, "uncovered plot")
-            mast.add_stress(30)
+            note = mast.add_stress(30)
+            if note and "mental break" in note:
+                msgs.append(render(Situation("mental_break", {"subject": mast})))
             if random.random() < 0.3 and mrealm.civ_name == trealm.civ_name:
                 mast.is_alive = False
                 mast.age_progress.is_alive = False
-                msgs.append(f"Plot uncovered in {trealm.civ_name}: {mast.name} executed")
+                msgs.append(render(Situation("plot_executed", {"mastermind": mast},
+                                             data={"civ": trealm.civ_name})))
             else:
-                msgs.append(f"A plot against {targ.name} was uncovered")
+                msgs.append(render(Situation("plot_uncovered", {"target": targ},
+                                             data={"civ": trealm.civ_name})))
     return msgs
 
 
