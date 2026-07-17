@@ -10,6 +10,8 @@ lands in M44; share dowries in M45.
 import random
 from typing import Dict, List
 
+from simulation import modify_opinion
+
 SECTORS = ("grain", "timber", "ore", "wool", "wine", "salt")
 
 
@@ -71,3 +73,45 @@ def pay_dividends(realm) -> float:
                 holder.gold_reserve += amt
                 total += amt
     return total
+
+
+def partition_shares(realm, old_ruler, new_ruler, law) -> List[str]:
+    """Succession 2.0 (M44): the dead ruler's stakes partition among heirs.
+
+    Title follows law (handled by the caller). Shares follow testament
+    weighting: the new ruler inherits half of every stake and living adult
+    dynasty kin split the other half evenly; GAVELKIND splits every stake
+    evenly among the new ruler and kin alike. A ruler with no adult kin
+    passes the full portfolio to the successor.
+
+    Non-inheriting kin resent the settlement: -40 opinion of the new ruler,
+    pushing them past the rival threshold that plot logic feeds on.
+    """
+    events: List[str] = []
+    kin = [c for c in realm.dynasty.all_characters.values()
+           if c.is_alive and c.age >= 16 and c.id not in (old_ruler.id, new_ruler.id)]
+    moved = 0.0
+    for ent in realm.enterprises:
+        stake = ent.ledger.pop(old_ruler.id, 0.0)
+        if stake <= 0:
+            continue
+        moved += stake
+        if not kin:
+            ent.assign_share(new_ruler.id, stake)
+        elif law == 'GAVELKIND':
+            share = stake / (len(kin) + 1)
+            ent.assign_share(new_ruler.id, share)
+            for k in kin:
+                ent.assign_share(k.id, share)
+        else:
+            ent.assign_share(new_ruler.id, stake / 2)
+            share = (stake / 2) / len(kin)
+            for k in kin:
+                ent.assign_share(k.id, share)
+    if moved > 0 and kin:
+        for k in kin:
+            modify_opinion(k, new_ruler, -40, "denied the throne")
+        events.append(f"{old_ruler.name}'s shares are partitioned; {len(kin)} kin become shareholder rivals of {new_ruler.name}")
+    elif moved > 0:
+        events.append(f"{new_ruler.name} inherits {old_ruler.name}'s full portfolio")
+    return events

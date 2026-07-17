@@ -7,6 +7,7 @@ from simulation import generate_child, modify_opinion, ATTRIBUTES
 from realms import MALE_NAMES, FEMALE_NAMES, _make_character
 from population import bulk_pass, relevance_set
 from dispositions import apply_drift
+from shares import partition_shares
 
 FEAST_INTERVAL = 12
 CHILD_INTERVAL = 8
@@ -62,6 +63,8 @@ def _tick_realm(game, realm, turn) -> List[str]:
         if heir.id not in realm.dynasty.all_characters:
             realm.dynasty.all_characters[heir.id] = heir
         msgs.append(f"{ruler.name} has died - {heir.name} now rules {realm.civ_name}")
+        msgs.extend(partition_shares(realm, ruler, heir,
+                                     game.succession_laws.get(realm.civ_name, 'PRIMOGENITURE')))
         ruler = heir
 
     # --- births ---

@@ -20,7 +20,7 @@ from simulation import Character, Dynasty, generate_child, modify_opinion, Dynas
 from dispositions import apply_drift
 from court import Court, CourtPosition
 from realms import create_realms
-from shares import found_enterprises, pay_dividends
+from shares import found_enterprises, pay_dividends, partition_shares
 from character_ai import tick_realms
 from event_engine import Situation, render
 from relationships import tick_relationships
@@ -1531,6 +1531,13 @@ class Game:
             # Update court if exists
             if self.court:
                 self.court.ruler = new_ruler
+
+            # Succession 2.0 (M44): the dead ruler's shares partition among heirs
+            realm = self.realms.get(civ_name)
+            if realm is not None:
+                for ev in partition_shares(realm, ruler, new_ruler, law):
+                    succession_msgs.append(f"  {ev}")
+                    self.state.turn_events.append(ev)
 
         # Lost cities become AI-controlled
         for city_name in result['lost_cities']:
