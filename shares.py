@@ -115,3 +115,20 @@ def partition_shares(realm, old_ruler, new_ruler, law) -> List[str]:
     elif moved > 0:
         events.append(f"{new_ruler.name} inherits {old_ruler.name}'s full portfolio")
     return events
+
+
+def transfer_shares(ent, from_id: str, to_id: str, pct: float) -> float:
+    """Move up to pct of an enterprise from one holder to another (M45).
+
+    Returns the amount actually moved. The ledger keeps summing to 100.
+    """
+    held = ent.ledger.get(from_id, 0.0)
+    amt = min(pct, held)
+    if amt <= 0:
+        return 0.0
+    if held - amt <= 1e-9:
+        ent.ledger.pop(from_id, None)
+    else:
+        ent.ledger[from_id] = held - amt
+    ent.assign_share(to_id, amt)
+    return amt
