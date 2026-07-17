@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Tuple
 from game_data import UNIT_TYPES, UnitType, TERRAIN_DEFENSE_BONUS, TerrainType, UnitCategory
 from combat import CombatResult, resolve_combat
 from court import CourtPosition
+from dispositions import apply_drift
 
 
 class Unit:
@@ -29,6 +30,7 @@ class Unit:
         self.last_combat_result = None
         self.kills = 0
         self.has_fought = False  # fought this turn; blocks healing (M30)
+        self.commander = None    # posted Commander character (M48), or None
         self.is_busy = False
         self.busy_type: str = ""
         self.busy_target: str = ""
@@ -194,6 +196,14 @@ class MilitaryManager:
         if self.game is not None:
             att_ruler = self.game.rulers.get(attacker.owner)
             def_ruler = self.game.rulers.get(defender.owner)
+        # Commander (M48, spec 4.4): a living posted commander leads the
+        # fight in the ruler's stead - their Command drives the multiplier.
+        att_cmd = getattr(attacker, "commander", None)
+        if att_cmd is not None and getattr(att_cmd, "is_alive", False):
+            att_ruler = att_cmd
+        def_cmd = getattr(defender, "commander", None)
+        if def_cmd is not None and getattr(def_cmd, "is_alive", False):
+            def_ruler = def_cmd
             # Head of Security (M46b): +1% strength per point of command.
             realms = getattr(self.game, "realms", None) or {}
             att_realm = realms.get(attacker.owner)
@@ -211,6 +221,20 @@ class MilitaryManager:
             if _t is not None:
                 _t["battles"] = _t.get("battles", 0) + 1
 
+        # Defeat and glory (M48): battles mark the commanders who led them.
+        if not attacker.is_alive and att_cmd is not None and att_cmd.is_alive:
+            att_cmd.add_stress(20)
+            apply_drift(att_cmd, "bold_craven", 8.0, "defeat")
+        if not defender.is_alive and def_cmd is not None and def_cmd.is_alive:
+            def_cmd.add_stress(20)
+            apply_drift(def_cmd, "bold_craven", 8.0, "defeat")
+        if not defender.is_alive and att_cmd is not None and att_cmd.is_alive:
+            att_cmd.reduce_stress(10)
+            apply_drift(att_cmd, "bold_craven", -4.0, "glory")
+        if not attacker.is_alive and def_cmd is not None and def_cmd.is_alive:
+            def_cmd.reduce_stress(10)
+            apply_drift(def_cmd, "bold_craven", -4.0, "glory")
+
         attacker.has_fought = True
         defender.has_fought = True
         attacker.last_combat_result = result
@@ -227,6 +251,10 @@ class MilitaryManager:
                 unit._fortify_turns = getattr(unit, "_fortify_turns", 0) + 1
             else:
                 unit._fortify_turns = 0
+            cmd = getattr(unit, "commander", None)
+            if (cmd is not None and getattr(cmd, "is_alive", False)
+                    and not getattr(unit, "has_fought", False)):
+                cmd.add_stress(1)  # glory-starvation (M48, spec 4.4)
             if getattr(unit, "has_fought", False):
                 unit.has_fought = False
             elif unit.hp < unit.max_hp:
