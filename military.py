@@ -6,6 +6,7 @@ import random
 from typing import List, Dict, Optional, Tuple
 from game_data import UNIT_TYPES, UnitType, TERRAIN_DEFENSE_BONUS, TerrainType, UnitCategory
 from combat import CombatResult, resolve_combat
+from court import CourtPosition
 
 
 class Unit:
@@ -189,11 +190,22 @@ class MilitaryManager:
             tile = self.map.tiles.get(defender.position)
 
         att_ruler = def_ruler = None
+        att_cb = def_cb = 0.0
         if self.game is not None:
             att_ruler = self.game.rulers.get(attacker.owner)
             def_ruler = self.game.rulers.get(defender.owner)
+            # Head of Security (M46b): +1% strength per point of command.
+            realms = getattr(self.game, "realms", None) or {}
+            att_realm = realms.get(attacker.owner)
+            def_realm = realms.get(defender.owner)
+            if att_realm is not None:
+                att_cb = att_realm.court.get_bonus(CourtPosition.HEAD_OF_SECURITY) / 100.0
+            if def_realm is not None:
+                def_cb = def_realm.court.get_bonus(CourtPosition.HEAD_OF_SECURITY) / 100.0
 
-        result = resolve_combat([attacker], [defender], tile, att_ruler, def_ruler)
+        result = resolve_combat([attacker], [defender], tile, att_ruler, def_ruler,
+                                attacker_council_bonus=att_cb,
+                                defender_council_bonus=def_cb)
         if self.game is not None:
             _t = getattr(self.game, "_telemetry", None)
             if _t is not None:

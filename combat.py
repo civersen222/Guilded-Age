@@ -145,6 +145,8 @@ def resolve_combat(
     tile: HexTile,
     attacker_ruler: Character,
     defender_ruler: Character,
+    attacker_council_bonus: float = 0.0,
+    defender_council_bonus: float = 0.0,
 ) -> CombatResult:
     """Resolve tactical combat between two armies.
 
@@ -165,10 +167,10 @@ def resolve_combat(
     # None-safe modifiers (M29): callers may pass no tile or a non-Character
     # ruler; treat those as neutral (no bonus) instead of crashing.
     terrain_mod = _terrain_defense_mod(tile) if tile is not None else 1.0
-    att_ruler_bonus = 1.0
+    att_ruler_bonus = 1.0 + attacker_council_bonus
     if attacker_ruler is not None and hasattr(attacker_ruler, "get_effective_stat"):
         att_ruler_bonus += attacker_ruler.get_effective_stat("command") / 100.0
-    def_ruler_bonus = 1.0
+    def_ruler_bonus = 1.0 + defender_council_bonus
     if defender_ruler is not None and hasattr(defender_ruler, "get_effective_stat"):
         def_ruler_bonus += defender_ruler.get_effective_stat("command") / 100.0
 
