@@ -11,7 +11,7 @@ from character_deepening import (
     get_available_traits,
     apply_traits_to_stats,
 )
-from dispositions import initial_dispositions, labels_for, inherit_dispositions, contradiction_stress
+from dispositions import initial_dispositions, labels_for, inherit_dispositions, contradiction_stress, apply_drift, VICE_DRIFTS
 
 # Six attributes (character-society spec 3.2) and legacy 4-stat compatibility
 ATTRIBUTES = ["statecraft", "command", "industry", "intrigue", "science", "resolve"]
@@ -73,6 +73,24 @@ STRESS_THRESHOLDS = {
     300: ('Breaking Point', -0.50, -2),
 }
 
+
+class Secret:
+    """A fact society doesn't know (spec 3.5): lives in the persona gap.
+
+    Discovered, held, sold or exposed by the intrigue economy (later
+    missions); for now created by mental-break vices."""
+
+    def __init__(self, kind: str, subject_id: str, description: str, potency: int):
+        self.kind = kind                    # "vice", "affair", "crime"...
+        self.subject_id = subject_id        # whose secret it is
+        self.description = description
+        self.potency = potency              # scandal power when exposed
+        self.holders: Set[str] = {subject_id}   # who knows; subject always does
+
+    def is_known_by(self, char_id: str) -> bool:
+        return char_id in self.holders
+
+
 class Character:
     def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18, gender: str = "Male"):
         self.id = str(uuid.uuid4())[:8]
@@ -91,6 +109,11 @@ class Character:
         
         # Stress system
         self.stress = 0  # range 0-300
+
+        # Spec 3.5: public persona (what society believes) vs private self
+        # (self.dispositions). Secrets live in the gap between the two.
+        self.persona: Dict[str, float] = dict(self.dispositions)
+        self.secrets: List[Secret] = []
         
         # Section 6: Character deepening
         self.age_progress = AgeProgress(current_age=age, is_alive=True)
@@ -154,6 +177,12 @@ class Character:
                 vice = random.choice(COPING_VICES)
                 self.add_trait(vice)
                 self.stress = max(self.stress - 100, 0)
+                # The vice is lived in private (spec 3.5): the true spectrum
+                # shifts while the public persona lags - a Secret in the gap.
+                pair_key, amt = VICE_DRIFTS[vice]
+                apply_drift(self, pair_key, amt, "coping vice")
+                self.secrets.append(Secret(
+                    "vice", self.id, f"{self.name} has secretly become {vice}", 25))
                 return (f"{self.name} suffers a mental break and becomes "
                         f"{vice} (stress: {self.stress})")
             return f"{self.name} is now '{new_level}' (stress: {self.stress})"
@@ -285,6 +314,7 @@ def generate_child(name: str, parent_a: Character, parent_b: Character) -> Chara
     # 4. Genetics (spec 3.3): Bloodline spectrums blend from the parents
     # with mutation; Temperament/Conviction re-seed near neutral.
     child.dispositions = inherit_dispositions(parent_a.dispositions, parent_b.dispositions)
+    child.persona = dict(child.dispositions)  # public estimate starts honest (spec 3.5)
 
     # Update parents' children lists
     parent_a.children_ids.append(child.id)

@@ -167,3 +167,13 @@ def contradiction_stress(dispositions: Dict[str, float], action_type: str) -> in
         elif sign < 0 and v <= -LABEL_THRESHOLD:
             total += -v / 5.0
     return int(total)
+
+
+# Spec 3.5: a coping vice is lived in private - it shifts the TRUE spectrum
+# while the public persona lags behind. vice -> (pair_key, private_drift).
+VICE_DRIFTS: Dict[str, tuple] = {
+    "Drunkard": ("temperate_hedonist", 15.0),
+    "Gambler": ("patient_impulsive", 15.0),
+    "Callous": ("cruel_compassionate", -15.0),
+    "Recluse": ("gregarious_reclusive", 15.0),
+}
