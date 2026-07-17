@@ -16,6 +16,18 @@ BTN_BG = (30, 32, 40)
 BTN_HIGHLIGHT = (40, 44, 55)
 
 
+def city_status_text(city):
+    """Siege/damage status string for a city, or None at full strength (P5)."""
+    occ = getattr(city, "occupied_turns", 0)
+    if occ > 0:
+        return f"OCCUPIED ({occ})"
+    hp = getattr(city, "hp", None)
+    max_hp = city.city_max_hp() if hasattr(city, "city_max_hp") else 0
+    if hp is not None and max_hp and hp < max_hp:
+        return f"HP {hp}/{max_hp}"
+    return None
+
+
 class CityPanel:
     """Left sidebar listing player cities."""
 
@@ -101,6 +113,12 @@ class CityPanel:
             prod_surf = self._font.render(f"[{prod_name}]", True, SUBTLE)
             px = rect.x + rect.width - prod_surf.get_width() - 10
             surface.blit(prod_surf, (px, rect.y + 22))
+
+            # Siege / occupied state (P5)
+            status = city_status_text(city)
+            if status:
+                st_surf = self._font.render(status, True, (255, 80, 80))
+                surface.blit(st_surf, (rect.x + 10, rect.y + 22))
 
     def handle_event(self, event) -> Optional[Any]:
         """If a city button was pressed, return the city. Otherwise None."""
