@@ -40,6 +40,7 @@ def tick_relationships(game) -> List[str]:
     for civ_name, realm in realms.items():
         msgs.extend(_succession_grievances(civ_name, realm))
         msgs.extend(_grievances(realm))
+        msgs.extend(_discover_secrets(realm))
         msgs.extend(_maybe_start_plot(game, civ_name, realm))
     msgs.extend(_advance_plots(game, realms))
     _factions_from_opinions(game)
@@ -134,6 +135,32 @@ def _grievances(realm) -> List[str]:
             modify_opinion(c, ruler, -random.randint(5, 12), "ambition")
             if not was_rival and get_relation(c, ruler) == "rival":
                 msgs.append(f"{c.name} has become a rival of {ruler.name}")
+    return msgs
+
+
+def _discover_secrets(realm) -> List[str]:
+    """Spec 3.5: courtiers sniff out the realm's secrets; discovery chance
+    scales with the observer's Intrigue (1% per point per turn, cap 30%)."""
+    msgs: List[str] = []
+    observers = [c for c in realm.court.positions.values()
+                 if c is not None and c.is_alive]
+    ruler = realm.ruler
+    if ruler is not None and ruler.is_alive and ruler not in observers:
+        observers.append(ruler)
+    subjects = list(observers)
+    for c in realm.dynasty.all_characters.values():
+        if c.is_alive and c not in subjects:
+            subjects.append(c)
+    for subject in subjects:
+        for secret in subject.secrets:
+            for obs in observers:
+                if obs.id == subject.id or secret.is_known_by(obs.id):
+                    continue
+                chance = min(0.3, obs.get_effective_stat("intrigue") * 0.01)
+                if random.random() < chance:
+                    secret.holders.add(obs.id)
+                    msgs.append(f"{obs.name} has uncovered a secret: "
+                                f"{secret.description}")
     return msgs
 
 
