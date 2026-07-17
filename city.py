@@ -71,6 +71,9 @@ class City:
         self.was_attacked: bool = False  # suppresses city healing this turn
         # Director (M47, spec 4.4): the city's governor character, or None.
         self.director: Optional[Any] = None
+        # Extraction dial (M55, spec 5.1): how hard the House squeezes labor.
+        self.extraction_dial: float = 50.0
+        self.unrest: float = 0.0   # accumulator; labor movements consume it in M56+
 
     def _director(self):
         """The living director, or None (dead/vacant = neutral)."""
@@ -454,6 +457,10 @@ class City:
         # trade profit vs unrest (unrest lands in empire happiness).
         yields["production"] *= self.director_production_multiplier()
         yields["gold"] *= self.director_profit_multiplier()
+
+        # Extraction dial (M55, spec 5.1): the squeeze scales production.
+        from labor import production_multiplier
+        yields["production"] *= production_multiplier(self.extraction_dial)
 
         # Population bonuses
         yields["food"] += self.population * 0.5

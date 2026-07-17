@@ -537,6 +537,15 @@ class AIPlayer:
                      f"{self.priorities['economy']*100:.0f}% economy, "
                      f"{self.priorities['expansion']*100:.0f}% expansion")
 
+        # Extraction dial (M55, spec 5.1): the ruler's convictions set how
+        # hard every House city squeezes its labor this turn.
+        from labor import dial_from_ruler
+        _realm = getattr(game, "realms", {}).get(self.civ_name)
+        _dial = dial_from_ruler(getattr(_realm, "ruler", None))
+        for _city in game.cities.values():
+            if _city.owner == self.civ_name:
+                _city.extraction_dial = _dial
+
         # 1. Research
         msgs.extend(self._manage_research(game))
 

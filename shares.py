@@ -57,19 +57,27 @@ def found_enterprises(realm, cities) -> List["Enterprise"]:
     return out
 
 
-def pay_dividends(realm) -> float:
+def pay_dividends(realm, cities=None) -> float:
     """Pay every enterprise's yield into living holders' gold_reserve.
 
     Returns the house's total payout this turn. Dead holders' shares simply
-    do not pay out (succession partition reassigns them in M44).
+    do not pay out (succession partition reassigns them in M44). If a
+    cities mapping (name -> City) is given, each enterprise's payout is
+    scaled by its city's extraction dial (M55, spec 5.1).
     """
+    from labor import dividend_multiplier, DIAL_DEFAULT
     by_id = {c.id: c for c in realm.characters}
     total = 0.0
     for ent in realm.enterprises:
+        mult = 1.0
+        if cities is not None:
+            city = cities.get(ent.city_name)
+            if city is not None:
+                mult = dividend_multiplier(getattr(city, "extraction_dial", DIAL_DEFAULT))
         for char_id, pct in ent.ledger.items():
             holder = by_id.get(char_id)
             if holder is not None and holder.is_alive:
-                amt = ent.base_yield * pct / 100.0
+                amt = ent.base_yield * pct / 100.0 * mult
                 holder.gold_reserve += amt
                 total += amt
     return total

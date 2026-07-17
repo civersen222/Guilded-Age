@@ -709,9 +709,11 @@ class Game:
         self.gold[civ_name] += tax_income
         msgs.append(f"  Tax Income: +{tax_income} gold")
 
-        # 1b. House dividends (M43): enterprises pay their shareholding ledgers
+        # 1b. House dividends (M43): enterprises pay their shareholding ledgers,
+        # scaled by each enterprise city's extraction dial (M55, spec 5.1).
+        _city_by_name = {c.name: c for c in self.cities.values()}
         for _realm in self.realms.values():
-            _payout = pay_dividends(_realm)
+            _payout = pay_dividends(_realm, _city_by_name)
             if _payout > 0:
                 self._telemetry["dividends"][_realm.civ_name] = self._telemetry["dividends"].get(_realm.civ_name, 0.0) + _payout
             if _realm.civ_name == civ_name and _payout > 0:
@@ -827,6 +829,12 @@ class Game:
                 city.grow(self.map.tiles, growth_mod)
                 if city.population > old_pop:
                     self.state.turn_events.append(f"{city.name} has grown to population {city.population}!")
+
+                # Extraction tick (M55, spec 5.1): unrest accrues and
+                # industrial accidents roll while the dial runs hot.
+                from labor import tick_extraction
+                for _ev in tick_extraction(city):
+                    self.state.turn_events.append(_ev)
                 
                 # Process production for each city
                 if city.production_queue:
