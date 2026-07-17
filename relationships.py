@@ -5,6 +5,7 @@ from typing import List
 
 from simulation import opinion_matrix, modify_opinion
 from realms import _make_character
+from dispositions import apply_drift
 
 RIVAL_AT = -25
 FRIEND_AT = 25
@@ -108,6 +109,11 @@ def _succession_grievances(civ_name, realm) -> List[str]:
             continue
         was_rival = get_relation(c, ruler) == "rival"
         modify_opinion(c, ruler, -random.randint(15, 30), "passed over")
+        # Being passed over marks a person for life (spec 3.4 drift).
+        for pk, amt in (("forgiving_vengeful", 12.0), ("ambitious_content", -8.0)):
+            d = apply_drift(c, pk, amt, "passed over")
+            if d:
+                msgs.append(d)
         if not was_rival and get_relation(c, ruler) == "rival":
             msgs.append(f"{c.name} has become a rival of {ruler.name}")
     return msgs

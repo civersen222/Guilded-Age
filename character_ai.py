@@ -6,6 +6,7 @@ from typing import List, Optional
 from simulation import generate_child, modify_opinion, ATTRIBUTES
 from realms import MALE_NAMES, FEMALE_NAMES, _make_character
 from population import bulk_pass, relevance_set
+from dispositions import apply_drift
 
 FEAST_INTERVAL = 12
 CHILD_INTERVAL = 8
@@ -118,13 +119,19 @@ def _ruler_action(game, realm, ruler, turn) -> Optional[str]:
         ruler.reduce_stress(15)
         for c in others:
             modify_opinion(c, ruler, random.randint(3, 8), "feast")
-        return f"{ruler.name} hosts a great feast in {realm.civ_name}"
+        # A life of feasting shapes the host (spec 3.4 drift).
+        drift = apply_drift(ruler, "gregarious_reclusive", -4.0, "hosting feasts")
+        base = f"{ruler.name} hosts a great feast in {realm.civ_name}"
+        return f"{base} - {drift}" if drift else base
     rivals = [r for n, r in game.rulers.items() if n != realm.civ_name and r.is_alive]
     if cunning and rivals and random.random() < 0.25:
         target = random.choice(rivals)
         modify_opinion(target, ruler, -random.randint(4, 10), "scheme")
         ruler.add_stress(5)
-        return f"{ruler.name} schemes against {target.name}"
+        # Habitual scheming corrodes honesty (spec 3.4 drift).
+        drift = apply_drift(ruler, "honest_deceitful", 5.0, "scheming")
+        base = f"{ruler.name} schemes against {target.name}"
+        return f"{base} - {drift}" if drift else base
     if social and others and random.random() < 0.3:
         modify_opinion(random.choice(others), ruler, random.randint(2, 6), "royal favor")
         return None
