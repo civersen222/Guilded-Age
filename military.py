@@ -196,14 +196,6 @@ class MilitaryManager:
         if self.game is not None:
             att_ruler = self.game.rulers.get(attacker.owner)
             def_ruler = self.game.rulers.get(defender.owner)
-        # Commander (M48, spec 4.4): a living posted commander leads the
-        # fight in the ruler's stead - their Command drives the multiplier.
-        att_cmd = getattr(attacker, "commander", None)
-        if att_cmd is not None and getattr(att_cmd, "is_alive", False):
-            att_ruler = att_cmd
-        def_cmd = getattr(defender, "commander", None)
-        if def_cmd is not None and getattr(def_cmd, "is_alive", False):
-            def_ruler = def_cmd
             # Head of Security (M46b): +1% strength per point of command.
             realms = getattr(self.game, "realms", None) or {}
             att_realm = realms.get(attacker.owner)
@@ -212,6 +204,14 @@ class MilitaryManager:
                 att_cb = att_realm.court.get_bonus(CourtPosition.HEAD_OF_SECURITY) / 100.0
             if def_realm is not None:
                 def_cb = def_realm.court.get_bonus(CourtPosition.HEAD_OF_SECURITY) / 100.0
+        # Commander (M48, spec 4.4): a living posted commander leads the
+        # fight in the ruler's stead - their Command drives the multiplier.
+        att_cmd = getattr(attacker, "commander", None)
+        if att_cmd is not None and getattr(att_cmd, "is_alive", False):
+            att_ruler = att_cmd
+        def_cmd = getattr(defender, "commander", None)
+        if def_cmd is not None and getattr(def_cmd, "is_alive", False):
+            def_ruler = def_cmd
 
         result = resolve_combat([attacker], [defender], tile, att_ruler, def_ruler,
                                 attacker_council_bonus=att_cb,
