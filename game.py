@@ -597,6 +597,7 @@ class Game:
 
         # Process war weariness
         self.process_war_weariness(msgs)
+        self.diplomacy_manager.process_truces()  # truces tick down each turn (M33)
         
         # Calculate happiness for all civilizations
         for civ_name in self.civilizations:
@@ -1487,7 +1488,9 @@ class Game:
         demand = sum(3 + city.population + (5 if getattr(city, "occupied_turns", 0) > 0 else 0)
                      for city in civ_cities)
 
-        happiness = int(9 + luxury_bonus + building_bonus + gov_bonus - demand)
+        # War weariness (M33, spec 3.4): -1 happiness per 10 weariness
+        weariness_penalty = self.war_weariness.get(civ_name, 0) // 10
+        happiness = int(9 + luxury_bonus + building_bonus + gov_bonus - demand - weariness_penalty)
         self.happiness[civ_name] = happiness
 
         if happiness < 0:

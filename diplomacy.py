@@ -71,8 +71,11 @@ class DiplomacyManager:
         current = self.relations.get(pair, 0)
         self.relations[pair] = max(-100, min(100, current + amount))
     
-    def declare_war(self, aggressor: str, defender: str):
-        """Declare war between two civilizations"""
+    def declare_war(self, aggressor: str, defender: str) -> bool:
+        """Declare war. Returns False while a truce still binds the pair (M33)."""
+        pair = tuple(sorted([aggressor, defender]))
+        if self.truces.get(pair, 0) > 0:
+            return False
         if aggressor not in self.wars:
             self.wars[aggressor] = []
         if defender not in self.wars[aggressor]:
@@ -84,6 +87,7 @@ class DiplomacyManager:
             self.wars[defender].append(aggressor)
         
         self.modify_relation(aggressor, defender, -50)
+        return True
     
     def make_pact(self, civ_a: str, civ_b: str, pact_type: str = "alliance"):
         """Create a diplomatic pact"""
@@ -122,6 +126,14 @@ class DiplomacyManager:
         for pair in expired:
             del self.truces[pair]
     
+    def make_peace(self, civ_a: str, civ_b: str, truce_turns: int = 10):
+        """End a war (M33): both sides stand down and a truce begins."""
+        if civ_a in self.wars and civ_b in self.wars[civ_a]:
+            self.wars[civ_a].remove(civ_b)
+        if civ_b in self.wars and civ_a in self.wars[civ_b]:
+            self.wars[civ_b].remove(civ_a)
+        self.sign_truce(civ_a, civ_b, truce_turns)
+
     def is_at_war(self, civ_a: str, civ_b: str) -> bool:
         """Check if two civilizations are at war"""
         if civ_a in self.wars and civ_b in self.wars[civ_a]:
@@ -192,7 +204,7 @@ class DiplomacyManager:
         proposer ruler's statecraft (1 relation point per attribute point)."""
         bonus = ruler.get_effective_stat("statecraft") if ruler is not None else 0
         if self.get_relation(civ_a, civ_b) + bonus >= -30:
-            self.sign_truce(civ_a, civ_b, 20)
+            self.make_peace(civ_a, civ_b, truce_turns=20)
             self.modify_relation(civ_a, civ_b, 10)
             return f"🕊️ {civ_b} accepts peace with {civ_a}"
         self.modify_relation(civ_a, civ_b, 2)

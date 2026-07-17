@@ -383,9 +383,10 @@ class AIPlayer:
 
             # Relation < -30 and not at war: 20% chance declare war
             if relation < -30 and not at_war:
-                if random.random() < 0.2:
-                    game.diplomacy_manager.declare_war(self.civ_name, target)
-                    self.war_targets.append(target)
+                if (random.random() < 0.2
+                        and game.diplomacy_manager.declare_war(self.civ_name, target)):
+                    if target not in self.war_targets:
+                        self.war_targets.append(target)
                     msg = f"⚔️ {self.civ_name} declares war on {target} (relation {relation})"
                     msgs.append(f"    {msg}")
                     game.state.turn_events.append(msg)
@@ -393,6 +394,17 @@ class AIPlayer:
                         "action": "declare_war", "target": target,
                         "turn": game.state.turn,
                     })
+
+            # War weariness (M33): weary AIs sue for peace
+            elif at_war and game.war_weariness.get(self.civ_name, 0) >= 50:
+                if random.random() < 0.25:
+                    ruler = game.rulers.get(self.civ_name)
+                    result = game.diplomacy_manager.propose_peace(self.civ_name, target, ruler)
+                    msgs.append(f"    {result}")
+                    game.state.turn_events.append(result)
+                    if not game.diplomacy_manager.is_at_war(self.civ_name, target):
+                        if target in self.war_targets:
+                            self.war_targets.remove(target)
 
             # Relation > 30 and not allied: 15% chance propose alliance
             elif relation > 30 and not allied and not at_war:
@@ -423,8 +435,7 @@ class AIPlayer:
         return msgs
 
     def _is_at_war(self, game, target: str) -> bool:
-        relations = game.diplomacy_manager.relations.get(self.civ_name, {})
-        return relations.get(target) == "war"
+        return game.diplomacy_manager.is_at_war(self.civ_name, target)
 
     def _evaluate_diplomacy_stance(self, other_civ: str, game_state) -> str:
         """Evaluate stance toward another civ: 'friendly', 'neutral', or 'hostile'.
