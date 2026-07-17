@@ -108,6 +108,14 @@ class City:
         v = d.dispositions.get("cruel_compassionate", 0.0)
         return max(0.0, -v) / 500.0
 
+    def revolt_risk(self) -> float:
+        """Loyalty hook (M49, consumed in Wave PE): a disloyal Director may
+        hand the city to revolutionaries. 0.0 with no (living) Director."""
+        d = self._director()
+        if d is None:
+            return 0.0
+        return max(0.0, 25.0 - getattr(d, "loyalty", 50.0)) / 100.0
+
     def city_max_hp(self) -> int:
         """Walls add an HP tier (M31)."""
         return 200 + (100 if "Wall" in self.buildings else 0)

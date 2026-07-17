@@ -4,7 +4,7 @@ import random
 from typing import List
 
 from simulation import opinion_matrix, modify_opinion
-from realms import _make_character
+from realms import _make_character, tick_loyalty
 from dispositions import apply_drift
 from event_engine import Situation, render
 
@@ -38,6 +38,7 @@ def tick_relationships(game) -> List[str]:
     msgs: List[str] = []
     realms = getattr(game, "realms", None) or {}
     _fill_player_court(game, realms)
+    msgs.extend(tick_loyalty(game))
     for civ_name, realm in realms.items():
         msgs.extend(_succession_grievances(civ_name, realm))
         msgs.extend(_grievances(realm))

@@ -132,3 +132,32 @@ def transfer_shares(ent, from_id: str, to_id: str, pct: float) -> float:
         ent.ledger[from_id] = held - amt
     ent.assign_share(to_id, amt)
     return amt
+
+
+EMBEZZLE_LOYALTY = 25.0
+EMBEZZLE_CHANCE = 0.25
+
+
+def embezzle(game, realm, cities) -> List[str]:
+    """Low-loyalty Directors skim the books (M49): gold moves from the civ
+    treasury into the Director's private gold_reserve."""
+    events: List[str] = []
+    gold = getattr(game, "gold", None)
+    if gold is None:
+        return events
+    civ = realm.civ_name
+    for city in cities:
+        d = city.director
+        if d is None or not d.is_alive:
+            continue
+        if getattr(d, "loyalty", 50.0) >= EMBEZZLE_LOYALTY:
+            continue
+        if random.random() >= EMBEZZLE_CHANCE:
+            continue
+        take = min(10, int(gold.get(civ, 0)))
+        if take <= 0:
+            continue
+        gold[civ] = gold.get(civ, 0) - take
+        d.gold_reserve += take
+        events.append(f"{d.name} embezzles {take}g from the {city.name} books")
+    return events

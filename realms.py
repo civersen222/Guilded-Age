@@ -110,3 +110,44 @@ def tick_directors(game) -> List[str]:
             else:
                 events.append(f"{director.name} is appointed Director of {city.name}")
     return events
+
+
+LOYALTY_START = 50.0
+
+
+def tick_loyalty(game) -> List[str]:
+    """Loyalty (M49, spec 4.4): council members and Directors hold loyalty
+    0-100 rebuilt each turn from opinion of the ruler, treatment (a shares
+    salary), and Conviction alignment (Labor/Capital axis). The disloyal
+    embezzle now (shares.embezzle); defection and revolution hooks are
+    consumed in Waves IN and PE."""
+    from shares import embezzle
+    from simulation import opinion_matrix
+    events: List[str] = []
+    realms = getattr(game, "realms", None) or {}
+    for civ_name, realm in realms.items():
+        ruler = realm.ruler
+        if ruler is None or not ruler.is_alive:
+            continue
+        cities = [c for c in game.cities.values() if c.owner == civ_name]
+        posted = {}
+        for ch in realm.court.positions.values():
+            if ch is not None and ch.is_alive:
+                posted[ch.id] = ch
+        for c in cities:
+            d = c.director
+            if d is not None and d.is_alive:
+                posted[d.id] = d
+        for ch in posted.values():
+            if ch.id == ruler.id:
+                continue
+            opinion = opinion_matrix.get((ch.id, ruler.id), 0)
+            paid = any(ch.id in ent.ledger for ent in realm.enterprises)
+            treatment = 10.0 if paid else -10.0
+            align = 10.0 - abs(ch.dispositions.get("labor_capital", 0.0)
+                               - ruler.dispositions.get("labor_capital", 0.0)) / 10.0
+            target = max(0.0, min(100.0, 50.0 + opinion / 2.0 + treatment + align))
+            cur = getattr(ch, "loyalty", LOYALTY_START)
+            ch.loyalty = cur + (target - cur) * 0.2
+        events.extend(embezzle(game, realm, cities))
+    return events
