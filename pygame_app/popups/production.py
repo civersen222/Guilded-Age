@@ -57,8 +57,8 @@ class ProductionPopup:
         if self._game and hasattr(self._game, "tech_manager"):
             tm = self._game.tech_manager
             researched_techs = set(getattr(tm, "unlocked_techs", set()))
-        if self._game and hasattr(self._game, "economy"):
-            owned_resources = set(getattr(self._game.economy, "resources", {}).keys())
+        if self._game and hasattr(self._game, "get_owned_resources"):
+            owned_resources = self._game.get_owned_resources(getattr(city, "owner", ""))
 
         buildable_units = city.get_buildable_units(researched_techs=researched_techs, owned_resources=owned_resources)
         buildable_buildings = city.get_buildable_buildings(researched_techs=researched_techs)
@@ -196,8 +196,8 @@ class ProductionPopup:
             researched = set(getattr(tm, "unlocked_techs", set()))
 
         owned_res = None
-        if self._game and hasattr(self._game, "economy"):
-            owned_res = set(getattr(self._game.economy, "resources", {}).keys())
+        if self._game and hasattr(self._game, "get_owned_resources"):
+            owned_res = self._game.get_owned_resources(getattr(self._city, "owner", ""))
 
         if item_id.startswith("wonder:"):
             wonder_name = item_id[len("wonder:"):]

@@ -60,6 +60,7 @@ class City:
         self._adjacency_scores: Dict[str, Dict[str, float]] = {}
         # Tile ownership & border growth (deep-systems spec 1.3/1.7)
         self.owned_tiles: set = set()      # (x, y) positions this city owns and may work
+        self.initialize_borders()
         self.culture_basket: float = 0.0   # culture stored toward the next tile claim
         self.tiles_claimed: int = 0        # tiles claimed beyond the initial radius-1 ring
         self.growth_basket: float = 0.0    # food surplus stored toward the next citizen
@@ -556,8 +557,8 @@ class City:
             # Check tech requirement
             if utype.requires_tech and researched_techs and utype.requires_tech not in researched_techs:
                 continue
-            # Check resource requirement
-            if utype.resource_required and owned_resources and utype.resource_required not in owned_resources:
+            # Check resource requirement (M32: None means "don't gate"; empty set gates)
+            if utype.resource_required and owned_resources is not None and utype.resource_required not in owned_resources:
                 continue
             # Check already in queue or current
             if uname in self.production_queue or uname == self.current_production:
@@ -603,8 +604,8 @@ class City:
                 return False
         elif item in UNIT_TYPES:
             utype = UNIT_TYPES[item]
-            # Check resource requirement
-            if utype.resource_required and owned_resources and utype.resource_required not in owned_resources:
+            # Check resource requirement (M32: None means "don't gate"; empty set gates)
+            if utype.resource_required and owned_resources is not None and utype.resource_required not in owned_resources:
                 return False
             # Check technology requirement
             if utype.requires_tech and researched_techs and utype.requires_tech not in researched_techs:

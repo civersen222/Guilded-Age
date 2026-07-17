@@ -1823,6 +1823,19 @@ class Game:
         with open(filepath) as f:
             return json.load(f)
 
+    def get_owned_resources(self, civ_name: str) -> set:
+        """Strategic resource names (e.g. 'Iron') on tiles inside civ_name's city borders (M32)."""
+        owned = set()
+        for city in self.cities.values():
+            if city.owner != civ_name:
+                continue
+            for pos in getattr(city, "owned_tiles", set()):
+                tile = self.map.tiles.get(pos)
+                resource = getattr(tile, "resource", None) if tile is not None else None
+                if resource is not None and getattr(resource, "category", None) == "Strategic":
+                    owned.add(resource.display_name)
+        return owned
+
     def get_tile_yield(self, x: int, y: int) -> Dict[str, int]:
         """Return yield bonuses from the resource on tile (x, y)."""
         resource = self.tile_resources.get((x, y))

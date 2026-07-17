@@ -145,6 +145,7 @@ class AIPlayer:
         units = [u for u in game.units.values() if u.owner == self.civ_name]
         tm = game.research.get(self.civ_name)
         researched = set(tm.researched.keys()) if tm else set()
+        owned_resources = game.get_owned_resources(self.civ_name)
 
         # Count existing military vs workers/settlers
         military_count = sum(1 for u in units
@@ -164,24 +165,28 @@ class AIPlayer:
 
         # If military priority high or threats exist, build military unit
         if adj["military"] > 0.35 or len(self.war_targets) > 0:
-            military_pool = self._get_available_military(researched)
+            military_pool = self._get_available_military(researched, owned_resources)
             if military_pool:
                 return random.choice(military_pool)
 
         # Default: balance between production and military
         if adj["military"] > adj["science"] and random.random() < 0.5:
-            military_pool = self._get_available_military(researched)
+            military_pool = self._get_available_military(researched, owned_resources)
             if military_pool:
                 return random.choice(military_pool)
         return "Barracks" if "Barracks" not in getattr(city, "buildings", []) else "Marketplace"
 
-    def _get_available_military(self, researched: Set[str]) -> List[str]:
-        """Get military units available given researched tech."""
+    def _get_available_military(self, researched: Set[str],
+                                owned_resources: Optional[Set[str]] = None) -> List[str]:
+        """Get military units available given researched tech and strategic resources (M32)."""
         pool = []
         for name, utype in UNIT_TYPES.items():
             if utype.category not in (UnitCategory.MELEE, UnitCategory.RANGED, UnitCategory.CAVALRY):
                 continue
             if utype.requires_tech and utype.requires_tech not in researched:
+                continue
+            if (utype.resource_required and owned_resources is not None
+                    and utype.resource_required not in owned_resources):
                 continue
             pool.append(name)
         return pool
@@ -215,7 +220,7 @@ class AIPlayer:
                     city.assign_production(item, researched_techs=set(
                         game.research.get(self.civ_name, {}).researched.keys()
                         if game.research.get(self.civ_name) else set()
-                    ))
+                    ), owned_resources=game.get_owned_resources(self.civ_name))
                     msgs.append(f"    🏭 {city.name}: producing {item}")
 
         # Advance production for all cities
