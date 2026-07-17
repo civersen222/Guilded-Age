@@ -21,6 +21,7 @@ from dispositions import apply_drift
 from court import Court, CourtPosition
 from realms import create_realms
 from character_ai import tick_realms
+from event_engine import Situation, render
 from relationships import tick_relationships
 from marriages import tick_marriages
 from city import CityManager
@@ -1503,7 +1504,11 @@ class Game:
         new_ruler = result['new_ruler']
         if new_ruler:
             self.rulers[civ_name] = new_ruler
-            succession_msgs.append(f"  New ruler: {new_ruler.name}")
+            # Situation renderer (M41): state applied above, prose varies.
+            line = render(Situation("succession", {"old": ruler, "new": new_ruler},
+                                    data={"civ": civ_name}))
+            succession_msgs.append(f"  {line}")
+            self.state.turn_events.append(f"👑 {line}")
 
             # Update dynasty root
             if self.dynasty:
