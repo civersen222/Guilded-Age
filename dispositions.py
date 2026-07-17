@@ -177,3 +177,26 @@ VICE_DRIFTS: Dict[str, tuple] = {
     "Callous": ("cruel_compassionate", -15.0),
     "Recluse": ("gregarious_reclusive", 15.0),
 }
+
+
+RUB_OFF_RATE = 0.05
+
+
+def guardian_rub_off(child, guardian) -> List[str]:
+    """Childhood shaping (M50, spec 3.6): a guardian's temperament and
+    convictions rub off on their ward - each turn the child's spectrums
+    drift a fraction of the way toward the guardian's. Bloodline is
+    genetic and never rubs off."""
+    msgs: List[str] = []
+    for key, pair in PAIRS.items():
+        if pair.family == "bloodline":
+            continue
+        gv = guardian.dispositions.get(key, 0.0)
+        cv = child.dispositions.get(key, 0.0)
+        delta = (gv - cv) * RUB_OFF_RATE
+        if abs(delta) < 0.01:
+            continue
+        m = apply_drift(child, key, delta, f"raised by {guardian.name}")
+        if m:
+            msgs.append(m)
+    return msgs

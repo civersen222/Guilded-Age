@@ -6,7 +6,7 @@ from typing import List, Optional
 from simulation import generate_child, modify_opinion, ATTRIBUTES
 from realms import MALE_NAMES, FEMALE_NAMES, _make_character
 from population import bulk_pass, relevance_set
-from dispositions import apply_drift
+from dispositions import apply_drift, guardian_rub_off
 from shares import partition_shares
 
 FEAST_INTERVAL = 12
@@ -79,6 +79,25 @@ def _tick_realm(game, realm, turn) -> List[str]:
             realm.characters.append(child)
             game.characters.append(child)
             msgs.append(f"A child, {child.name}, is born to {ruler.name}")
+
+    # --- Guardians & education (M50, spec 3.6): childhood shapes adults ---
+    grown = [c for c in realm.characters if c.is_alive and c.age >= 16]
+    for c in realm.characters:
+        if not c.is_alive:
+            continue
+        if c.age < 16:
+            g = c.guardian
+            if g is None or not getattr(g, "is_alive", False):
+                pool = [a for a in grown if a.id != c.id]
+                c.guardian = random.choice(pool) if pool else None
+            if c.education_track is None:
+                c.education_track = max(ATTRIBUTES, key=lambda a: c.base_stats.get(a, 0))
+            if c.guardian is not None:
+                msgs.extend(guardian_rub_off(c, c.guardian))
+        else:
+            m = c.graduate()
+            if m:
+                msgs.append(m)
 
     # --- court replenishment: fill vacant positions, new blood if the realm runs dry ---
     if not is_player:

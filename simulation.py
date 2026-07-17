@@ -120,6 +120,11 @@ class Character:
         self.lifestyle = LifestyleProgression()
         self.is_heir = False
 
+        # Guardian & education (M50, spec 3.6): childhood slots.
+        self.guardian = None                          # guardian character, or None
+        self.education_track: Optional[str] = None    # one of ATTRIBUTES
+        self.graduated = False
+
     @property
     def traits(self) -> List[str]:
         """Explicit traits plus labels derived live from dispositions."""
@@ -159,6 +164,23 @@ class Character:
         for trait in self.traits:
             bonus += TRAIT_DATABASE.get(trait, {}).get(stat_name, 0)
         return skill_base + bonus
+
+    def graduate(self) -> Optional[str]:
+        """Education pays out at adulthood (M50, spec 3.6): the tracked
+        attribute jumps by an amount set by guardian skill and Bloodline.
+        Fires once; returns the event line, or None."""
+        if self.graduated or self.age < 16 or self.education_track is None:
+            return None
+        self.graduated = True
+        track = self.education_track
+        quality = 1
+        g = self.guardian
+        if g is not None and getattr(g, "is_alive", False):
+            quality += g.get_effective_stat(track) // 6
+        bloodline = self.dispositions.get("brilliant_dull", 0.0)
+        quality += int(max(0.0, -bloodline) // 25)  # Brilliant blood learns fast
+        self.base_stats[track] = self.base_stats.get(track, 8) + quality
+        return f"{self.name} completes a {track} education (+{quality} {track})"
 
     def add_stress(self, amount: int) -> Optional[str]:
         """Increase stress by amount. Returns threshold message if crossed.
