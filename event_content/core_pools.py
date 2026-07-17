@@ -1,4 +1,4 @@
-"""Core template pools (M41): prose variants per situation kind.
+"""Core template pools: prose variants per situation kind.
 
 Every template must only use slots the wiring guarantees for its kind:
     succession:         old, new, civ
@@ -7,7 +7,7 @@ Every template must only use slots the wiring guarantees for its kind:
     plot_assassination: target, civ
     plot_uncovered:     target, civ
     plot_executed:      mastermind, civ
-M42 grows every pool to 4+ variants.
+Content pack 1 (M42): every pool has 4+ variants.
 """
 
 TEMPLATE_POOLS = {
@@ -15,26 +15,38 @@ TEMPLATE_POOLS = {
         "The bells toll in {civ}: {old} is dead, and {new} takes the throne",
         "{old}'s reign is over; all eyes in {civ} turn to {new}",
         "A crown changes heads in {civ} - {new} succeeds {old}",
+        "{new} kneels before the court of {civ} and rises a sovereign; {old} belongs to history now",
+        "The banners of {civ} fly at half-mast for {old} - and by nightfall they fly for {new}",
     ],
     "mental_break": [
         "{subject} shatters under the strain; the court whispers of a new vice",
         "Something in {subject} gives way - the mask has slipped",
         "{subject} is no longer the ruler they were; the pressure has left its mark",
+        "Behind closed doors, {subject} has stopped pretending to cope",
+        "The physicians are discreet, but the servants talk: {subject} has changed",
     ],
     "plot_coup": [
         "COUP in {civ}! {mastermind} seizes the throne from {target}",
         "Steel in the corridors of {civ}: {mastermind} topples {target}",
+        "{target} wakes to find the palace guard answers to {mastermind} now",
+        "The council of {civ} convenes at dawn - and acclaims {mastermind} while {target} is still in chains",
     ],
     "plot_assassination": [
         "{target} of {civ} has been assassinated!",
         "A cup of wine, a quiet gasp - {target} of {civ} is dead",
+        "{target} never saw the blade; {civ} mourns and wonders who paid for it",
+        "The candles in {target}'s chamber burned all night; by morning {civ} had no ruler",
     ],
     "plot_uncovered": [
         "A plot against {target} was uncovered",
         "Whispers reach {target} in time - a plot is foiled",
+        "{target}'s spymaster earns their keep: a conspiracy dies in the dark",
+        "Letters intercepted, doors kicked in - the plot against {target} collapses",
     ],
     "plot_executed": [
         "Plot uncovered in {civ}: {mastermind} executed",
         "{mastermind} gambled against the crown of {civ} and paid with their head",
+        "The headsman of {civ} works at dawn; {mastermind}'s conspiracy ends on the block",
+        "{mastermind} is dragged before the throne of {civ} - the sentence is death",
     ],
 }
