@@ -18,6 +18,7 @@ class Realm:
     dynasty: Dynasty
     court: Court
     characters: List[Character] = field(default_factory=list)
+    promoted_ids: set = field(default_factory=set)  # Tier-1 pins (population.promote)
 
 
 def _jitter_stats(base: Dict[str, int], spread: int = 3) -> Dict[str, int]:
@@ -42,7 +43,8 @@ def create_realm(civ, turn: int = 0) -> Realm:
         dynasty.add_member(child, ruler.id)
         characters.append(child)
     court = Court(ruler)
-    courtiers = [_make_character(civ.name, civ.starting_stats, [], 20, 55) for _ in range(random.randint(4, 6))]
+    # Spec-scale pool (spec 3.1): hundreds of living characters per game.
+    courtiers = [_make_character(civ.name, civ.starting_stats, [], 20, 55) for _ in range(random.randint(40, 60))]
     characters.extend(courtiers)
     unassigned = list(courtiers)
     for position in CourtPosition:

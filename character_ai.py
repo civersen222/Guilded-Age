@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from simulation import generate_child, modify_opinion, ATTRIBUTES
 from realms import MALE_NAMES, FEMALE_NAMES, _make_character
+from population import bulk_pass, relevance_set
 
 FEAST_INTERVAL = 12
 CHILD_INTERVAL = 8
@@ -31,14 +32,12 @@ def _tick_realm(game, realm, turn) -> List[str]:
     if is_player:
         realm.ruler = game.rulers.get(pname, realm.ruler)
 
-    # --- aging (the player ruler is aged by the dynasty block in process_turn) ---
+    # --- Tier 0 bulk pass (spec 3.1): aging, mortality, fertility for ALL ---
+    # (the player ruler is aged by the dynasty block in process_turn)
     court_ids = {c.id for c in realm.court.positions.values() if c}
-    for c in realm.characters:
-        if not c.is_alive or (is_player and c.id == realm.ruler.id):
-            continue
-        event = c.age_up()
-        if event and (c.id == realm.ruler.id or c.id in court_ids):
-            msgs.append(f"{c.name}: {event}")
+    skip_ids = {realm.ruler.id} if is_player else set()
+    notable_ids = court_ids | {realm.ruler.id}
+    msgs.extend(bulk_pass(realm, game, skip_ids, notable_ids))
 
     # --- succession (AI realms; player succession is handled in process_turn) ---
     ruler = realm.ruler
@@ -93,9 +92,10 @@ def _tick_realm(game, realm, turn) -> List[str]:
             realm.court.positions[pos] = None
             realm.court.appoint(pos, pick, turn)
 
-    # --- actions: one per living adult ---
+    # --- actions: full Tier-1 logic only for the relevance set (spec 3.1) ---
+    relevant = relevance_set(game, realm)
     for c in realm.characters:
-        if not c.is_alive or c.age < 16:
+        if not c.is_alive or c.age < 16 or c.id not in relevant:
             continue
         c.decay_stress()
         if c.id == realm.ruler.id:
