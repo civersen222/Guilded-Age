@@ -41,12 +41,12 @@ class TestTechManager(unittest.TestCase):
 
     def test_research_availability(self):
         available = self.tech.get_available_technologies("Rome")
-        self.assertIn("Agriculture", available)
+        self.assertIn("Mechanized Farming", available)
 
     def test_research_completion(self):
-        self.tech.research("Agriculture", "Rome")
+        self.tech.research("Mechanized Farming", "Rome")
         self.tech.add_research_progress("Rome", 20)
-        self.assertIn("Agriculture", self.tech.researched)
+        self.assertIn("Mechanized Farming", self.tech.researched)
 
 
 class TestEventManager(unittest.TestCase):
