@@ -530,6 +530,25 @@ class Game:
         # Generate initial events
         self.event_manager.generate_events()
 
+    def _council_bonus(self, civ_name: str, position) -> int:
+        """Seat holder's effective stat for a realm's council seat, 0 if vacant."""
+        realm = (getattr(self, "realms", None) or {}).get(civ_name)
+        if realm is None:
+            return 0
+        return realm.court.get_bonus(position)
+
+    def council_research_multiplier(self, civ_name: str) -> float:
+        """Chief Engineer (M46): +1% research per point of science."""
+        return 1.0 + self._council_bonus(civ_name, CourtPosition.CHIEF_ENGINEER) / 100.0
+
+    def council_tax_multiplier(self, civ_name: str) -> float:
+        """Chief Steward (M46): +0.5% tax income per point of industry."""
+        return 1.0 + self._council_bonus(civ_name, CourtPosition.CHIEF_STEWARD) / 200.0
+
+    def council_happiness_bonus(self, civ_name: str) -> int:
+        """Board Chairman (M46): +1 happiness per 10 statecraft."""
+        return self._council_bonus(civ_name, CourtPosition.BOARD_CHAIRMAN) // 10
+
     def process_turn(self) -> List[str]:
         """Process one turn and return messages. Does not block on input."""
         self.stats["turns_played"] += 1
@@ -686,6 +705,7 @@ class Game:
         # 1. Tax Income
         ruler = self.rulers.get(civ_name)
         tax_income = self.tax_system.process_tax_income(self.cities, ruler)
+        tax_income = int(tax_income * self.council_tax_multiplier(civ_name))
         self.gold[civ_name] += tax_income
         msgs.append(f"  Tax Income: +{tax_income} gold")
 
@@ -789,7 +809,9 @@ class Game:
                             owner_mgr.research(cheapest, city.owner)
                             self.state.turn_events.append(
                                 f"🧪 {city.owner} began researching {cheapest}")
-                    completed = owner_mgr.add_research_progress(city.owner, yields.get('science', 0))
+                    completed = owner_mgr.add_research_progress(
+                        city.owner,
+                        yields.get('science', 0) * self.council_research_multiplier(city.owner))
                     if completed:
                         self.state.turn_events.append(
                             f"🔬 {city.owner} completed research: {completed}")
@@ -1516,7 +1538,8 @@ class Game:
 
         # War weariness (M33, spec 3.4): -1 happiness per 10 weariness
         weariness_penalty = self.war_weariness.get(civ_name, 0) // 10
-        happiness = int(9 + luxury_bonus + building_bonus + gov_bonus - demand - weariness_penalty)
+        happiness = int(9 + luxury_bonus + building_bonus + gov_bonus
+                        + self.council_happiness_bonus(civ_name) - demand - weariness_penalty)
         self.happiness[civ_name] = happiness
 
         if happiness < 0:

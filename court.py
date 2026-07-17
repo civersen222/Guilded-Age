@@ -1,4 +1,4 @@
-"""Court positions: Marshal, Spymaster, Chancellor, Steward, Chaplain."""
+"""Council seats (spec 4.4): Board Chairman, Chief Engineer, Head of Security, Master of the Press, Chief Steward."""
 
 from __future__ import annotations
 from enum import Enum
@@ -8,22 +8,22 @@ from simulation import Character
 
 
 class CourtPosition(Enum):
-    MARSHAL = "Marshal"
-    SPYMASTER = "Spymaster"
-    CHANCELLOR = "Chancellor"
-    STEWARD = "Steward"
-    CHAPLAIN = "Chaplain"
+    BOARD_CHAIRMAN = "Board Chairman"
+    CHIEF_ENGINEER = "Chief Engineer"
+    HEAD_OF_SECURITY = "Head of Security"
+    MASTER_OF_PRESS = "Master of the Press"
+    CHIEF_STEWARD = "Chief Steward"
 
 
 class Court:
     """Manages the ruler's court positions and their bonuses."""
 
     POSITION_STATS: Dict[CourtPosition, str] = {
-        CourtPosition.MARSHAL: "command",
-        CourtPosition.SPYMASTER: "intrigue",
-        CourtPosition.CHANCELLOR: "statecraft",
-        CourtPosition.STEWARD: "industry",
-        CourtPosition.CHAPLAIN: "statecraft",
+        CourtPosition.BOARD_CHAIRMAN: "statecraft",
+        CourtPosition.CHIEF_ENGINEER: "science",
+        CourtPosition.HEAD_OF_SECURITY: "command",
+        CourtPosition.MASTER_OF_PRESS: "intrigue",
+        CourtPosition.CHIEF_STEWARD: "industry",
     }
 
     def __init__(self, ruler: Character):
