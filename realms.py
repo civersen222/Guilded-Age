@@ -19,6 +19,7 @@ class Realm:
     court: Court
     characters: List[Character] = field(default_factory=list)
     promoted_ids: set = field(default_factory=set)  # Tier-1 pins (population.promote)
+    enterprises: List = field(default_factory=list)  # house Enterprises (shares.py, M43)
 
 
 def _jitter_stats(base: Dict[str, int], spread: int = 3) -> Dict[str, int]:

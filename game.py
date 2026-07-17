@@ -20,6 +20,7 @@ from simulation import Character, Dynasty, generate_child, modify_opinion, Dynas
 from dispositions import apply_drift
 from court import Court, CourtPosition
 from realms import create_realms
+from shares import found_enterprises, pay_dividends
 from character_ai import tick_realms
 from event_engine import Situation, render
 from relationships import tick_relationships
@@ -279,6 +280,10 @@ class Game:
         
         # Set up AI players with starting cities and units
         self._setup_ai_players()
+
+        # House founding (M43): every Great House gets enterprises over its cities
+        for realm in self.realms.values():
+            realm.enterprises = found_enterprises(realm, self.cities.values())
         
         # Update managers with actual data
         self.city_manager.cities = list(self.cities.values())
@@ -678,6 +683,14 @@ class Game:
         tax_income = self.tax_system.process_tax_income(self.cities, ruler)
         self.gold[civ_name] += tax_income
         msgs.append(f"  Tax Income: +{tax_income} gold")
+
+        # 1b. House dividends (M43): enterprises pay their shareholding ledgers
+        for _realm in self.realms.values():
+            _payout = pay_dividends(_realm)
+            if _realm.civ_name == civ_name and _payout > 0:
+                div_msg = f"  House Dividends: +{_payout:.1f} gold to shareholders"
+                msgs.append(div_msg)
+                self.state.turn_events.append(div_msg)
 
         # City maintenance (deep-systems spec 1.8): all civs pay upkeep
         self._process_city_maintenance(msgs)
