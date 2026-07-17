@@ -194,6 +194,10 @@ class MilitaryManager:
             def_ruler = self.game.rulers.get(defender.owner)
 
         result = resolve_combat([attacker], [defender], tile, att_ruler, def_ruler)
+        if self.game is not None:
+            _t = getattr(self.game, "_telemetry", None)
+            if _t is not None:
+                _t["battles"] = _t.get("battles", 0) + 1
 
         attacker.has_fought = True
         defender.has_fought = True

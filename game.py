@@ -535,6 +535,8 @@ class Game:
         self.stats["turns_played"] += 1
         msgs = []
         self.state.turn_events = []
+        # P4 telemetry: per-turn counters (flushed to CSV if telemetry_path set)
+        self._telemetry = {"dividends": {}, "marriages": 0, "successions": 0, "battles": 0}
         
         msgs.append(f"\n{'='*60}")
         msgs.append(f"TURN {self.state.turn} - {self.state.phase} PHASE")
@@ -690,6 +692,8 @@ class Game:
         # 1b. House dividends (M43): enterprises pay their shareholding ledgers
         for _realm in self.realms.values():
             _payout = pay_dividends(_realm)
+            if _payout > 0:
+                self._telemetry["dividends"][_realm.civ_name] = self._telemetry["dividends"].get(_realm.civ_name, 0.0) + _payout
             if _realm.civ_name == civ_name and _payout > 0:
                 div_msg = f"  House Dividends: +{_payout:.1f} gold to shareholders"
                 msgs.append(div_msg)
@@ -927,6 +931,7 @@ class Game:
         for _mmsg in tick_marriages(self):
             msgs.append(f"  {_mmsg}")
             self.state.turn_events.append(_mmsg)
+            self._telemetry["marriages"] += 1
 
         # --- CK-style character events ---
         ruler = self.rulers.get(self.player_civ.name)
@@ -949,6 +954,27 @@ class Game:
             if cname == self.player_civ.name and self.dynasty is not None:
                 p += self.dynasty.calculate_dynastic_prestige()
             civ_obj.prestige = p
+
+        # P4 telemetry: opt-in per-turn CSV dump (one row per civ)
+        _tpath = getattr(self, "telemetry_path", None)
+        if _tpath:
+            import csv as _csv, os as _os
+            _t = self._telemetry
+            _new_file = not _os.path.exists(_tpath)
+            with open(_tpath, "a", newline="", encoding="utf-8") as _tf:
+                _w = _csv.writer(_tf)
+                if _new_file:
+                    _w.writerow(["turn", "civ", "gold", "dividends", "marriage_events", "successions", "battles"])
+                for _cname in self.civilizations:
+                    _w.writerow([
+                        self.state.turn,
+                        _cname,
+                        self.gold.get(_cname, 0),
+                        round(_t["dividends"].get(_cname, 0.0), 2),
+                        _t["marriages"],
+                        _t["successions"],
+                        _t["battles"],
+                    ])
 
         # Check victory conditions
         victory = self._check_victory()
@@ -1512,6 +1538,9 @@ class Game:
         ruler = self.rulers.get(civ_name)
         if not ruler:
             return succession_msgs
+        _t = getattr(self, "_telemetry", None)
+        if _t is not None:
+            _t["successions"] = _t.get("successions", 0) + 1
 
         succession_msgs.append(f"\n  👑 SUCCESSION for {civ_name}: {ruler.name} has died!")
 
