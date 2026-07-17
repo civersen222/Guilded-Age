@@ -6,16 +6,25 @@ from typing import Dict, List, Optional, Set, Union
 from game_data import TECHNOLOGIES, Technology, Era, TechBranch
 
 
-# Eureka conditions: maps tech name -> human-readable condition description
+# Era ordering (M54): never compare Era .value strings (alphabetical order
+# mis-ranks the eras) - rank through this sequence instead.
+ERA_SEQUENCE = [Era.ANCIENT, Era.CLASSICAL, Era.MEDIEVAL, Era.RENAISSANCE,
+                Era.INDUSTRIAL, Era.MODERN]
+ERA_RANK = {era: i for i, era in enumerate(ERA_SEQUENCE)}
+
+
+# Eureka conditions: maps tech name -> human-readable condition description.
+# Remapped to the 56-tech industrial-century tree (M54); condition strings
+# are unchanged so _evaluate_condition needs no changes.
 EUREKA_CONDITIONS: Dict[str, str] = {
-    'Mining': 'Build a Quarry',
-    'Sailing': 'Found a coastal city',
-    'Archery': 'Kill a unit with a ranged unit',
-    'Writing': 'Meet another civilization',
-    'Bronze Working': 'Kill 3 enemy units',
-    'Iron Working': 'Build a Barracks',
-    'Currency': 'Establish a trade route',
-    'Education': 'Build a Library',
+    'Deep Mining': 'Build a Quarry',
+    'Marine Engineering': 'Found a coastal city',
+    'Small Arms': 'Kill a unit with a ranged unit',
+    'Telegraphy': 'Meet another civilization',
+    'Bessemer Process': 'Kill 3 enemy units',
+    'Munitions Works': 'Build a Barracks',
+    'Commodity Exchanges': 'Establish a trade route',
+    'Mass Schooling': 'Build a Library',
 }
 
 
@@ -213,18 +222,22 @@ class TechManager:
         return all(name in self.researched for name in era_techs)
     
     def get_current_era(self, civ: str = "") -> Era:
-        """Get the current era of a civilization"""
-        max_era = Era.ANCIENT
+        """Era = the coarse clock (deep-spec Part 2): the highest era in
+        which at least 3 technologies have been researched."""
+        counts = {era: 0 for era in ERA_SEQUENCE}
         for tech in self.researched.values():
-            if tech.era.value > max_era.value:
-                max_era = tech.era
-        return max_era
+            counts[tech.era] += 1
+        current = Era.ANCIENT
+        for era in ERA_SEQUENCE:
+            if counts[era] >= 3:
+                current = era
+        return current
     
     def get_tech_bonus(self, civ: str = "", bonus_type: str = "production") -> float:
         """Get bonus from researched technologies"""
         total_bonus = 0.0
         for tech in self.researched.values():
-            if bonus_type in tech.bonus.lower():
+            if tech.bonus and bonus_type in tech.bonus.lower():
                 total_bonus += 0.1
         return total_bonus
     

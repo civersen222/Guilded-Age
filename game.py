@@ -1314,7 +1314,8 @@ class Game:
             if tm is None or not hasattr(tm, 'get_current_era'):
                 return False
             try:
-                return tm.get_current_era(name).value >= MIN_VICTORY_ERA.value
+                from tech import ERA_RANK
+                return ERA_RANK[tm.get_current_era(name)] >= ERA_RANK[MIN_VICTORY_ERA]
             except Exception:
                 return False
 
