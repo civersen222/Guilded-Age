@@ -205,15 +205,15 @@ def resolve_combat(
         # ── Calculate defender power ──
         def_power = def_.defense * terrain_mod * def_ruler_bonus
 
-        # Fortification bonus
+        # Fortification bonus (M30, spec 3.2: +25% first turn, +50% after)
         if def_.is_fortified:
             fort_turns = getattr(def_, "_fortify_turns", 0)
             if fort_turns >= 1:
-                def_power *= 1.06  # +6% defense for 2+ turns
-                bonuses["fortified(2+)"] = 6
+                def_power *= 1.50  # +50% defense for 2+ turns
+                bonuses["fortified(2+)"] = 50
             else:
-                def_power *= 1.03  # +3% defense for 1st turn
-                bonuses["fortified(1)"] = 3
+                def_power *= 1.25  # +25% defense for 1st turn
+                bonuses["fortified(1)"] = 25
 
         # ── Determine damage ──
         def_is_ranged = UNIT_CATEGORY_MAP.get(def_.unit_type) == UnitCategory.RANGED

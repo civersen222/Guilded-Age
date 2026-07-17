@@ -888,6 +888,10 @@ class Game:
                 msgs.append(f"  {faction_event}")
                 self.state.turn_events.append(faction_event)
         
+        # --- Military upkeep (M30): reset moves, tick fortification, heal idle units ---
+        self.military_manager.units = list(self.units.values())
+        self.military_manager.process_turn()
+
         # --- Clean up dead units ---
         dead_units = [name for name, unit in self.units.items() if not unit.is_alive]
         for name in dead_units:

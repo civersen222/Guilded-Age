@@ -27,6 +27,7 @@ class Unit:
         self.is_alive = True
         self.last_combat_result = None
         self.kills = 0
+        self.has_fought = False  # fought this turn; blocks healing (M30)
         self.is_busy = False
         self.busy_type: str = ""
         self.busy_target: str = ""
@@ -193,17 +194,36 @@ class MilitaryManager:
             def_ruler = self.game.rulers.get(defender.owner)
 
         result = resolve_combat([attacker], [defender], tile, att_ruler, def_ruler)
-        
+
+        attacker.has_fought = True
+        defender.has_fought = True
         attacker.last_combat_result = result
         defender.last_combat_result = result
         return result
     
     def process_turn(self):
-        """Reset moves and un-fortify all living units."""
+        """Per-turn upkeep (M30): reset moves, tick fortification, heal idle units."""
         for unit in self.units:
-            if unit.is_alive:
-                unit.moves_left = unit.max_moves
-                unit.is_fortified = False
+            if not unit.is_alive:
+                continue
+            unit.moves_left = unit.max_moves
+            if unit.is_fortified:
+                unit._fortify_turns = getattr(unit, "_fortify_turns", 0) + 1
+            else:
+                unit._fortify_turns = 0
+            if getattr(unit, "has_fought", False):
+                unit.has_fought = False
+            elif unit.hp < unit.max_hp:
+                unit.heal(10 if self._in_friendly_territory(unit) else 5)
+
+    def _in_friendly_territory(self, unit) -> bool:
+        """True when the unit stands on a tile owned by one of its own cities."""
+        if self.game is None:
+            return False
+        for city in getattr(self.game, "cities", {}).values():
+            if city.owner == unit.owner and unit.position in getattr(city, "owned_tiles", set()):
+                return True
+        return False
     
     def add_unit(self, unit: Unit):
         self.units.append(unit)
