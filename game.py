@@ -539,6 +539,11 @@ class Game:
         # Transformation (M61, spec 5.3): civ_name -> turn it broke with the Houses.
         self.transformed = {}
 
+        # Signature chains (M72, spec 7): authored beats over the live state.
+        from event_chains import ChainManager
+        from event_content.chains_pack1 import build_pack1
+        self.chain_manager = ChainManager(build_pack1())
+
         # Generate initial events
         self.event_manager.generate_events()
 
@@ -570,6 +575,10 @@ class Game:
         self._telemetry = {"dividends": {}, "marriages": 0, "successions": 0, "battles": 0}
         # Ideological tide (M58, spec 5.2): history grinds forward each turn.
         self.tide.tick()
+        # Signature chains (M72, spec 7): authored beats over the live state.
+        for _cev in self.chain_manager.tick(self):
+            msgs.append(f"  📜 {_cev}")
+            self.state.turn_events.append(_cev)
         
         msgs.append(f"\n{'='*60}")
         msgs.append(f"TURN {self.state.turn} - {self.state.phase} PHASE")
