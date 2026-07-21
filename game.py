@@ -32,7 +32,7 @@ from diplomacy import DiplomacyManager
 from religion import ReligionManager
 from tech import TechManager, EurekaTracker, EUREKA_CONDITIONS
 from events import EventManager
-from plots import PlotManager
+from schemes import SchemeManager
 from victory import VictoryConditionTracker, VictoryType
 from tax_system import TaxSystem
 from happiness_system import HappinessSystem
@@ -227,7 +227,7 @@ class Game:
         self.tech_manager = TechManager()
         self.eureka_tracker = EurekaTracker()
         self.event_manager = EventManager()
-        self.plot_manager = PlotManager()
+        self.scheme_manager = SchemeManager()
         self.dynasty_manager = DynastyManager()
         self.city_manager = CityManager([])
         self.military_manager = MilitaryManager([])
