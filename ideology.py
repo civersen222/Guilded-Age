@@ -99,3 +99,45 @@ def record_scandal(legitimacy: dict, house: str, severity: float = 1.0,
         events.append(f"📰 Scandal rocks {house}: legitimacy falls "
                       f"{loss:.0f} to {legitimacy[house]:.0f}")
     return loss
+
+
+# --- Revolution (M60, spec 5.3): the wall ----------------------------------
+
+REVOLUTION_LEGITIMACY_FLOOR = 15.0   # below this the mandate is effectively gone
+REVOLUTION_MILITANCY_PEAK = 60.0     # a movement this militant smells blood
+REVOLUTION_BREWING_TURNS = 3         # consecutive turns of both before it fires
+REVOLUTION_OWNER = "The Commune"     # who defected cities answer to
+
+
+def revolution_brewing(legitimacy_value: float, cities) -> bool:
+    """True while a House's mandate is gone AND at least one of its
+    movements has peaked - the preconditions of uprising."""
+    if legitimacy_value >= REVOLUTION_LEGITIMACY_FLOOR:
+        return False
+    for c in cities:
+        mv = getattr(c, "movement", None)
+        if mv is not None and mv.militancy >= REVOLUTION_MILITANCY_PEAK:
+            return True
+    return False
+
+
+def trigger_revolution(house: str, cities) -> tuple:
+    """The uprising (spec 5.3): every organized city defects to the
+    Commune, its workers forming militias that hold the works at full
+    strength. Returns (defected_city_names, events)."""
+    defected = []
+    events = [f"🔥 REVOLUTION against House {house}! The {REVOLUTION_OWNER} rises"]
+    for c in cities:
+        mv = getattr(c, "movement", None)
+        if mv is None:
+            continue
+        c.owner = REVOLUTION_OWNER
+        c.movement = None          # the movement IS the city now
+        c.unrest = 0.0
+        c.extraction_dial = 0.0    # nobody grinds the Commune's own
+        if hasattr(c, "city_max_hp"):
+            c.hp = c.city_max_hp()   # worker militias man the barricades
+        defected.append(c.name)
+        events.append(f"  ⚑ {c.name} defects to the {REVOLUTION_OWNER}; "
+                      f"worker militias man the barricades")
+    return defected, events

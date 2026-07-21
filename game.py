@@ -534,6 +534,8 @@ class Game:
         # Legitimacy (M59, spec 5.3): each House's mandate to rule.
         from ideology import LEGITIMACY_START
         self.legitimacy = {name: LEGITIMACY_START for name in self.civilizations}
+        # Revolution (M60, spec 5.3): consecutive brewing turns per House.
+        self.revolution_brewing = {}
 
         # Generate initial events
         self.event_manager.generate_events()
@@ -648,6 +650,41 @@ class Game:
                 self.state.turn_events.append(
                     f"⚖️ House {civ_name}'s legitimacy craters ({_after:.0f}) - "
                     f"its right to rule is in question")
+
+        # Revolution (M60, spec 5.3): a cratered mandate plus a peaked
+        # movement brews an uprising; when it fires, organized cities defect
+        # and a House stripped of everything is expropriated - the wall.
+        from ideology import (revolution_brewing, trigger_revolution,
+                              REVOLUTION_BREWING_TURNS)
+        for civ_name in list(self.civilizations):
+            _rcities = [c for c in self.cities.values() if c.owner == civ_name]
+            if _rcities and revolution_brewing(
+                    self.legitimacy.get(civ_name, LEGITIMACY_START), _rcities):
+                _n = self.revolution_brewing.get(civ_name, 0) + 1
+                self.revolution_brewing[civ_name] = _n
+                if _n < REVOLUTION_BREWING_TURNS:
+                    self.state.turn_events.append(
+                        f"🔥 Revolution brews against House {civ_name} "
+                        f"({_n}/{REVOLUTION_BREWING_TURNS})")
+                    continue
+                self.revolution_brewing.pop(civ_name, None)
+                _defected, _revs = trigger_revolution(civ_name, _rcities)
+                for _ev in _revs:
+                    msgs.append(_ev)
+                    self.state.turn_events.append(_ev)
+                if not any(c.owner == civ_name for c in self.cities.values()):
+                    _line = (f"⚑ House {civ_name} is expropriated - "
+                             f"the Revolution takes everything")
+                    msgs.append(_line)
+                    self.state.turn_events.append(_line)
+                    if civ_name == self.player_civ.name:
+                        self.state.game_over = True
+                        self.state.winner = "The Revolution"
+                        self.state.victory_type = "Revolution"
+                        self.state.victory = "The Revolution wins by Expropriation"
+                        return self.state.turn_events
+            else:
+                self.revolution_brewing.pop(civ_name, None)
 
         # Pantheon auto-founding: when faith >= 25 and no pantheon yet
         for civ_name in self.civilizations:
