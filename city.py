@@ -73,7 +73,9 @@ class City:
         self.director: Optional[Any] = None
         # Extraction dial (M55, spec 5.1): how hard the House squeezes labor.
         self.extraction_dial: float = 50.0
-        self.unrest: float = 0.0   # accumulator; labor movements consume it in M56+
+        self.unrest: float = 0.0   # accumulator; movements crystallize from it (M57)
+        # Labor movement (M57, spec 5.2): the city's union, or None.
+        self.movement = None
 
     def _director(self):
         """The living director, or None (dead/vacant = neutral)."""
@@ -461,6 +463,11 @@ class City:
         # Extraction dial (M55, spec 5.1): the squeeze scales production.
         from labor import production_multiplier
         yields["production"] *= production_multiplier(self.extraction_dial)
+
+        # Strike (M57, spec 5.2): a striking movement halts the works.
+        _mv = getattr(self, "movement", None)
+        if _mv is not None and _mv.state == "striking":
+            yields["production"] = 0.0
 
         # Population bonuses
         yields["food"] += self.population * 0.5
