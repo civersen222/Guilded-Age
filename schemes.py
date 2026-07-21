@@ -12,6 +12,8 @@ from typing import List
 from simulation import Secret, modify_opinion
 from event_engine import Situation, render
 from ideology import record_scandal
+from dispositions import expose_persona
+from shares import extort_shares
 
 SCHEME_TYPES = {
     "coup":          {"risk": 0.03, "scandal": 1.5, "success_bonus": 0.15},
@@ -158,3 +160,56 @@ class SchemeManager:
             if any(c.id == char.id for c in realm.characters):
                 return realm
         return None
+
+
+# --- Spending secrets (M63, spec 6): the knife and the newspaper -----------
+
+EXPOSE_SEVERITY = 0.04      # scandal severity per point of secret potency
+PRESS_WEAPON = 0.05         # Master of the Press: +5% severity per Intrigue point
+EXPOSE_OPINION = -40
+BLACKMAIL_SHARE_PCT = 10.0  # extorted from every enterprise stake
+BLACKMAIL_REFUSE = 0.25     # chance the victim calls the bluff
+BLACKMAIL_STRESS = 10       # base stress of turning the screw
+
+
+def expose_secret(game, publisher, secret, subject, house, press_bonus=0) -> List[str]:
+    """Feed a rival's secret to the tabloids (spec 6): the persona gap
+    collapses in public, the subject's House takes a potency-scaled
+    scandal - weaponized by the Master of the Press - and the spent
+    secret is a secret no more."""
+    if not secret.is_known_by(publisher.id) or secret.subject_id != subject.id:
+        return []
+    msgs = [f"📰 EXPOSED: {secret.description}!"]
+    expose_persona(subject, secret.potency)
+    severity = secret.potency * EXPOSE_SEVERITY * (1.0 + press_bonus * PRESS_WEAPON)
+    record_scandal(game.legitimacy, house, severity, msgs)
+    modify_opinion(subject, publisher, EXPOSE_OPINION, "exposed in the press")
+    note = subject.add_stress(30)
+    if note and "mental break" in note:
+        msgs.append(render(Situation("mental_break", {"subject": subject})))
+    if secret in subject.secrets:
+        subject.secrets.remove(secret)
+    return msgs
+
+
+def blackmail(game, agent, secret, victim, realm, house, press_bonus=0,
+              rng=_random) -> List[str]:
+    """Hold the secret over the victim (spec 6): extort shares quietly -
+    or have the bluff called and be forced to publish everything."""
+    if not secret.is_known_by(agent.id) or secret.subject_id != victim.id:
+        return []
+    if rng.random() < BLACKMAIL_REFUSE:
+        msgs = [f"{victim.name} calls the bluff - the tabloids get everything"]
+        msgs.extend(expose_secret(game, agent, secret, victim, house, press_bonus))
+        return msgs
+    moved = extort_shares(realm, victim.id, agent.id, BLACKMAIL_SHARE_PCT)
+    line = f"{agent.name} turns the screw on {victim.name}"
+    if moved:
+        line += f": {moved:.0f}% in shares change hands quietly"
+    msgs = [line]
+    modify_opinion(victim, agent, -30, "blackmailed")
+    victim.add_stress(20)
+    note = agent.add_stress(BLACKMAIL_STRESS + agent.check_stress_action("blackmail"))
+    if note and "mental break" in note:
+        msgs.append(render(Situation("mental_break", {"subject": agent})))
+    return msgs

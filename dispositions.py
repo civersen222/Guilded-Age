@@ -152,6 +152,7 @@ ACTION_CONFLICTS: Dict[str, tuple] = {
     "raise_taxes": (("generous_greedy", -1),),
     "accept_unfavorable_peace": (("ambitious_content", -1),),
     "cover_up": (("honest_deceitful", -1), ("cruel_compassionate", 1)),
+    "blackmail": (("honest_deceitful", -1), ("cruel_compassionate", 1)),
 }
 
 
@@ -201,3 +202,24 @@ def guardian_rub_off(child, guardian) -> List[str]:
         if m:
             msgs.append(m)
     return msgs
+
+
+# Spec 6 (M63): an exposé collapses the persona gap - society learns the
+# truth all at once, and assumes the worst about what else is hidden.
+EXPOSE_SCAR = 0.3   # persona-only push toward Deceitful, per potency point
+
+
+def expose_persona(char, potency: float) -> float:
+    """Snap the public persona to the private truth (spec 6: Expose).
+
+    Every spectrum's public estimate is set to the true value, and the
+    exposure leaves a persona-only scar toward Deceitful - the exposed
+    are presumed liars. Returns the total gap closed (the shock value)."""
+    gap = 0.0
+    for key in PAIRS:
+        true_v = char.dispositions.get(key, 0.0)
+        gap += abs(true_v - char.persona.get(key, true_v))
+        char.persona[key] = true_v
+    scar = char.persona.get("honest_deceitful", 0.0) + potency * EXPOSE_SCAR
+    char.persona["honest_deceitful"] = max(-100.0, min(100.0, scar))
+    return gap

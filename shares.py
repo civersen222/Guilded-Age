@@ -142,6 +142,15 @@ def transfer_shares(ent, from_id: str, to_id: str, pct: float) -> float:
     return amt
 
 
+def extort_shares(realm, from_id: str, to_id: str, pct: float) -> float:
+    """Blackmail's teeth (M63, spec 6): move up to pct of EVERY enterprise
+    stake the victim holds to the extorter. Returns the total moved."""
+    moved = 0.0
+    for ent in realm.enterprises:
+        moved += transfer_shares(ent, from_id, to_id, pct)
+    return moved
+
+
 EMBEZZLE_LOYALTY = 25.0
 EMBEZZLE_CHANCE = 0.25
 
