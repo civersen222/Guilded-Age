@@ -60,7 +60,7 @@ def bulk_pass(realm, game, skip_ids: Set[str] = frozenset(),
 
 def relevance_set(game, realm) -> Set[str]:
     """Tier-1 ids for one realm: ruler, living dynasty kin, seated court,
-    plot participants, plus anyone pinned via promote()."""
+    scheme participants, plus anyone pinned via promote()."""
     rel: Set[str] = set(realm.promoted_ids)
     if realm.ruler is not None:
         rel.add(realm.ruler.id)
@@ -70,12 +70,12 @@ def relevance_set(game, realm) -> Set[str]:
     for c in realm.court.positions.values():
         if c is not None:
             rel.add(c.id)
-    pm = getattr(game, "plot_manager", None)
-    if pm is not None:
-        for p in pm.plots:
-            rel.add(p.mastermind)
-            rel.add(p.target)
-            rel.update(p.participants)
+    sm = getattr(game, "scheme_manager", None)
+    if sm is not None:
+        for s in sm.schemes:
+            rel.add(s.agent.id)
+            rel.add(s.target.id)
+            rel.update(ch.id for ch in s.participants)
     return rel
 
 

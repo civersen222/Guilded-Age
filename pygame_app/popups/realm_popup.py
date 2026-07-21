@@ -92,7 +92,7 @@ def build_realm_html(game: Any) -> str:
     parts.append("<br><b><u>Standing at Court</u></b><br>")
     parts.append(f'<font color="#44cc44">Friends:</font> ' + (", ".join(c.name for c in friends[:6]) or "none") + "<br>")
     parts.append(f'<font color="#ff4444">Rivals:</font> ' + (", ".join(c.name for c in rivals[:6]) or "none") + "<br>")
-    brewing = sum(1 for p in game.plot_manager.plots if p.target == ruler.id)
+    brewing = sum(1 for s in game.scheme_manager.schemes if s.target.id == ruler.id)
     if brewing:
         parts.append(f'<font color="#aa44ff">Whispers at court: {brewing} plot(s) rumored against the throne...</font><br>')
 
