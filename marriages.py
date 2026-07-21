@@ -164,6 +164,53 @@ def _maybe_arrange_match(game, realms) -> Optional[str]:
     return None
 
 
+def arrange_match_between(game, civ_a: str, civ_b: str) -> Optional[str]:
+    """A deliberate match between two named Houses (M76): the AI binds a
+    friend the way the ambient tick does, but on purpose - kin preferred,
+    best bloodline first, the same merger contract."""
+    global wedding_count
+    realms = getattr(game, "realms", None) or {}
+    ra, rb = realms.get(civ_a), realms.get(civ_b)
+    if ra is None or rb is None:
+        return None
+    dm = game.diplomacy_manager
+    if dm.is_at_war(civ_a, civ_b):
+        return None
+    kin_a = [c for c in _eligible(ra) if c.id in ra.dynasty.all_characters]
+    cand_a = kin_a or _eligible(ra)
+    if not cand_a:
+        return None
+    a = max(cand_a, key=bloodline_quality)
+    want = "Female" if a.gender == "Male" else "Male"
+    cand_b = _eligible(rb, want)
+    if not cand_b:
+        return None
+    b = max(cand_b, key=bloodline_quality)
+    if b in rb.characters:
+        rb.characters.remove(b)
+    ra.characters.append(b)
+    ra.dynasty.all_characters.setdefault(b.id, b)
+    for pos, ch in rb.court.positions.items():
+        if ch and ch.id == b.id:
+            rb.court.positions[pos] = None
+    modify_opinion(a, b, 40, "marriage")
+    modify_opinion(b, a, 40, "marriage")
+    contract = _negotiate_contract(ra, rb, a, b)
+    if contract.dowry_gold > 0:
+        ra.ruler.gold_reserve -= contract.dowry_gold
+        rb.ruler.gold_reserve += contract.dowry_gold
+    if contract.dowry_shares_pct > 0 and ra.enterprises:
+        transfer_shares(random.choice(ra.enterprises), ra.ruler.id,
+                        rb.ruler.id, contract.dowry_shares_pct)
+    _marriages.append((a.id, civ_a, b.id, civ_b))
+    _contracts[(a.id, b.id)] = contract
+    _married_ids.update((a.id, b.id))
+    wedding_count += 1
+    dm.modify_relation(civ_a, civ_b,
+                       MARRIAGE_RELATION_BONUS + (10 if contract.alliance else 0))
+    return f"{a.name} weds {b.name} - {civ_a} and {civ_b} are bound by marriage"
+
+
 def _blood_ties(game, realms) -> List[str]:
     """Living cross-civ couples slowly pull their realms together."""
     msgs = []

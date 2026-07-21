@@ -49,6 +49,7 @@ class AIPlayer:
         self.aggression_modifiers: List[Tuple[str, float]] = []
         self.trust_level: Dict[str, float] = {}
         self.grudges: Dict[str, int] = {}
+        self._takeover = None   # live hostile takeover vs the player (M76)
 
     # ── Priority evaluation ────────────────────────────────────────────────
 
@@ -521,6 +522,69 @@ class AIPlayer:
 
         return msgs
 
+    INTRIGUE_CADENCE = 5    # the character game moves every fifth turn
+
+    def _manage_intrigue(self, game) -> List[str]:
+        """The character game (M76, spec 6): knives for war enemies,
+        weddings for friends, and the bloodless kill aimed at the
+        player's House."""
+        msgs = []
+        realm = getattr(game, "realms", {}).get(self.civ_name)
+        ruler = getattr(realm, "ruler", None)
+        if realm is None or ruler is None or not ruler.is_alive:
+            return msgs
+        # A running takeover is pressed every single turn.
+        if self._takeover is not None:
+            msgs.extend(f"    🗝️ {m}" for m in self._takeover.advance())
+            if self._takeover.complete:
+                self._takeover = None
+        if game.state.turn % self.INTRIGUE_CADENCE != 0:
+            return msgs
+        dm = game.diplomacy_manager
+        others = [n for n in game.civilizations if n != self.civ_name]
+        # 1. The knife: the most hated House's ruler draws a conspiracy.
+        sm = getattr(game, "scheme_manager", None)
+        enemies = [n for n in others
+                   if dm.is_at_war(self.civ_name, n)
+                   or dm.get_relation(self.civ_name, n) < -30]
+        if sm is not None and enemies:
+            enemies.sort(key=lambda n: dm.get_relation(self.civ_name, n))
+            target = game.rulers.get(enemies[0])
+            pool = [ch for ch in realm.characters
+                    if ch.is_alive and ch.age >= 16 and ch.id != ruler.id
+                    and not sm.scheming(ch)]
+            pool.sort(key=lambda ch: (-ch.get_effective_stat("intrigue"), ch.id))
+            if (target is not None and target.is_alive and pool
+                    and not any(s.agent in realm.characters for s in sm.schemes)):
+                scheme = sm.start_scheme(pool[0], target, "assassination",
+                                         enemies[0])
+                for ally in pool[1:3]:
+                    scheme.add_participant(ally)
+                msgs.append(f"    🗡️ Agents of {self.civ_name} move against {target.name}")
+        # 2. The wedding: bind the warmest friend by marriage-as-merger.
+        friends = [n for n in others
+                   if not dm.is_at_war(self.civ_name, n)
+                   and dm.get_relation(self.civ_name, n) >= 20]
+        if friends:
+            friends.sort(key=lambda n: -dm.get_relation(self.civ_name, n))
+            from marriages import arrange_match_between
+            line = arrange_match_between(game, self.civ_name, friends[0])
+            if line:
+                msgs.append(f"    💍 {line}")
+        # 3. The bloodless kill: a rich, hostile House buys the player out.
+        player = getattr(game, "player_civ", None)
+        if (self._takeover is None and player is not None
+                and player.name != self.civ_name
+                and dm.get_relation(self.civ_name, player.name) < 0):
+            prealm = getattr(game, "realms", {}).get(player.name)
+            if (prealm is not None and getattr(prealm, "enterprises", None)
+                    and ruler.gold_reserve >= 150.0):
+                from schemes import Takeover
+                self._takeover = Takeover(ruler, realm, prealm)
+                msgs.append(f"    🗝️ House {self.civ_name} begins quietly buying "
+                            f"House {player.name} paper")
+        return msgs
+
     def _is_at_war(self, game, target: str) -> bool:
         return game.diplomacy_manager.is_at_war(self.civ_name, target)
 
@@ -653,8 +717,9 @@ class AIPlayer:
         msgs.extend(self._assign_commanders(game))
         msgs.extend(self._manage_military(game))
 
-        # 4. Diplomacy
+        # 4. Diplomacy, then the character game (M76)
         msgs.extend(self._manage_diplomacy(game))
+        msgs.extend(self._manage_intrigue(game))
 
         # 5. Expansion
         msgs.extend(self._manage_expansion(game))
