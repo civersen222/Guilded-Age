@@ -531,6 +531,10 @@ class Game:
         from ideology import IdeologicalTide
         self.tide = IdeologicalTide()
 
+        # Legitimacy (M59, spec 5.3): each House's mandate to rule.
+        from ideology import LEGITIMACY_START
+        self.legitimacy = {name: LEGITIMACY_START for name in self.civilizations}
+
         # Generate initial events
         self.event_manager.generate_events()
 
@@ -629,6 +633,21 @@ class Game:
         # Calculate happiness for all civilizations
         for civ_name in self.civilizations:
             self._calculate_happiness(civ_name, msgs)
+
+        # Legitimacy (M59): each House's mandate follows its people's mood,
+        # its fresh atrocities, and the world-wide tide.
+        from ideology import (tick_legitimacy, LEGITIMACY_START,
+                              LEGITIMACY_VICTORY_FLOOR)
+        for civ_name in self.civilizations:
+            _fresh = self.tide.consume_fresh(civ_name)
+            _before = self.legitimacy.get(civ_name, LEGITIMACY_START)
+            _after = tick_legitimacy(_before, self.happiness.get(civ_name, 0),
+                                     tide=self.tide, fresh_atrocities=_fresh)
+            self.legitimacy[civ_name] = _after
+            if _after < LEGITIMACY_VICTORY_FLOOR <= _before:
+                self.state.turn_events.append(
+                    f"⚖️ House {civ_name}'s legitimacy craters ({_after:.0f}) - "
+                    f"its right to rule is in question")
 
         # Pantheon auto-founding: when faith >= 25 and no pantheon yet
         for civ_name in self.civilizations:
@@ -1356,7 +1375,13 @@ class Game:
                 city_counts[c.owner] = city_counts.get(c.owner, 0) + 1
 
         # Check all civilizations
+        from ideology import LEGITIMACY_START, LEGITIMACY_VICTORY_FLOOR
         for civ_name, civ in self.civilizations.items():
+            # Legitimacy gate (M59): a delegitimized House cannot claim a
+            # victory of accumulation, whatever its tally says.
+            if getattr(self, "legitimacy", {}).get(
+                    civ_name, LEGITIMACY_START) < LEGITIMACY_VICTORY_FLOOR:
+                continue
             civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
 
             # Domination: dominate the map rather than hit a flat city count.

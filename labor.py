@@ -92,7 +92,7 @@ def resolve_accident(city, realm=None, rng=_random, tide=None) -> list:
     from game_data import house_name
     events = []
     if tide is not None:
-        tide.record_atrocity("accident")
+        tide.record_atrocity("accident", house=city.owner)
     if city.population > 1:
         city.population -= 1
     city.unrest += ACCIDENT_UNREST
@@ -133,7 +133,7 @@ def cover_up(ruler, city, tide=None) -> list:
                                data={"ruler": getattr(ruler, "name", str(ruler)),
                                      "city": city.name}))]
     if tide is not None:
-        tide.record_atrocity("cover_up")
+        tide.record_atrocity("cover_up", house=city.owner)
     city.unrest = max(0.0, city.unrest - COVERUP_UNREST_RELIEF)
     if ruler is not None and getattr(ruler, "is_alive", False):
         msg = ruler.add_stress(COVERUP_STRESS + ruler.check_stress_action("cover_up"))
@@ -231,7 +231,7 @@ def martyr_leader(mv, city, cities=None, realm=None, rng=_random, tide=None) -> 
     mv.martyr = leader.name
     mv.militancy = min(100.0, mv.militancy + MARTYR_MILITANCY)
     if tide is not None:
-        tide.record_atrocity("martyrdom")
+        tide.record_atrocity("martyrdom", house=city.owner)
     events.append(f"{leader.name} is martyred - {city.name} will not forget")
     if not cities:
         return events
