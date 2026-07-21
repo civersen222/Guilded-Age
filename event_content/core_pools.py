@@ -10,6 +10,8 @@ Every template must only use slots the wiring guarantees for its kind:
     focus_milestone:    subject, focus, attr
     industrial_accident: city, house
     cover_up:           ruler, city
+    staged_accident:    target, civ
+    conspiracy_trial:   mastermind, civ
 Content pack 1 (M42): every pool has 4+ variants.
 """
 
@@ -69,5 +71,17 @@ TEMPLATE_POOLS = {
         "Ink dries on {ruler}'s desk - the {city} inquest is quietly dissolved",
         "{ruler} buys every column inch in the capital; {city} buries its dead unmentioned",
         "The {city} witnesses recant one by one; {ruler}'s meaning is understood",
+    ],
+    "staged_accident": [
+        "A carriage axle snaps on the cliff road; {target} of {civ} dies in a 'tragic accident'",
+        "{target} of {civ} drowns in the mill race - the inquest finds nothing, twice",
+        "The gas lamps in {target}'s study leaked all night; {civ} mourns a misfortune",
+        "A scaffold gives way beneath {target}; {civ} buries the body and asks no questions",
+    ],
+    "conspiracy_trial": [
+        "TRIAL OF THE CENTURY in {civ}: {mastermind} stands accused of conspiracy to murder",
+        "The Houses close ranks - {mastermind} is dragged before a tribunal in {civ}",
+        "Every paper in {civ} prints the same word over {mastermind}'s portrait: MURDERER",
+        "{mastermind}'s letters are read aloud in open court; {civ} gasps at every page",
     ],
 }

@@ -13,6 +13,7 @@ ATROCITY_WEIGHTS = {
     "accident": 1.0,
     "cover_up": 2.0,
     "martyrdom": 4.0,
+    "assassination": 6.0,
 }
 
 

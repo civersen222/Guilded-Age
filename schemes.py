@@ -367,3 +367,98 @@ class Takeover:
                         f"{self.target_realm.civ_name} - {n} enterprises "
                         f"change hands without a shot")
         return msgs
+
+
+# --- Assassination conspiracy (M66, spec 6): everyone fears it -------------
+
+CONSPIRACY_COST = 100.0        # hired men, staged accidents, anarchist patsies
+CONSPIRACY_TURNS = 3           # turns of preparation before the attempt
+CONSPIRACY_BETRAYAL = 0.08     # per co-conspirator, per turn
+CONSPIRACY_SUCCESS = 0.7       # the attempt itself, once prepared
+CONSPIRACY_MIN = 2             # no lone knives - it takes a conspiracy
+NUCLEAR_SCANDAL = 5.0          # the nuclear scandal: legitimacy collapse
+CLOSED_RANKS_OPINION = -60     # every House turns on the exposed mastermind
+
+
+def start_conspiracy(mastermind, target, target_civ, conspirators):
+    """Assemble the conspiracy (spec 6): expensive, deniable, dreaded.
+    Returns the Conspiracy, or None if the mastermind cannot pay or
+    cannot find enough co-conspirators."""
+    if len(conspirators) < CONSPIRACY_MIN:
+        return None
+    if mastermind.gold_reserve < CONSPIRACY_COST:
+        return None
+    mastermind.gold_reserve -= CONSPIRACY_COST
+    return Conspiracy(mastermind, target, target_civ, conspirators)
+
+
+class Conspiracy:
+    """Assassination as a conspiracy (spec 6): hired men, a staged
+    accident, and co-conspirators who are each a betrayal risk every
+    turn. Success is a quiet 'accident' nobody can pin; exposure is the
+    nuclear scandal - legitimacy collapse, every House closing ranks,
+    and a trial. Everyone fears it; almost no one dares it."""
+
+    def __init__(self, mastermind, target, target_civ, conspirators):
+        self.mastermind = mastermind
+        self.target = target
+        self.target_civ = target_civ
+        self.conspirators = list(conspirators)
+        self.turns = 0
+        self.done = False
+        self.exposed = False
+
+    def advance(self, game, rng=_random, tide=None) -> List[str]:
+        """One turn in the dark: every living co-conspirator may lose
+        their nerve and talk; if the plot holds through preparation,
+        the accident is staged."""
+        if self.done or not self.target.is_alive:
+            self.done = True
+            return []
+        for ch in self.conspirators:
+            if ch.is_alive and rng.random() < CONSPIRACY_BETRAYAL:
+                return self._expose(game, ch, rng, tide)
+        self.turns += 1
+        if self.turns < CONSPIRACY_TURNS:
+            return []
+        if rng.random() < CONSPIRACY_SUCCESS:
+            self.done = True
+            self.target.is_alive = False
+            self.target.age_progress.is_alive = False
+            return [render(Situation("staged_accident", {"target": self.target},
+                                     data={"civ": self.target_civ}))]
+        return self._expose(game, None, rng, tide)
+
+    def _expose(self, game, traitor, rng=_random, tide=None) -> List[str]:
+        """The nuclear scandal (spec 6): the conspiracy comes to light -
+        legitimacy collapses, the tide books the atrocity, every House
+        closes ranks against the mastermind, and the trial begins."""
+        self.done = True
+        self.exposed = True
+        m = self.mastermind
+        msgs: List[str] = []
+        if traitor is not None:
+            msgs.append(f"{traitor.name} loses their nerve and talks - "
+                        f"the conspiracy is blown open")
+        arealm = SchemeManager._realm_of(game, m)
+        house = arealm.civ_name if arealm is not None else None
+        if house is not None:
+            record_scandal(game.legitimacy, house, NUCLEAR_SCANDAL, msgs)
+        if tide is not None:
+            tide.record_atrocity("assassination", house=house)
+        for realm in (getattr(game, "realms", None) or {}).values():
+            ruler = getattr(realm, "ruler", None)
+            if ruler is not None and ruler.is_alive and ruler.id != m.id:
+                modify_opinion(ruler, m, CLOSED_RANKS_OPINION,
+                               "conspiracy to murder")
+        msgs.append(render(Situation("conspiracy_trial", {"mastermind": m},
+                                     data={"civ": self.target_civ})))
+        note = m.add_stress(40)
+        if note and "mental break" in note:
+            msgs.append(render(Situation("mental_break", {"subject": m})))
+        if rng.random() < EXECUTION_CHANCE:
+            m.is_alive = False
+            m.age_progress.is_alive = False
+            msgs.append(render(Situation("plot_executed", {"mastermind": m},
+                                         data={"civ": self.target_civ})))
+        return msgs
