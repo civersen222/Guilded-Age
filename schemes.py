@@ -13,7 +13,7 @@ from simulation import Secret, modify_opinion
 from event_engine import Situation, render
 from ideology import record_scandal
 from dispositions import expose_persona
-from shares import extort_shares
+from shares import extort_shares, transfer_shares, house_stake, seize_enterprises
 
 SCHEME_TYPES = {
     "coup":          {"risk": 0.03, "scandal": 1.5, "success_bonus": 0.15},
@@ -310,3 +310,60 @@ def compromise(game, agent, target, rng=_random) -> List[str]:
     if arealm is not None:
         record_scandal(game.legitimacy, arealm.civ_name, 1.0, msgs)
     return msgs
+
+
+# --- Hostile takeover (M65, spec 6): the bloodless kill --------------------
+
+TAKEOVER_THRESHOLD = 50.0   # average portfolio stake that flips the House
+TAKEOVER_PRICE = 2.0        # gold per 1% of one enterprise
+TAKEOVER_TRANCHE = 15.0     # max pct bought per enterprise, per seller, per turn
+
+
+class Takeover:
+    """The signature bloodless kill (spec 6): quietly buy a rival House's
+    shares via its disloyal holders - siblings, widows, denied heirs -
+    until you own their company out from under them. Past the threshold
+    the House's enterprises re-register under the buyer: the House
+    survives as characters, but it has lost its base. No shot fired."""
+
+    def __init__(self, buyer, buyer_realm, target_realm):
+        self.buyer = buyer
+        self.buyer_realm = buyer_realm
+        self.target_realm = target_realm
+        self.complete = False
+
+    def advance(self) -> List[str]:
+        """One turn of quiet buying: approach every disloyal holder and
+        take up to a tranche of each stake, gold changing hands at
+        TAKEOVER_PRICE. Completes when the average stake clears the
+        threshold."""
+        from realms import disloyal_shareholders
+        if self.complete:
+            return []
+        msgs: List[str] = []
+        for seller in disloyal_shareholders(self.target_realm):
+            for ent in self.target_realm.enterprises:
+                want = min(TAKEOVER_TRANCHE, self.buyer.gold_reserve / TAKEOVER_PRICE)
+                if want <= 0:
+                    break
+                moved = transfer_shares(ent, seller.id, self.buyer.id, want)
+                if moved > 0:
+                    cost = moved * TAKEOVER_PRICE
+                    self.buyer.gold_reserve -= cost
+                    seller.gold_reserve += cost
+                    modify_opinion(seller, self.buyer, 5, "a generous buyer")
+        stake = house_stake(self.target_realm, self.buyer.id)
+        if stake > 0:
+            msgs.append(f"{self.buyer.name} quietly holds {stake:.0f}% of "
+                        f"House {self.target_realm.civ_name}")
+        if stake > TAKEOVER_THRESHOLD:
+            n = seize_enterprises(self.target_realm, self.buyer_realm)
+            self.complete = True
+            vic_ruler = getattr(self.target_realm, "ruler", None)
+            if vic_ruler is not None:
+                modify_opinion(vic_ruler, self.buyer, -80,
+                               "bought the House out from under them")
+            msgs.append(f"HOSTILE TAKEOVER: {self.buyer.name} owns House "
+                        f"{self.target_realm.civ_name} - {n} enterprises "
+                        f"change hands without a shot")
+        return msgs

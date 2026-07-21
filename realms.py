@@ -151,3 +151,28 @@ def tick_loyalty(game) -> List[str]:
             ch.loyalty = cur + (target - cur) * 0.2
         events.extend(embezzle(game, realm, cities))
     return events
+
+
+DISLOYAL_LOYALTY = 40.0   # sellers: loyalty below this...
+DISLOYAL_OPINION = -20    # ...or opinion of the ruler at or below this
+
+
+def disloyal_shareholders(realm) -> List[Character]:
+    """Hostile takeover's door (M65, spec 6): the siblings, widows and
+    denied heirs who hold House shares but no love for the House. Low
+    loyalty or a grudge against the ruler marks them ready to sell.
+    The ruler is never on this list - selling the House out from under
+    yourself is a different verb."""
+    from simulation import opinion_matrix
+    ruler = realm.ruler
+    out: List[Character] = []
+    for ch in realm.characters:
+        if not ch.is_alive or ch.id == ruler.id:
+            continue
+        if not any(ch.id in ent.ledger for ent in realm.enterprises):
+            continue
+        opinion = opinion_matrix.get((ch.id, ruler.id), 0)
+        if (getattr(ch, "loyalty", LOYALTY_START) < DISLOYAL_LOYALTY
+                or opinion <= DISLOYAL_OPINION):
+            out.append(ch)
+    return out

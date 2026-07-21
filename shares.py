@@ -178,3 +178,27 @@ def embezzle(game, realm, cities) -> List[str]:
         d.gold_reserve += take
         events.append(f"{d.name} embezzles {take}g from the {city.name} books")
     return events
+
+
+def house_stake(realm, char_id: str) -> float:
+    """Hostile takeover's yardstick (M65, spec 6): the average stake one
+    holder has across EVERY enterprise of the House. Owning most of one
+    mill is a nuisance; owning most of the portfolio is the House."""
+    ents = realm.enterprises
+    if not ents:
+        return 0.0
+    return sum(ent.ledger.get(char_id, 0.0) for ent in ents) / len(ents)
+
+
+def seize_enterprises(from_realm, to_realm) -> int:
+    """The bloodless kill lands (M65, spec 6): every enterprise of the
+    toppled House re-registers under the buyer's House. Ledgers ride
+    along untouched - but dividends resolve against the owning realm's
+    characters, so the old kin's minority stakes stop paying out. The
+    House survives as characters; it has lost its base."""
+    moved = list(from_realm.enterprises)
+    for ent in moved:
+        ent.house = to_realm.civ_name
+        to_realm.enterprises.append(ent)
+    from_realm.enterprises.clear()
+    return len(moved)
