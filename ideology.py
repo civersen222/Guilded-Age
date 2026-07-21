@@ -141,3 +141,43 @@ def trigger_revolution(house: str, cities) -> tuple:
         events.append(f"  ⚑ {c.name} defects to the {REVOLUTION_OWNER}; "
                       f"worker militias man the barricades")
     return defected, events
+
+
+# --- Transformation (M61, spec 5.3): riding the wave -----------------------
+
+TRANSFORM_CONVICTION = -40.0    # true labor_capital at/below this is genuine
+TRANSFORM_LEGITIMACY = 55.0     # a fresh mandate from the workers themselves
+
+
+def can_transform(ruler) -> bool:
+    """Genuine Labor-ward conviction (spec 5.3): the TRUE spectrum value
+    is checked - dispositions are the private self; a cultivated persona
+    does not fool the movement."""
+    if ruler is None or not getattr(ruler, "is_alive", False):
+        return False
+    return ruler.dispositions.get("labor_capital", 0.0) <= TRANSFORM_CONVICTION
+
+
+def transform_house(house: str, ruler, cities, realm, legitimacy: dict) -> list:
+    """Break with the Great Houses (spec 5.3): concede the enterprises to
+    their workers, arm the strikers, smash the dials - and survive as
+    People's Chairman of a transformed state."""
+    events = [f"⚑ {ruler.name} breaks with the Great Houses - House {house} "
+              f"transforms! The People's Chairman rises"]
+    conceded = 0
+    for ent in getattr(realm, "enterprises", ()):
+        if ent.ledger:
+            ent.ledger = {}          # the workers hold the works now
+            conceded += 1
+    for c in cities:
+        if getattr(c, "movement", None) is not None:
+            c.movement = None        # the strikers are armed, not fought
+            if hasattr(c, "city_max_hp"):
+                c.hp = c.city_max_hp()   # worker militias defend the city
+        c.unrest = 0.0
+        c.extraction_dial = 0.0      # the dial is smashed
+    legitimacy[house] = TRANSFORM_LEGITIMACY
+    if conceded:
+        events.append(f"  {conceded} enterprises conceded to their workers; "
+                      f"shares become political capital")
+    return events

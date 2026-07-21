@@ -536,6 +536,8 @@ class Game:
         self.legitimacy = {name: LEGITIMACY_START for name in self.civilizations}
         # Revolution (M60, spec 5.3): consecutive brewing turns per House.
         self.revolution_brewing = {}
+        # Transformation (M61, spec 5.3): civ_name -> turn it broke with the Houses.
+        self.transformed = {}
 
         # Generate initial events
         self.event_manager.generate_events()
@@ -668,6 +670,18 @@ class Game:
                         f"({_n}/{REVOLUTION_BREWING_TURNS})")
                     continue
                 self.revolution_brewing.pop(civ_name, None)
+                # Transformation (M61, spec 5.3): a ruler whose TRUE
+                # conviction is genuinely Labor-ward rides the wave instead.
+                from ideology import can_transform, transform_house
+                _trealm = self.realms.get(civ_name)
+                if can_transform(getattr(_trealm, "ruler", None)):
+                    _tevs = transform_house(civ_name, _trealm.ruler, _rcities,
+                                            _trealm, self.legitimacy)
+                    self.transformed[civ_name] = self.state.turn
+                    for _ev in _tevs:
+                        msgs.append(_ev)
+                        self.state.turn_events.append(_ev)
+                    continue
                 _defected, _revs = trigger_revolution(civ_name, _rcities)
                 for _ev in _revs:
                     msgs.append(_ev)
@@ -1420,6 +1434,13 @@ class Game:
                     civ_name, LEGITIMACY_START) < LEGITIMACY_VICTORY_FLOOR:
                 continue
             civ_cities = [c for c in self.cities.values() if c.owner == civ_name]
+
+            # People's Chairman (M61, spec 5.3): a transformed House wins
+            # when the world's tide itself turns revolutionary - it led the
+            # wave instead of drowning under it.
+            if (civ_name in getattr(self, "transformed", {}) and civ_cities
+                    and self.tide.phase() == "revolutionary"):
+                return {"winner": civ_name, "type": "People's Chairman"}
 
             # Domination: dominate the map rather than hit a flat city count.
             # Requires owning a super-majority of all cities AND a decisive lead
