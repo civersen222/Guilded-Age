@@ -1415,6 +1415,20 @@ class Game:
         if self.state.turn < MIN_VICTORY_TURN:
             return None
 
+        # Time victory (M77): when the budget runs out, the age is judged.
+        turn_budget = getattr(self.state, "turn_budget", 0)
+        if turn_budget and self.state.turn >= turn_budget:
+            def _score(name: str) -> float:
+                civ_o = self.civilizations[name]
+                tm = self.research.get(name)
+                return (12.0 * sum(1 for c in self.cities.values() if c.owner == name)
+                        + 6.0 * len(getattr(tm, "researched", []) or [])
+                        + getattr(civ_o, "culture", 0) / 5.0
+                        + getattr(civ_o, "prestige", 0) / 5.0
+                        + getattr(self, "legitimacy", {}).get(name, 0.0))
+            winner = max(self.civilizations, key=_score)
+            return {"winner": winner, "type": "Time"}
+
         def _reached_min_era(name: str) -> bool:
             tm = self.research.get(name)
             if tm is None or not hasattr(tm, 'get_current_era'):

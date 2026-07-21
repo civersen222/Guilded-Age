@@ -67,10 +67,11 @@ class IdeologicalTide:
 
 LEGITIMACY_START = 70.0           # every House begins with a workable mandate
 LEGITIMACY_MAX = 100.0
-LEGITIMACY_HAPPY_RECOVERY = 0.4   # per turn while the realm is content
+LEGITIMACY_HAPPY_RECOVERY = 0.4   # base per-turn recovery while content
+LEGITIMACY_HAPPY_BONUS = 0.6      # extra recovery at happiness >= 20 (scales linearly)
 LEGITIMACY_UNHAPPY_DRAIN = 0.2    # per point of negative happiness, per turn
 LEGITIMACY_ATROCITY_DRAIN = 3.0   # per unit of fresh atrocity weight
-LEGITIMACY_TIDE_DRAIN = 0.6       # per turn at full tide (scales linearly)
+LEGITIMACY_TIDE_DRAIN = 0.35      # per turn at full tide (M77: recovery can win)
 LEGITIMACY_SCANDAL_DRAIN = 8.0    # per unit of scandal severity
 LEGITIMACY_VICTORY_FLOOR = 40.0   # no accumulation victory below this
 
@@ -80,7 +81,8 @@ def tick_legitimacy(current: float, happiness: int, tide=None,
     """One turn of a House's mandate: contentment slowly rebuilds it;
     misery, fresh atrocities and the rising tide all drain it."""
     if happiness >= 0:
-        current += LEGITIMACY_HAPPY_RECOVERY
+        current += (LEGITIMACY_HAPPY_RECOVERY
+                    + LEGITIMACY_HAPPY_BONUS * min(happiness, 20) / 20.0)
     else:
         current -= LEGITIMACY_UNHAPPY_DRAIN * float(-happiness)
     current -= LEGITIMACY_ATROCITY_DRAIN * fresh_atrocities
