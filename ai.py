@@ -131,13 +131,8 @@ class AIPlayer:
         if not candidates:
             return None
 
-        # Weighted random pick, fallback to highest weight
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        if random.random() < 0.6:
-            return candidates[0][0]
-        top = [c for c in candidates if c[1] >= candidates[0][1] * 0.5]
-        if top:
-            return random.choice(top)[0]
+        # Deterministic targeting (M74): best weight first, cheapest tie-break
+        candidates.sort(key=lambda c: (-c[1], TECHNOLOGIES[c[0]].cost, c[0]))
         return candidates[0][0]
 
     # ── Production ──────────────────────────────────────────────────────────
@@ -178,7 +173,31 @@ class AIPlayer:
             military_pool = self._get_available_military(researched, owned_resources)
             if military_pool:
                 return random.choice(military_pool)
-        return "Barracks" if "Barracks" not in getattr(city, "buildings", []) else "Marketplace"
+        return self._choose_building(city, researched)
+
+    BUILD_ORDER = ["Monument", "Granary", "Workshop", "Aqueduct", "Factory"]
+
+    def _choose_building(self, city, researched: Set[str]) -> Optional[str]:
+        """The build order (M74): first unbuilt house we can raise without
+        a district, gated only by tech."""
+        built = getattr(city, "buildings", None) or {}
+        for name in self.BUILD_ORDER:
+            btype = BUILDINGS[name]
+            if name in built:
+                continue
+            if btype.requires_tech and btype.requires_tech not in researched:
+                continue
+            return name
+        return None
+
+    def _dial_relief(self, city) -> float:
+        """Ease the squeeze where the streets are hot (M74, spec 5.1)."""
+        unrest = getattr(city, "unrest", 0.0)
+        if unrest >= 50.0:
+            return 20.0
+        if unrest >= 25.0:
+            return 10.0
+        return 0.0
 
     def _get_available_military(self, researched: Set[str],
                                 owned_resources: Optional[Set[str]] = None) -> List[str]:
@@ -550,13 +569,15 @@ class AIPlayer:
                      f"{self.priorities['expansion']*100:.0f}% expansion")
 
         # Extraction dial (M55, spec 5.1): the ruler's convictions set how
-        # hard every House city squeezes its labor this turn.
-        from labor import dial_from_ruler
+        # hard every House city squeezes its labor this turn; hot streets
+        # get relief (M74).
+        from labor import clamp_dial, dial_from_ruler
         _realm = getattr(game, "realms", {}).get(self.civ_name)
         _dial = dial_from_ruler(getattr(_realm, "ruler", None))
         for _city in game.cities.values():
             if _city.owner == self.civ_name:
-                _city.extraction_dial = _dial
+                _city.extraction_dial = clamp_dial(
+                    _dial - self._dial_relief(_city))
 
         # 1. Research
         msgs.extend(self._manage_research(game))
