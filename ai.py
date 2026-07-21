@@ -11,6 +11,9 @@ from court import Court, CourtPosition
 from diplomacy_extended import TreatyType, CasusBelliType
 
 
+TILES_PER_CITY = 25     # spec 0.1: one city controls ~25 land tiles once borders settle
+
+
 class AIPlayer:
     """Simulates an opponent civilization's decisions with strategic depth."""
 
@@ -83,10 +86,11 @@ class AIPlayer:
 
         if threats > 0 and self.aggression > 0.4:
             adj["military"] += threats * 0.15
-        if len(cities) > 5:
+        target = self._city_target(game)
+        if len(cities) > target:
             adj["economy"] += 0.1
             adj["expansion"] -= 0.1
-        if len(cities) < 4:
+        if len(cities) < target:
             adj["expansion"] += max(0, 0.8 - 0.2 * len(cities))
         if gold > 150:
             adj["science"] += 0.1
@@ -155,8 +159,8 @@ class AIPlayer:
                            if u.unit_type in ("Worker", "Trader"))
         settler_count = sum(1 for u in units if u.unit_type == "Settler")
 
-        # If low on settlers and few cities, build settler
-        if adj["expansion"] > 0.15 and len(cities) < 6 and settler_count == 0:
+        # If below the map's fair share and no settler out, build settler
+        if adj["expansion"] > 0.15 and len(cities) < self._city_target(game) and settler_count == 0:
             return "Settler"
 
         # If low on workers, build worker
@@ -478,6 +482,14 @@ class AIPlayer:
 
     # ── City expansion ──────────────────────────────────────────────────────
 
+    def _city_target(self, game) -> int:
+        """This House's fair share of the map (spec 0.1): land / 25 / civs."""
+        tiles = getattr(getattr(game, "map", None), "tiles", None) or {}
+        land = sum(1 for t in tiles.values()
+                   if t.terrain not in (TerrainType.WATER_COAST, TerrainType.OCEAN))
+        civs = max(1, len(getattr(game, "civilizations", None) or {}))
+        return max(4, round(land / TILES_PER_CITY / civs))
+
     def _manage_expansion(self, game) -> List[str]:
         """Build settlers and found new cities."""
         msgs = []
@@ -486,8 +498,8 @@ class AIPlayer:
                     if u.owner == self.civ_name and u.unit_type == "Settler"
                     and u.is_alive and u.moves_left > 0]
 
-        # If we have settlers and few cities, try to found a new city
-        if settlers and len(cities) < 6:
+        # If we have settlers and land unclaimed, try to found a new city
+        if settlers and len(cities) < self._city_target(game):
             settler = settlers[0]
             tile = self._find_expansion_tile(game, settler.position)
             if tile:
