@@ -543,6 +543,9 @@ class Game:
         from event_chains import ChainManager
         from event_content.chains_pack1 import build_pack1
         self.chain_manager = ChainManager(build_pack1())
+        # Chain pack 2 (M72b, spec 7): the strike wave and the panic.
+        from event_content.chains_pack2 import build_pack2
+        self.chain_manager.defs.extend(build_pack2())
 
         # Generate initial events
         self.event_manager.generate_events()
