@@ -314,6 +314,58 @@ class AIPlayer:
 
     # ── Military management ─────────────────────────────────────────────────
 
+    def _army_strength(self, game, civ: str) -> float:
+        """Sum of attack across a House's living soldiers (M75)."""
+        total = 0.0
+        for u in game.units.values():
+            if u.owner != civ or not u.is_alive:
+                continue
+            utype = UNIT_TYPES.get(u.unit_type)
+            if utype is None or utype.category in (UnitCategory.WORKER,
+                                                   UnitCategory.SETTLER):
+                continue
+            total += u.attack
+        return total
+
+    def _assign_commanders(self, game) -> List[str]:
+        """Post the House's best captains on its leaderless soldiers
+        (M75, spec 4.4)."""
+        realm = getattr(game, "realms", {}).get(self.civ_name)
+        if realm is None:
+            return []
+        busy = set()
+        ruler = getattr(realm, "ruler", None)
+        if ruler is not None:
+            busy.add(ruler.id)
+        for u in game.units.values():
+            cmd = getattr(u, "commander", None)
+            if cmd is not None and cmd.is_alive:
+                busy.add(cmd.id)
+        for c in game.cities.values():
+            d = getattr(c, "director", None)
+            if d is not None and d.is_alive:
+                busy.add(d.id)
+        pool = [ch for ch in getattr(realm, "characters", [])
+                if ch.is_alive and ch.age >= 16 and ch.id not in busy]
+        pool.sort(key=lambda ch: (-ch.get_effective_stat("command"), ch.id))
+        soldiers = []
+        for u in game.units.values():
+            if u.owner != self.civ_name or not u.is_alive:
+                continue
+            utype = UNIT_TYPES.get(u.unit_type)
+            if utype is None or utype.category in (UnitCategory.WORKER,
+                                                   UnitCategory.SETTLER):
+                continue
+            cmd = getattr(u, "commander", None)
+            if cmd is None or not cmd.is_alive:
+                soldiers.append(u)
+        soldiers.sort(key=lambda u: -u.attack)
+        msgs = []
+        for unit, captain in zip(soldiers, pool):
+            unit.commander = captain
+            msgs.append(f"    🎖️ {captain.name} takes command of the {unit.unit_type}")
+        return msgs
+
     def _manage_military(self, game) -> List[str]:
         """Move units toward threats or garrison cities — units actually move."""
         msgs = []
@@ -326,6 +378,14 @@ class AIPlayer:
                        if u.owner != self.civ_name and u.is_alive]
         enemy_cities = [c for c in game.cities.values() if c.owner != self.civ_name]
         enemy_targets = enemy_units + enemy_cities
+        # Wars of conquest (M75): while at war, the army marches on the
+        # enemy's soldiers and cities - not whoever happens to be nearest.
+        dm = getattr(game, "diplomacy_manager", None)
+        if dm is not None:
+            war_targets = [t for t in enemy_targets
+                           if dm.is_at_war(self.civ_name, t.owner)]
+            if war_targets:
+                enemy_targets = war_targets
 
         def step_toward(unit, target_pos):
             """Move one land tile toward target_pos. move_unit handles combat."""
@@ -404,9 +464,13 @@ class AIPlayer:
             allied = target in self.allied_civs
             trading = target in self.trade_partners
 
-            # Relation < -30 and not at war: 20% chance declare war
+            # War of conquest (M75, spec 5): the House marches only when it
+            # is half again as strong as its prey - never on a coin flip.
             if relation < -30 and not at_war:
-                if (random.random() < 0.2
+                mine = self._army_strength(game, self.civ_name)
+                theirs = self._army_strength(game, target)
+                if (self.aggression >= 0.4 and mine >= 10.0
+                        and mine >= 1.5 * theirs
                         and game.diplomacy_manager.declare_war(self.civ_name, target)):
                     if target not in self.war_targets:
                         self.war_targets.append(target)
@@ -585,7 +649,8 @@ class AIPlayer:
         # 2. Production (units, buildings)
         msgs.extend(self._manage_production(game))
 
-        # 3. Military actions
+        # 3. Military actions: post the captains, then march (M75)
+        msgs.extend(self._assign_commanders(game))
         msgs.extend(self._manage_military(game))
 
         # 4. Diplomacy
