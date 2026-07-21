@@ -62,7 +62,7 @@ COVERUP_STRESS = 20       # base stress of signing a suppression order
 COVERUP_UNREST_RELIEF = 3.0
 
 
-def tick_extraction(city, realm=None, rng=_random) -> list:
+def tick_extraction(city, realm=None, rng=_random, tide=None) -> list:
     """One turn of the squeeze on one city: accrue unrest, roll accidents,
     and let the labor movement respond (spec 5.1/5.2).
 
@@ -70,24 +70,29 @@ def tick_extraction(city, realm=None, rng=_random) -> list:
     bodies fed into it). Returns a list of event strings (empty on quiet
     turns). Pass the owning realm to let accidents maim the Director,
     drift witnesses, and let unrest crystallize into a movement - with no
-    realm wired, the tick stays movement-free.
+    realm wired, the tick stays movement-free. Pass the world's
+    IdeologicalTide (M58) and the rising water scales unrest growth.
     """
     events = []
-    city.unrest += unrest_gain(city.extraction_dial)
+    _mult = tide.movement_multiplier() if tide is not None else 1.0
+    city.unrest += unrest_gain(city.extraction_dial) * _mult
     p = accident_chance(city.extraction_dial) * max(0.25, min(2.0, city.population / POP_REF))
     if rng.random() < p:
-        events.extend(resolve_accident(city, realm, rng))
+        events.extend(resolve_accident(city, realm, rng, tide))
     events.extend(tick_movement(city, realm, rng))
     return events
 
 
-def resolve_accident(city, realm=None, rng=_random) -> list:
+def resolve_accident(city, realm=None, rng=_random, tide=None) -> list:
     """An industrial accident: a worker dies, the city seethes, and the harm
     climbs the ladder (spec 5.1) - the Director is sometimes maimed, and
-    witnesses drift Reformist or Callous by where they already stand."""
+    witnesses drift Reformist or Callous by where they already stand.
+    Feeds the ideological tide (M58); a high tide drifts witnesses harder."""
     from event_engine import Situation, render
     from game_data import house_name
     events = []
+    if tide is not None:
+        tide.record_atrocity("accident")
     if city.population > 1:
         city.population -= 1
     city.unrest += ACCIDENT_UNREST
@@ -106,25 +111,29 @@ def resolve_accident(city, realm=None, rng=_random) -> list:
         msg = director.add_stress(30)
         if msg:
             events.append(msg)
+    _drift = WITNESS_DRIFT * (tide.drift_multiplier() if tide is not None else 1.0)
     for w in (director, ruler):
         if w is None or not getattr(w, "is_alive", False):
             continue
-        line = witness_drift(w, "labor_capital", WITNESS_DRIFT,
+        line = witness_drift(w, "labor_capital", _drift,
                              f"the {city.name} accident")
         if line:
             events.append(line)
     return events
 
 
-def cover_up(ruler, city) -> list:
+def cover_up(ruler, city, tide=None) -> list:
     """The ruler signs the suppression order (spec 5.1: the cost climbs the
     ladder). Unrest is smothered now; the signer pays in stress - more if
-    Honest or Compassionate - and drifts toward the Cruel end."""
+    Honest or Compassionate - and drifts toward the Cruel end. The lie
+    feeds the ideological tide (M58) harder than the accident did."""
     from event_engine import Situation, render
     from dispositions import apply_drift
     events = [render(Situation("cover_up",
                                data={"ruler": getattr(ruler, "name", str(ruler)),
                                      "city": city.name}))]
+    if tide is not None:
+        tide.record_atrocity("cover_up")
     city.unrest = max(0.0, city.unrest - COVERUP_UNREST_RELIEF)
     if ruler is not None and getattr(ruler, "is_alive", False):
         msg = ruler.add_stress(COVERUP_STRESS + ruler.check_stress_action("cover_up"))
@@ -209,10 +218,11 @@ def tick_movement(city, realm=None, rng=_random) -> list:
     return events
 
 
-def martyr_leader(mv, city, cities=None, realm=None, rng=_random) -> list:
+def martyr_leader(mv, city, cities=None, realm=None, rng=_random, tide=None) -> list:
     """Kill the movement's leader and reap the whirlwind (spec 5.2):
     martyrdom surges militancy and regionalizes - the nearest sister city
-    of the same House organizes in the martyr's name."""
+    of the same House organizes in the martyr's name. The loudest atrocity
+    the tide knows (M58)."""
     events = []
     leader = mv.leader
     if leader is None:
@@ -220,6 +230,8 @@ def martyr_leader(mv, city, cities=None, realm=None, rng=_random) -> list:
     leader.is_alive = False
     mv.martyr = leader.name
     mv.militancy = min(100.0, mv.militancy + MARTYR_MILITANCY)
+    if tide is not None:
+        tide.record_atrocity("martyrdom")
     events.append(f"{leader.name} is martyred - {city.name} will not forget")
     if not cities:
         return events

@@ -527,6 +527,10 @@ class Game:
         # Every civ gets a ruler, dynasty, and court (Phase B1)
         self.realms = create_realms(self)
 
+        # Ideological tide (M58, spec 5.2): one world-wide meter.
+        from ideology import IdeologicalTide
+        self.tide = IdeologicalTide()
+
         # Generate initial events
         self.event_manager.generate_events()
 
@@ -556,6 +560,8 @@ class Game:
         self.state.turn_events = []
         # P4 telemetry: per-turn counters (flushed to CSV if telemetry_path set)
         self._telemetry = {"dividends": {}, "marriages": 0, "successions": 0, "battles": 0}
+        # Ideological tide (M58, spec 5.2): history grinds forward each turn.
+        self.tide.tick()
         
         msgs.append(f"\n{'='*60}")
         msgs.append(f"TURN {self.state.turn} - {self.state.phase} PHASE")
@@ -830,19 +836,20 @@ class Game:
                 if city.population > old_pop:
                     self.state.turn_events.append(f"{city.name} has grown to population {city.population}!")
 
-                # Extraction tick (M55/M56, spec 5.1): unrest accrues and
-                # industrial accidents roll while the dial runs hot; a
-                # Capitalist ruler smothers the story and pays in stress.
+                # Extraction tick (M55/M56/M58, spec 5.1): unrest accrues
+                # and industrial accidents roll while the dial runs hot; a
+                # Capitalist ruler smothers the story and pays in stress;
+                # every atrocity feeds the world's ideological tide.
                 from labor import tick_extraction, cover_up
                 _lrealm = self.realms.get(city.owner)
-                _levs = tick_extraction(city, _lrealm)
+                _levs = tick_extraction(city, _lrealm, tide=self.tide)
                 for _ev in _levs:
                     self.state.turn_events.append(_ev)
                 _lruler = getattr(_lrealm, "ruler", None)
                 if (_levs and _lruler is not None
                         and getattr(_lruler, "is_alive", False)
                         and _lruler.dispositions.get("labor_capital", 0.0) >= 50):
-                    for _ev in cover_up(_lruler, city):
+                    for _ev in cover_up(_lruler, city, tide=self.tide):
                         self.state.turn_events.append(_ev)
                 
                 # Process production for each city
