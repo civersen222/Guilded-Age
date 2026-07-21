@@ -167,6 +167,7 @@ class GameScreen(BaseScreen):
             return
         elif event.key == pygame.K_y: self._open_popup("dynasty", game)
         elif event.key == pygame.K_c: self._open_popup("characters", game)
+        elif event.key == pygame.K_b: self._open_popup("board", game)
         elif event.key == pygame.K_r:
             if getattr(self, "_active_popup", None): self._active_popup._kill()
             from pygame_app.popups.religion_popup import ReligionPopup
@@ -186,6 +187,7 @@ class GameScreen(BaseScreen):
                 "<b>D</b> - Diplomacy<br>"
                 "<b>Y</b> - Dynasty<br>"
                 "<b>C</b> - Characters<br>"
+                "<b>B</b> - House Board<br>"
                 "<b>R</b> - Religion<br>"
                 "<b>P</b> - Production (city)<br>"
                 "<b>TAB</b> - Cycle Units<br>"
@@ -390,7 +392,7 @@ class GameScreen(BaseScreen):
         signatures and proper _kill() methods.
         """
         if getattr(self, "_active_popup", None): self._active_popup._kill()
-        popups = {"tech": ("TechTreePopup", "tech_tree"), "diplomacy": ("DiplomacyPopup", "diplomacy"), "dynasty": ("RealmPopup", "realm_popup"), "characters": ("CharacterSheetPopup", "character_sheet")}
+        popups = {"tech": ("TechTreePopup", "tech_tree"), "diplomacy": ("DiplomacyPopup", "diplomacy"), "dynasty": ("RealmPopup", "realm_popup"), "characters": ("CharacterSheetPopup", "character_sheet"), "board": ("HouseBoardPopup", "house_board")}
         cls_name, mod_name = popups[kind]
         mod = __import__(f"pygame_app.popups.{mod_name}", fromlist=[cls_name])
         popup = getattr(mod, cls_name)()
