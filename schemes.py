@@ -213,3 +213,100 @@ def blackmail(game, agent, secret, victim, realm, house, press_bonus=0,
     if note and "mental break" in note:
         msgs.append(render(Situation("mental_break", {"subject": agent})))
     return msgs
+
+
+# --- Leverage verbs (M64, spec 6): the machine as a weapon -----------------
+
+SABOTAGE_RISK = 0.15        # base discovery chance
+SABOTAGE_SCANDAL = 2.0
+SABOTAGE_POTENCY = 40
+SWAY_BASE = 0.6
+SWAY_OPINION = 15
+SEDUCE_BASE = 0.4
+AFFAIR_POTENCY = 35
+COMPROMISE_BASE = 0.5
+COMPROMISE_POTENCY = 20
+
+
+def sabotage(game, agent, city, victim_realm, rng=_random, tide=None) -> List[str]:
+    """A deniable 'accident' at a rival work (spec 6): the machine grinds
+    as a weapon - it kills THEIR workers, seethes THEIR city, and the
+    atrocity books to THEIR House (the tide does not ask who loosened the
+    bolt). Discovery pins a sabotage Secret on the agent and the scandal
+    comes home."""
+    from labor import resolve_accident
+    msgs = [f"A mysterious accident strikes the {city.name} works..."]
+    msgs.extend(resolve_accident(city, victim_realm, rng, tide))
+    defense = max((ch.get_effective_stat("intrigue")
+                   for ch in victim_realm.court.positions.values()
+                   if ch and ch.is_alive), default=0)
+    risk = max(0.02, min(0.5, SABOTAGE_RISK
+                         - agent.get_effective_stat("intrigue") * 0.005
+                         + defense * 0.005))
+    if rng.random() < risk:
+        secret = Secret("sabotage", agent.id,
+                        f"{agent.name} engineered the {city.name} accident",
+                        SABOTAGE_POTENCY)
+        vic_ruler = getattr(victim_realm, "ruler", None)
+        if vic_ruler is not None:
+            secret.holders.add(vic_ruler.id)
+            modify_opinion(vic_ruler, agent, -50, "sabotage uncovered")
+        agent.secrets.append(secret)
+        arealm = SchemeManager._realm_of(game, agent)
+        if arealm is not None:
+            record_scandal(game.legitimacy, arealm.civ_name,
+                           SABOTAGE_SCANDAL, msgs)
+        msgs.append(f"The {city.name} 'accident' is traced to {agent.name}!")
+    return msgs
+
+
+def sway(agent, target, rng=_random) -> List[str]:
+    """Work on a person (spec 6/4.3): flattery, favors, salons. Success
+    builds real opinion leverage; a clumsy approach costs a little."""
+    chance = min(0.95, SWAY_BASE + agent.get_effective_stat("statecraft") * 0.01)
+    if rng.random() < chance:
+        modify_opinion(target, agent, SWAY_OPINION, "swayed")
+        return [f"{agent.name} wins ground with {target.name}"]
+    modify_opinion(target, agent, -5, "clumsy flattery")
+    return [f"{target.name} sees through {agent.name}'s flattery"]
+
+
+def seduce(agent, target, rng=_random) -> List[str]:
+    """Charm as leverage (spec 6/4.3): success starts an affair - a
+    mutual Secret in the persona gap, potent enough to spend."""
+    disp = agent.dispositions
+    charm = (max(0.0, -disp.get("magnetic_repellent", 0.0))
+             + max(0.0, -disp.get("comely_plain", 0.0)))
+    warmth = max(0.0, -target.dispositions.get("romantic_cold", 0.0))
+    chance = min(0.95, SEDUCE_BASE + charm * 0.002 + warmth * 0.002)
+    if rng.random() < chance:
+        secret = Secret("affair", target.id,
+                        f"{target.name} and {agent.name} are entangled in an affair",
+                        AFFAIR_POTENCY)
+        secret.holders.add(agent.id)
+        target.secrets.append(secret)
+        modify_opinion(target, agent, 25, "the affair")
+        modify_opinion(agent, target, 25, "the affair")
+        return [f"{agent.name} and {target.name} begin an affair - leverage in the gap"]
+    modify_opinion(target, agent, -20, "rebuffed advance")
+    return [f"{target.name} rebuffs {agent.name}"]
+
+
+def compromise(game, agent, target, rng=_random) -> List[str]:
+    """Manufacture a Secret (spec 6): stage the photograph, forge the
+    ledger. Success mints leverage; getting caught fabricating is a
+    scandal of its own."""
+    chance = min(0.95, COMPROMISE_BASE + agent.get_effective_stat("intrigue") * 0.01)
+    if rng.random() < chance:
+        secret = Secret("compromise", target.id,
+                        f"{target.name} was compromised by {agent.name}'s design",
+                        COMPROMISE_POTENCY)
+        secret.holders.add(agent.id)
+        target.secrets.append(secret)
+        return [f"{agent.name} manufactures leverage on {target.name}"]
+    msgs = [f"{target.name} catches {agent.name} fabricating evidence"]
+    modify_opinion(target, agent, -40, "caught fabricating")
+    arealm = SchemeManager._realm_of(game, agent)
+    if arealm is not None:
+        record_scandal(game.legitimacy, arealm.civ_name, 1.0, msgs)
+    return msgs

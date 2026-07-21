@@ -53,9 +53,21 @@ def house_power(realm) -> float:
     return float(sum(ent.base_yield for ent in realm.enterprises))
 
 
+SCANDAL_KEYS = ("honest_deceitful", "temperate_hedonist")
+
+
+def scandal_discount(char) -> float:
+    """Courtship pressure (M64, spec 4.3): what society BELIEVES about a
+    person is what the market prices - an exposé craters the persona and
+    with it the asking price."""
+    persona = getattr(char, "persona", None) or {}
+    return sum(max(0.0, persona.get(k, 0.0)) for k in SCANDAL_KEYS) * 0.15
+
+
 def asking_price(char, realm) -> float:
     """AI valuation: what this hand in marriage costs the other house."""
-    return 10.0 + bloodline_quality(char) * 0.5 + house_power(realm)
+    return max(1.0, 10.0 + bloodline_quality(char) * 0.5 + house_power(realm)
+               - scandal_discount(char))
 
 
 def _negotiate_contract(ra, rb, a, b) -> MarriageContract:
