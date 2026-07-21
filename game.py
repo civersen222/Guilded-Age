@@ -830,11 +830,20 @@ class Game:
                 if city.population > old_pop:
                     self.state.turn_events.append(f"{city.name} has grown to population {city.population}!")
 
-                # Extraction tick (M55, spec 5.1): unrest accrues and
-                # industrial accidents roll while the dial runs hot.
-                from labor import tick_extraction
-                for _ev in tick_extraction(city):
+                # Extraction tick (M55/M56, spec 5.1): unrest accrues and
+                # industrial accidents roll while the dial runs hot; a
+                # Capitalist ruler smothers the story and pays in stress.
+                from labor import tick_extraction, cover_up
+                _lrealm = self.realms.get(city.owner)
+                _levs = tick_extraction(city, _lrealm)
+                for _ev in _levs:
                     self.state.turn_events.append(_ev)
+                _lruler = getattr(_lrealm, "ruler", None)
+                if (_levs and _lruler is not None
+                        and getattr(_lruler, "is_alive", False)
+                        and _lruler.dispositions.get("labor_capital", 0.0) >= 50):
+                    for _ev in cover_up(_lruler, city):
+                        self.state.turn_events.append(_ev)
                 
                 # Process production for each city
                 if city.production_queue:

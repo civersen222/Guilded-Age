@@ -8,6 +8,8 @@ Every template must only use slots the wiring guarantees for its kind:
     plot_uncovered:     target, civ
     plot_executed:      mastermind, civ
     focus_milestone:    subject, focus, attr
+    industrial_accident: city, house
+    cover_up:           ruler, city
 Content pack 1 (M42): every pool has 4+ variants.
 """
 
@@ -55,5 +57,17 @@ TEMPLATE_POOLS = {
         "Years on {focus} leave their mark: {subject} grows in {attr}",
         "{subject} reaches a new plateau on {focus}; the {attr} gains are plain to see",
         "The long hours tell: {subject}'s {attr} climbs another rung on {focus}",
+    ],
+    "industrial_accident": [
+        "Disaster at the {city} works: the machinery of {house} does not stop for the dead",
+        "A boiler bursts in {city}; {house} counts the cost in silver, the workers in coffins",
+        "Black smoke over {city} - another 'regrettable incident' at the {house} works",
+        "The whistle at {city} blows early: an accident on the floor, and {house} ledgers a loss",
+    ],
+    "cover_up": [
+        "{ruler} signs the order: the {city} incident never happened",
+        "Ink dries on {ruler}'s desk - the {city} inquest is quietly dissolved",
+        "{ruler} buys every column inch in the capital; {city} buries its dead unmentioned",
+        "The {city} witnesses recant one by one; {ruler}'s meaning is understood",
     ],
 }

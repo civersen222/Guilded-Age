@@ -55,18 +55,79 @@ def dial_from_ruler(ruler) -> float:
     return clamp_dial(DIAL_DEFAULT + lc * 0.35 + pe * 0.15)
 
 
-def tick_extraction(city, rng=_random) -> list:
+POP_REF = 10.0            # accident risk scales with workforce size
+MAIM_CHANCE = 0.25        # chance the city's Director is caught in the machinery
+WITNESS_DRIFT = 8.0       # conviction shove per witnessed accident
+COVERUP_STRESS = 20       # base stress of signing a suppression order
+COVERUP_UNREST_RELIEF = 3.0
+
+
+def tick_extraction(city, realm=None, rng=_random) -> list:
     """One turn of the squeeze on one city: accrue unrest, roll accidents.
 
-    Returns a list of event strings (empty on quiet turns). An accident
-    kills a citizen and spikes unrest by ACCIDENT_UNREST.
+    Accident risk is dial x workforce (spec 5.1: the grind scales with the
+    bodies fed into it). Returns a list of event strings (empty on quiet
+    turns). Pass the owning realm to let accidents maim the Director and
+    drift witnesses (Callous or Reformist).
     """
     events = []
     city.unrest += unrest_gain(city.extraction_dial)
-    if rng.random() < accident_chance(city.extraction_dial):
-        if city.population > 1:
-            city.population -= 1
-        city.unrest += ACCIDENT_UNREST
-        events.append(
-            f"Industrial accident in {city.name}! A worker is dead and the city seethes.")
+    p = accident_chance(city.extraction_dial) * max(0.25, min(2.0, city.population / POP_REF))
+    if rng.random() < p:
+        events.extend(resolve_accident(city, realm, rng))
+    return events
+
+
+def resolve_accident(city, realm=None, rng=_random) -> list:
+    """An industrial accident: a worker dies, the city seethes, and the harm
+    climbs the ladder (spec 5.1) - the Director is sometimes maimed, and
+    witnesses drift Reformist or Callous by where they already stand."""
+    from event_engine import Situation, render
+    from game_data import house_name
+    events = []
+    if city.population > 1:
+        city.population -= 1
+    city.unrest += ACCIDENT_UNREST
+    events.append(render(Situation("industrial_accident",
+                                   data={"city": city.name,
+                                         "house": house_name(city.owner)})))
+    if realm is None:
+        return events
+    from dispositions import witness_drift
+    director = getattr(city, "director", None)
+    ruler = getattr(realm, "ruler", None)
+    if (director is not None and getattr(director, "is_alive", False)
+            and rng.random() < MAIM_CHANCE):
+        director.add_trait("Maimed")
+        events.append(f"{director.name} is maimed in the {city.name} accident!")
+        msg = director.add_stress(30)
+        if msg:
+            events.append(msg)
+    for w in (director, ruler):
+        if w is None or not getattr(w, "is_alive", False):
+            continue
+        line = witness_drift(w, "labor_capital", WITNESS_DRIFT,
+                             f"the {city.name} accident")
+        if line:
+            events.append(line)
+    return events
+
+
+def cover_up(ruler, city) -> list:
+    """The ruler signs the suppression order (spec 5.1: the cost climbs the
+    ladder). Unrest is smothered now; the signer pays in stress - more if
+    Honest or Compassionate - and drifts toward the Cruel end."""
+    from event_engine import Situation, render
+    from dispositions import apply_drift
+    events = [render(Situation("cover_up",
+                               data={"ruler": getattr(ruler, "name", str(ruler)),
+                                     "city": city.name}))]
+    city.unrest = max(0.0, city.unrest - COVERUP_UNREST_RELIEF)
+    if ruler is not None and getattr(ruler, "is_alive", False):
+        msg = ruler.add_stress(COVERUP_STRESS + ruler.check_stress_action("cover_up"))
+        if msg:
+            events.append(msg)
+        line = apply_drift(ruler, "cruel_compassionate", -4.0, "signed the cover-up")
+        if line:
+            events.append(line)
     return events

@@ -151,6 +151,7 @@ ACTION_CONFLICTS: Dict[str, tuple] = {
     "declare_war": (("militarist_pacifist", 1),),
     "raise_taxes": (("generous_greedy", -1),),
     "accept_unfavorable_peace": (("ambitious_content", -1),),
+    "cover_up": (("honest_deceitful", -1), ("cruel_compassionate", 1)),
 }
 
 
