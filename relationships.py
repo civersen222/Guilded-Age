@@ -70,6 +70,7 @@ def _fill_player_court(game, realms):
             heir = _make_character(realm.civ_name, realm.ruler.base_stats, [], 20, 35)
             realm.characters.append(heir)
             game.characters.append(heir)
+        realm.prestige_legacy += getattr(realm.ruler, "prestige", 0.0)  # the House banks the dead ruler's glory (M84)
         for pos, ch in realm.court.positions.items():
             if ch and ch.id == heir.id:
                 realm.court.positions[pos] = None
