@@ -135,3 +135,18 @@ def test_long_ledger_is_the_default_verdict():
     g.houses[hs[1]].treasury = 10 ** 6
     ep = judge(g, h)
     assert ep.ending_key == "The Long Ledger"
+
+
+def test_epilogue_names_the_age_and_rival():
+    from gilded.chassis import GildedGame, TURN_BUDGET
+    from gilded.endings import judge
+    g = GildedGame(seed=2026)
+    for _ in range(TURN_BUDGET + 1):
+        g.end_turn()
+        if g.game_over:
+            break
+    ep = judge(g, next(iter(g.houses)))
+    # the coda names the final era and the bound rival
+    from gilded.saga.content.eras import ERAS
+    assert any(era.title in ep.text for era in ERAS[:g.director.age_idx + 1])
+    assert g.director.rival in ep.text

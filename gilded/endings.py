@@ -131,6 +131,32 @@ def judge(game, house_name: str) -> Epilogue:
                                               living, ever))
 
 
+def _saga_coda(game) -> str:
+    """The Director's closing lines: the final age, the rival's fate, and any
+    thread the century left open. Empty when no Director has observed a turn."""
+    d = getattr(game, "director", None)
+    if d is None:
+        return ""
+    from gilded.saga.content.eras import ERAS
+    parts = []
+    if 0 <= d.age_idx < len(ERAS):
+        parts.append(f"The age closed in {ERAS[d.age_idx].title}.")
+    if d.rival:
+        rival_beats = [b for b in d.beats.values() if b.source == "rival"]
+        reached = [b for b in rival_beats if b.state == "complete"]
+        if reached:
+            parts.append(f"House {d.rival}, the great rival, "
+                         f"{reached[-1].title.lower()} before the end.")
+        else:
+            parts.append(f"House {d.rival} was the rival that never quite rose.")
+    open_threads = [b for b in d.beats.values()
+                    if b.source == "chronicle" and b.state == "active"]
+    if open_threads:
+        parts.append("Left unresolved: "
+                     + "; ".join(sorted(b.title for b in open_threads)) + ".")
+    return " ".join(parts)
+
+
 def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
                    living: List, ever: int) -> str:
     year = year_of(game.turn)
@@ -166,4 +192,6 @@ def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
         p4 = (f"World: {axes['world']:.0f}. The House holds no province at "
               f"the close; whoever paid the century's bill, it was not them "
               f"- it never is.")
-    return "\n\n".join((p1, p2, p3, p4))
+    coda = _saga_coda(game)
+    paragraphs = [p1, p2, p3, p4] + ([coda] if coda else [])
+    return "\n\n".join(paragraphs)
