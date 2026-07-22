@@ -20,6 +20,9 @@ env/
 saves/
 *.json
 
+# Superpowers scratch (brainstorm companion sessions)
+.superpowers/
+
 # Local code engine
 .cynco-*
 .localcode*/
