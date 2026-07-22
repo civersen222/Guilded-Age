@@ -679,6 +679,9 @@ class City:
             btype = BUILDINGS[item]
             if btype.requires_tech and researched_techs and btype.requires_tech not in researched_techs:
                 return False
+        else:
+            # Unknown item (M86): reject so the queue can't be bricked.
+            return False
 
         self.production_queue.append(item)
         return True

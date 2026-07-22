@@ -943,7 +943,16 @@ class Game:
                 if city.production_queue:
                     item = city.production_queue[0]
                     cost = city.get_production_cost(item)
-                    if cost is not None:
+                    while cost is None and city.production_queue:
+                        # An unknown/unbuildable queue head would brick the
+                        # city forever (M86): drop it and let the rest build.
+                        dropped = city.production_queue.pop(0)
+                        if city.current_production == dropped:
+                            city.current_production = None
+                        msgs.append(f"  City '{city.name}' cannot build '{dropped}' — removed from queue.")
+                        item = city.production_queue[0] if city.production_queue else None
+                        cost = city.get_production_cost(item) if item else None
+                    if item and cost is not None:
                         completed_item = city.process_production(
                             yields.get('food', 0),
                             yields.get('gold', 0),
