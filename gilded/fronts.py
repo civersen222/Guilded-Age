@@ -6,11 +6,14 @@ and steel capacity, allocated to fronts, and led by real characters whose
 command skill and temperament tilt the dice. Each resolution the line
 shifts in quarter steps; a line pushed to its limit hands a frontier
 province to the winner and moves the war score. Casualties feed province
-unrest and the century's rising tide. Peace terms arrive in G16."""
+unrest and the century's rising tide. Peace (G16) flows loser to winner:
+provinces, gold, shares - and a truce that binds both signatures."""
 
 import math
 from dataclasses import dataclass, field
 from typing import List, Tuple
+
+from gilded.society.shares import seize_enterprises, transfer_shares
 
 REGIMENT_POP_COST = 5          # thousands of workforce per regiment raised
 REGIMENT_STEEL_COST = 2        # steel capacity per regiment
@@ -304,4 +307,99 @@ def tick_wars(game) -> List[str]:
         elif war.war_score <= -WAR_SCORE_WIN:
             msgs.append(f"House {war.defender} has broken the invader - "
                         f"House {war.aggressor} must come to terms")
+    return msgs
+
+
+# --- peace (G16) -------------------------------------------------------------
+
+TRUCE_TURNS = 8
+ACCEPT_SCORE = 40.0            # a loser this far down will talk
+PROVINCE_SCORE = 15.0          # terms cost: each ceded province
+GOLD_SCORE = 50.0              # terms cost: divisor on gold demanded
+SHARES_SCORE = 0.3             # terms cost: per pct of shares signed over
+MARKETS_SCORE = 10.0           # terms cost: opened markets
+TERMS_SCALE = 1.0              # accepted when cost <= score-against * this
+OPEN_MARKETS_PRESTIGE = 10.0
+
+
+@dataclass
+class PeaceTerms:
+    provinces: List[int] = field(default_factory=list)   # ceded to winner
+    gold: float = 0.0
+    shares_pct: float = 0.0        # loser's enterprises signed over (via seize/transfer)
+    open_markets: bool = False
+
+
+def _sides(war: War) -> Tuple[str, str]:
+    """(winner, loser) by the score; a level score reads for the aggressor."""
+    if war.war_score >= 0.0:
+        return war.aggressor, war.defender
+    return war.defender, war.aggressor
+
+
+def terms_cost(terms: PeaceTerms) -> float:
+    """What the bill weighs, in war-score points."""
+    return (PROVINCE_SCORE * len(terms.provinces)
+            + terms.gold / GOLD_SCORE
+            + SHARES_SCORE * terms.shares_pct
+            + (MARKETS_SCORE if terms.open_markets else 0.0))
+
+
+def ai_acceptable(game, war: War, terms: PeaceTerms, for_house: str) -> bool:
+    """Would this House sign? A loser talks once the score against them
+    reaches ACCEPT_SCORE, and signs any bill no heavier than the beating."""
+    against = -war.war_score if for_house == war.aggressor else war.war_score
+    if against < ACCEPT_SCORE:
+        return False
+    return terms_cost(terms) <= against * TERMS_SCALE
+
+
+def negotiate_peace(game, war: War, terms: PeaceTerms) -> List[str]:
+    """Sign the peace: terms flow from loser to winner, the war ends, and
+    a truce binds both Houses until it expires."""
+    winner, loser = _sides(war)
+    provinces = game.atlas.provinces
+    msgs = [f"Peace is signed between House {war.aggressor} "
+            f"and House {war.defender}"]
+    ceded = set()
+    for pid in terms.provinces:
+        p = provinces.get(pid)
+        if p is not None and p.owner == loser:
+            p.owner = winner
+            ceded.add(pid)
+            msgs.append(f"{p.name} is ceded to House {winner}")
+    if terms.gold > 0.0:
+        paid = min(terms.gold, game.houses[loser].treasury)
+        game.houses[loser].treasury -= paid
+        game.houses[winner].treasury += paid
+        msgs.append(f"House {loser} pays {paid:.0f} gold in reparations")
+    if terms.shares_pct > 0.0 and ceded:
+        spoils = [e for e in game.enterprises
+                  if e.house == loser and e.province in ceded]
+        if terms.shares_pct >= 100.0:
+            taken = seize_enterprises(spoils, loser, winner,
+                                      game.realms[winner])
+            if taken:
+                msgs.append(f"{taken} enterprises re-register "
+                            f"under House {winner}")
+        elif spoils:
+            ruler = game.realms[winner].ruler
+            for ent in spoils:
+                for holder, stake in sorted(ent.ledger.items()):
+                    if holder != ruler.id:
+                        transfer_shares(ent, holder, ruler.id,
+                                        stake * terms.shares_pct / 100.0)
+            msgs.append(f"{terms.shares_pct:.0f}% of the works on the ceded "
+                        f"frontier is signed over to House {winner}")
+    if terms.open_markets:
+        game.houses[winner].prestige += OPEN_MARKETS_PRESTIGE
+        msgs.append(f"House {loser}'s markets open to House {winner}'s goods")
+    if war in game.wars:
+        game.wars.remove(war)
+    game.houses[war.aggressor].at_war_with.discard(war.defender)
+    game.houses[war.defender].at_war_with.discard(war.aggressor)
+    expiry = game.turn + TRUCE_TURNS
+    game.houses[war.aggressor].truces[war.defender] = expiry
+    game.houses[war.defender].truces[war.aggressor] = expiry
+    msgs.append(f"A truce holds until turn {expiry}")
     return msgs

@@ -19,6 +19,7 @@ from gilded.enterprises import (Enterprise, capacity_out, found_enterprise,
 from gilded.directives import DIRECTIVE_KEYS, Directives, tick_friction
 from gilded.docket import (DOMAIN_SEAT, MAX_PETITIONS, Petition,
                            generate_petitions, resolve_unattended)
+from gilded.fronts import tick_wars
 from gilded.society.house_ai import tick_realm
 from gilded.society.ideology import (REVOLUTION_BREWING_TURNS, IdeologicalTide,
                                      can_transform, revolution_brewing,
@@ -244,9 +245,8 @@ class GildedGame:
                     self._emit([f"{name} resigns as {seat.value} over the "
                                 f"House's {key} policy"], "letters", h)
 
-        # 6. war resolution (G15/G16 hook)
-        if self.wars:
-            pass
+        # 6. war resolution - the fronts grind and the papers carry the cost
+        self._emit(tick_wars(self), "gazette")
 
         # 7. the tide and the mandate
         self.tide.tick()

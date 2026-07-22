@@ -19,6 +19,9 @@ from gilded.enterprises import (
     found_enterprise,
 )
 from gilded.directives import DIRECTIVE_CONVICTION, friction
+from gilded.fronts import (ENTRENCH_MAX, PeaceTerms, WarGoal, ai_acceptable,
+                           allocate, declare_war, negotiate_peace,
+                           raise_regiments)
 from gilded.society.court import Court, CourtPosition
 from gilded.society.characters import modify_opinion
 from gilded.society.dispositions import apply_drift
@@ -36,6 +39,11 @@ HEIR_ALLOWANCE = 100.0
 TOUR_UNREST_RELIEF = 10.0
 TOUR_STRESS = 8
 FUMBLE_STRESS = 6
+WAR_SWING = 20.0                  # war-score movement that convenes the council
+LINE_CRISIS = 0.5                 # a front this deep in motion is a crisis
+REINFORCE_REGIMENTS = 3
+PEACE_GOLD_PER_SCORE = 5.0        # auto-terms reparations per score point
+PEACE_LAND_SCORE = 40.0           # auto-terms demand land from this score up
 
 DOMAIN_SEAT = {
     "capital": CourtPosition.BOARD_CHAIRMAN,
@@ -388,26 +396,90 @@ def _gen_rail_proposal(game, house_name, realm, rng) -> Optional[Petition]:
         ])
 
 
+def _wars_of(game, house_name: str) -> List:
+    return [w for w in getattr(game, "wars", [])
+            if house_name in (w.aggressor, w.defender)]
+
+
+def _auto_terms(game, war) -> PeaceTerms:
+    """The bill the winner's chancery drafts from the state of the war."""
+    terms = PeaceTerms()
+    score = abs(war.war_score)
+    winner = war.aggressor if war.war_score >= 0.0 else war.defender
+    loser = war.defender if winner == war.aggressor else war.aggressor
+    if (war.goal.kind == "seize" and winner == war.aggressor
+            and score >= PEACE_LAND_SCORE):
+        terms.provinces = [pid for pid in war.goal.provinces
+                           if pid in game.atlas.provinces
+                           and game.atlas.provinces[pid].owner == loser]
+    if war.goal.kind == "open_markets" and winner == war.aggressor:
+        terms.open_markets = True
+    terms.gold = score * PEACE_GOLD_PER_SCORE
+    return terms
+
+
+def _try_peace(game, house_name: str, war) -> List[str]:
+    """Draft auto-terms and put them to the losing signature."""
+    terms = _auto_terms(game, war)
+    loser = war.defender if war.war_score >= 0.0 else war.aggressor
+    if ai_acceptable(game, war, terms, loser):
+        return negotiate_peace(game, war, terms)
+    other = war.defender if house_name == war.aggressor else war.aggressor
+    return [f"House {other}'s envoys will not yield - the war goes on"]
+
+
 def _gen_war_council(game, house_name, realm, rng) -> Optional[Petition]:
-    """An active front in crisis (wired to real fronts in G16)."""
-    wars = [w for w in getattr(game, "wars", [])
-            if house_name in (getattr(w, "attacker", None), getattr(w, "defender", None))]
-    if not wars:
-        return None
+    """The Marshal convenes when a front is in motion or the score swings."""
+    for war in _wars_of(game, house_name):
+        seen = getattr(war, "_council_scores", {})
+        last = seen.get(house_name, 0.0)
+        hot = [f for f in war.fronts if abs(f.line) >= LINE_CRISIS]
+        if not hot and abs(war.war_score - last) < WAR_SWING:
+            continue
+        if not hasattr(war, "_council_scores"):
+            war._council_scores = {}
+        war._council_scores[house_name] = war.war_score
+        other = war.defender if house_name == war.aggressor else war.aggressor
+        front = hot[0] if hot else (war.fronts[0] if war.fronts else None)
 
-    def _noop(ctx) -> List[str]:
-        return ["The war council adjourns - the fronts themselves follow in the war system (G16)"]
+        def _reinforce(ctx, war=war, front=front) -> List[str]:
+            if front is None:
+                return ["There is no front left to reinforce"]
+            owned = _house_provinces(ctx.game, ctx.house)
+            if not owned:
+                return ["The House has no province left to muster from"]
+            src = max(owned, key=lambda p: (p.population, -p.pid))
+            raised = raise_regiments(ctx.game, ctx.house, src.pid,
+                                     REINFORCE_REGIMENTS)
+            if raised <= 0:
+                return [f"{src.name} can spare no men for the front"]
+            allocate(war, front, ctx.house, raised)
+            return [f"{raised} fresh regiments march to front {front.fid}"]
 
-    return Petition(
-        pid=_next_pid(game), kind="war_council", domain="war",
-        house=house_name,
-        text="The Marshal convenes the war council",
-        actors={},
-        options=[
-            PetitionOption("reinforce", "Reinforce the front", 60, _noop),
-            PetitionOption("hold", "Hold the line", 0, _noop),
-            PetitionOption("seek_terms", "Seek terms", -60, _noop),
-        ])
+        def _hold(ctx, war=war, front=front) -> List[str]:
+            if front is not None:
+                if ctx.house == war.aggressor:
+                    front.entrenchment_a = min(ENTRENCH_MAX,
+                                               front.entrenchment_a + 1)
+                else:
+                    front.entrenchment_d = min(ENTRENCH_MAX,
+                                               front.entrenchment_d + 1)
+            return ["The order is to hold; the lines deepen"]
+
+        def _seek_terms(ctx, war=war) -> List[str]:
+            return _try_peace(ctx.game, ctx.house, war)
+
+        return Petition(
+            pid=_next_pid(game), kind="war_council", domain="war",
+            house=house_name,
+            text=f"The Marshal convenes the war council on the war with House {other}",
+            actors={"war": war},
+            options=[
+                PetitionOption("reinforce", "Reinforce the front", 60, _reinforce),
+                PetitionOption("hold", "Hold the line", 0, _hold),
+                PetitionOption("seek_terms", "Seek terms", -60, _seek_terms),
+            ])
+    return None
 
 
 def generate_petitions(game, house_name: str) -> List[Petition]:
@@ -583,6 +655,32 @@ def _init_adjust_garrison(ctx, **kw) -> List[str]:
     return ["The Marshal has no active war to garrison against (fronts arrive in G16)"]
 
 
+def _init_declare_war(ctx, target_house=None, goal=None, **kw) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if target_house not in ctx.game.houses or target_house == ctx.house:
+        return [f"There is no House {target_house} to declare against"]
+    if target_house in house.at_war_with:
+        return [f"The House is already at war with House {target_house}"]
+    truce = house.truces.get(target_house, 0)
+    if truce > ctx.game.turn:
+        return [f"A truce with House {target_house} holds until turn {truce}"]
+    war = declare_war(ctx.game, ctx.house, target_house,
+                      goal if goal is not None else WarGoal("humble"))
+    out = [f"House {ctx.house} declares war on House {target_house}!"]
+    if not war.fronts:
+        out.append("No shared border: the war exists only on paper")
+    return out
+
+
+def _init_negotiate_peace(ctx, target_house=None, **kw) -> List[str]:
+    war = next((w for w in ctx.game.wars
+                if {w.aggressor, w.defender} == {ctx.house, target_house}),
+               None)
+    if war is None:
+        return [f"There is no war with House {target_house} to end"]
+    return _try_peace(ctx.game, ctx.house, war)
+
+
 def _init_acquire_minor(ctx, province_pid=None, **kw) -> List[str]:
     province = ctx.game.atlas.provinces[province_pid]
     if province.owner != MINOR_OWNER:
@@ -609,6 +707,8 @@ INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "tour_province": ("family", _init_tour_province),
     "adjust_garrison": ("war", _init_adjust_garrison),
     "acquire_minor": ("expansion", _init_acquire_minor),
+    "declare_war": ("war", _init_declare_war),
+    "negotiate_peace": ("diplomacy", _init_negotiate_peace),
 }
 
 
