@@ -23,3 +23,21 @@ def test_director_does_not_change_state():
     assert {h: a.houses[h].treasury for h in a.houses} \
         == {h: b.houses[h].treasury for h in b.houses}
     assert [e.text for e in a.events] == [e.text for e in b.events]
+
+
+def test_full_century_produces_a_saga():
+    from gilded.chassis import GildedGame, TURN_BUDGET
+    g = GildedGame(seed=2026)
+    for _ in range(TURN_BUDGET + 1):
+        g.end_turn()
+        if g.game_over:
+            break
+    d = g.director
+    assert d.age_idx >= 1                       # the Age advanced past the opening era
+    assert d.rival is not None                  # a Rival was bound
+    completed = [b for b in d.beats.values() if b.state == "complete"]
+    assert len(completed) >= 1                  # at least one beat paid off
+    # every rival beat references the real bound house
+    for b in d.beats.values():
+        if b.source == "rival":
+            assert b.cast.get("self") == d.rival

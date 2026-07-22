@@ -3,8 +3,9 @@ durable facts, ticks the three beat-sources, advances the spine, and emits
 chronicle TurnEvents. Fully deterministic: a dedicated rng (never game.rng),
 choices tie-broken by id. It never mutates sim state.
 
-This is the N1 skeleton: facts + advancement + snapshot. The three beat-source
-tick methods arrive in Wave N2, routed through _tick_sources()."""
+Wave N2 wires the three beat-sources - the Age (named eras from the tide), the
+Rival (a deterministically-bound AI house), and the Chronicle (emergent threads
+detected from the FactStore) - through _tick_sources()."""
 
 import random
 from typing import Dict, List, Optional
@@ -12,6 +13,9 @@ from typing import Dict, List, Optional
 from gilded.chassis import TurnEvent
 from gilded.saga.beats import Beat, eval_predicate
 from gilded.saga.facts import FactStore, facts_from_turn
+from gilded.saga.content.eras import ERAS
+from gilded.saga.content.rival_arc import rival_beats
+from gilded.saga.content.threads import candidate_threads, MAX_ACTIVE_THREADS
 
 
 class Director:
@@ -21,9 +25,9 @@ class Director:
         self.beats: Dict[str, Beat] = {}
         self.active: List[str] = []
         self.snapshot: Optional[Dict] = None
-        self.rival: Optional[str] = None             # bound in N2
-        self.age_idx: int = -1                        # N2
-        self.threads: Dict[str, str] = {}             # N2
+        self.rival: Optional[str] = None             # bound by _tick_rival
+        self.age_idx: int = -1                        # advanced by _tick_age
+        self.threads: Dict[str, str] = {}             # reserved
 
     # --- beat bookkeeping ---------------------------------------------------
 
@@ -55,8 +59,72 @@ class Director:
         return events
 
     def _tick_sources(self, game) -> List[TurnEvent]:
-        """Overridden by the three N2 tick methods; empty in N1."""
+        out: List[TurnEvent] = []
+        out += self._tick_age(game)
+        out += self._tick_rival(game)
+        out += self._tick_chronicle(game)
+        return out
+
+    # --- the Age (§4.C) -----------------------------------------------------
+
+    def _tick_age(self, game) -> List[TurnEvent]:
+        target = self.age_idx
+        for i, era in enumerate(ERAS):
+            if game.turn >= era.turn or game.tide.level >= era.tide:
+                target = max(target, i)
+        out: List[TurnEvent] = []
+        while self.age_idx < target:
+            self.age_idx += 1
+            era = ERAS[self.age_idx]
+            b = Beat(bid=era.bid, source="age", title=era.title,
+                     load_bearing=False, foreshadow=era.foreshadow, payoff=era.payoff,
+                     state="active", opened_turn=game.turn)
+            self.beats[b.bid] = b
+            out.append(TurnEvent(era.payoff, "gazette"))
+        return out
+
+    # --- the Rival (§4.A) ---------------------------------------------------
+
+    def _pick_rival(self, game):
+        best = None
+        best_key = None
+        for name in sorted(game.houses):
+            if getattr(game.houses[name], "is_player", False):
+                continue
+            pop = sum(getattr(p, "population", 0) for p in game.provinces_of(name))
+            strength = pop / 100.0 + game.houses[name].treasury
+            key = (strength,)
+            if best_key is None or key > best_key:
+                best_key = key
+                best = name
+        return best
+
+    def _tick_rival(self, game) -> List[TurnEvent]:
+        out: List[TurnEvent] = []
+        if self.rival is None:
+            self.rival = self._pick_rival(game)
+            if self.rival is not None:
+                for b in rival_beats(self.rival):
+                    self.register(b, game)
+        return out
+
+    # --- the Chronicle (§4.B) -----------------------------------------------
+
+    def _tick_chronicle(self, game) -> List[TurnEvent]:
+        active_threads = [b for b in self.active if b.startswith("thread_")]
+        room = MAX_ACTIVE_THREADS - len(active_threads)
+        if room <= 0:
+            return []
+        for bid, _n, beat in candidate_threads(self.facts, game.houses):
+            if room <= 0:
+                break
+            if bid in self.beats:
+                continue
+            self.register(beat, game)
+            room -= 1
         return []
+
+    # --- advancement --------------------------------------------------------
 
     def _advance(self, game) -> List[TurnEvent]:
         out: List[TurnEvent] = []
