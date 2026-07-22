@@ -949,10 +949,10 @@ class Game:
                         dropped = city.production_queue.pop(0)
                         if city.current_production == dropped:
                             city.current_production = None
-                        msgs.append(f"  City '{city.name}' cannot build '{dropped}' — removed from queue.")
+                        msgs.append(f"  City '{city.name}' cannot build '{dropped}' - removed from queue")
                         item = city.production_queue[0] if city.production_queue else None
-                        cost = city.get_production_cost(item) if item else None
-                    if item and cost is not None:
+                        cost = city.get_production_cost(item) if item is not None else None
+                    if cost is not None:
                         completed_item = city.process_production(
                             yields.get('food', 0),
                             yields.get('gold', 0),

@@ -680,7 +680,8 @@ class City:
             if btype.requires_tech and researched_techs and btype.requires_tech not in researched_techs:
                 return False
         else:
-            # Unknown item (M86): reject so the queue can't be bricked.
+            # Unknown item (M86): reject it - queueing something that can
+            # never complete used to brick the city's production forever.
             return False
 
         self.production_queue.append(item)
