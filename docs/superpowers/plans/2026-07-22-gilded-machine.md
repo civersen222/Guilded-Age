@@ -353,7 +353,12 @@ print("G3 smoke OK")
 ### Task G4: Enterprises & Shares (`gilded/enterprises.py`, `gilded/society/shares.py`)
 
 **Files:**
-- Create: `gilded/enterprises.py`, `gilded/society/shares.py`
+- Create: `gilded/enterprises.py`, `gilded/society/shares.py`, and
+  `gilded/society/labor.py` (dial formulas only — constants, `clamp_dial`,
+  `production_multiplier`, `dividend_multiplier`, `unrest_gain`,
+  `accident_chance`, `dial_from_ruler`, bodies byte-identical to root; G4
+  needs the multipliers, so the pure-formula half lands here and G6 rewrites
+  the file adding the Movement layer)
 - Test: `gilded/tests/test_enterprises.py`
 - Sources (read-only): repo root `shares.py`, `labor.py` (for multiplier formulas)
 
@@ -505,7 +510,9 @@ Note: `friction(stance, conviction_value)` takes the numeric conviction (caller 
 ### Task G6: Labor (`gilded/society/labor.py`)
 
 **Files:**
-- Create: `gilded/society/labor.py`
+- Rewrite: `gilded/society/labor.py` (G4 shipped the dial-formula half; this
+  mission replaces the file wholesale, keeping those formulas byte-identical
+  and adding the Movement layer)
 - Test: `gilded/tests/test_labor.py`
 - Sources (read-only): repo root `labor.py`
 
