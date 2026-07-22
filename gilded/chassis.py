@@ -71,6 +71,8 @@ class GildedGame:
         self.enterprises: List[Enterprise] = []
         self.directives = {h: Directives() for h in self.houses}
         self.tide = IdeologicalTide()
+        from gilded.saga.director import Director   # local: director imports TurnEvent
+        self.director = Director(seed)
         self.legitimacy = {h: 50.0 for h in self.houses}
         self.scheme_mgr = SchemeManager()
         self.marriages = MarriageRegistry()
@@ -300,6 +302,9 @@ class GildedGame:
                 msgs, _flipped = trigger_revolution(h, provs, self.enterprises)
                 self.fallen.setdefault(h, "revolution")
             self._emit(msgs, "gazette", h)
+
+        # 8.5 the Director reads the resolved turn and chronicles it
+        self.events.extend(self.director.observe(self))
 
         # 9. endings, then the next morning's paper
         self.turn += 1
