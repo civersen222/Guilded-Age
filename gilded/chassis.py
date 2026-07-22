@@ -40,6 +40,12 @@ ENDOWMENT_ENTERPRISE = {
     "coalfield": "colliery", "iron": "ironworks", "timber": "mill",
     "farmland": "estate", "harbor": "rail_co",
 }
+TURN_BUDGET = 70                  # the century, at a year and a half a turn
+YEAR_START = 1900
+
+
+def year_of(turn: int) -> int:
+    return YEAR_START + round((turn - 1) * 100 / TURN_BUDGET)
 
 
 @dataclass
@@ -71,6 +77,7 @@ class GildedGame:
         self.docket_by_house: Dict[str, List[Petition]] = {}
         self.attention: Dict[str, int] = {}
         self.game_over: Optional[str] = None               # ending key when finished
+        self.fallen: Dict[str, str] = {}                   # house -> "revolution"|"transformed"
         self.capacity: Dict[str, Dict[str, float]] = {}    # strategic capacity per house
         self.last_accidents: List[tuple] = []              # (ent, province) this turn
         self.brewing_turns: Dict[str, int] = {}            # revolution preconditions held
@@ -145,6 +152,8 @@ class GildedGame:
             self.docket_by_house[h] = (carried + fresh)[:MAX_PETITIONS]
 
     def end_turn(self) -> List[TurnEvent]:
+        if self.game_over is not None:
+            return self.events             # the age has closed; the paper stands
         self.events = []
         self.last_accidents = []
         provinces = self.atlas.provinces
@@ -274,11 +283,23 @@ class GildedGame:
                                                 self.enterprises, realm,
                                                 self.legitimacy[h])
                 self.legitimacy[h] = new_leg
+                self.fallen.setdefault(h, "transformed")
             else:
                 msgs, _flipped = trigger_revolution(h, provs, self.enterprises)
+                self.fallen.setdefault(h, "revolution")
             self._emit(msgs, "gazette", h)
 
-        # 9. endings (G17 hook), then the next morning's paper
+        # 9. endings, then the next morning's paper
         self.turn += 1
+        from gilded.endings import check_ending    # local: endings imports our constants
+        judged = next((h for h in sorted(self.houses)
+                       if self.houses[h].is_player), None)
+        if judged is not None:
+            verdict = check_ending(self, judged)
+        else:
+            verdict = "century" if self.turn > TURN_BUDGET else None
+        if verdict is not None and verdict != "transformed":
+            self.game_over = verdict
+            self._emit([f"THE AGE CLOSES: {verdict}"], "gazette")
         self.open_turn()
         return self.events
