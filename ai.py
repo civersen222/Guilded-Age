@@ -92,7 +92,9 @@ class AIPlayer:
             adj["economy"] += 0.1
             adj["expansion"] -= 0.1
         if len(cities) < target:
-            adj["expansion"] += max(0, 0.8 - 0.2 * len(cities))
+            # Hunger scales with the remaining gap (M85), so mid-game houses
+            # below target keep expanding through threat inflation.
+            adj["expansion"] += min(0.8, 0.2 * (target - len(cities)))
         if gold > 150:
             adj["science"] += 0.1
         if len(researched) < 3:
@@ -666,7 +668,24 @@ class AIPlayer:
         if settlers and len(cities) < self._city_target(game):
             settler = settlers[0]
             tile = self._find_expansion_tile(game, settler.position)
-            if tile:
+            # March the settler toward the chosen frontier (M85).
+            if tile and tile != settler.position:
+                tx, ty = tile if isinstance(tile, tuple) else (tile.x, tile.y)
+                px, py = settler.position if isinstance(settler.position, tuple) else (settler.position.x, settler.position.y)
+                dx = tx - px
+                dy = ty - py
+                steps = min(settler.moves_left, max(abs(dx), abs(dy)))
+                for _ in range(steps):
+                    nx = px + (1 if dx > 0 else -1 if dx < 0 else 0)
+                    ny = py + (1 if dy > 0 else -1 if dy < 0 else 0)
+                    target = game.map.tiles.get((nx, ny))
+                    if target:
+                        settler.position = (nx, ny)
+                        settler.moves_left -= 1
+                        px, py = nx, ny
+                        dx = tx - nx
+                        dy = ty - ny
+            if tile and tile == settler.position:
                 new_city = game.found_city(settler)
                 self.city_expansion_history.append((game.state.turn, len(cities) + 1))
                 msgs.append(f"    🏛️ Founded {new_city.name} at {tile}")
@@ -674,7 +693,7 @@ class AIPlayer:
         return msgs
 
     def _find_expansion_tile(self, game, current_pos, min_dist: int = 4):
-        """Find a valid tile for a new city."""
+        """Find a valid tile for a new city — nearest good frontier (M85)."""
         city_positions = [c.position for c in game.cities.values()
                           if c.owner == self.civ_name]
         candidates = []
@@ -687,7 +706,7 @@ class AIPlayer:
             candidates.append((t.x, t.y))
         if not candidates:
             return None
-        # Prefer tiles near resources/water
+        # Prefer nearest good land (M85) so settlers don't march across the map.
         def score(pos):
             s = 0
             tile = game.map.tiles.get(pos)
@@ -695,6 +714,9 @@ class AIPlayer:
                 s += 2
             if tile and tile.terrain.value == "Plains":
                 s += 1
+            # Tie-break: prefer closer tiles (negate distance for reverse sort)
+            dist = game.map.get_distance(pos[0], pos[1], current_pos[0], current_pos[1])
+            s -= dist * 0.01
             return s
         candidates.sort(key=score, reverse=True)
         return candidates[0]
