@@ -33,3 +33,27 @@ def test_select_narrator_honours_disable(monkeypatch):
     import gilded.saga.narrator as nar
     monkeypatch.setenv("GILDED_NARRATE", "0")
     assert isinstance(nar.select_narrator(), nar.NarratorTemplated)
+
+
+def test_app_state_carries_a_narrator(monkeypatch):
+    monkeypatch.setenv("GILDED_NARRATE", "0")     # keep tests model-free
+    import os
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    import pygame
+    pygame.init()
+    from gilded.ui import app
+    st = app.new_app_state(seed=2026)
+    assert hasattr(st, "narrator") and st.narrator is not None
+
+
+def test_toggle_narrate_action_flips_the_view(monkeypatch):
+    monkeypatch.setenv("GILDED_NARRATE", "0")
+    import os
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    import pygame
+    pygame.init()
+    from gilded.ui import app
+    st = app.new_app_state(seed=2026)
+    before = st.view.narrate_on
+    app._apply_action(st, {"toggle_narrate": True})
+    assert st.view.narrate_on is (not before)

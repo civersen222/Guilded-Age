@@ -26,6 +26,7 @@ from gilded.directives import DIRECTIVE_KEYS
 from gilded.docket import DOMAIN_SEAT, initiative as docket_initiative, rule as docket_rule
 from gilded.endings import judge
 from gilded.papers import compose, format_broadsheet
+from gilded.saga.narrator import select_narrator
 from gilded.society.court import CourtPosition
 
 POLL_SECONDS = 0.05
@@ -58,6 +59,7 @@ class Console:
             if not ai_only:
                 self.game.houses[effective].is_player = True
         self.house = effective
+        self.narrator = select_narrator()   # LLM in play; templated under test
         self._quit = False
 
     # --- helpers -------------------------------------------------------------
@@ -99,8 +101,9 @@ class Console:
                 "game_over": g.game_over}
 
     def cmd_papers(self, *args):
-        text = format_broadsheet(compose(self.game, self.house))
-        return {"ok": True, "text": text}
+        report = compose(self.game, self.house)
+        report = self.narrator.render(report, self.game.director, self.game)
+        return {"ok": True, "text": format_broadsheet(report)}
 
     def cmd_docket(self, *args):
         petitions = []

@@ -22,6 +22,7 @@ import pygame
 from gilded.ai import _executor_for
 from gilded.chassis import GildedGame
 from gilded.docket import rule as docket_rule
+from gilded.saga.narrator import select_narrator
 from gilded.ui.broadsheet import BroadsheetView
 
 WINDOW_TITLE = "The Gilded Machine"
@@ -37,6 +38,7 @@ class AppState:
     house: str
     clock: pygame.time.Clock
     save_path: str
+    narrator: object
 
 
 def new_app_state(seed: int, player_house: Optional[str] = None,
@@ -50,9 +52,11 @@ def new_app_state(seed: int, player_house: Optional[str] = None,
     screen = pygame.display.set_mode(size)
     pygame.display.set_caption(WINDOW_TITLE)
     pygame.event.clear()
-    view = BroadsheetView(game, house)
+    narrator = select_narrator()            # LLM in play; templated under test
+    view = BroadsheetView(game, house, narrator)
     save_path = os.path.join(os.getcwd(), "gilded_quicksave.pkl")
-    return AppState(game, view, screen, house, pygame.time.Clock(), save_path)
+    return AppState(game, view, screen, house, pygame.time.Clock(), save_path,
+                    narrator)
 
 
 def _executor_by_id(state: AppState, char_id: Optional[str], domain: str):
@@ -67,6 +71,9 @@ def _executor_by_id(state: AppState, char_id: Optional[str], domain: str):
 def _apply_action(state: AppState, action: dict) -> None:
     """Turn one view action into a move on the game (the UI stays a client)."""
     g, h = state.game, state.house
+    if action.get("toggle_narrate"):
+        state.view.narrate_on = not state.view.narrate_on
+        return
     if action.get("end_turn"):
         if g.game_over is None:
             g.end_turn()
@@ -108,6 +115,8 @@ def step_once(state: AppState) -> bool:
                 return False
             if event.key == pygame.K_F5:
                 _quicksave(state)
+            if event.key == pygame.K_n:
+                state.view.narrate_on = not state.view.narrate_on
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             action = state.view.handle_click(event.pos)
             if action:

@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Tuple
 import pygame
 
 from gilded.papers import compose
+from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 
@@ -75,9 +76,12 @@ def _wrap(text: str, font: pygame.font.Font, width: int) -> List[str]:
 
 
 class BroadsheetView:
-    def __init__(self, game, house_name: str):
+    def __init__(self, game, house_name: str, narrator=None):
         self.game = game
         self.house = house_name
+        # the narrator rewrites the Gazette's prose only; templated is identity.
+        self.narrator = narrator if narrator is not None else NarratorTemplated()
+        self.narrate_on = True
         self.active_tab = TABS[0]
         self.selected_pid: Optional[int] = None
         # per-petition executor choice: an index into that card's candidate
@@ -86,6 +90,7 @@ class BroadsheetView:
         # hit regions, rebuilt every draw:
         self._tab_rects: Dict[str, pygame.Rect] = {}
         self._end_turn_rect: Optional[pygame.Rect] = None
+        self._narrate_rect: Optional[pygame.Rect] = None
         self._option_hits: List[Tuple[pygame.Rect, tuple]] = []
         self._exec_hits: List[Tuple[pygame.Rect, int]] = []
         self._atlas_polys: Dict[int, List[Tuple[int, int]]] = {}
@@ -151,6 +156,14 @@ class BroadsheetView:
         font = _font(18, bold=True)
         label = font.render(f"Attention: {attn}", True, ATTN_COLOR)
         surface.blit(label, (PAD, y + (BOTTOM_H - label.get_height()) / 2))
+        nlabel = font.render(
+            f"Narrate: {'on' if self.narrate_on else 'off'}", True, TAB_TEXT)
+        nrect = pygame.Rect(self._w - 170 - nlabel.get_width() - 36,
+                            y + 10, nlabel.get_width() + 20, BOTTOM_H - 20)
+        self._narrate_rect = nrect
+        pygame.draw.rect(surface, EXEC_BG, nrect)
+        surface.blit(nlabel, (nrect.centerx - nlabel.get_width() / 2,
+                              nrect.centery - nlabel.get_height() / 2))
         rect = pygame.Rect(self._w - 170, y + 10, 154, BOTTOM_H - 20)
         self._end_turn_rect = rect
         pygame.draw.rect(surface, ENDTURN_BG, rect)
@@ -160,6 +173,8 @@ class BroadsheetView:
 
     def _draw_paper(self, surface, content: pygame.Rect) -> None:
         report = compose(self.game, self.house)
+        if self.narrate_on and self.active_tab == "Gazette":
+            report = self.narrator.render(report, self.game.director, self.game)
         items = {"Gazette": report.gazette, "Ledger": report.ledger,
                  "Letters": report.letters}[self.active_tab]
         head = _font(30, bold=True).render(
@@ -281,6 +296,8 @@ class BroadsheetView:
                 return {"tab": name}
         if self._end_turn_rect is not None and self._end_turn_rect.collidepoint(pos):
             return {"end_turn": True}
+        if self._narrate_rect is not None and self._narrate_rect.collidepoint(pos):
+            return {"toggle_narrate": True}
         if self.active_tab == "Docket":
             for rect, pid in self._exec_hits:
                 if rect.collidepoint(pos):
