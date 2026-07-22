@@ -299,6 +299,11 @@ class PlayConsole:
         at_war = civ in (dm.wars.get(self.player) or [])
         return {"ok": True, "message": msg, "still_at_war": at_war}
 
+    def cmd_gov(self, gov_type):
+        msg = self.game.change_government(self.player, gov_type)
+        return {"ok": True, "message": msg,
+                "government": self.game.governments.get(self.player)}
+
     def cmd_marry(self, civ):
         from marriages import arrange_match_between
         msg = arrange_match_between(self.game, self.player, civ)
@@ -405,6 +410,7 @@ class PlayConsole:
         "attack": (cmd_attack, 2, 2), "fortify": (cmd_fortify, 1, 1),
         "found": (cmd_found, 1, 1), "war": (cmd_war, 1, 1),
         "peace": (cmd_peace, 1, 1), "marry": (cmd_marry, 1, 1),
+        "gov": (cmd_gov, 1, 1),
         "scheme": (cmd_scheme, 2, 2), "appoint": (cmd_appoint, 1, 2),
         "dial": (cmd_dial, 2, 2), "choose": (cmd_choose, 1, 1),
         "end_turn": (cmd_end_turn, 0, 0), "shot": (cmd_shot, 1, 2),
