@@ -884,6 +884,10 @@ class Game:
                     civ_obj.culture += yields.get('culture', 0)
                 # Building faith (Temples, Shrines, ...) accrues to the owning civ
                 self.faith_points[owner] = self.faith_points.get(owner, 0) + yields.get('faith', 0)
+                # AI treasuries earn their city gold (M80); the player's
+                # income arrives through the tax system instead.
+                if owner != self.player_civ.name:
+                    self.gold[owner] = self.gold.get(owner, 0) + yields.get('gold', 0)
 
                 # Science advances the owning civ's research
                 owner_mgr = self.research.get(city.owner)
@@ -1079,12 +1083,16 @@ class Game:
         religion_spread_msgs = self._process_religion_spread(msgs)
         msgs.extend(religion_spread_msgs)
 
-        # Sync prestige onto civilizations for victory checks
+        # Sync prestige onto civilizations for victory checks (M80: the
+        # House's banked legacy counts alongside the living ruler)
         for cname, civ_obj in self.civilizations.items():
             p = 0
             r = self.rulers.get(cname)
             if r is not None:
                 p += getattr(r, 'prestige', 0)
+            realm_p = self.realms.get(cname)
+            if realm_p is not None:
+                p += getattr(realm_p, 'prestige_legacy', 0.0)
             if cname == self.player_civ.name and self.dynasty is not None:
                 p += self.dynasty.calculate_dynastic_prestige()
             civ_obj.prestige = p
@@ -1748,6 +1756,7 @@ class Game:
             # Succession 2.0 (M44): the dead ruler's shares partition among heirs
             realm = self.realms.get(civ_name)
             if realm is not None:
+                realm.prestige_legacy += getattr(ruler, "prestige", 0.0)  # the House banks the dead ruler's glory (M80)
                 for ev in partition_shares(realm, ruler, new_ruler, law):
                     succession_msgs.append(f"  {ev}")
                     self.state.turn_events.append(ev)

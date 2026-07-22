@@ -185,7 +185,7 @@ class AIPlayer:
                     return random.choice(military_pool)
         return self._choose_building(city, researched)
 
-    BUILD_ORDER = ["Monument", "Granary", "Workshop", "Aqueduct", "Factory"]
+    BUILD_ORDER = ["Monument", "Granary", "Shrine", "Workshop", "Aqueduct", "Factory"]
 
     def _choose_building(self, city, researched: Set[str]) -> Optional[str]:
         """The build order (M74): first unbuilt house we can raise without
@@ -693,6 +693,23 @@ class AIPlayer:
         candidates.sort(key=score, reverse=True)
         return candidates[0]
 
+    RELIGION_FAITH_COST = 80
+
+    def _manage_religion(self, game) -> List[str]:
+        """Found a religion when the faith pool allows (M80): the AI joins
+        the faith race instead of hoarding an untouched pool."""
+        rm = getattr(game, "religion_manager", None)
+        if rm is None:
+            return []
+        if any(rel.founder == self.civ_name for rel in rm.religions.values()):
+            return []
+        if game.faith_points.get(self.civ_name, 0) < self.RELIGION_FAITH_COST:
+            return []
+        game.faith_points[self.civ_name] -= self.RELIGION_FAITH_COST
+        name = f"Faith of {self.civ_name}"
+        rm.found_religion(name, self.civ_name)
+        return [f"    {self.civ_name} founds {name}!"]
+
     # ── Main entry point ────────────────────────────────────────────────────
 
     def take_turn(self, game) -> List[str]:
@@ -736,6 +753,9 @@ class AIPlayer:
         # 4. Diplomacy, then the character game (M76)
         msgs.extend(self._manage_diplomacy(game))
         msgs.extend(self._manage_intrigue(game))
+
+        # 4b. Faith: found a religion once the pool overflows (M80)
+        msgs.extend(self._manage_religion(game))
 
         # 5. Expansion
         msgs.extend(self._manage_expansion(game))

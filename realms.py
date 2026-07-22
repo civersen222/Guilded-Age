@@ -20,6 +20,7 @@ class Realm:
     characters: List[Character] = field(default_factory=list)
     promoted_ids: set = field(default_factory=set)  # Tier-1 pins (population.promote)
     enterprises: List = field(default_factory=list)  # house Enterprises (shares.py, M43)
+    prestige_legacy: float = 0.0  # dead rulers' prestige banked by the House (M80)
 
 
 def _jitter_stats(base: Dict[str, int], spread: int = 3) -> Dict[str, int]:

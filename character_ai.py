@@ -57,6 +57,7 @@ def _tick_realm(game, realm, turn) -> List[str]:
         for pos, ch in realm.court.positions.items():
             if ch and ch.id == heir.id:
                 realm.court.positions[pos] = None
+        realm.prestige_legacy += getattr(ruler, "prestige", 0.0)  # the House banks the dead ruler's glory (M80)
         realm.ruler = heir
         realm.court.ruler = heir
         game.rulers[realm.civ_name] = heir
