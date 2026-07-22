@@ -641,12 +641,18 @@ class AIPlayer:
     # ── City expansion ──────────────────────────────────────────────────────
 
     def _city_target(self, game) -> int:
-        """This House's fair share of the map (spec 0.1): land / 25 / civs."""
+        """This House's fair share of the map (spec 0.1): land / 25 / civs.
+        The share is claimed at a human pace (M82): +1 city allowance every
+        40 turns, so the land grab is an arc, not a turn-25 sprint."""
         tiles = getattr(getattr(game, "map", None), "tiles", None) or {}
         land = sum(1 for t in tiles.values()
                    if t.terrain not in (TerrainType.WATER_COAST, TerrainType.OCEAN))
         civs = max(1, len(getattr(game, "civilizations", None) or {}))
-        return max(4, round(land / TILES_PER_CITY / civs))
+        fair = max(4, round(land / TILES_PER_CITY / civs))
+        state = getattr(game, "state", None)
+        if state is None:
+            return fair
+        return min(fair, 4 + state.turn // 40)
 
     def _manage_expansion(self, game) -> List[str]:
         """Build settlers and found new cities."""
