@@ -109,9 +109,14 @@ class LoadGameScreen(BaseScreen):
     def _load_save(self, filepath: str):
         """Load a save file and switch to the game screen."""
         import json
+        from game import Game
         try:
-            with open(filepath, 'r') as f:
-                data = json.load(f)
+            if filepath.endswith('.pkl'):
+                game = Game.restore(filepath)
+            else:
+                with open(filepath, 'r') as f:
+                    data = json.load(f)
+                game = Game.from_dict(data)
         except Exception as e:
             from pygame_gui.windows import UIMessageWindow
             UIMessageWindow(
@@ -122,8 +127,6 @@ class LoadGameScreen(BaseScreen):
             )
             return
 
-        from game import Game
-        game = Game.from_dict(data)
         self.app.game = game
 
         # Restore AI players

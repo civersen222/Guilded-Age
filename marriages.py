@@ -251,3 +251,20 @@ def _blood_ties(game, realms) -> List[str]:
                     game.characters.append(child)
                     msgs.append(f"A child of the union, {child.name}, is born into House {house_civ}")
     return msgs
+
+
+def get_state() -> dict:
+    """Snapshot the module-level marriage registries (M78)."""
+    return {"marriages": list(_marriages), "contracts": dict(_contracts),
+            "married_ids": set(_married_ids), "wedding_count": wedding_count}
+
+
+def set_state(state: dict) -> None:
+    """Restore the module-level marriage registries (M78)."""
+    global wedding_count
+    _marriages[:] = state.get("marriages", [])
+    _contracts.clear()
+    _contracts.update(state.get("contracts", {}))
+    _married_ids.clear()
+    _married_ids.update(state.get("married_ids", set()))
+    wedding_count = state.get("wedding_count", 0)

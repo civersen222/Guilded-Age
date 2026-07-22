@@ -1824,199 +1824,40 @@ class Game:
 
     @staticmethod
     def from_dict(data: dict) -> 'Game':
-        """Deserialize game state from a dict."""
-        data = Game._migrate_save(data)
-        civ_name = data.get("player_civ", "Rome")
-        civ = CIVILIZATIONS.get(civ_name, list(CIVILIZATIONS.values())[0])
-        map_w = data.get("map_data", {}).get("width", 16)
-        map_h = data.get("map_data", {}).get("height", 16)
-        game = Game(civ, map_width=map_w, map_height=map_h)
-
-        # Restore basic state
-        game.state.turn = data.get("turn", 1)
-        game.state.phase = data.get("phase", "Player")
-        game.state.game_over = data.get("game_over", False)
-        game.state.victory = data.get("victory", None)
-        game.gold = data.get("gold", {civ_name: 0})
-
-        # Restore civilizations (including AI civs)
-        for name, civ_data in data.get("civilizations", {}).items():
-            if name == civ_name:
-                continue
-            ai_civ = CIVILIZATIONS.get(name)
-            if ai_civ:
-                game.civilizations[name] = ai_civ
-                ai_diff = data.get("ai_players", {}).get(name, "medium")
-                game.ai_players[name] = AIPlayer(name, ai_diff)
-                if name not in game.research:
-                    game.research[name] = TechManager()
-
-        # Restore cities
-        for city_name, city_data in data.get("cities", {}).items():
-            try:
-                city = City(
-                    name=city_data["name"],
-                    owner=city_data["owner"],
-                    position=tuple(city_data["position"]) if isinstance(city_data["position"], list) else city_data["position"],
-                    population=city_data.get("population", 1),
-                    gold=city_data.get("gold", 0),
-                    climate_zone=city_data.get("climate_zone"),
-                    is_coastal=city_data.get("is_coastal", False),
-                )
-                # Restore production state
-                city.production = city_data.get("production", 0)
-                city.current_production = city_data.get("current_production")
-                city.production_queue = city_data.get("production_queue", [])
-                city.happiness = city_data.get("happiness", 0)
-                city.science = city_data.get("science", 0)
-                # Restore buildings and districts
-                for b in city_data.get("buildings", []):
-                    city.add_building(b)
-                for d in city_data.get("districts", []):
-                    city.add_district(d)
-                game.cities[city_name] = city
-                if city.position in game.map.tiles:
-                    game.map.add_city(city)
-            except Exception:
-                pass
-
-        # Restore units
-        for unit_name, unit_data in data.get("units", {}).items():
-            try:
-                unit = Unit(
-                    unit_type=unit_data["unit_type"],
-                    owner=unit_data["owner"],
-                    position=tuple(unit_data["position"]) if isinstance(unit_data["position"], list) else unit_data["position"],
-                    moves_left=unit_data.get("moves_left"),
-                )
-                # Restore unit state
-                unit.name = unit_data.get("name", unit_name)
-                unit.xp = unit_data.get("xp", 0)
-                unit.level = unit_data.get("level", 1)
-                unit.promotions = unit_data.get("promotions", [])
-                unit.hp = unit_data.get("hp", 100)
-                unit.max_hp = unit_data.get("max_hp", 100)
-                unit.is_alive = unit_data.get("is_alive", True)
-                unit.is_fortified = unit_data.get("is_fortified", False)
-                unit.kills = unit_data.get("kills", 0)
-                game.units[unit.name] = unit
-                if unit.position in game.map.tiles:
-                    game.map.add_unit(unit)
-            except Exception:
-                pass
-
-        # Restore research
-        for civ_r, research_data in data.get("research", {}).items():
-            game.research[civ_r] = TechManager()
-            for tech_name in research_data.get("researched", []):
-                try:
-                    game.research[civ_r].research(tech_name, civ_r)
-                except Exception:
-                    pass
-            if research_data.get("current_research"):
-                game.research[civ_r].current_research = research_data["current_research"]
-                game.research[civ_r].research_progress = research_data.get("research_progress", 0)
-
-        # Restore diplomacy
-        if data.get("diplomacy"):
-            dip_data = data["diplomacy"]
-            if isinstance(dip_data, dict):
-                game.diplomacy_manager.relations = {
-                    tuple(k) if isinstance(k, list) else k: v
-                    for k, v in dip_data.get("relations", {}).items()
-                }
-                game.diplomacy_manager.alliances = dip_data.get("alliances", {})
-                game.diplomacy_manager.wars = dip_data.get("wars", {})
-                game.diplomacy_manager.truces = {
-                    tuple(k) if isinstance(k, list) else k: v
-                    for k, v in dip_data.get("truces", {}).items()
-                }
-                game.diplomacy_manager.trade_agreements = {
-                    tuple(k) if isinstance(k, list) else k: v
-                    for k, v in dip_data.get("trade_agreements", {}).items()
-                }
-
-        # Restore religion
-        if data.get("religion") and hasattr(game, 'religion_manager'):
-            rel_data = data["religion"]
-            if isinstance(rel_data, dict):
-                for attr in ['founded_religion', 'followers', 'spread_strength', 'doctrine']:
-                    if attr in rel_data:
-                        setattr(game.religion_manager, attr, rel_data[attr])
-
-        # Restore characters and dynasty
-        if data.get("characters"):
-            for char_data in data["characters"]:
-                try:
-                    char = Character(
-                        name=char_data.get("name", "Unknown"),
-                        stats=char_data.get("stats", {}),
-                        traits=char_data.get("traits", []),
-                    )
-                    char.id = char_data.get("id", char.id)
-                    game.characters.append(char)
-                except Exception:
-                    pass
-            # Restore dynasty
-            if data.get("dynasty") and game.characters:
-                try:
-                    dynasty_data = data["dynasty"]
-                    founder = game.characters[0]
-                    game.dynasty = Dynasty(founder, {founder.id: founder})
-                    game.dynasty_manager.root = founder
-                except Exception:
-                    pass
-            # Restore court
-            if data.get("court") and game.characters:
-                try:
-                    game.court = Court(game.characters[0])
-                except Exception:
-                    pass
-
-        # Restore map tile state (visited, explored, fog)
-        if data.get("map_data", {}).get("tiles"):
-            for pos_str, tile_data in data["map_data"]["tiles"].items():
-                try:
-                    pos = tuple(int(x) for x in pos_str.strip("()").split(","))
-                    tile = game.map.tiles.get(pos)
-                    if tile:
-                        if "visited" in tile_data:
-                            tile.visited = tile_data["visited"]
-                        if "explored" in tile_data:
-                            tile.explored = tile_data["explored"]
-                        # Restore fog of war state
-                        if hasattr(game.map.fog, 'explored'):
-                            if pos_str.strip("()") in [f"({x},{y})" for x, y in game.map.fog.explored] or tile.explored:
-                                game.map.fog.explored.add(pos)
-                        if hasattr(game.map.fog, 'visible') and tile.visited:
-                            game.map.fog.visible.add(pos)
-                except Exception:
-                    pass
-
-        # Update managers with restored data
-        game.city_manager.cities = list(game.cities.values())
-        game.military_manager.units = list(game.units.values())
-
-        return game
+        """DEPRECATED — use Game.load_game(filepath) for pickle checkpoints (M78)."""
+        raise NotImplementedError('from_dict removed in M78; use Game.load_game() instead')
 
     def save_game(self, filepath):
-        """Save game state to JSON file."""
-        import json
+        """Full-fidelity pickle checkpoint (M78)."""
+        import pickle
+        import marriages
         state = {
-            "turn": self.state.turn,
-            "player_civ": self.player_civ.name,
-            "cities": {name: {"position": list(c.position), "population": c.population, "owner": c.owner} for name, c in self.cities.items()},
-            "units": {name: {"position": list(u.position), "type": u.unit_type, "owner": u.owner, "hp": getattr(u, "hp", 100)} for name, u in self.units.items()},
+            "__version__": 1,
+            "game": self,
+            "marriages": marriages.get_state(),
         }
-        with open(filepath, "w") as f:
-            json.dump(state, f, indent=2)
-    @staticmethod
+        with open(filepath, "wb") as f:
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+        return filepath
+
     @classmethod
     def load_game(cls, filepath):
-        """Load game state from JSON file. Returns partial state dict."""
-        import json
-        with open(filepath) as f:
-            return json.load(f)
+        """Restore a full-fidelity pickle checkpoint (M78). Returns a running Game."""
+        import pickle
+        import marriages
+        with open(filepath, "rb") as f:
+            state = pickle.load(f)
+        marriages.set_state(state.get("marriages", {}))
+        return state["game"]
+
+    def checkpoint(self, filepath: str = "savegame.pkl"):
+        """Alias for save_game — creates a pickle checkpoint (M78)."""
+        return self.save_game(filepath)
+
+    @classmethod
+    def restore(cls, filepath: str):
+        """Alias for load_game — restores a pickle checkpoint (M78)."""
+        return cls.load_game(filepath)
 
     def get_owned_resources(self, civ_name: str) -> set:
         """Strategic resource names (e.g. 'Iron') on tiles inside civ_name's city borders (M32)."""

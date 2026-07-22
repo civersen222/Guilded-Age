@@ -169,6 +169,22 @@ def get_save_slots() -> List[Dict[str, Any]]:
     
     slots = []
     for filename in sorted(os.listdir(SAVE_DIR)):
+        if filename.endswith('.pkl'):
+            filepath = os.path.join(SAVE_DIR, filename)
+            try:
+                ts = datetime.fromtimestamp(os.path.getmtime(filepath)).isoformat()
+            except OSError:
+                ts = 'Unknown'
+            slots.append({
+                'slot': filename,
+                'file': filepath,
+                'turn': '?',
+                'timestamp': ts,
+                'civilization': 'Checkpoint',
+                'game_over': False,
+                'victory': None,
+            })
+            continue
         if filename.endswith('.json'):
             filepath = os.path.join(SAVE_DIR, filename)
             try:

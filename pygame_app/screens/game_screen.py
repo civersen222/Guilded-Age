@@ -338,8 +338,8 @@ class GameScreen(BaseScreen):
     def _handle_action(self, action, game):
         if action == "Next Turn": self._process_next_turn(game)
         elif action == "Save":
-            game.save_game("savegame.json")
-            self._event_log.add_event("Game saved to savegame.json", "success")
+            game.save_game("saves/checkpoint.pkl")
+            self._event_log.add_event("Game saved to saves/checkpoint.pkl", "success")
         elif action in ("Move", "Attack", "Fortify", "Skip"): self._handle_unit_action(action, game)
         elif action == "Tech Tree": self._open_popup("tech", game)
         elif action == "Diplomacy": self._open_popup("diplomacy", game)

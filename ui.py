@@ -543,25 +543,20 @@ class GameUI:
                 if msg:
                     print(msg)
 
-    def save_game(self):
-        """Save the current game."""
-        import json
+    def save_game(self, filepath: str = "savegame.pkl"):
+        """Save game as pickle checkpoint (M78)."""
         try:
-            with open("savegame.json", "w") as f:
-                json.dump(self.game.to_dict(), f, indent=2, default=str)
-            print("Game saved!")
+            self.game.save_game(filepath)
+            print(f"Game saved to {filepath}!")
         except Exception as e:
             print(f"Save failed: {e}")
 
     @staticmethod
-    def load_game() -> Optional[Game]:
-        """Load a saved game."""
-        import json
+    def load_game(filepath: str = "savegame.pkl") -> Optional[Game]:
+        """Load game from pickle checkpoint (M78)."""
         try:
-            with open("savegame.json", "r") as f:
-                data = json.load(f)
-            return Game.from_dict(data)
-        except:
+            return Game.load_game(filepath)
+        except Exception:
             return None
 
     @staticmethod
