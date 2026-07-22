@@ -1,8 +1,8 @@
-"""python -m gilded (mission G19): the console entry point.
+"""python -m gilded: the entry point.
 
-  python -m gilded --console <dir> [--seed N] [--house NAME] [--ai-only]
-
-The graphical client arrives in G23; until then --console is the way in.
+  python -m gilded                      -> the graphical client (random seed)
+  python -m gilded --seed N --house X   -> the graphical client
+  python -m gilded --console <dir> ...  -> headless file-bridge (mission G19)
 """
 
 import argparse
@@ -28,8 +28,8 @@ def main(argv=None) -> int:
         run_console(args.console, seed, args.house, args.ai_only)
         return 0
 
-    print("The graphical client arrives in mission G23. "
-          "For now, run with --console <dir>.")
+    from gilded.ui.app import run_app
+    run_app(seed, args.house)
     return 0
 
 
