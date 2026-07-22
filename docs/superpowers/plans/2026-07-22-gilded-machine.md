@@ -269,8 +269,9 @@ class House:
     capital: int                      # pid
     treasury: float = STARTING_TREASURY
     is_player: bool = False
-    legitimacy: float = 50.0
     prestige: float = 0.0
+    # NOTE: no legitimacy field — chassis owns the legitimacy dict (G13);
+    # a duplicate here would create dual state.
     at_war_with: Set[str] = field(default_factory=set)
     truces: Dict[str, int] = field(default_factory=dict)   # house -> expiry turn
     relations: Dict[str, int] = field(default_factory=dict) # house -> -100..100
