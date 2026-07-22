@@ -134,6 +134,7 @@ def test_attention_resets_each_morning():
 def test_seatless_paper_carries_then_festers():
     g = _game()
     h = _first_house(g)
+    g.houses[h].is_player = True   # the AI would rule this paper; the player lets it fester
     fired = []
 
     def _apply(ctx):
@@ -194,6 +195,7 @@ def _prime_uprising(g: GildedGame, h: str):
 def test_revolution_raises_the_commune():
     g = _game()
     h = _first_house(g)
+    g.houses[h].is_player = True   # an AI ruler would reset its own labor directive
     g.realms[h].ruler.dispositions["labor_capital"] = 0.0
     province = _prime_uprising(g, h)
     events = []

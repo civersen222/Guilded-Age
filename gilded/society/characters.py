@@ -16,6 +16,16 @@ from gilded.society.character_deepening import (
 )
 from gilded.society.dispositions import initial_dispositions, labels_for, inherit_dispositions, contradiction_stress, apply_drift, VICE_DRIFTS
 
+# Deterministic character identity. uuid4 ids are process-random and make
+# same-seed games irreproducible (the AI, replays, and soak tests all need
+# determinism); a per-game counter gives opaque-but-reproducible ids instead.
+_ID_COUNTER = 0
+
+def _next_character_id() -> str:
+    global _ID_COUNTER
+    _ID_COUNTER += 1
+    return format(_ID_COUNTER, "08x")
+
 # Six attributes (character-society spec 3.2) and legacy 4-stat compatibility
 ATTRIBUTES = ["statecraft", "command", "industry", "intrigue", "science", "resolve"]
 STAT_COMPAT = {"diplomacy": "statecraft", "martial": "command", "stewardship": "industry"}
@@ -96,7 +106,7 @@ class Secret:
 
 class Character:
     def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18, gender: str = "Male"):
-        self.id = str(uuid.uuid4())[:8]
+        self.id = _next_character_id()
         self.name = name
         # Six attributes (spec 3.2); legacy 4-stat dicts are remapped.
         self.base_stats = normalize_stats(stats)
@@ -312,6 +322,19 @@ class Dynasty:
 # Global Opinion Matrix
 # (char_id_a, char_id_b) -> value
 opinion_matrix: Dict[Tuple[str, str], int] = {}
+
+def reset_society_globals() -> None:
+    """Return the process-global society state to a clean slate so a fresh
+    game is reproducible: restart the character-id counter and drop any
+    opinions left behind by a prior game in this process. One live game per
+    process (the console, the soak, and the GUI all run a single game)."""
+    global _ID_COUNTER
+    _ID_COUNTER = 0
+    opinion_matrix.clear()
+    # the last-ruler memory is the other half of the society save-state
+    # (relationships.get_state); a fresh game must not inherit it either.
+    from gilded.society.relationships import _last_rulers  # local: avoids cycle
+    _last_rulers.clear()
 
 def modify_opinion(char_a: Character, char_b: Character, amount: int, reason: str):
     pair = (char_a.id, char_b.id)

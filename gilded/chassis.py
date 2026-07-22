@@ -19,13 +19,14 @@ from gilded.enterprises import (Enterprise, capacity_out, found_enterprise,
 from gilded.directives import DIRECTIVE_KEYS, Directives, tick_friction
 from gilded.docket import (DOMAIN_SEAT, MAX_PETITIONS, Petition,
                            generate_petitions, resolve_unattended)
-from gilded.fronts import tick_wars
+from gilded.fronts import negotiate_peace, tick_wars
 from gilded.society.house_ai import tick_realm
 from gilded.society.ideology import (REVOLUTION_BREWING_TURNS, IdeologicalTide,
                                      can_transform, revolution_brewing,
                                      tick_legitimacy, transform_house,
                                      trigger_revolution)
 from gilded.society.labor import STRIKE_OUTPUT_MULT, tick_extraction, tick_movement
+from gilded.society.characters import reset_society_globals
 from gilded.society.marriages import MarriageRegistry
 from gilded.society.realm import create_house_realm, tick_directors, tick_loyalty
 from gilded.society.relationships import tick_relationships
@@ -59,6 +60,7 @@ class GildedGame:
     def __init__(self, seed: int, player_house: Optional[str] = None):
         self.seed = seed
         random.seed(seed)          # Character internals draw from module random
+        reset_society_globals()    # deterministic ids + no stale opinions
         self.rng = random.Random(seed)
         self.turn = 1
         self.atlas = generate_atlas(seed)
@@ -157,6 +159,16 @@ class GildedGame:
         self.events = []
         self.last_accidents = []
         provinces = self.atlas.provinces
+
+        # 0. the AI houses read their morning paper (the player's waits)
+        from gilded.ai import ai_peace_check, ai_turn   # local: ai imports docket
+        for h in sorted(self.houses):
+            if not self.houses[h].is_player:
+                self._emit(ai_turn(self, h), "letters", h)
+        for war in list(self.wars):
+            terms = ai_peace_check(self, war)
+            if terms is not None:
+                self._emit(negotiate_peace(self, war, terms), "gazette")
 
         # 1. unattended dockets
         for h in sorted(self.houses):
