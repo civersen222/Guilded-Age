@@ -158,8 +158,9 @@ def _maybe_arrange_match(game, realms) -> Optional[str]:
             _contracts[(a.id, b.id)] = contract
             _married_ids.update((a.id, b.id))
             wedding_count += 1
-            dm.modify_relation(civ_a, civ_b,
-                               MARRIAGE_RELATION_BONUS + (10 if contract.alliance else 0))
+            if dm.get_relation(civ_a, civ_b) < 60:
+                dm.modify_relation(civ_a, civ_b,
+                                   MARRIAGE_RELATION_BONUS + (10 if contract.alliance else 0))
             return f"{a.name} weds {b.name} - {civ_a} and {civ_b} are bound by marriage"
     return None
 
@@ -206,8 +207,9 @@ def arrange_match_between(game, civ_a: str, civ_b: str) -> Optional[str]:
     _contracts[(a.id, b.id)] = contract
     _married_ids.update((a.id, b.id))
     wedding_count += 1
-    dm.modify_relation(civ_a, civ_b,
-                       MARRIAGE_RELATION_BONUS + (10 if contract.alliance else 0))
+    if dm.get_relation(civ_a, civ_b) < 60:
+        dm.modify_relation(civ_a, civ_b,
+                           MARRIAGE_RELATION_BONUS + (10 if contract.alliance else 0))
     return f"{a.name} weds {b.name} - {civ_a} and {civ_b} are bound by marriage"
 
 

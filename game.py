@@ -645,6 +645,7 @@ class Game:
         # Process war weariness
         self.process_war_weariness(msgs)
         self.diplomacy_manager.process_truces()  # truces tick down each turn (M33)
+        self.diplomacy_manager.tick_relations(self, self.state.turn)  # goodwill fades, borders grind (M79)
         
         # Calculate happiness for all civilizations
         for civ_name in self.civilizations:

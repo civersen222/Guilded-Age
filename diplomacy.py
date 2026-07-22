@@ -70,7 +70,45 @@ class DiplomacyManager:
         pair = tuple(sorted([civ_a, civ_b]))
         current = self.relations.get(pair, 0)
         self.relations[pair] = max(-100, min(100, current + amount))
-    
+
+    RELATION_DRIFT = 1          # goodwill decays toward neutral each turn
+    BORDER_FRICTION = 3         # rivals grind each other every friction tick
+    FRICTION_PERIOD = 5         # turns between friction applications
+
+    def tick_relations(self, game, turn: int) -> None:
+        """Relations are not forever (M79): goodwill decays toward neutral
+        while grudges persist, and every House grinds against its nearest
+        neighbor - proximity breeds rivalry."""
+        for pair in list(self.relations):
+            cur = self.relations[pair]
+            if cur > 0:
+                self.relations[pair] = cur - min(self.RELATION_DRIFT, cur)
+        if turn % self.FRICTION_PERIOD != 0:
+            return
+        for pair in self._rival_pairs(game):
+            if not self.is_at_war(*pair):
+                self.modify_relation(pair[0], pair[1], -self.BORDER_FRICTION)
+
+    def _rival_pairs(self, game) -> set:
+        """Each civ paired with its nearest neighbor by city distance (M79)."""
+        positions = {}
+        for city in game.cities.values():
+            positions.setdefault(city.owner, []).append(city.position)
+        pairs = set()
+        for a in positions:
+            best, best_d = None, None
+            for b in positions:
+                if a == b:
+                    continue
+                d = min(max(abs(x1 - x2), abs(y1 - y2))
+                        for (x1, y1) in positions[a]
+                        for (x2, y2) in positions[b])
+                if best_d is None or d < best_d:
+                    best, best_d = b, d
+            if best is not None:
+                pairs.add(tuple(sorted((a, best))))
+        return pairs
+
     def declare_war(self, aggressor: str, defender: str) -> bool:
         """Declare war. Returns False while a truce still binds the pair (M33)."""
         pair = tuple(sorted([aggressor, defender]))
