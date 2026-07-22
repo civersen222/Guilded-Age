@@ -163,17 +163,26 @@ class AIPlayer:
         if worker_count < len(cities) * 2 and adj["economy"] > 0.2:
             return "Worker"
 
-        # If military priority high or threats exist, build military unit
-        if adj["military"] > 0.35 or len(self.war_targets) > 0:
-            military_pool = self._get_available_military(researched, owned_resources)
-            if military_pool:
-                return random.choice(military_pool)
+        # Army cap (M81): a House fields at most 3 + 2 per city; past the
+        # cap the forges turn to civic works.
+        soldiers = sum(1 for u in units
+                       if getattr(u, 'is_alive', True)
+                       and u.unit_type in UNIT_TYPES
+                       and UNIT_TYPES[u.unit_type].category not in (UnitCategory.WORKER,
+                                                                    UnitCategory.SETTLER))
+        army_cap = 3 + 2 * len(cities)
+        if soldiers < army_cap:
+            # If military priority high or threats exist, build military unit
+            if adj["military"] > 0.35 or len(self.war_targets) > 0:
+                military_pool = self._get_available_military(researched, owned_resources)
+                if military_pool:
+                    return random.choice(military_pool)
 
-        # Default: balance between production and military
-        if adj["military"] > adj["science"] and random.random() < 0.5:
-            military_pool = self._get_available_military(researched, owned_resources)
-            if military_pool:
-                return random.choice(military_pool)
+            # Default: balance between production and military
+            if adj["military"] > adj["science"] and random.random() < 0.5:
+                military_pool = self._get_available_military(researched, owned_resources)
+                if military_pool:
+                    return random.choice(military_pool)
         return self._choose_building(city, researched)
 
     BUILD_ORDER = ["Monument", "Granary", "Workshop", "Aqueduct", "Factory"]
@@ -274,6 +283,8 @@ class AIPlayer:
                 elif item in BUILDINGS:
                     city.add_building(BUILDINGS[item])
                     msgs.append(f"    ✅ {city.name} completed: {item}")
+                if item in city.production_queue:
+                    city.production_queue.remove(item)  # one order, one delivery (M81)
                 city.current_production = None
                 city.production = 0
 
@@ -716,6 +727,11 @@ class AIPlayer:
         # 3. Military actions: post the captains, then march (M75)
         msgs.extend(self._assign_commanders(game))
         msgs.extend(self._manage_military(game))
+
+        # 3b. Field promotions resolve on the spot (M81)
+        for _u in game.units.values():
+            if _u.owner == self.civ_name and getattr(_u, "pending_promotion", False):
+                _u.accept_promotion("attack")
 
         # 4. Diplomacy, then the character game (M76)
         msgs.extend(self._manage_diplomacy(game))

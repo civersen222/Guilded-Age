@@ -69,8 +69,6 @@ class Unit:
     def _offer_promotion(self) -> None:
         """Mark unit as having a pending promotion for player to choose."""
         self.pending_promotion = True
-        print(f"[PROMOTION] {self.name} ({self.owner}) has a pending promotion "
-              f"(XP: {self.xp}, Level: {self.level})")
 
     def accept_promotion(self, choice: str) -> None:
         """Apply a player-chosen promotion. choice must be 'attack', 'defense', or 'movement'."""
@@ -83,8 +81,6 @@ class Unit:
         self.level += 1
         self.pending_promotion = False
         self._apply_promotions()
-        print(f"[PROMOTION] {self.name} ({self.owner}) promoted: +1 {choice} "
-              f"(XP: {self.xp}, Level: {self.level})")
     def get_promotion_title(self) -> str:
         """Get current promotion title based on level."""
         titles = ["Conscript", "Trained", "Veteran", "Elite", "Champion", "Legendary"]
