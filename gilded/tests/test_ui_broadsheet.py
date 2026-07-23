@@ -18,7 +18,7 @@ def _view():
 
 def test_tabs_shape():
     assert TABS == ("Briefing", "Gazette", "Ledger", "Letters",
-                    "Docket", "Atlas", "House")
+                    "Docket", "Atlas", "Powers", "House")
 
 
 def test_hud_rides_above_every_tab():
@@ -113,3 +113,22 @@ def test_atlas_click_selects_province():
     c = g.atlas.provinces[pid].center
     result = v.handle_click((int(c[0] * 8), int(c[1] * 8)))
     assert result == {"select_province": pid} and v.selected_pid == pid
+
+
+def test_powers_tab_lists_houses_by_threat():
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView, TABS
+    from gilded import agenda
+    g = GildedGame(seed=7)
+    player = next(iter(g.houses))
+    g.houses[player].is_player = True
+    for h in g.houses:
+        if h != player:
+            agenda.ensure_agenda(g, h)
+    view = BroadsheetView(g, player)
+    assert "Powers" in TABS
+    lines = view.powers_lines()
+    assert lines and all(isinstance(s, str) for s in lines)
+    for h in g.houses:
+        if h != player:
+            assert any(h in ln for ln in lines)

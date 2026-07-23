@@ -85,6 +85,9 @@ class GildedGame:
         self.capacity: Dict[str, Dict[str, float]] = {}    # strategic capacity per house
         self.last_accidents: List[tuple] = []              # (ent, province) this turn
         self.brewing_turns: Dict[str, int] = {}            # revolution preconditions held
+        self.agendas: Dict[str, object] = {}   # house -> agenda.Goal (Stage 2)
+        self.informants: set = set()           # (viewer_house, target_house) intel lever
+        self.takeovers: List[object] = []      # society.schemes.Takeover in flight
         self._seed_enterprises()
         self.open_turn()
 
@@ -243,6 +246,11 @@ class GildedGame:
                                       self.turn, self.rng), "gazette")
         self._emit(self.scheme_mgr.advance_all(self.realms, self.legitimacy,
                                                self.rng), "gazette")
+        for tk in list(self.takeovers):
+            self._emit(tk.advance(self.realms, self.enterprises, self.rng),
+                       "gazette")
+            if tk.complete:
+                self.takeovers.remove(tk)
         for _kind, h in self.scheme_mgr.pending_successions:
             self._emit([f"House {h}'s chair stands empty - the succession is unsettled"],
                        "gazette", h)

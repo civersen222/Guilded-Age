@@ -23,12 +23,13 @@ from typing import Dict, List, Optional, Tuple
 import pygame
 
 from gilded.dashboard import delta, scoreboard
+from gilded.intel import report as intel_report, threat_rank
 from gilded.papers import compose
 from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 
-TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Atlas", "House")
+TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Atlas", "Powers", "House")
 
 TAB_H = 40
 HUD_H = 96
@@ -142,6 +143,8 @@ class BroadsheetView:
             self._draw_paper(surface, content)
         elif self.active_tab == "Docket":
             self._draw_docket(surface, content)
+        elif self.active_tab == "Powers":
+            self._draw_powers(surface, content)
         elif self.active_tab == "House":
             self._draw_house(surface, content)
 
@@ -193,6 +196,13 @@ class BroadsheetView:
         surface.blit(fs.render(
             f"{rival}    You rank #{b.rank} of {len(self.game.houses)}",
             True, HUD_INK), (x, y))
+        y += line_h
+        spotlight = b.rival_name or (
+            threat_rank(self.game)[0] if threat_rank(self.game) else None)
+        if spotlight is not None:
+            intent = intel_report(self.game, self.house, spotlight).apparent_intent
+            surface.blit(fs.render(f"Their design: {intent}", True, HUD_INK),
+                         (x, y))
 
     def _draw_bottom_bar(self, surface) -> None:
         y = self._h - BOTTOM_H
@@ -375,6 +385,35 @@ class BroadsheetView:
             f = _font(18, bold=True) if i == 0 else font
             surface.blit(f.render(line, True, TAB_TEXT), (rect.x + PAD, y))
             y += font.get_height() + 2
+
+    def powers_lines(self) -> List[str]:
+        """One line per rival House, ordered by threat to the player: the
+        House, its earned intel tier, the sources, and whatever intent that
+        tier reveals."""
+        lines: List[str] = []
+        for h in threat_rank(self.game):
+            r = intel_report(self.game, self.house, h)
+            src = f" [{', '.join(r.breakdown)}]" if r.breakdown else ""
+            lines.append(
+                f"House {h}  (intel {r.tier}/3){src}  -  {r.apparent_intent}")
+        return lines
+
+    def _draw_powers(self, surface, content) -> None:
+        title = _font(30, bold=True).render("THE POWERS", True, INK)
+        surface.blit(title, (PAD, content.y + 6))
+        y = content.y + 6 + title.get_height() + 10
+        body = _font(18)
+        width = content.width - 2 * PAD
+        lines = self.powers_lines()
+        if not lines:
+            lines = ["(no rival House stands against you)"]
+        for ln in lines:
+            for wln in _wrap(ln, body, width):
+                if y > content.bottom - 20:
+                    return
+                surface.blit(body.render(wln, True, INK), (PAD, y))
+                y += body.get_height() + 2
+            y += 6
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house

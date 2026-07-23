@@ -14,6 +14,7 @@ from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
 from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST, PeaceTerms,
                            ai_acceptable)
 from gilded.society.characters import opinion_matrix
+from gilded.agenda import ensure_agenda, goal_domain, goal_initiative
 
 DIRECTIVE_INTERVAL = 10        # turns between directive resets
 OPINION_FLOOR = -20            # a minister this sour is not trusted to execute
@@ -22,6 +23,7 @@ WAR_CONVICTION = 50.0          # militarist conviction beyond this marches
 WEAKER = 0.7                   # a neighbor under this fraction of our strength
 URGENCY_ESCALATED = 2.0
 CONVICTION_DIV = 50.0
+AGENDA_PETITION_BONUS = 1.0    # a petition in the goal's domain jumps the queue
 
 ENDOWMENT_KIND = {v[0]: k for k, v in sorted(ENTERPRISE_TYPES.items())
                   if v[0] is not None}
@@ -32,9 +34,10 @@ def _conviction(ruler, domain: str) -> float:
     return ruler.dispositions.get(pair, 0.0) if pair else 0.0
 
 
-def _score_petition(ruler, petition) -> float:
+def _score_petition(ruler, petition, goal_dom: Optional[str] = None) -> float:
     urgency = URGENCY_ESCALATED if petition.escalated else 1.0
-    return urgency + abs(_conviction(ruler, petition.domain)) / CONVICTION_DIV
+    bonus = AGENDA_PETITION_BONUS if goal_dom == petition.domain else 0.0
+    return urgency + bonus + abs(_conviction(ruler, petition.domain)) / CONVICTION_DIV
 
 
 def _executor_for(game, realm, domain: str):
@@ -88,10 +91,14 @@ def _found_spot(game, house_name: str) -> Optional[Tuple[str, int]]:
     return kind, pid
 
 
-def _pick_initiative(game, house_name: str, realm):
-    """Leftover attention, spent by disposition."""
+def _pick_initiative(game, house_name: str, realm, goal=None):
+    """The goal's signature verb first, then leftover attention by disposition."""
     house = game.houses[house_name]
     ruler = realm.ruler
+    if goal is not None:
+        sig = goal_initiative(game, house_name, goal)
+        if sig is not None:
+            return sig
     if ruler.dispositions.get("ambitious_content", 0.0) > AMBITION_BAR:
         ents = sorted((e for e in game.enterprises
                        if e.house == house_name and e.tier < TIER_MAX
@@ -130,12 +137,14 @@ def ai_turn(game, house_name: str) -> List[str]:
         return []
     ruler = realm.ruler
     msgs: List[str] = []
+    goal = ensure_agenda(game, house_name)
+    goal_dom = goal_domain(goal) if goal is not None else None
     if game.turn % DIRECTIVE_INTERVAL == 1:
         directives = game.directives[house_name]
         for key in DIRECTIVE_KEYS:
             directives.set_stance(key, int(round(_conviction(ruler, key))))
     docket = list(game.docket_by_house.get(house_name, []))
-    docket.sort(key=lambda p: (-_score_petition(ruler, p), p.pid))
+    docket.sort(key=lambda p: (-_score_petition(ruler, p, goal_dom), p.pid))
     for petition in docket:
         if game.attention.get(house_name, 0) <= 0:
             break
@@ -147,7 +156,7 @@ def ai_turn(game, house_name: str) -> List[str]:
         msgs.extend(rule(game, petition, option.key, executor))
         game.docket_by_house[house_name].remove(petition)
     if game.attention.get(house_name, 0) > 0:
-        choice = _pick_initiative(game, house_name, realm)
+        choice = _pick_initiative(game, house_name, realm, goal)
         if choice is not None:
             verb, kwargs = choice
             domain, _handler = INITIATIVES[verb]

@@ -698,6 +698,24 @@ def _init_acquire_minor(ctx, province_pid=None, **kw) -> List[str]:
     return [f"{province.name} is bought into the House for {cost:.0f} gold"]
 
 
+def _init_start_takeover(ctx, target_house=None, **kw) -> List[str]:
+    from gilded.society.schemes import Takeover
+    if target_house not in ctx.game.houses or target_house == ctx.house:
+        return [f"There is no House {target_house} to buy into"]
+    if any(t.buyer_house == ctx.house and t.target_house == target_house
+           and not t.complete for t in ctx.game.takeovers):
+        return [f"A quiet buying campaign against House {target_house} is already under way"]
+    ctx.game.takeovers.append(Takeover(ctx.executor, ctx.house, target_house))
+    return [f"{ctx.executor.name} begins quietly buying into House {target_house}"]
+
+
+def _init_establish_informant(ctx, target_house=None, **kw) -> List[str]:
+    if target_house not in ctx.game.houses or target_house == ctx.house:
+        return [f"There is no House {target_house} to watch"]
+    ctx.game.informants.add((ctx.house, target_house))
+    return [f"{ctx.executor.name} places an informant inside House {target_house}"]
+
+
 INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "propose_marriage": ("diplomacy", _init_propose_marriage),
     "found_enterprise": ("capital", _init_found_enterprise),
@@ -709,6 +727,8 @@ INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "acquire_minor": ("expansion", _init_acquire_minor),
     "declare_war": ("war", _init_declare_war),
     "negotiate_peace": ("diplomacy", _init_negotiate_peace),
+    "start_takeover": ("capital", _init_start_takeover),
+    "establish_informant": ("diplomacy", _init_establish_informant),
 }
 
 

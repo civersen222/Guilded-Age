@@ -70,3 +70,16 @@ def test_end_turn_lands_on_briefing_and_records_prev_board():
     assert state.game.turn == turn + 1
     assert state.view.active_tab == "Briefing"
     assert state.view.prev_board is not None
+
+
+def test_place_informant_action_spends_attention_and_sets_flag():
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=7)
+    g = state.game
+    player = state.house
+    g.houses[player].is_player = True
+    target = next(h for h in sorted(g.houses) if h != player)
+    before = g.attention.get(player, 0)
+    gapp._apply_action(state, {"place_informant": target})
+    assert (player, target) in g.informants
+    assert g.attention.get(player, 0) == before - 1

@@ -82,6 +82,15 @@ def _apply_action(state: AppState, action: dict) -> None:
             state.view.prev_board = pre       # non-invasive snapshot for the feed
             state.view.active_tab = "Briefing"
         return
+    target = action.get("place_informant")
+    if target is not None:
+        if g.attention.get(h, 0) <= 0 or target not in g.houses or target == h:
+            return
+        from gilded.docket import initiative
+        executor = _executor_by_id(state, None, "diplomacy")
+        g.attention[h] -= 1
+        initiative(g, h, "establish_informant", executor, target_house=target)
+        return
     if "rule" in action:
         pid, option_key, exec_id = action["rule"]
         if g.attention.get(h, 0) <= 0:
