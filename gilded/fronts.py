@@ -246,12 +246,16 @@ def resolve_front(game, war: War, front: Front) -> List[str]:
     msgs: List[str] = []
     cmd_a = _find_commander(game, front.commander_a_id)
     cmd_d = _find_commander(game, front.commander_d_id)
+    from gilded import policy
+    str_a = policy.effects(game, war.aggressor).strength_mod
+    str_d = policy.effects(game, war.defender).strength_mod
     power_a = (front.attacker_regiments * _cmd_mult(cmd_a)
-               * supply(game, war.aggressor, front) * _dice(game, cmd_a))
+               * supply(game, war.aggressor, front) * _dice(game, cmd_a)
+               * str_a)
     power_d = (front.defender_regiments * _cmd_mult(cmd_d)
                * supply(game, war.defender, front)
                * (1.0 + ENTRENCH_DEFENSE * front.entrenchment_d)
-               * _dice(game, cmd_d))
+               * _dice(game, cmd_d) * str_d)
     if power_a <= 0.0 and power_d <= 0.0:
         return msgs                      # an empty theater; nobody marches
     if power_a > power_d * ADVANCE_EDGE:

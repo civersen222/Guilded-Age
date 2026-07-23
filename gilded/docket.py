@@ -124,14 +124,19 @@ def _gen_capital_request(game, house_name, realm, rng) -> Optional[Petition]:
         return None
     ent = min(candidates, key=lambda e: (e.tier, e.eid))
     director = by_id[ent.director_id]
-    cost = EXPAND_COST[ent.tier + 1]
+    from gilded import policy
+    _eff = policy.effects(game, house_name)
+    cost = EXPAND_COST[ent.tier + 1] * _eff.expand_cost_mod
 
     def _grant(ctx) -> List[str]:
         house = ctx.game.houses[ctx.house]
         if house.treasury < cost:
             return [f"The treasury cannot meet {director.name}'s request ({cost:.0f} gold)"]
         house.treasury -= cost
-        ent.under_construction = EXPAND_TURNS[ent.tier + 1]
+        _turns = EXPAND_TURNS[ent.tier + 1]
+        if _eff.build_speed_mod > 0:
+            _turns = max(1, int(round(_turns / _eff.build_speed_mod)))
+        ent.under_construction = _turns
         ent.target_tier = ent.tier + 1
         modify_opinion(director, realm.ruler, int(10 * ctx.scale), "expansion capital")
         return [f"{ent.name} breaks ground on tier {ent.tier + 1} ({cost:.0f} gold)"]

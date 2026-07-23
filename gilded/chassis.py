@@ -165,6 +165,14 @@ class GildedGame:
         self.last_accidents = []
         provinces = self.atlas.provinces
 
+        # Stage 3: standing policy — compute once, apply at each seam below.
+        from gilded import policy
+        self.policy = {h: policy.effects(self, h) for h in self.houses}
+        for h in sorted(self.houses):
+            lvl = float(self.policy[h].extraction_level)
+            for ent in self.ents_of(h):
+                ent.extraction_dial = lvl
+
         # 0. the AI houses read their morning paper (the player's waits)
         from gilded.ai import ai_peace_check, ai_turn   # local: ai imports docket
         for h in sorted(self.houses):
@@ -204,6 +212,7 @@ class GildedGame:
                 mv = getattr(province, "movement", None)
                 if mv is not None and mv.state == "striking":
                     mod *= STRIKE_OUTPUT_MULT
+                mod *= self.policy[h].output_mod
                 take, _ = pay_dividends(realm, [ent], provinces, mod)
                 take_total += take
             if take_total > 0:
@@ -279,6 +288,35 @@ class GildedGame:
         # 6. war resolution - the fronts grind and the papers carry the cost
         self._emit(tick_wars(self), "gazette")
 
+        # 6.5 policy effects — happiness, legitimacy, relations, trade income
+        for h in sorted(self.houses):
+            eff = self.policy[h]
+            provs = self.provinces_of(h)
+            # Happiness mod from diplomacy (positive = reduces unrest)
+            if eff.happiness_mod:
+                for p in provs:
+                    p.unrest = max(0.0, min(100.0, p.unrest - eff.happiness_mod))
+            # Legitimacy mod from diplomacy
+            if eff.legitimacy_mod:
+                self.legitimacy[h] = max(0, min(100.0,
+                    self.legitimacy[h] + eff.legitimacy_mod))
+            # Relations drift from diplomacy
+            drift = eff.relations_drift
+            if drift:
+                rel = self.houses[h].relations
+                for other in self.houses:
+                    if other == h:
+                        continue
+                    rel[other] = max(-100, min(100, int(round(
+                        rel.get(other, 0) + drift))))
+            # Trade income from expansion
+            if eff.trade_income:
+                self.houses[h].treasury += eff.trade_income
+            # Unrest add from labor policy
+            if eff.unrest_add:
+                for p in provs:
+                    p.unrest = max(0.0, min(100.0, p.unrest + eff.unrest_add * 100))
+
         # 7. the tide and the mandate
         self.tide.tick()
         for h in sorted(self.houses):
@@ -306,9 +344,11 @@ class GildedGame:
                                                 self.legitimacy[h])
                 self.legitimacy[h] = new_leg
                 self.fallen.setdefault(h, "transformed")
+                self.directives[h].set_stance("labor", -100)
             else:
                 msgs, _flipped = trigger_revolution(h, provs, self.enterprises)
                 self.fallen.setdefault(h, "revolution")
+                self.directives[h].set_stance("labor", -100)
             self._emit(msgs, "gazette", h)
 
         # 8.5 the Director reads the resolved turn and chronicles it

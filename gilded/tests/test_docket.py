@@ -3,6 +3,7 @@
 import random
 
 from gilded import docket
+from gilded.directives import Directives
 from gilded.docket import (
     DOMAIN_PRIORITY,
     MAX_PETITIONS,
@@ -48,6 +49,9 @@ class SeqRng:
 class FakeGame:
     pass
 
+    def __init__(self):
+        self.directives = {}
+
 
 def _game(seed, realm_count=1):
     random.seed(seed)
@@ -64,6 +68,7 @@ def _game(seed, realm_count=1):
     g.marriages = MarriageRegistry()
     g.scheme_mgr = SchemeManager()
     g.legitimacy = {n: 50.0 for n in g.houses}
+    g.directives = {n: Directives() for n in g.houses}
     g.tide = IdeologicalTide()
     return g, names[0]
 

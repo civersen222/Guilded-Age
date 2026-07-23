@@ -9,6 +9,10 @@ and the fronts peace table - the AI cheats at nothing."""
 from typing import Dict, List, Optional, Tuple
 
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
+from gilded import policy as _policy
+
+POLICY_STEP = 5
+DEAD_BAND = 10
 from gilded.docket import DOMAIN_SEAT, INITIATIVES, _auto_terms, initiative, rule
 from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
 from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST, PeaceTerms,
@@ -130,6 +134,40 @@ def _pick_initiative(game, house_name: str, realm, goal=None):
 
 # --- the turn ----------------------------------------------------------------
 
+def set_policy(game, house_name: str) -> None:
+    """Drift-with-dead-band: nudge each stance toward the house's target,
+    at most POLICY_STEP per turn, only if distance > DEAD_BAND.
+    On decade turns (turn % DIRECTIVE_INTERVAL == 1) snap directly to
+    convictions and refresh the policy targets.
+    Consumes no game.rng."""
+    d = game.directives[house_name]
+    eff = _policy.effects(game, house_name)
+    if game.turn % DIRECTIVE_INTERVAL == 1:
+        # Decade: reset targets from convictions and snap stances to them
+        targets = {}
+        for key in DIRECTIVE_KEYS:
+            targets[key] = int(round(_conviction(
+                game.realms[house_name].ruler, key)))
+        d._policy_targets = targets
+        for key in DIRECTIVE_KEYS:
+            d.set_stance(key, targets[key])
+        return
+    targets = d._policy_targets
+    if targets is None:
+        targets = {}
+        for key in DIRECTIVE_KEYS:
+            targets[key] = int(round(_conviction(
+                game.realms[house_name].ruler, key)))
+        d._policy_targets = targets
+    for key in DIRECTIVE_KEYS:
+        current = d.stances.get(key, 0)
+        target = targets.get(key, current)
+        gap = target - current
+        if abs(gap) > DEAD_BAND:
+            step = POLICY_STEP if gap > 0 else -POLICY_STEP
+            d.set_stance(key, current + step)
+
+
 def ai_turn(game, house_name: str) -> List[str]:
     """The AI ruler's morning: directives, the docket, then ambition."""
     realm = game.realms.get(house_name)
@@ -139,10 +177,7 @@ def ai_turn(game, house_name: str) -> List[str]:
     msgs: List[str] = []
     goal = ensure_agenda(game, house_name)
     goal_dom = goal_domain(goal) if goal is not None else None
-    if game.turn % DIRECTIVE_INTERVAL == 1:
-        directives = game.directives[house_name]
-        for key in DIRECTIVE_KEYS:
-            directives.set_stance(key, int(round(_conviction(ruler, key))))
+    set_policy(game, house_name)
     docket = list(game.docket_by_house.get(house_name, []))
     docket.sort(key=lambda p: (-_score_petition(ruler, p, goal_dom), p.pid))
     for petition in docket:

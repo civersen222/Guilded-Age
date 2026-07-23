@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 DIRECTIVE_KEYS = ("capital", "labor", "expansion", "diplomacy", "war")
 
@@ -33,6 +33,7 @@ class Directives:
     stances: Dict[str, int] = field(
         default_factory=lambda: {k: 0 for k in DIRECTIVE_KEYS})
     friction_turns: Dict[str, int] = field(default_factory=dict)  # key -> consecutive turns
+    _policy_targets: Optional[Dict[str, int]] = field(default=None, repr=False)
 
     def set_stance(self, key: str, value: int) -> None:
         """Clamp to -100..100; changing course resets the friction counter."""
