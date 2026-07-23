@@ -495,16 +495,18 @@ Then extend step 7 (the mandate) so `happiness_mod`/`legitimacy_mod` reach happi
 ```
 (`tick_legitimacy` already clamps to `[0, LEGITIMACY_MAX]`; the extra `legitimacy_mod` is re-clamped to `[0,100]` here. Confirm `LEGITIMACY_MAX == 100.0` in `gilded/society/ideology.py`; if it differs, clamp to `LEGITIMACY_MAX` instead of `100.0`.)
 
-For diplomacy `relations_drift`, apply it in step 7's loop as a warming/cooling of standing relations toward other houses. Immediately after the legitimacy line above, add:
+For diplomacy `relations_drift`, apply it in step 7's loop as a warming/cooling of this house's standing relations toward the other houses. The relations store is `game.houses[h].relations`, a `Dict[str, int]` keyed by house name, range −100..100, initialized to 0 for every pair (`gilded/houses.py:31,131`); it is exactly what `intel.py` reads (`intel.py:52,76`). Immediately after the legitimacy line above, add:
 ```python
             drift = self.policy[h].relations_drift
             if drift:
+                rel = self.houses[h].relations
                 for other in self.houses:
                     if other == h:
                         continue
-                    self.relations.nudge(h, other, drift)
+                    rel[other] = max(-100, min(100, int(round(
+                        rel.get(other, 0) + drift))))
 ```
-**Verification of the relations API before writing:** confirm `self.relations` exists on `GildedGame` and exposes a symmetric `nudge(a, b, amount)` (or equivalent). If the method is named differently (e.g. `adjust`, `warm`, or relations are stored as a dict keyed by frozenset), adapt this call to the real API — grep `self.relations` in `chassis.py` and read the relations module first. If no house-to-house relations structure exists, DROP the `relations_drift` application here (leave the field computed for the UI only) and note it in the CynCo brief; do not invent a relations system in this task.
+(Relations are directional per house — nudging `houses[h].relations[other]` warms/cools how house `h` regards `other`, which is the axis `intel` reads. This is deliberate; do not attempt to mirror it onto `other`'s dict.)
 
 - [ ] **Step 8: Run the test + full suite**
 
@@ -1145,7 +1147,7 @@ After all tasks: dispatch a code-review pass over the full Stage 3 diff against 
 1. **Paths:** spec said `gilded/labor.py`/`gilded/ideology.py`; real paths are `gilded/society/labor.py` / `gilded/society/ideology.py`. Corrected throughout.
 2. **Labor realized via the existing per-enterprise dial** (not a separately-threaded `dividend_mod`), because the dial already feeds all four curves AND the endings blood-axis — driving it is lower-risk and keeps displayed==applied. So `PolicyEffects` carries `extraction_level` (not `dividend_mod`); the UI derives the labor line from the same curves.
 3. **War `legitimacy_mod` dropped** in favor of realizing war's domestic cost through `happiness_mod` (which already flows to legitimacy). Noted at the effects contract.
-4. **`relations_drift` application is contingent** on a real house-to-house relations API existing in `chassis`; Task 3b instructs verifying it and, if absent, computing the field for the UI only rather than inventing a relations system (that belongs to Stage 6 Diplomacy). This is the one open verification the implementer/CynCo brief must resolve against the real `chassis.py`.
+4. **`relations_drift` resolved (kept):** the house-to-house relations store DOES exist — `game.houses[h].relations: Dict[str,int]` (−100..100, `houses.py:31`), the same axis `intel.py` reads. Task 3b applies drift directly to `houses[h].relations[other]` (directional, clamped). No relations system is invented; nothing is dropped.
 
 **Placeholder scan:** none — every code step carries complete code. The two "adapt to real fixture" notes (UI tests) point at reading existing same-file fixtures, not inventing behavior; the CynCo brief will pin them to the actual helper names.
 
