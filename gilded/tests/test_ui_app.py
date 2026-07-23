@@ -54,6 +54,15 @@ def test_rule_action_spends_attention_and_clears_paper():
     assert all(x.pid != p.pid for x in g.docket_by_house[h])
 
 
+def test_set_stance_action_moves_the_dial_for_free():
+    state = _state()
+    g, h = state.game, state.house
+    attn_before = g.attention.get(h, 0)
+    app._apply_action(state, {"set_stance": ("labor", 40)})
+    assert g.directives[h].stances["labor"] == 40
+    assert g.attention.get(h, 0) == attn_before   # free — no attention spent
+
+
 def test_quicksave_writes_a_file(tmp_path):
     state = _state()
     state.save_path = str(tmp_path / "quick.pkl")

@@ -91,6 +91,11 @@ def _apply_action(state: AppState, action: dict) -> None:
         g.attention[h] -= 1
         initiative(g, h, "establish_informant", executor, target_house=target)
         return
+    stance = action.get("set_stance")
+    if stance is not None:
+        key, value = stance
+        g.directives[h].set_stance(key, value)
+        return
     if "rule" in action:
         pid, option_key, exec_id = action["rule"]
         if g.attention.get(h, 0) <= 0:

@@ -7,8 +7,9 @@ and the House's rank are always on screen. The Briefing tab is the landing view
 each turn: the "Since last session" delta feed, the turn's papers, and the
 docket surfaced as an Agenda. The paper tabs (Gazette, Ledger, Letters) set
 papers.compose() in wrapped serif columns; the Docket tab and the Agenda share
-one petition-card renderer; the Atlas tab hands off to atlas_view; the House tab
-shows the court and the standing of the realm.
+one petition-card renderer; the Policies tab reads and sets the five standing
+directive dials; the Atlas tab hands off to atlas_view; the House tab shows the
+court and the standing of the realm.
 
 The view is a CLIENT. handle_click() never touches the game - it returns an
 action dict (or None) and lets app.py apply it. Executor cycling is the one
@@ -29,7 +30,7 @@ from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 
-TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Atlas", "Powers", "House")
+TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Atlas", "Powers", "House")
 
 TAB_H = 40
 HUD_H = 96
@@ -105,6 +106,7 @@ class BroadsheetView:
         self._narrate_rect: Optional[pygame.Rect] = None
         self._option_hits: List[Tuple[pygame.Rect, tuple]] = []
         self._exec_hits: List[Tuple[pygame.Rect, int]] = []
+        self._dial_hits: List[Tuple[pygame.Rect, str]] = []
         self._atlas_polys: Dict[int, List[Tuple[int, int]]] = {}
         self._w = 0
         self._h = 0
@@ -131,6 +133,7 @@ class BroadsheetView:
         self._w, self._h = surface.get_size()
         self._option_hits = []
         self._exec_hits = []
+        self._dial_hits = []
         surface.fill(PAPER_BG)
         content = pygame.Rect(0, TAB_H + HUD_H, self._w,
                               self._h - TAB_H - HUD_H - BOTTOM_H)
@@ -143,6 +146,8 @@ class BroadsheetView:
             self._draw_paper(surface, content)
         elif self.active_tab == "Docket":
             self._draw_docket(surface, content)
+        elif self.active_tab == "Policies":
+            self._draw_policies(surface, content)
         elif self.active_tab == "Powers":
             self._draw_powers(surface, content)
         elif self.active_tab == "House":
@@ -364,6 +369,88 @@ class BroadsheetView:
         y = content.y + 6 + title.get_height() + 10
         self._draw_petition_cards(surface, content, y)
 
+    def _draw_policies(self, surface, content) -> None:
+        from gilded import policy
+        from gilded.society import labor
+        from gilded.directives import (DIRECTIVE_KEYS, DIRECTIVE_CONVICTION,
+                                        friction, FRICTION_THRESHOLD)
+        from gilded.docket import DOMAIN_SEAT
+
+        POLES = {
+            "capital": ("traditionalist", "industrialist"),
+            "labor": ("protective", "extractionist"),
+            "expansion": ("consolidation", "expansionism"),
+            "diplomacy": ("nationalist", "cosmopolitan"),
+            "war": ("pacifist", "militarist"),
+        }
+        h = self.house
+        eff = policy.effects(self.game, h)
+        directives = self.game.directives[h]
+        realm = self.game.realms[h]
+        title = _font(22, bold=True)
+        label = _font(17, bold=True)
+        small = _font(15)
+        x = content.x + PAD
+        w = content.width - 2 * PAD
+        y = content.y + PAD
+        surface.blit(title.render("Standing Policy", True, INK), (x, y))
+        y += title.get_height() + 12
+        track_w = w - 240
+        for key in DIRECTIVE_KEYS:
+            left, right = POLES[key]
+            stance = directives.stances.get(key, 0)
+            # label row
+            surface.blit(label.render(f"{left}", True, FADED), (x, y))
+            rlabel = label.render(right, True, FADED)
+            surface.blit(rlabel, (x + track_w - rlabel.get_width(), y))
+            sign = f"(+{stance})" if stance > 0 else f"({stance})"
+            surface.blit(label.render(sign, True, INK), (x + track_w + 16, y))
+            y += label.get_height() + 6
+            # track + marker
+            track_y = y + 8
+            pygame.draw.line(surface, CARD_EDGE, (x, track_y),
+                             (x + track_w, track_y), 3)
+            frac = (stance + 100) / 200.0
+            mx = int(x + frac * track_w)
+            pygame.draw.circle(surface, INK, (mx, track_y), 7)
+            track_rect = pygame.Rect(x, track_y - 12, track_w, 24)
+            self._dial_hits.append((track_rect, key))
+            y += 22
+            # live effect line (displayed == applied)
+            if key == "labor":
+                lvl = eff.extraction_level
+                line = (f"extraction {lvl} · dividends x"
+                        f"{labor.dividend_multiplier(lvl):.2f} · output x"
+                        f"{labor.production_multiplier(lvl):.2f} · unrest +"
+                        f"{labor.unrest_gain(lvl):.1f}/turn")
+            elif key == "capital":
+                line = (f"output x{eff.output_mod:.2f} · build x"
+                        f"{eff.build_speed_mod:.2f}")
+            elif key == "expansion":
+                line = (f"expansion cost x{eff.expand_cost_mod:.2f} · unrest +"
+                        f"{max(0.0, eff.unrest_add):.1f}/turn")
+            elif key == "war":
+                line = (f"strength x{eff.strength_mod:.2f} · happiness "
+                        f"{eff.happiness_mod:+.1f}")
+            else:  # diplomacy
+                line = (f"relations {eff.relations_drift:+.1f}/turn · trade +"
+                        f"{eff.trade_income:.1f} · legitimacy "
+                        f"{eff.legitimacy_mod:+.1f}")
+            surface.blit(small.render(line, True, INK), (x, y))
+            y += small.get_height() + 4
+            # friction flag
+            seat = realm.court.positions.get(DOMAIN_SEAT[key])
+            if seat is not None and getattr(seat, "is_alive", False):
+                conviction = seat.dispositions.get(DIRECTIVE_CONVICTION[key], 0.0)
+                if friction(stance, conviction) > 0:
+                    turns = directives.friction_turns.get(key, 0)
+                    flag = (f"! {seat.name} leans "
+                            f"{left if conviction < 0 else right} — straining "
+                            f"{turns}/4")
+                    surface.blit(small.render(flag, True, FADED), (x, y))
+                    y += small.get_height() + 4
+            y += 16
+
     def _draw_atlas(self, surface) -> None:
         surface.fill(OCEAN_COLOR)
         self._atlas_polys = draw_atlas(surface, self.game, self.selected_pid)
@@ -462,6 +549,13 @@ class BroadsheetView:
                 if rect.collidepoint(pos):
                     _, pid, key, exec_id = action
                     return {"rule": (pid, key, exec_id)}
+        if self.active_tab == "Policies":
+            for rect, key in self._dial_hits:
+                if rect.collidepoint(pos):
+                    frac = (pos[0] - rect.x) / rect.width
+                    value = int(round((frac * 200 - 100) / 10.0)) * 10
+                    value = max(-100, min(100, value))
+                    return {"set_stance": (key, value)}
         if self.active_tab == "Atlas":
             pid = pick_province(self.game.atlas, self._atlas_polys, pos)
             if pid is not None:

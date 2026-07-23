@@ -18,7 +18,7 @@ def _view():
 
 def test_tabs_shape():
     assert TABS == ("Briefing", "Gazette", "Ledger", "Letters",
-                    "Docket", "Atlas", "Powers", "House")
+                    "Docket", "Policies", "Atlas", "Powers", "House")
 
 
 def test_hud_rides_above_every_tab():
@@ -102,6 +102,20 @@ def test_executor_cycle_changes_choice_not_game():
     before = v._exec_idx.get(pid, 0)
     assert v.handle_click(rect.center) is None      # UI-internal, no game action
     assert v._exec_idx[pid] != before
+
+
+def test_policies_tab_draws_and_clicks():
+    g, v = _view()
+    v.active_tab = "Policies"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)                                     # must not raise
+    assert v._dial_hits                              # dial hit-regions were built
+    rect, key = v._dial_hits[0]
+    action = v.handle_click((rect.centerx, rect.centery))
+    assert set(action) == {"set_stance"}
+    k, val = action["set_stance"]
+    assert k in ("capital", "labor", "expansion", "diplomacy", "war")
+    assert -100 <= val <= 100 and val % 10 == 0
 
 
 def test_atlas_click_selects_province():
