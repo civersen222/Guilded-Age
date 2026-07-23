@@ -1,10 +1,14 @@
-"""The broadsheet screens (mission G22): the century read as a newspaper.
+"""The broadsheet screens (mission G22, Stage 1 reframe): the century read as a
+newspaper, now fronted by a persistent scoreboard HUD and a Council briefing.
 
-BroadsheetView renders one House's world across six tabs. The paper tabs
-(Gazette, Ledger, Letters) set papers.compose() in wrapped serif columns; the
-Docket tab lays each petition out as a card with option buttons, an executor
-cycle, and the attention still in hand; the Atlas tab hands off to atlas_view;
-the House tab shows the court and the standing of the realm.
+BroadsheetView renders one House's world across seven tabs. A HUD strip (the
+Stage 1 read-model) rides above every tab so the four axes, the Tide, the era,
+and the House's rank are always on screen. The Briefing tab is the landing view
+each turn: the "Since last session" delta feed, the turn's papers, and the
+docket surfaced as an Agenda. The paper tabs (Gazette, Ledger, Letters) set
+papers.compose() in wrapped serif columns; the Docket tab and the Agenda share
+one petition-card renderer; the Atlas tab hands off to atlas_view; the House tab
+shows the court and the standing of the realm.
 
 The view is a CLIENT. handle_click() never touches the game - it returns an
 action dict (or None) and lets app.py apply it. Executor cycling is the one
@@ -18,14 +22,16 @@ from typing import Dict, List, Optional, Tuple
 
 import pygame
 
+from gilded.dashboard import delta, scoreboard
 from gilded.papers import compose
 from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 
-TABS = ("Gazette", "Ledger", "Letters", "Docket", "Atlas", "House")
+TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Atlas", "House")
 
 TAB_H = 40
+HUD_H = 96
 BOTTOM_H = 56
 PAD = 16
 
@@ -35,6 +41,8 @@ FADED = (96, 88, 78)
 TAB_BG = (54, 48, 42)
 TAB_ACTIVE = (206, 176, 108)
 TAB_TEXT = (232, 226, 210)
+HUD_BG = (44, 40, 34)
+HUD_INK = (232, 226, 210)
 CARD_BG = (248, 244, 234)
 CARD_EDGE = (120, 108, 92)
 BUTTON_BG = (60, 82, 60)
@@ -84,6 +92,9 @@ class BroadsheetView:
         self.narrate_on = True
         self.active_tab = TABS[0]
         self.selected_pid: Optional[int] = None
+        # the previous turn's board, retained by app.py across end_turn so the
+        # briefing can show "since last session"; None means first session.
+        self.prev_board = None
         # per-petition executor choice: an index into that card's candidate
         # list, where index 0 means "let the game pick the seat's default".
         self._exec_idx: Dict[int, int] = {}
@@ -120,9 +131,12 @@ class BroadsheetView:
         self._option_hits = []
         self._exec_hits = []
         surface.fill(PAPER_BG)
-        content = pygame.Rect(0, TAB_H, self._w, self._h - TAB_H - BOTTOM_H)
+        content = pygame.Rect(0, TAB_H + HUD_H, self._w,
+                              self._h - TAB_H - HUD_H - BOTTOM_H)
 
-        if self.active_tab == "Atlas":
+        if self.active_tab == "Briefing":
+            self._draw_briefing(surface, content)
+        elif self.active_tab == "Atlas":
             self._draw_atlas(surface)
         elif self.active_tab in ("Gazette", "Ledger", "Letters"):
             self._draw_paper(surface, content)
@@ -132,6 +146,7 @@ class BroadsheetView:
             self._draw_house(surface, content)
 
         self._draw_tab_bar(surface)
+        self._draw_hud(surface)
         self._draw_bottom_bar(surface)
 
     def _draw_tab_bar(self, surface) -> None:
@@ -148,6 +163,36 @@ class BroadsheetView:
                                 INK if name == self.active_tab else TAB_TEXT)
             surface.blit(label, (rect.centerx - label.get_width() / 2,
                                  rect.centery - label.get_height() / 2))
+
+    def _draw_hud(self, surface) -> None:
+        b = scoreboard(self.game, self.house)
+        y0 = TAB_H
+        pygame.draw.rect(surface, HUD_BG, (0, y0, self._w, HUD_H))
+        strong = _font(16, bold=True)
+        fs = _font(15)
+        line_h = fs.get_height() + 3
+        x = PAD
+        y = y0 + 6
+        axis_str = "    ".join(
+            f"{name.capitalize()} {b.axes[name]:.0f}"
+            for name in ("capital", "standing", "blood", "world"))
+        surface.blit(strong.render(axis_str, True, HUD_INK), (x, y))
+        y += line_h
+        surface.blit(fs.render(
+            f"Legitimacy {b.legitimacy:.0f}    Treasury {b.treasury:.0f}    "
+            f"Tide {b.tide_level:.0f} ({b.tide_phase})    "
+            f"Atrocities {b.atrocities:.0f}", True, HUD_INK), (x, y))
+        y += line_h
+        surface.blit(fs.render(
+            f"{b.era_title}   -   {b.next_era}   -   "
+            f"{b.year} ({b.century_pct * 100:.0f}% of the century)",
+            True, HUD_INK), (x, y))
+        y += line_h
+        rival = (f"Rival: House {b.rival_name}" if b.rival_name
+                 else "Rival: none yet")
+        surface.blit(fs.render(
+            f"{rival}    You rank #{b.rank} of {len(self.game.houses)}",
+            True, HUD_INK), (x, y))
 
     def _draw_bottom_bar(self, surface) -> None:
         y = self._h - BOTTOM_H
@@ -171,33 +216,74 @@ class BroadsheetView:
         surface.blit(et, (rect.centerx - et.get_width() / 2,
                           rect.centery - et.get_height() / 2))
 
-    def _draw_paper(self, surface, content: pygame.Rect) -> None:
-        report = compose(self.game, self.house)
-        if self.narrate_on and self.active_tab == "Gazette":
-            report = self.narrator.render(report, self.game.director, self.game)
-        items = {"Gazette": report.gazette, "Ledger": report.ledger,
-                 "Letters": report.letters}[self.active_tab]
-        head = _font(30, bold=True).render(
-            f"THE {self.active_tab.upper()} - {report.year}", True, INK)
-        surface.blit(head, (PAD, content.y + 6))
-        body = _font(18)
-        y = content.y + 6 + head.get_height() + 10
-        width = content.width - 2 * PAD
-        if not items:
-            items = ["(nothing to report)"]
-        for item in items:
-            for line in _wrap(item, body, width):
-                if y > content.bottom - 20:
-                    return
-                surface.blit(body.render(line, True, INK), (PAD, y))
-                y += body.get_height() + 2
-            y += 6
+    # --- the Council briefing ------------------------------------------------
 
-    def _draw_docket(self, surface, content: pygame.Rect) -> None:
-        petitions = self.game.docket_by_house.get(self.house, [])
-        title = _font(30, bold=True).render("THE DOCKET", True, INK)
+    def _delta_lines(self, d, board) -> List[str]:
+        if d.first_session:
+            return ["The century opens; there is no prior "
+                    "session to weigh against."]
+        out: List[str] = []
+
+        def cue(md):
+            return "rose" if md.direction > 0 else "fell"
+
+        for name in ("capital", "standing", "blood", "world"):
+            md = d.axes[name]
+            if md.direction:
+                out.append(f"{name.capitalize()} {cue(md)} {abs(md.change):.0f}")
+        pairs = (("Legitimacy", d.legitimacy), ("Treasury", d.treasury),
+                 ("Tide", d.tide_level), ("Unrest", d.unrest_avg))
+        for label, md in pairs:
+            if md.direction:
+                out.append(f"{label} {cue(md)} {abs(md.change):.0f}")
+        if d.rank.direction:
+            moved = "improved" if d.rank.change < 0 else "slipped"
+            out.append(f"Your standing {moved} to rank #{board.rank}")
+        if not out:
+            out.append("A quiet turn; nothing of note moved.")
+        return out
+
+    def _draw_briefing(self, surface, content: pygame.Rect) -> None:
+        board = scoreboard(self.game, self.house)
+        d = delta(self.prev_board, board)
+        title = _font(30, bold=True).render(
+            f"COUNCIL BRIEFING - {board.year}", True, INK)
         surface.blit(title, (PAD, content.y + 6))
-        y = content.y + 6 + title.get_height() + 10
+        y = content.y + 6 + title.get_height() + 8
+        head = _font(19, bold=True)
+        body = _font(17)
+        width = content.width - 2 * PAD
+
+        surface.blit(head.render("Since last session", True, INK), (PAD, y))
+        y += head.get_height() + 4
+        for line in self._delta_lines(d, board):
+            surface.blit(body.render(line, True, INK), (PAD + 10, y))
+            y += body.get_height() + 2
+        y += 8
+
+        report = compose(self.game, self.house)
+        events = report.gazette[:2] + report.ledger[:2] + report.letters[:1]
+        if events:
+            surface.blit(head.render("What the papers say", True, INK), (PAD, y))
+            y += head.get_height() + 4
+            for ev in events:
+                for line in _wrap(ev, body, width - 10):
+                    if y > content.bottom - 170:
+                        break
+                    surface.blit(body.render(line, True, INK), (PAD + 10, y))
+                    y += body.get_height() + 2
+                y += 4
+        y += 8
+
+        surface.blit(head.render("The Agenda", True, INK), (PAD, y))
+        y += head.get_height() + 6
+        self._draw_petition_cards(surface, content, y)
+
+    # --- shared petition renderer (Docket + Agenda) --------------------------
+
+    def _draw_petition_cards(self, surface, content: pygame.Rect,
+                             y: int) -> None:
+        petitions = self.game.docket_by_house.get(self.house, [])
         body = _font(17)
         small = _font(15, bold=True)
         width = content.width - 2 * PAD
@@ -230,7 +316,8 @@ class BroadsheetView:
                     (brect, ("rule", p.pid, opt.key, exec_id)))
                 bx += bw + 8
             ex = self._chosen_executor(p.pid)
-            ex_name = "executor: default" if ex is None else f"executor: {ex.name}"
+            ex_name = ("executor: default" if ex is None
+                       else f"executor: {ex.name}")
             elabel = small.render(ex_name, True, BUTTON_TEXT)
             erect = pygame.Rect(bx, hy + 4, elabel.get_width() + 20, 26)
             pygame.draw.rect(surface, EXEC_BG, erect)
@@ -238,6 +325,34 @@ class BroadsheetView:
             surface.blit(elabel, (erect.x + 10, erect.y + 5))
             self._exec_hits.append((erect, p.pid))
             y += card_h + 10
+
+    def _draw_paper(self, surface, content: pygame.Rect) -> None:
+        report = compose(self.game, self.house)
+        if self.narrate_on and self.active_tab == "Gazette":
+            report = self.narrator.render(report, self.game.director, self.game)
+        items = {"Gazette": report.gazette, "Ledger": report.ledger,
+                 "Letters": report.letters}[self.active_tab]
+        head = _font(30, bold=True).render(
+            f"THE {self.active_tab.upper()} - {report.year}", True, INK)
+        surface.blit(head, (PAD, content.y + 6))
+        body = _font(18)
+        y = content.y + 6 + head.get_height() + 10
+        width = content.width - 2 * PAD
+        if not items:
+            items = ["(nothing to report)"]
+        for item in items:
+            for line in _wrap(item, body, width):
+                if y > content.bottom - 20:
+                    return
+                surface.blit(body.render(line, True, INK), (PAD, y))
+                y += body.get_height() + 2
+            y += 6
+
+    def _draw_docket(self, surface, content: pygame.Rect) -> None:
+        title = _font(30, bold=True).render("THE DOCKET", True, INK)
+        surface.blit(title, (PAD, content.y + 6))
+        y = content.y + 6 + title.get_height() + 10
+        self._draw_petition_cards(surface, content, y)
 
     def _draw_atlas(self, surface) -> None:
         surface.fill(OCEAN_COLOR)
@@ -250,7 +365,7 @@ class BroadsheetView:
         font = _font(16)
         w = max(font.size(l)[0] for l in lines) + 2 * PAD
         h = len(lines) * (font.get_height() + 2) + 2 * PAD
-        rect = pygame.Rect(self._w - w - PAD, TAB_H + PAD, w, h)
+        rect = pygame.Rect(self._w - w - PAD, TAB_H + HUD_H + PAD, w, h)
         panel = pygame.Surface(rect.size)
         panel.set_alpha(225)
         panel.fill((18, 16, 14))
@@ -298,7 +413,7 @@ class BroadsheetView:
             return {"end_turn": True}
         if self._narrate_rect is not None and self._narrate_rect.collidepoint(pos):
             return {"toggle_narrate": True}
-        if self.active_tab == "Docket":
+        if self.active_tab in ("Docket", "Briefing"):
             for rect, pid in self._exec_hits:
                 if rect.collidepoint(pos):
                     cands = self._candidates(pid)

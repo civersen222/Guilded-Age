@@ -21,6 +21,7 @@ import pygame
 
 from gilded.ai import _executor_for
 from gilded.chassis import GildedGame
+from gilded.dashboard import scoreboard
 from gilded.docket import rule as docket_rule
 from gilded.saga.narrator import select_narrator
 from gilded.ui.broadsheet import BroadsheetView
@@ -76,7 +77,10 @@ def _apply_action(state: AppState, action: dict) -> None:
         return
     if action.get("end_turn"):
         if g.game_over is None:
+            pre = scoreboard(g, h)            # the board the council closed on
             g.end_turn()
+            state.view.prev_board = pre       # non-invasive snapshot for the feed
+            state.view.active_tab = "Briefing"
         return
     if "rule" in action:
         pid, option_key, exec_id = action["rule"]

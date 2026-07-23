@@ -60,3 +60,13 @@ def test_quicksave_writes_a_file(tmp_path):
     path = app._quicksave(state)
     assert os.path.exists(path)
     assert state.game.docket_by_house      # the docket is restored after saving
+
+
+def test_end_turn_lands_on_briefing_and_records_prev_board():
+    state = _state()
+    state.view.active_tab = "House"
+    turn = state.game.turn
+    app._apply_action(state, {"end_turn": True})
+    assert state.game.turn == turn + 1
+    assert state.view.active_tab == "Briefing"
+    assert state.view.prev_board is not None

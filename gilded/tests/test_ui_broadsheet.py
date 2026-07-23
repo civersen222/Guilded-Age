@@ -17,7 +17,34 @@ def _view():
 
 
 def test_tabs_shape():
-    assert TABS == ("Gazette", "Ledger", "Letters", "Docket", "Atlas", "House")
+    assert TABS == ("Briefing", "Gazette", "Ledger", "Letters",
+                    "Docket", "Atlas", "House")
+
+
+def test_hud_rides_above_every_tab():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    for tab in TABS:
+        v.active_tab = tab
+        v.draw(surf)   # the HUD is drawn on every tab; must not crash
+
+
+def test_briefing_is_the_default_view():
+    g, v = _view()
+    assert v.active_tab == "Briefing"
+
+
+def test_briefing_agenda_rules_a_petition():
+    g, v = _view()
+    v.active_tab = "Briefing"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    assert v._option_hits, "the briefing surfaces the docket as an Agenda"
+    rect, action = v._option_hits[0]
+    result = v.handle_click(rect.center)
+    assert result is not None and "rule" in result
+    pid, key, exec_id = result["rule"]
+    assert any(p.pid == pid for p in g.docket_by_house[v.house])
 
 
 def test_every_tab_draws_headless():
