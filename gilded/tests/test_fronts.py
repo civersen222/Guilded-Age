@@ -211,3 +211,12 @@ def test_seize_goal_in_hand_is_a_decisive_verdict():
     msgs = tick_wars(g)
     assert war.war_score == WAR_SCORE_WIN
     assert any("must come to terms" in m for m in msgs)
+
+
+def test_militarist_policy_boosts_regiment_power():
+    from gilded import policy
+    from gilded.chassis import GildedGame
+    g = GildedGame(seed=29)
+    h = sorted(g.houses)[0]
+    g.directives[h].set_stance("war", 100)
+    assert policy.effects(g, h).strength_mod > 1.0

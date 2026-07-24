@@ -315,7 +315,7 @@ class GildedGame:
             # Unrest add from labor policy
             if eff.unrest_add:
                 for p in provs:
-                    p.unrest = max(0.0, min(100.0, p.unrest + eff.unrest_add * 100))
+                    p.unrest = max(0.0, min(100.0, p.unrest + eff.unrest_add))
 
         # 7. the tide and the mandate
         self.tide.tick()

@@ -310,3 +310,16 @@ def test_initiative_guardrails():
     msgs = initiative(g, h, "adjust_garrison", realm.ruler)
     assert any("G16" in m for m in msgs)
     assert initiative(g, h, "nonsense", realm.ruler) == ["No such initiative 'nonsense'"]
+
+
+def test_expansionist_policy_cheapens_expansion():
+    from gilded.chassis import GildedGame
+    from gilded.enterprises import EXPAND_COST
+    g = GildedGame(seed=23)
+    h = next(x for x in sorted(g.houses) if g.ents_of(x))
+    ent = next(e for e in g.ents_of(h) if e.tier < 5 and e.under_construction == 0)
+    g.directives[h].set_stance("expansion", 100)
+    from gilded import policy
+    eff = policy.effects(g, h)
+    expected = EXPAND_COST[ent.tier + 1] * eff.expand_cost_mod
+    assert expected < EXPAND_COST[ent.tier + 1]

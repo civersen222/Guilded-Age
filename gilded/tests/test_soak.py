@@ -50,3 +50,18 @@ def test_soak_determinism():
         b.end_turn()
     assert [e.text for e in b.events] == a_events
     assert time.monotonic() - t0 < WALL_BUDGET
+
+
+def test_policy_century_is_stable():
+    from gilded.chassis import GildedGame
+    g = GildedGame(seed=2026)
+    for _ in range(60):
+        if g.game_over is not None:
+            break
+        g.end_turn()
+    for h in g.houses:
+        assert 0.0 <= g.legitimacy[h] <= 100.0
+        for e in g.ents_of(h):
+            assert 0.0 <= e.extraction_dial <= 100.0
+        for k, v in g.directives[h].stances.items():
+            assert -100 <= v <= 100

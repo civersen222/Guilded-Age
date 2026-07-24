@@ -9,10 +9,6 @@ and the fronts peace table - the AI cheats at nothing."""
 from typing import Dict, List, Optional, Tuple
 
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
-from gilded import policy as _policy
-
-POLICY_STEP = 5
-DEAD_BAND = 10
 from gilded.docket import DOMAIN_SEAT, INITIATIVES, _auto_terms, initiative, rule
 from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
 from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST, PeaceTerms,
@@ -28,6 +24,12 @@ WEAKER = 0.7                   # a neighbor under this fraction of our strength
 URGENCY_ESCALATED = 2.0
 CONVICTION_DIV = 50.0
 AGENDA_PETITION_BONUS = 1.0    # a petition in the goal's domain jumps the queue
+
+POLICY_STEP = 15       # max stance change per dial per turn
+DEAD_BAND = 5          # within this of target, leave it alone (friction accrues)
+LOW_TREASURY = 200.0   # below this, the house squeezes labor harder
+HIGH_UNREST = 25.0     # above this average, ease off to calm the land
+LOW_LEGITIMACY = 30.0  # below this, ease off to calm the land
 
 ENDOWMENT_KIND = {v[0]: k for k, v in sorted(ENTERPRISE_TYPES.items())
                   if v[0] is not None}
@@ -134,38 +136,57 @@ def _pick_initiative(game, house_name: str, realm, goal=None):
 
 # --- the turn ----------------------------------------------------------------
 
-def set_policy(game, house_name: str) -> None:
-    """Drift-with-dead-band: nudge each stance toward the house's target,
-    at most POLICY_STEP per turn, only if distance > DEAD_BAND.
-    On decade turns (turn % DIRECTIVE_INTERVAL == 1) snap directly to
-    convictions and refresh the policy targets.
-    Consumes no game.rng."""
-    d = game.directives[house_name]
-    eff = _policy.effects(game, house_name)
-    if game.turn % DIRECTIVE_INTERVAL == 1:
-        # Decade: reset targets from convictions and snap stances to them
-        targets = {}
-        for key in DIRECTIVE_KEYS:
-            targets[key] = int(round(_conviction(
-                game.realms[house_name].ruler, key)))
-        d._policy_targets = targets
-        for key in DIRECTIVE_KEYS:
-            d.set_stance(key, targets[key])
-        return
-    targets = d._policy_targets
-    if targets is None:
-        targets = {}
-        for key in DIRECTIVE_KEYS:
-            targets[key] = int(round(_conviction(
-                game.realms[house_name].ruler, key)))
-        d._policy_targets = targets
+def _policy_targets(game, house_name) -> dict:
+    """Deterministic target stance per dial: ruler conviction baseline +
+    circumstance nudges + Stage-2 agenda bias. No rng."""
+    realm = game.realms[house_name]
+    ruler = realm.ruler
+    targets = {k: _conviction(ruler, k) for k in DIRECTIVE_KEYS}
+
+    house = game.houses[house_name]
+    provs = game.provinces_of(house_name)
+    unrest = (sum(p.unrest for p in provs) / len(provs)) if provs else 0.0
+    legitimacy = game.legitimacy.get(house_name, 50.0)
+    at_war = any(house_name in (w.aggressor, w.defender) for w in game.wars)
+
+    if house.treasury < LOW_TREASURY:
+        targets["labor"] += 40            # squeeze harder when broke
+    if unrest > HIGH_UNREST or legitimacy < LOW_LEGITIMACY:
+        targets["labor"] -= 40            # ease the squeeze to calm the land
+        targets["capital"] -= 30          # go traditionalist
+    if at_war:
+        targets["war"] += 50              # mobilize
+
+    goal = game.agendas.get(house_name)
+    fam = getattr(goal, "family", None)
+    if fam in ("Conquest", "Glory"):
+        targets["war"] += 40
+    elif fam in ("Buyout", "Dominion"):
+        targets["capital"] += 40
+        targets["labor"] += 30
+    elif fam == "Consolidation":
+        targets["labor"] -= 30
+        targets["capital"] -= 20
+    elif fam == "Dynasty":
+        targets["diplomacy"] += 40
+
+    return {k: max(-100, min(100, int(round(v)))) for k, v in targets.items()}
+
+
+def set_policy(game, house_name) -> None:
+    """Drift each dial one bounded step toward its target, but only while the
+    gap exceeds the dead-band. Converged dials are left untouched so their
+    seated ministers accrue friction exactly as the player's do. No rng."""
+    directives = game.directives[house_name]
+    targets = _policy_targets(game, house_name)
     for key in DIRECTIVE_KEYS:
-        current = d.stances.get(key, 0)
-        target = targets.get(key, current)
+        current = directives.stances.get(key, 0)
+        target = targets[key]
         gap = target - current
-        if abs(gap) > DEAD_BAND:
-            step = POLICY_STEP if gap > 0 else -POLICY_STEP
-            d.set_stance(key, current + step)
+        if abs(gap) <= DEAD_BAND:
+            continue                      # converged: do not reset friction
+        step = max(-POLICY_STEP, min(POLICY_STEP, gap))
+        directives.set_stance(key, current + step)
 
 
 def ai_turn(game, house_name: str) -> List[str]:

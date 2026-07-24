@@ -218,3 +218,60 @@ def test_true_believer_transforms_instead():
     for ent in g.ents_of(h):
         assert ent.ledger == {COLLECTIVE_ID: 100.0}
     assert any("transforms" in e.text for e in events)
+
+
+def test_labor_policy_drives_enterprise_extraction():
+    from gilded.chassis import GildedGame
+    g = GildedGame(seed=7)
+    h = next(x for x in sorted(g.houses) if g.ents_of(x))
+    # Enterprises founded mid-turn get the dial next turn; pin to standing ones.
+    g.directives[h].set_stance("labor", 100)
+    ids = {e.eid for e in g.ents_of(h)}
+    g.end_turn()
+    assert all(e.extraction_dial == 100.0 for e in g.ents_of(h) if e.eid in ids)
+    g.directives[h].set_stance("labor", -100)
+    ids = {e.eid for e in g.ents_of(h)}
+    g.end_turn()
+    assert all(e.extraction_dial == 0.0 for e in g.ents_of(h) if e.eid in ids)
+
+
+def test_extractionist_labor_earns_more_and_strains_more():
+    from gilded.chassis import GildedGame
+    hard = GildedGame(seed=11)
+    soft = GildedGame(seed=11)
+    h = next(x for x in sorted(hard.houses) if hard.ents_of(x))
+    hard.directives[h].set_stance("labor", 100)
+    soft.directives[h].set_stance("labor", -100)
+    hard.end_turn()
+    soft.end_turn()
+    hard_unrest = sum(p.unrest for p in hard.provinces_of(h))
+    soft_unrest = sum(p.unrest for p in soft.provinces_of(h))
+    assert hard.houses[h].treasury >= soft.houses[h].treasury
+    assert hard_unrest >= soft_unrest
+
+
+def test_industrialist_capital_lifts_dividends():
+    from gilded.chassis import GildedGame
+    ind = GildedGame(seed=13)
+    trad = GildedGame(seed=13)
+    h = next(x for x in sorted(ind.houses) if ind.ents_of(x))
+    ind.directives[h].set_stance("capital", 100)
+    trad.directives[h].set_stance("capital", -100)
+    ind.end_turn()
+    trad.end_turn()
+    assert ind.houses[h].treasury > trad.houses[h].treasury
+
+
+def test_expansionism_and_diplomacy_apply_standing_effects():
+    from gilded.chassis import GildedGame
+    g = GildedGame(seed=17)
+    h = next(x for x in sorted(g.houses) if g.provinces_of(x))
+    g.directives[h].set_stance("expansion", 100)   # +1 unrest/turn on worked provs
+    g.directives[h].set_stance("diplomacy", 100)   # +trade income
+    calm = GildedGame(seed=17)
+    g.end_turn()
+    calm.end_turn()
+    assert (sum(p.unrest for p in g.provinces_of(h))
+            >= sum(p.unrest for p in calm.provinces_of(h)))
+    # cosmopolitan trade income lands in the treasury as a standing drip
+    assert g.houses[h].treasury >= calm.houses[h].treasury

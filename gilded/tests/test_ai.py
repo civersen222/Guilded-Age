@@ -97,19 +97,19 @@ def test_escalated_petitions_jump_the_queue():
 
 # --- directives --------------------------------------------------------------
 
-def test_directives_reset_from_convictions_on_the_decade():
+def test_directives_drift_toward_conviction():
+    from gilded.ai import POLICY_STEP
     g = _game()
     h = _first(g)
     ruler = g.realms[h].ruler
     g.docket_by_house[h] = []
     _quiet(ruler)
-    ruler.dispositions["militarist_pacifist"] = 77.3
-    assert g.turn % 10 == 1
+    ruler.dispositions["militarist_pacifist"] = 100.0
+    g.directives[h].set_stance("war", 0)
     ai_turn(g, h)
-    assert g.directives[h].stances["war"] == 77
-    for key in DIRECTIVE_KEYS:
-        want = int(round(ruler.dispositions.get(DIRECTIVE_CONVICTION[key], 0.0)))
-        assert g.directives[h].stances[key] == max(-100, min(100, want))
+    new_stance = g.directives[h].stances["war"]
+    assert new_stance > 0, "stance should drift toward conviction"
+    assert new_stance <= POLICY_STEP, "stance should not exceed POLICY_STEP in one turn"
 
 
 # --- initiatives -------------------------------------------------------------
