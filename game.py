@@ -333,6 +333,15 @@ class Game:
         if "faith_bonus" in wonder:
             civ.faith_bonus += wonder["faith_bonus"]
             bonus_parts.append(f"+{wonder['faith_bonus']} faith")
+        if "happiness" in wonder:
+            self.happiness[civ_name] = self.happiness.get(civ_name, 0) + wonder["happiness"]
+            bonus_parts.append(f"+{wonder['happiness']} happiness")
+        if "gold" in wonder:
+            civ.gold += wonder["gold"]
+            bonus_parts.append(f"+{wonder['gold']} gold")
+        if "military" in wonder:
+            civ.military_bonus = getattr(civ, "military_bonus", 0) + wonder["military"]
+            bonus_parts.append(f"+{wonder['military']} military")
 
         return f"{civ_name} built {wonder_name}! Bonuses: {', '.join(bonus_parts)}"
 
