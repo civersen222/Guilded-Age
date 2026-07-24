@@ -2,7 +2,7 @@
 
 import random
 
-from gilded.society.characters import ATTRIBUTES, Secret
+from gilded.society.characters import ATTRIBUTES, Secret, SocietyState
 from gilded.society.house_ai import tick_realm
 from gilded.society.realm import create_house_realm
 from gilded.society.relationships import (
@@ -34,6 +34,9 @@ class QuietRng:
     def shuffle(self, seq):
         pass
 
+    def gauss(self, mu, sigma):
+        return mu
+
 
 class EagerRng(QuietRng):
     """Every chance roll fires."""
@@ -45,12 +48,13 @@ class EagerRng(QuietRng):
 def _realm(seed, house="Vantrell"):
     random.seed(seed)
     rng = random.Random(seed)
-    return create_house_realm(house, rng)
+    society = SocietyState(rng)
+    return create_house_realm(house, society)
 
 
 def test_opinion_helpers_and_relation_thresholds():
     ra = _realm(70)
-    set_state({})
+    set_state(ra.society, {})
     a, b = ra.characters[0], ra.characters[1]
     assert opinion_of(a, b) == 0 and get_relation(a, b) == "neutral"
     modify_opinion(a, b, -25)
@@ -62,7 +66,7 @@ def test_opinion_helpers_and_relation_thresholds():
 
 def test_succession_grievances_fire_only_on_ruler_change():
     ra = _realm(71)
-    set_state({})
+    set_state(ra.society, {})
     mgr = SchemeManager()
     realms = {"Vantrell": ra}
     tick_relationships(realms, mgr, 1, QuietRng())  # registers the sitting ruler
@@ -80,7 +84,7 @@ def test_succession_grievances_fire_only_on_ruler_change():
 
 def test_grievance_makes_rival_and_seated_rival_plots_coup():
     ra = _realm(72)
-    set_state({})
+    set_state(ra.society, {})
     mgr = SchemeManager()
     seated = next(c for c in ra.court.positions.values()
                   if c is not None and c.is_alive)
@@ -95,9 +99,10 @@ def test_grievance_makes_rival_and_seated_rival_plots_coup():
 def test_foreign_rival_ruler_plots_assassination():
     random.seed(73)
     rng0 = random.Random(73)
-    ra = create_house_realm("Vantrell", rng0)
-    rb = create_house_realm("Karsgate", rng0)
-    set_state({})
+    society = SocietyState(rng0)
+    ra = create_house_realm("Vantrell", society)
+    rb = create_house_realm("Karsgate", society)
+    set_state(society, {})
     mgr = SchemeManager()
     modify_opinion(ra.ruler, rb.ruler, -30)
     tick_relationships({"Vantrell": ra, "Karsgate": rb}, mgr, 1, EagerRng())
@@ -108,7 +113,7 @@ def test_foreign_rival_ruler_plots_assassination():
 
 def test_courtiers_discover_secrets():
     ra = _realm(74)
-    set_state({})
+    set_state(ra.society, {})
     subject = next(c for c in ra.court.positions.values()
                    if c is not None and c.is_alive)
     secret = Secret("vice", subject.id, "a hidden vice", 30)
@@ -119,13 +124,13 @@ def test_courtiers_discover_secrets():
 
 def test_state_roundtrip():
     ra = _realm(75)
-    set_state({})
+    set_state(ra.society, {})
     a, b = ra.characters[0], ra.characters[1]
     modify_opinion(a, b, -40)
-    snapshot = get_state()
-    set_state({})
+    snapshot = get_state(ra.society)
+    set_state(ra.society, {})
     assert opinion_of(a, b) == 0
-    set_state(snapshot)
+    set_state(ra.society, snapshot)
     assert opinion_of(a, b) == -40
 
 
@@ -176,7 +181,7 @@ def test_children_get_guardians_and_education_tracks():
 
 def test_feast_at_interval_warms_opinions():
     ra = _realm(80)
-    set_state({})
+    set_state(ra.society, {})
     other = next(c for c in ra.characters
                  if c.is_alive and c.age >= 16 and c.id != ra.ruler.id)
     before = opinion_of(other, ra.ruler)

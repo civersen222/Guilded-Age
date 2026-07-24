@@ -12,12 +12,14 @@ from gilded.directives import (
     friction,
     tick_friction,
 )
-from gilded.society.characters import Character
+from gilded.society.characters import Character, SocietyState
 
 
 def _char(name="Sec"):
     random.seed(11)
-    return Character(name=name, stats={}, traits=[], age=45, gender="Male")
+    rng = random.Random(11)
+    society = SocietyState(rng)
+    return Character(name=name, stats={}, traits=[], age=45, gender="Male", society=society)
 
 
 def test_default_stances_zero():

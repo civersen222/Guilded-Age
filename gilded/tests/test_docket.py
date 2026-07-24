@@ -14,7 +14,7 @@ from gilded.docket import (
 )
 from gilded.enterprises import EXPAND_COST, found_enterprise
 from gilded.houses import assign_houses
-from gilded.society.characters import opinion_matrix
+from gilded.society.characters import SocietyState
 from gilded.society.court import CourtPosition
 from gilded.society.ideology import IdeologicalTide
 from gilded.society.labor import Movement
@@ -57,10 +57,11 @@ def _game(seed, realm_count=1):
     random.seed(seed)
     g = FakeGame()
     g.rng = random.Random(seed)
+    g.society = SocietyState(g.rng)
     g.atlas = generate_atlas(seed)
     g.houses = assign_houses(g.atlas, seed)
     names = sorted(g.houses)[:realm_count]
-    g.realms = {n: create_house_realm(n, g.rng) for n in names}
+    g.realms = {n: create_house_realm(n, g.society) for n in names}
     g.enterprises = []
     g.wars = []
     g.events = []
@@ -177,10 +178,10 @@ def test_heir_demand_refusal_wounds():
     pets = generate_petitions(g, h)
     hd = [p for p in pets if p.kind == "heir_demand"]
     assert hd and hd[0].domain == "family"
-    before = opinion_matrix.get((heir.id, realm.ruler.id), 0)
+    before = heir._society.opinions.get((heir.id, realm.ruler.id), 0)
     g.rng = SeqRng([0.0])
     rule(g, hd[0], "refuse", realm.ruler)
-    assert opinion_matrix.get((heir.id, realm.ruler.id), 0) == before - 12
+    assert heir._society.opinions.get((heir.id, realm.ruler.id), 0) == before - 12
 
 
 def test_disaster_inquiry_compensation():

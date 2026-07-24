@@ -3,7 +3,7 @@
 import random
 
 from gilded.enterprises import Enterprise
-from gilded.society.characters import opinion_matrix
+from gilded.society.characters import SocietyState
 from gilded.society.court import CourtPosition
 from gilded.society.population import bulk_pass, promote, relevance_set
 from gilded.society.realm import (
@@ -16,10 +16,15 @@ from gilded.society.realm import (
 )
 
 
+def _realm(seed, house="Vantrell"):
+    rng = random.Random(seed)
+    society = SocietyState(rng)
+    return create_house_realm(house, society)
+
+
 def test_create_house_realm_basics():
     random.seed(80)
-    rng = random.Random(11)
-    realm = create_house_realm("Vantrell", rng)
+    realm = _realm(11)
     assert realm.house_name == "Vantrell"
     assert realm.ruler.is_alive and 28 <= realm.ruler.age <= 45
     assert realm.ruler.name.endswith("Vantrell")
@@ -33,7 +38,7 @@ def test_create_house_realm_basics():
 
 def test_create_house_realm_dynasty_children():
     random.seed(81)
-    realm = create_house_realm("Karsgate", random.Random(3))
+    realm = _realm(3, "Karsgate")
     kids = [c for c in realm.characters if c.parent_ids]
     assert 1 <= len(kids) <= 2
     for kid in kids:
@@ -44,8 +49,8 @@ def test_create_house_realm_dynasty_children():
 
 def test_create_house_realm_rng_determinism():
     random.seed(82)
-    a = create_house_realm("Vantrell", random.Random(11))
-    b = create_house_realm("Vantrell", random.Random(11))
+    a = _realm(11)
+    b = _realm(11)
     assert a.ruler.name == b.ruler.name
     assert a.ruler.age == b.ruler.age
     assert len(a.characters) == len(b.characters)
@@ -54,8 +59,7 @@ def test_create_house_realm_rng_determinism():
 
 def test_tick_directors_appoints_and_pays():
     random.seed(83)
-    rng = random.Random(4)
-    realm = create_house_realm("Vantrell", rng)
+    realm = _realm(4)
     paid = Enterprise(eid=1, kind="bank", name="Vantrell Trust",
                       house="Vantrell", province=0)
     paid.ledger = {realm.ruler.id: 100.0}
@@ -63,7 +67,7 @@ def test_tick_directors_appoints_and_pays():
                       house="Vantrell", province=1)
     other = Enterprise(eid=3, kind="bank", name="Rival Bank",
                        house="Karsgate", province=2)
-    events = tick_directors(realm, [paid, free, other], rng)
+    events = tick_directors(realm, [paid, free, other], realm.society.rng)
     assert paid.director_id and free.director_id
     assert paid.director_id != free.director_id
     assert other.director_id == ""                     # other houses untouched
@@ -78,57 +82,53 @@ def test_tick_directors_appoints_and_pays():
 
 def test_tick_directors_replaces_dead_and_focus():
     random.seed(84)
-    rng = random.Random(5)
-    realm = create_house_realm("Vantrell", rng)
+    realm = _realm(5)
     ent = Enterprise(eid=1, kind="bank", name="Vantrell Trust",
                      house="Vantrell", province=0)
-    tick_directors(realm, [ent], rng)
+    tick_directors(realm, [ent], realm.society.rng)
     first = ent.director_id
     by_id = {ch.id: ch for ch in realm.characters}
     director = by_id[first]
     assert director.focus.attribute == "industry"
     assert director.focus.progress == 1
     director.is_alive = False
-    tick_directors(realm, [ent], rng)
+    tick_directors(realm, [ent], realm.society.rng)
     assert ent.director_id and ent.director_id != first
 
 
 def test_tick_loyalty_targets_and_disloyalty():
     random.seed(85)
-    rng = random.Random(6)
-    realm = create_house_realm("Vantrell", rng)
+    realm = _realm(6)
     ch = next(c for c in realm.court.positions.values() if c is not None)
     ch.dispositions["labor_capital"] = 0.0
     realm.ruler.dispositions["labor_capital"] = 0.0
-    opinion_matrix[(ch.id, realm.ruler.id)] = -60
-    events1 = tick_loyalty(realm, [], rng)
+    ch._society.opinions[(ch.id, realm.ruler.id)] = -60
+    events1 = tick_loyalty(realm, [], realm.society.rng)
     assert abs(ch.loyalty - 44.0) < 1e-6               # 50 + (20-50)*0.2
-    events2 = tick_loyalty(realm, [], rng)
+    events2 = tick_loyalty(realm, [], realm.society.rng)
     assert ch.loyalty < DISLOYAL_LOYALTY
     assert any(ch.name in e for e in events1 + events2)
 
 
 def test_tick_loyalty_pay_helps():
     random.seed(86)
-    rng = random.Random(7)
-    realm = create_house_realm("Vantrell", rng)
+    realm = _realm(7)
     seated = [c for c in realm.court.positions.values() if c is not None]
     a, b = seated[0], seated[1]
     for c in (a, b):
         c.dispositions["labor_capital"] = 0.0
-        opinion_matrix[(c.id, realm.ruler.id)] = 0
+        c._society.opinions[(c.id, realm.ruler.id)] = 0
     realm.ruler.dispositions["labor_capital"] = 0.0
     ent = Enterprise(eid=1, kind="bank", name="Vantrell Trust",
                      house="Vantrell", province=0)
     ent.ledger = {a.id: 5.0}
-    tick_loyalty(realm, [ent], rng)
+    tick_loyalty(realm, [ent], realm.society.rng)
     assert a.loyalty > b.loyalty
 
 
 def test_disloyal_shareholders():
     random.seed(87)
-    rng = random.Random(8)
-    realm = create_house_realm("Vantrell", rng)
+    realm = _realm(8)
     holder = realm.characters[10]
     holder.loyalty = 30.0
     ruler = realm.ruler
@@ -146,8 +146,7 @@ def test_disloyal_shareholders():
 
 def test_bulk_pass_ages_births_and_skips():
     random.seed(88)
-    rng = random.Random(9)
-    realm = create_house_realm("Vantrell", rng)
+    realm = _realm(9)
     elder = realm.characters[10]
     elder.age = 79
     elder.age_progress.current_age = 79
@@ -155,7 +154,7 @@ def test_bulk_pass_ages_births_and_skips():
     born_total = []
     msgs_total = []
     for turn in range(30):
-        msgs, born = bulk_pass(realm, turn, rng,
+        msgs, born = bulk_pass(realm, turn, realm.society.rng,
                                skip_ids={realm.ruler.id},
                                notable_ids={elder.id})
         born_total.extend(born)
@@ -171,8 +170,7 @@ def test_bulk_pass_ages_births_and_skips():
 
 def test_relevance_set_and_promote():
     random.seed(89)
-    rng = random.Random(10)
-    realm = create_house_realm("Vantrell", rng)
+    realm = _realm(10)
     rs = relevance_set(realm, {"agent-x"})
     assert realm.ruler.id in rs
     assert "agent-x" in rs

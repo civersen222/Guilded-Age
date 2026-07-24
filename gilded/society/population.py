@@ -52,7 +52,7 @@ def bulk_pass(realm, turn: int, rng: random.Random,
         father = rng.choice(men)
         child = generate_child(
             f"{rng.choice(MALE_NAMES + FEMALE_NAMES)} {realm.house_name}",
-            father, mother)
+            father, mother, rng)
         child.age = 0
         child.age_progress.current_age = 0
         realm.characters.append(child)

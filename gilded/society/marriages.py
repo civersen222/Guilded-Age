@@ -238,7 +238,7 @@ class MarriageRegistry:
                     if home is not None:
                         child = generate_child(
                             f"{rng.choice(MALE_NAMES + FEMALE_NAMES)} {house_name}",
-                            father, mother)
+                            father, mother, rng)
                         child.age = 0
                         child.age_progress.current_age = 0
                         home.dynasty.add_member(child, parent.id)

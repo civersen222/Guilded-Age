@@ -18,7 +18,7 @@ from gilded.society.ideology import (
     trigger_revolution,
 )
 from gilded.society.labor import DIAL_DEFAULT, Movement
-from gilded.society.characters import Character
+from gilded.society.characters import Character, SocietyState
 from gilded.world import generate_atlas
 
 
@@ -107,7 +107,8 @@ def test_trigger_revolution_flips_and_clears():
 
 def test_can_transform_checks_true_conviction():
     random.seed(30)
-    r = Character(name="Chairman", stats={}, traits=[], age=50, gender="Male")
+    society = SocietyState(random.Random(30))
+    r = Character(name="Chairman", stats={}, traits=[], age=50, gender="Male", society=society)
     r.dispositions["labor_capital"] = -60.0
     r.persona["labor_capital"] = 50.0                  # persona does not fool it
     assert can_transform(r)
@@ -118,6 +119,7 @@ def test_can_transform_checks_true_conviction():
 
 def test_transform_house_concedes_everything():
     random.seed(31)
+    society = SocietyState(random.Random(31))
     atlas = generate_atlas(42)
     houses = assign_houses(atlas, 42)
     hname = next(iter(houses))
@@ -130,7 +132,7 @@ def test_transform_house_concedes_everything():
     ent.extraction_dial = 90.0
     other = Enterprise(eid=2, kind="bank", name="O", house="Other", province=0)
     other.ledger = {"b": 100.0}
-    ruler = Character(name="Chairman", stats={}, traits=[], age=50, gender="Male")
+    ruler = Character(name="Chairman", stats={}, traits=[], age=50, gender="Male", society=society)
     msgs, new_legit = transform_house(hname, ruler, owned, [ent, other],
                                       None, 10.0)
     assert new_legit == TRANSFORM_LEGITIMACY

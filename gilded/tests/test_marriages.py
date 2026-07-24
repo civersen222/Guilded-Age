@@ -5,7 +5,7 @@ import random
 
 from gilded.enterprises import Enterprise
 from gilded.houses import House
-from gilded.society.characters import Character
+from gilded.society.characters import Character, SocietyState
 from gilded.society.marriages import (
     ALLIANCE_AT,
     BLOOD_TIE_INTERVAL,
@@ -28,6 +28,9 @@ class FixedRng:
     def random(self):
         return self.r
 
+    def randint(self, a, b):
+        return a
+
     def choice(self, seq):
         return seq[0]
 
@@ -37,21 +40,26 @@ class FixedRng:
     def sample(self, seq, k):
         return seq[:k]
 
+    def gauss(self, mu, sigma):
+        return mu
+
 
 def _setup(seed):
     random.seed(seed)
     rng = random.Random(seed)
-    realms = {"Vantrell": create_house_realm("Vantrell", rng),
-              "Karsgate": create_house_realm("Karsgate", rng)}
+    society = SocietyState(rng)
+    realms = {"Vantrell": create_house_realm("Vantrell", society),
+              "Karsgate": create_house_realm("Karsgate", society)}
     houses = {"Vantrell": House(name="Vantrell", capital=0),
               "Karsgate": House(name="Karsgate", capital=1)}
     ents = {"Vantrell": [], "Karsgate": []}
-    return realms, houses, ents, rng
+    return realms, houses, ents, society
 
 
 def test_valuation_formulas():
     random.seed(110)
-    c = Character(name="Vera Vantrell", stats={}, traits=[], age=25, gender="Female")
+    society = SocietyState(random.Random(110))
+    c = Character(name="Vera Vantrell", stats={}, traits=[], age=25, gender="Female", society=society)
     c.dispositions = {k: 0.0 for k in c.dispositions}
     c.dispositions["brilliant_dull"] = -50.0
     c.dispositions["comely_plain"] = -30.0

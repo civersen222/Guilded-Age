@@ -8,6 +8,7 @@ from gilded.society.characters import (
     Character,
     Dynasty,
     Secret,
+    SocietyState,
     generate_child,
     normalize_stats,
 )
@@ -16,13 +17,16 @@ from gilded.society.dispositions import PAIRS, apply_drift, initial_dispositions
 from gilded.society.event_engine import Situation, render
 
 
-def _char(name="Elias Vantrell", age=40, gender="Male"):
-    return Character(name=name, stats={}, traits=[], age=age, gender=gender)
+def _char(name="Elias Vantrell", age=40, gender="Male", society=None):
+    if society is None:
+        society = SocietyState(random.Random(0))
+    return Character(name=name, stats={}, traits=[], age=age, gender=gender, society=society)
 
 
 def test_normalize_stats_covers_six_attributes():
     random.seed(3)
-    norm = normalize_stats({"diplomacy": 12, "martial": 9})
+    rng = random.Random(3)
+    norm = normalize_stats({"diplomacy": 12, "martial": 9}, rng)
     assert set(ATTRIBUTES) <= set(norm)
     assert norm["statecraft"] == 12 and norm["command"] == 9
 
@@ -38,8 +42,9 @@ def test_character_has_thirty_dispositions_and_persona():
 
 def test_generate_child_links_parents():
     random.seed(5)
-    a, b = _char("Elias"), _char("Mara", age=36, gender="Female")
-    kid = generate_child("Corin", a, b)
+    society = SocietyState(random.Random(5))
+    a, b = _char("Elias", society=society), _char("Mara", age=36, gender="Female", society=society)
+    kid = generate_child("Corin", a, b, society.rng)
     assert kid.age == 0
     assert set(ATTRIBUTES) <= set(kid.base_stats)
     assert kid.parent_ids == [a.id, b.id]
@@ -60,7 +65,8 @@ def test_court_has_six_gilded_seats():
 
 def test_court_appoint_dismiss_bonus():
     random.seed(6)
-    ruler, aide = _char("Ruler"), _char("Aide")
+    society = SocietyState(random.Random(6))
+    ruler, aide = _char("Ruler", society=society), _char("Aide", society=society)
     court = Court(ruler)
     assert not court.appoint(CourtPosition.MARSHAL, ruler, turn=1)
     assert court.appoint(CourtPosition.MARSHAL, aide, turn=1)
@@ -100,10 +106,11 @@ def test_apply_drift_moves_disposition():
 
 def test_dynasty_prestige_counts_living():
     random.seed(10)
-    root = _char("Root")
+    society = SocietyState(random.Random(10))
+    root = _char("Root", society=society)
     all_chars = {root.id: root}
     dyn = Dynasty(root, all_chars)
-    kid = generate_child("Kid", root, _char("Consort", gender="Female"))
+    kid = generate_child("Kid", root, _char("Consort", gender="Female", society=society), society.rng)
     dyn.add_member(kid, root.id)
     assert kid in dyn.get_all_members()
     assert dyn.calculate_dynastic_prestige() > 0

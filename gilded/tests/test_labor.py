@@ -4,7 +4,7 @@ import random
 
 from gilded.enterprises import Enterprise
 from gilded.society import labor
-from gilded.society.characters import Character
+from gilded.society.characters import Character, SocietyState
 from gilded.world import generate_atlas
 
 
@@ -23,10 +23,11 @@ class StubTide:
 
 
 class FakeRealm:
-    def __init__(self, characters=None, ruler=None):
+    def __init__(self, characters=None, ruler=None, society=None):
         self.characters = characters or []
         self.ruler = ruler
         self.civ_name = "Vantrell"
+        self.society = society
 
 
 def _prov(atlas=None):
@@ -54,16 +55,18 @@ def test_formula_shapes():
 def test_dial_from_ruler():
     random.seed(20)
     assert labor.dial_from_ruler(None) == labor.DIAL_DEFAULT
-    r = Character(name="Baron", stats={}, traits=[], age=50, gender="Male")
+    society = SocietyState(random.Random(20))
+    r = Character(name="Baron", stats={}, traits=[], age=50, gender="Male", society=society)
     r.dispositions["labor_capital"] = 90.0
     r.dispositions["preservationist_extractionist"] = 60.0
     assert labor.dial_from_ruler(r) > labor.DIAL_DEFAULT
 
 
 def test_extraction_accrues_unrest():
+    society = SocietyState(random.Random(3))
     prov = _prov()
     ent = _ent(prov.pid, dial=95.0)
-    realm = FakeRealm()
+    realm = FakeRealm(society=society)
     rng = random.Random(3)
     u0 = prov.unrest
     for _ in range(10):
@@ -73,11 +76,12 @@ def test_extraction_accrues_unrest():
 
 def test_accident_kills_and_records():
     random.seed(21)
+    society = SocietyState(random.Random(21))
     prov = _prov()
     pop0 = prov.population
-    director = Character(name="Dir", stats={}, traits=[], age=40, gender="Male")
-    ruler = Character(name="Rul", stats={}, traits=[], age=50, gender="Male")
-    realm = FakeRealm([director, ruler], ruler)
+    director = Character(name="Dir", stats={}, traits=[], age=40, gender="Male", society=society)
+    ruler = Character(name="Rul", stats={}, traits=[], age=50, gender="Male", society=society)
+    realm = FakeRealm([director, ruler], ruler, society=society)
     ent = _ent(prov.pid, dial=95.0)
     ent.director_id = director.id
     tide = StubTide()
@@ -89,10 +93,11 @@ def test_accident_kills_and_records():
 
 def test_union_forms_then_strikes_then_stands_down():
     random.seed(22)
+    society = SocietyState(random.Random(22))
     prov = _prov()
     prov.movement = None
     prov.unrest = 60.0
-    realm = FakeRealm([Character(name="W", stats={}, traits=[], age=30, gender="Male")])
+    realm = FakeRealm([Character(name="W", stats={}, traits=[], age=30, gender="Male", society=society)], society=society)
     rng = random.Random(5)
     msgs = labor.tick_movement(prov, realm, rng)
     assert prov.movement is not None and "union is born" in " ".join(msgs)
@@ -112,7 +117,8 @@ def test_martyr_spreads_to_sister_province():
     a.owner = b.owner = "Vantrell"
     a.movement = None
     b.movement = None
-    realm = FakeRealm([Character(name="W", stats={}, traits=[], age=30, gender="Male")])
+    society = SocietyState(random.Random(23))
+    realm = FakeRealm([Character(name="W", stats={}, traits=[], age=30, gender="Male", society=society)], society=society)
     rng = random.Random(6)
     a.unrest = 60.0
     labor.tick_movement(a, realm, rng)
@@ -131,7 +137,8 @@ def test_buy_off_dissolves_cold_movement():
     prov = _prov()
     prov.movement = None
     prov.unrest = 30.0
-    realm = FakeRealm([Character(name="W", stats={}, traits=[], age=30, gender="Male")])
+    society = SocietyState(random.Random(24))
+    realm = FakeRealm([Character(name="W", stats={}, traits=[], age=30, gender="Male", society=society)], society=society)
     rng = random.Random(7)
     labor.tick_movement(prov, realm, rng)
     mv = prov.movement
@@ -144,9 +151,10 @@ def test_buy_off_dissolves_cold_movement():
 
 def test_cover_up_relieves_unrest_and_stresses_ruler():
     random.seed(25)
+    society = SocietyState(random.Random(25))
     prov = _prov()
     prov.unrest = 50.0
-    ruler = Character(name="Rul", stats={}, traits=[], age=50, gender="Male")
+    ruler = Character(name="Rul", stats={}, traits=[], age=50, gender="Male", society=society)
     tide = StubTide()
     events = labor.cover_up(ruler, prov, tide)
     assert prov.unrest < 50.0

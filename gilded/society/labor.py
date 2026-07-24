@@ -197,7 +197,8 @@ def _make_leader(province, realm, rng):
     name = f"{rng.choice(pool)} of the {province.name} union"
     leader = Character(name, {"industry": 6, "statecraft": 10,
                               "command": 6, "intrigue": 8}, [],
-                       age=int(25 + rng.random() * 15), gender=gender)
+                       age=int(25 + rng.random() * 15), gender=gender,
+                       society=realm.society)
     leader.dispositions["labor_capital"] = -70.0   # a true believer
     realm.characters.append(leader)
     promoted = getattr(realm, "promoted_ids", None)

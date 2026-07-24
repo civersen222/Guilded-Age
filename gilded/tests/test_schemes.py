@@ -4,7 +4,7 @@
 import random
 
 from gilded.enterprises import Enterprise
-from gilded.society.characters import Secret, opinion_matrix
+from gilded.society.characters import Secret, SocietyState
 from gilded.society.ideology import IdeologicalTide
 from gilded.society.realm import create_house_realm
 from gilded.society.schemes import (
@@ -36,8 +36,9 @@ class SeqRng:
 def _two_realms(seed):
     random.seed(seed)
     rng = random.Random(seed)
-    ra = create_house_realm("Vantrell", rng)
-    rb = create_house_realm("Karsgate", rng)
+    society = SocietyState(rng)
+    ra = create_house_realm("Vantrell", society)
+    rb = create_house_realm("Karsgate", society)
     return ra, rb, {"Vantrell": ra, "Karsgate": rb}
 
 
@@ -103,7 +104,7 @@ def test_discovery_shames_the_house():
     msgs = mgr.advance_all(realms, legit, SeqRng([0.0]))
     assert legit["Vantrell"] < 50.0
     assert any(sec.kind == "scheme" for sec in agent.secrets)
-    assert opinion_matrix[(rb.ruler.id, agent.id)] <= -40
+    assert rb.ruler._society.opinions[(rb.ruler.id, agent.id)] <= -40
     assert agent.is_alive                           # cross-house: no execution
     assert msgs
 
@@ -158,7 +159,7 @@ def test_leverage_verbs():
     ra, rb, realms = _two_realms(98)
     a, t = ra.ruler, rb.ruler
     sway(a, t, SeqRng([0.0]))
-    assert opinion_matrix[(t.id, a.id)] >= 15
+    assert a._society.opinions[(t.id, a.id)] >= 15
     seduce(a, t, SeqRng([0.0]))
     assert any(sec.kind == "affair" for sec in t.secrets)
     compromise(a, t, SeqRng([0.0]))
@@ -216,6 +217,6 @@ def test_conspiracy_exposure_is_nuclear():
     assert c.exposed and c.done
     assert legit["Vantrell"] < 70.0
     assert tide.house_atrocities.get("Vantrell", 0.0) > 0
-    assert opinion_matrix[(rb.ruler.id, m.id)] <= -60
+    assert rb.ruler._society.opinions[(rb.ruler.id, m.id)] <= -60
     assert not m.is_alive                           # execution roll came up
     assert any("loses their nerve" in m_ for m_ in msgs)

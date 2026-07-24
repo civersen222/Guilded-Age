@@ -11,15 +11,16 @@ from gilded.enterprises import (
     tick_construction,
 )
 from gilded.society import shares
-from gilded.society.characters import Character, Dynasty, generate_child
+from gilded.society.characters import Character, Dynasty, SocietyState, generate_child
 from gilded.world import generate_atlas
 
 
 class FakeRealm:
-    def __init__(self, ruler, characters):
+    def __init__(self, ruler, characters, society=None):
         self.ruler = ruler
         self.characters = characters
         self.dynasty = Dynasty(ruler, {c.id: c for c in characters})
+        self.society = society
 
 
 def _coal_province(atlas):
@@ -71,7 +72,8 @@ def test_output_scales_with_dial_and_director():
     ent.extraction_dial = 100.0
     assert output_gold(ent, prov, None) > base
     ent.extraction_dial = 50.0
-    director = Character(name="D", stats={"industry": 16}, traits=[], age=40, gender="Male")
+    society = SocietyState(random.Random(2))
+    director = Character(name="D", stats={"industry": 16}, traits=[], age=40, gender="Male", society=society)
     assert output_gold(ent, prov, director) > base
     assert output_gold(ent, prov, None, tech_mod=1.5) > base
 
@@ -91,11 +93,12 @@ def test_initial_ledger_and_dividends():
     random.seed(3)
     atlas = generate_atlas(42)
     prov = _coal_province(atlas)
-    ruler = Character(name="R", stats={}, traits=[], age=45, gender="Male")
-    consort = Character(name="C", stats={}, traits=[], age=40, gender="Female")
-    kid = generate_child("K", ruler, consort)
+    society = SocietyState(random.Random(3))
+    ruler = Character(name="R", stats={}, traits=[], age=45, gender="Male", society=society)
+    consort = Character(name="C", stats={}, traits=[], age=40, gender="Female", society=society)
+    kid = generate_child("K", ruler, consort, society.rng)
     kid.age = 20
-    realm = FakeRealm(ruler, [ruler, consort, kid])
+    realm = FakeRealm(ruler, [ruler, consort, kid], society=society)
     realm.dynasty.add_member(kid, ruler.id)
     ent = _built("colliery", prov)
     shares.initial_ledger(ent, realm)
@@ -121,10 +124,11 @@ def test_transfer_and_extort_and_stake():
 
 def test_partition_shares_primogeniture():
     random.seed(4)
-    old = Character(name="Old", stats={}, traits=[], age=70, gender="Male")
-    heir = Character(name="Heir", stats={}, traits=[], age=30, gender="Male")
-    spare = Character(name="Spare", stats={}, traits=[], age=25, gender="Male")
-    realm = FakeRealm(old, [old, heir, spare])
+    society = SocietyState(random.Random(4))
+    old = Character(name="Old", stats={}, traits=[], age=70, gender="Male", society=society)
+    heir = Character(name="Heir", stats={}, traits=[], age=30, gender="Male", society=society)
+    spare = Character(name="Spare", stats={}, traits=[], age=25, gender="Male", society=society)
+    realm = FakeRealm(old, [old, heir, spare], society=society)
     realm.dynasty.all_characters = {c.id: c for c in (old, heir, spare)}
     ent = Enterprise(eid=1, kind="bank", name="B", house="V", province=0)
     ent.ledger = {old.id: 100.0}
@@ -137,8 +141,9 @@ def test_partition_shares_primogeniture():
 
 def test_seize_enterprises():
     random.seed(5)
-    victor = Character(name="Victor", stats={}, traits=[], age=40, gender="Male")
-    realm = FakeRealm(victor, [victor])
+    society = SocietyState(random.Random(5))
+    victor = Character(name="Victor", stats={}, traits=[], age=40, gender="Male", society=society)
+    realm = FakeRealm(victor, [victor], society=society)
     ent = Enterprise(eid=1, kind="bank", name="B", house="Loser", province=0)
     ent.ledger = {"ghost": 100.0}
     other = Enterprise(eid=2, kind="bank", name="B2", house="Third", province=0)
