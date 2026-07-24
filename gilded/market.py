@@ -8,8 +8,8 @@ from typing import Dict
 
 COMMODITIES = ["coal", "steel", "freight", "farm"]
 
-PRICE_MIN = 0.1
-PRICE_MAX = 10.0
+PRICE_MIN = 0.25
+PRICE_MAX = 4.0
 DAMPING = 0.2
 TARGET = 1.0
 
@@ -41,6 +41,15 @@ CONSTRUCTION_STEEL_DEMAND = 5.0
 # Strike reduces supply by this factor
 STRIKE_SUPPLY_REDUCTION = 0.5
 
+# Freight demand: each operating enterprise tier generates freight demand
+FREIGHT_PER_TIER = 2.0
+
+# Steel war demand: each regiment on a war front generates steel demand
+STEEL_PER_REGIMENT = 1.5
+
+# Positive floor for supply/demand to avoid divide-by-zero
+SUPPLY_DEMAND_FLOOR = 1.0
+
 
 def clear_price(prev: float, supply: float, demand: float,
                 damping: float = DAMPING,
@@ -58,7 +67,7 @@ def clear_price(prev: float, supply: float, demand: float,
 
 def supply_by_commodity(game) -> Dict[str, float]:
     """Total supply of each commodity from all operating enterprises."""
-    supply: Dict[str, float] = {c: 0.0 for c in COMMODITIES}
+    supply: Dict[str, float] = {c: SUPPLY_DEMAND_FLOOR for c in COMMODITIES}
     provinces = game.atlas.provinces
 
     for ent in game.enterprises:
@@ -91,7 +100,7 @@ def supply_by_commodity(game) -> Dict[str, float]:
 
 def demand_by_commodity(game) -> Dict[str, float]:
     """Total demand for each commodity from all enterprises."""
-    demand: Dict[str, float] = {c: 0.0 for c in COMMODITIES}
+    demand: Dict[str, float] = {c: SUPPLY_DEMAND_FLOOR for c in COMMODITIES}
     provinces = game.atlas.provinces
 
     # Base demand from consumption relationships
@@ -113,6 +122,22 @@ def demand_by_commodity(game) -> Dict[str, float]:
     for pid, prov in provinces.items():
         total_pop += getattr(prov, 'population', 0)
     demand["farm"] += total_pop * BASE_FARM_DEMAND_PER_POP
+
+    # Freight demand: tracks total operating enterprise reach
+    total_tier = 0
+    for ent in game.enterprises:
+        if ent.under_construction > 0:
+            continue
+        total_tier += ent.tier
+    demand["freight"] += total_tier * FREIGHT_PER_TIER
+
+    # Steel war demand: absorbs regiments across all war fronts
+    wars = getattr(game, 'wars', None)
+    if wars:
+        for war in wars:
+            for front in war.fronts:
+                regiments = front.attacker_regiments + front.defender_regiments
+                demand["steel"] += regiments * STEEL_PER_REGIMENT
 
     return demand
 
