@@ -16,6 +16,7 @@ from gilded.world import generate_atlas
 from gilded.houses import assign_houses
 from gilded.enterprises import (Enterprise, capacity_out, found_enterprise,
                                 tick_construction)
+from gilded.market import Market, tech_mod_for
 from gilded.directives import DIRECTIVE_KEYS, Directives, tick_friction
 from gilded.docket import (DOMAIN_SEAT, MAX_PETITIONS, Petition,
                            generate_petitions, resolve_unattended)
@@ -82,6 +83,7 @@ class GildedGame:
         self.attention: Dict[str, int] = {}
         self.game_over: Optional[str] = None               # ending key when finished
         self.fallen: Dict[str, str] = {}                   # house -> "revolution"|"transformed"
+        self.market = Market()
         self.capacity: Dict[str, Dict[str, float]] = {}    # strategic capacity per house
         self.last_accidents: List[tuple] = []              # (ent, province) this turn
         self.brewing_turns: Dict[str, int] = {}            # revolution preconditions held
@@ -145,6 +147,12 @@ class GildedGame:
                 self.enterprises.append(ent)
                 made += 1
 
+    # --- helpers ------------------------------------------------------------
+
+    def tech_mod_for(self, province) -> float:
+        """Tech modifier based on province development level."""
+        return tech_mod_for(province)
+
     # --- the turn ------------------------------------------------------------
 
     def open_turn(self) -> None:
@@ -197,6 +205,7 @@ class GildedGame:
                        if getattr(p, "movement", None) is not None
                        and p.movement.state == "striking")
         coal_price = 1.0 + COAL_STRIKE_PRICE * striking
+        self.market.clear(self)
         self.capacity = {h: {k: 0.0 for k in CAPACITY_KINDS} for h in self.houses}
         for h in sorted(self.houses):
             realm = self.realms[h]
@@ -213,7 +222,10 @@ class GildedGame:
                 if mv is not None and mv.state == "striking":
                     mod *= STRIKE_OUTPUT_MULT
                 mod *= self.policy[h].output_mod
+                mod *= self.market.output_mod(ent)
+                mod *= tech_mod_for(province)
                 take, _ = pay_dividends(realm, [ent], provinces, mod)
+                take -= self.market.input_cost(ent)
                 take_total += take
             if take_total > 0:
                 self.houses[h].treasury += take_total
