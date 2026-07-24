@@ -12,7 +12,7 @@ from gilded.society.characters import (
     Character,
     Dynasty,
     generate_child,
-    opinion_matrix,
+    SocietyState,
 )
 from gilded.society.court import Court, CourtPosition
 from gilded.society.shares import transfer_shares
@@ -39,32 +39,35 @@ def _jitter_stats(base: Dict[str, int], rng: random.Random, spread: int = 3) -> 
     return {k: max(1, v + rng.randint(-spread, spread)) for k, v in base.items()}
 
 
-def _make_character(house_name: str, base_stats: Dict[str, int], traits: List[str], age_lo: int, age_hi: int, rng: random.Random, gender: str = None) -> Character:
+def _make_character(house_name: str, base_stats: Dict[str, int], traits: List[str], age_lo: int, age_hi: int, rng: random.Random, society: SocietyState, gender: str = None) -> Character:
     gender = gender or rng.choice(["Male", "Female"])
     pool = MALE_NAMES if gender == "Male" else FEMALE_NAMES
     name = f"{rng.choice(pool)} {house_name}"
-    return Character(name=name, stats=_jitter_stats(base_stats, rng), traits=list(traits), age=rng.randint(age_lo, age_hi), gender=gender)
+    return Character(name=name, stats=_jitter_stats(base_stats, rng), traits=list(traits), age=rng.randint(age_lo, age_hi), gender=gender, society=society)
 
 
-def create_house_realm(house_name: str, rng: random.Random) -> Realm:
+def create_house_realm(house_name: str, society: SocietyState) -> Realm:
     """Build ruler, spouse, children, courtiers, dynasty, and court for one house."""
-    ruler = _make_character(house_name, HOUSE_BASE_STATS, [], 28, 45, rng)
-    spouse = _make_character(house_name, HOUSE_BASE_STATS, [], 22, 40, rng, gender="Female" if ruler.gender == "Male" else "Male")
+    rng = society.rng
+    ruler = _make_character(house_name, HOUSE_BASE_STATS, [], 28, 45, rng, society)
+    spouse = _make_character(house_name, HOUSE_BASE_STATS, [], 22, 40, rng, society, gender="Female" if ruler.gender == "Male" else "Male")
     dynasty = Dynasty(ruler, {ruler.id: ruler})
     characters = [ruler, spouse]
     for _ in range(rng.randint(1, 2)):
-        child = generate_child(f"{rng.choice(MALE_NAMES + FEMALE_NAMES)} {house_name}", ruler, spouse)
+        child = generate_child(f"{rng.choice(MALE_NAMES + FEMALE_NAMES)} {house_name}", ruler, spouse, rng)
         dynasty.add_member(child, ruler.id)
         characters.append(child)
     court = Court(ruler)
-    courtiers = [_make_character(house_name, HOUSE_BASE_STATS, [], 20, 55, rng) for _ in range(rng.randint(40, 60))]
+    courtiers = [_make_character(house_name, HOUSE_BASE_STATS, [], 20, 55, rng, society) for _ in range(rng.randint(40, 60))]
     characters.extend(courtiers)
     unassigned = list(courtiers)
     for position in CourtPosition:
         best = court.get_best_candidate(unassigned, position)
         if best and court.appoint(position, best, 0):
             unassigned.remove(best)
-    return Realm(house_name, ruler, dynasty, court, characters)
+    realm = Realm(house_name, ruler, dynasty, court, characters)
+    realm.society = society
+    return realm
 
 
 DIRECTOR_SALARY_PCT = 10.0  # shares salary from the ruler's stake (spec 4.4)
@@ -138,7 +141,7 @@ def tick_loyalty(realm: Realm, enterprises: List, rng: random.Random) -> List[st
     for ch in posted.values():
         if ch.id == ruler.id:
             continue
-        opinion = opinion_matrix.get((ch.id, ruler.id), 0)
+        opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
         paid = any(ch.id in ent.ledger for ent in house_ents)
         treatment = 10.0 if paid else -10.0
         align = 10.0 - abs(ch.dispositions.get("labor_capital", 0.0)
@@ -170,7 +173,7 @@ def disloyal_shareholders(realm: Realm, enterprises: List) -> List[Character]:
             continue
         if not any(ch.id in ent.ledger for ent in house_ents):
             continue
-        opinion = opinion_matrix.get((ch.id, ruler.id), 0)
+        opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
         if (getattr(ch, "loyalty", LOYALTY_START) < DISLOYAL_LOYALTY
                 or opinion <= DISLOYAL_OPINION):
             out.append(ch)

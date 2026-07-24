@@ -27,7 +27,7 @@ from gilded.society.ideology import (REVOLUTION_BREWING_TURNS, IdeologicalTide,
                                      tick_legitimacy, transform_house,
                                      trigger_revolution)
 from gilded.society.labor import STRIKE_OUTPUT_MULT, tick_extraction, tick_movement
-from gilded.society.characters import reset_society_globals
+from gilded.society.characters import SocietyState
 from gilded.society.marriages import MarriageRegistry
 from gilded.society.realm import create_house_realm, tick_directors, tick_loyalty
 from gilded.society.relationships import tick_relationships
@@ -60,15 +60,15 @@ class TurnEvent:
 class GildedGame:
     def __init__(self, seed: int, player_house: Optional[str] = None):
         self.seed = seed
-        random.seed(seed)          # Character internals draw from module random
-        reset_society_globals()    # deterministic ids + no stale opinions
+        random.seed(seed)          # governs narration text (event_engine.render)
         self.rng = random.Random(seed)
+        self.society = SocietyState(self.rng)
         self.turn = 1
         self.atlas = generate_atlas(seed)
         self.houses = assign_houses(self.atlas, seed)
         if player_house is not None and player_house in self.houses:
             self.houses[player_house].is_player = True
-        self.realms = {h: create_house_realm(h, self.rng) for h in self.houses}
+        self.realms = {h: create_house_realm(h, self.society) for h in self.houses}
         self.enterprises: List[Enterprise] = []
         self.directives = {h: Directives() for h in self.houses}
         self.tide = IdeologicalTide()

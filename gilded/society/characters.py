@@ -16,22 +16,29 @@ from gilded.society.character_deepening import (
 )
 from gilded.society.dispositions import initial_dispositions, labels_for, inherit_dispositions, contradiction_stress, apply_drift, VICE_DRIFTS
 
-# Deterministic character identity. uuid4 ids are process-random and make
-# same-seed games irreproducible (the AI, replays, and soak tests all need
-# determinism); a per-game counter gives opaque-but-reproducible ids instead.
-_ID_COUNTER = 0
+# Per-game society state carrier — replaces process-global mutable stores
+# (_ID_COUNTER, opinion_matrix, _last_rulers) so multiple GildedGame
+# instances in one process don't share identity/opinion/ruler state.
+class SocietyState:
+    """Carries per-game society state: rng, opinions, last-ruler memory,
+    and a deterministic character-id counter."""
 
-def _next_character_id() -> str:
-    global _ID_COUNTER
-    _ID_COUNTER += 1
-    return format(_ID_COUNTER, "08x")
+    def __init__(self, rng: random.Random):
+        self.rng = rng
+        self.opinions: Dict[Tuple[str, str], int] = {}
+        self.last_rulers: Dict[str, str] = {}
+        self._id = 0
+
+    def next_id(self) -> str:
+        self._id += 1
+        return format(self._id, "08x")
 
 # Six attributes (character-society spec 3.2) and legacy 4-stat compatibility
 ATTRIBUTES = ["statecraft", "command", "industry", "intrigue", "science", "resolve"]
 STAT_COMPAT = {"diplomacy": "statecraft", "martial": "command", "stewardship": "industry"}
 
 
-def normalize_stats(stats: Dict[str, int]) -> Dict[str, int]:
+def normalize_stats(stats: Dict[str, int], rng: random.Random) -> Dict[str, int]:
     """Map a possibly-legacy stat dict onto the six attributes; seed any
     missing attribute (notably science/resolve) with 8 +/- 3 jitter."""
     norm: Dict[str, int] = {}
@@ -39,7 +46,7 @@ def normalize_stats(stats: Dict[str, int]) -> Dict[str, int]:
         norm[STAT_COMPAT.get(key, key)] = val
     for attr in ATTRIBUTES:
         if attr not in norm:
-            norm[attr] = max(1, 8 + random.randint(-3, 3))
+            norm[attr] = max(1, 8 + rng.randint(-3, 3))
     return norm
 
 
@@ -105,13 +112,15 @@ class Secret:
 
 
 class Character:
-    def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18, gender: str = "Male"):
-        self.id = _next_character_id()
+    def __init__(self, name: str, stats: Dict[str, int], traits: List[str], parent_ids: List[str] = None, age: int = 18, gender: str = "Male", *, society: SocietyState):
+        self._society = society
+        self._rng = society.rng
+        self.id = society.next_id()
         self.name = name
         # Six attributes (spec 3.2); legacy 4-stat dicts are remapped.
-        self.base_stats = normalize_stats(stats)
+        self.base_stats = normalize_stats(stats, society.rng)
         # Disposition spectrums (spec 3.3): 30 paired values in -100..+100.
-        self.dispositions: Dict[str, float] = initial_dispositions()
+        self.dispositions: Dict[str, float] = initial_dispositions(society.rng)
         self.traits = traits  # goes through the property setter below
         self.parent_ids = parent_ids or []
         self.children_ids: List[str] = []
@@ -216,7 +225,7 @@ class Character:
         if new_level != old_level and new_level:
             if (new_level in ("Overwhelmed", "Breaking Point")
                     and not any(v in self._explicit_traits for v in COPING_VICES)):
-                vice = random.choice(COPING_VICES)
+                vice = self._rng.choice(COPING_VICES)
                 self.add_trait(vice)
                 self.stress = max(self.stress - 100, 0)
                 # The vice is lived in private (spec 3.5): the true spectrum
@@ -319,35 +328,21 @@ class Dynasty:
         # Prestige = (Living Count * 10) + Sum of all effective stats + bonus
         return (len(living_members) * 10) + total_stats + self.bonus_prestige
 
-# Global Opinion Matrix
-# (char_id_a, char_id_b) -> value
-opinion_matrix: Dict[Tuple[str, str], int] = {}
-
-def reset_society_globals() -> None:
-    """Return the process-global society state to a clean slate so a fresh
-    game is reproducible: restart the character-id counter and drop any
-    opinions left behind by a prior game in this process. One live game per
-    process (the console, the soak, and the GUI all run a single game)."""
-    global _ID_COUNTER
-    _ID_COUNTER = 0
-    opinion_matrix.clear()
-    # the last-ruler memory is the other half of the society save-state
-    # (relationships.get_state); a fresh game must not inherit it either.
-    from gilded.society.relationships import _last_rulers  # local: avoids cycle
-    _last_rulers.clear()
+# (removed: opinion_matrix, reset_society_globals — replaced by SocietyState)
 
 def modify_opinion(char_a: Character, char_b: Character, amount: int, reason: str):
+    m = char_a._society.opinions
     pair = (char_a.id, char_b.id)
-    current = opinion_matrix.get(pair, 0)
-    opinion_matrix[pair] = current + amount
+    current = m.get(pair, 0)
+    m[pair] = current + amount
     return f"{char_a.name} -> {char_b.name}: {amount:+d} ({reason})"
 
-def generate_child(name: str, parent_a: Character, parent_b: Character) -> Character:
+def generate_child(name: str, parent_a: Character, parent_b: Character, rng: random.Random) -> Character:
     # 1. Base stats: Average of parents + random fluctuation (six attributes)
     stats = {}
     for stat in ATTRIBUTES:
         avg = (parent_a.base_stats.get(stat, 8) + parent_b.base_stats.get(stat, 8)) / 2
-        stats[stat] = int(avg + random.randint(-2, 2))
+        stats[stat] = int(avg + rng.randint(-2, 2))
 
     # 2. Genetic Inheritance of traits (explicit only; disposition labels
     # are derived live from the child's own spectrums, never copied).
@@ -355,20 +350,20 @@ def generate_child(name: str, parent_a: Character, parent_b: Character) -> Chara
     all_parent_traits = list(set(parent_a._explicit_traits + parent_b._explicit_traits))
     for trait in all_parent_traits:
         # 30% base chance to inherit any parent trait
-        if random.random() < 0.3:
+        if rng.random() < 0.3:
             child_traits.append(trait)
     
     # 3. Stat-based trait probability
     # If parents have high stewardship, higher chance of 'Industrious'
     avg_stew = (parent_a.get_effective_stat('stewardship') + parent_b.get_effective_stat('stewardship')) / 2
     if avg_stew > 12 and "Industrious" not in child_traits:
-        if random.random() < 0.4: # 40% chance
+        if rng.random() < 0.4: # 40% chance
             child_traits.append("Industrious")
 
-    child = Character(name, stats, child_traits, parent_ids=[parent_a.id, parent_b.id], age=0)
+    child = Character(name, stats, child_traits, parent_ids=[parent_a.id, parent_b.id], age=0, society=parent_a._society)
     # 4. Genetics (spec 3.3): Bloodline spectrums blend from the parents
     # with mutation; Temperament/Conviction re-seed near neutral.
-    child.dispositions = inherit_dispositions(parent_a.dispositions, parent_b.dispositions)
+    child.dispositions = inherit_dispositions(parent_a.dispositions, parent_b.dispositions, rng)
     child.persona = dict(child.dispositions)  # public estimate starts honest (spec 3.5)
 
     # Update parents' children lists

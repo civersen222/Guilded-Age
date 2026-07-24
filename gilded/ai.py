@@ -13,7 +13,7 @@ from gilded.docket import DOMAIN_SEAT, INITIATIVES, _auto_terms, initiative, rul
 from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
 from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST, PeaceTerms,
                            ai_acceptable)
-from gilded.society.characters import opinion_matrix
+# opinion_matrix removed — reads through char._society.opinions now
 from gilded.agenda import ensure_agenda, goal_domain, goal_initiative
 
 DIRECTIVE_INTERVAL = 10        # turns between directive resets
@@ -51,7 +51,7 @@ def _executor_for(game, realm, domain: str):
     seat = DOMAIN_SEAT.get(domain)
     holder = realm.court.positions.get(seat) if seat is not None else None
     if (holder is not None and holder.is_alive
-            and opinion_matrix.get((holder.id, realm.ruler.id), 0) > OPINION_FLOOR):
+            and holder._society.opinions.get((holder.id, realm.ruler.id), 0) > OPINION_FLOOR):
         return holder
     return realm.ruler
 

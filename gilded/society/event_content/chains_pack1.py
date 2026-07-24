@@ -3,7 +3,7 @@
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from gilded.society.event_chains import ChainDef, ChainStep
-from gilded.society.characters import Secret, modify_opinion, opinion_matrix
+from gilded.society.characters import Secret, modify_opinion
 
 
 def _drain_legitimacy(game: Any, house: str, amount: float) -> List[str]:
@@ -75,8 +75,8 @@ def _trig_tabloid_war(game: Any) -> Optional[Dict[str, Any]]:
             b = getattr(rb, "ruler", None)
             if a is None or b is None:
                 continue
-            if (opinion_matrix.get((a.id, b.id), 0) <= -40
-                    and opinion_matrix.get((b.id, a.id), 0) <= -40):
+            if (a._society.opinions.get((a.id, b.id), 0) <= -40
+                    and b._society.opinions.get((b.id, a.id), 0) <= -40):
                 return {"house_a": ra.civ_name, "house_b": rb.civ_name,
                         "a": a.name, "b": b.name}
     return None

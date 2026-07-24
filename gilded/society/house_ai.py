@@ -50,7 +50,7 @@ def tick_realm(realm, turn, rng: random.Random, tide=None,
             living = [c for c in realm.characters if c.is_alive and c.age >= 16]
             heir = max(living, key=lambda c: c.get_effective_stat("statecraft")) if living else None
         if heir is None:
-            heir = _make_character(realm.house_name, ruler.base_stats, [], 20, 35, rng)
+            heir = _make_character(realm.house_name, ruler.base_stats, [], 20, 35, rng, realm.society)
             realm.characters.append(heir)
             new_chars.append(heir)
         for pos, ch in realm.court.positions.items():
@@ -68,7 +68,7 @@ def tick_realm(realm, turn, rng: random.Random, tide=None,
     if ruler.is_alive and turn % CHILD_INTERVAL == 0 and 16 <= ruler.age < 55 and living_kin < MAX_LIVING_DYNASTY:
         partner = next((c for c in realm.characters if c.is_alive and c.gender != ruler.gender and c.age >= 16 and c.id != ruler.id), None)
         if partner:
-            child = generate_child(f"{rng.choice(MALE_NAMES + FEMALE_NAMES)} {realm.house_name}", ruler, partner)
+            child = generate_child(f"{rng.choice(MALE_NAMES + FEMALE_NAMES)} {realm.house_name}", ruler, partner, rng)
             child.age = 0
             child.age_progress.current_age = 0
             realm.dynasty.add_member(child, ruler.id)
@@ -104,7 +104,7 @@ def tick_realm(realm, turn, rng: random.Random, tide=None,
                       and all(o is None or o.id != c.id for o in realm.court.positions.values())]
         pick = realm.court.get_best_candidate(candidates, pos)
         if pick is None:
-            pick = _make_character(realm.house_name, realm.ruler.base_stats, [], 18, 35, rng)
+            pick = _make_character(realm.house_name, realm.ruler.base_stats, [], 18, 35, rng, realm.society)
             realm.characters.append(pick)
             new_chars.append(pick)
         realm.court.positions[pos] = None

@@ -2,13 +2,11 @@
 
 Ported from root relationships.py onto realms dicts and a SchemeManager
 parameter. Every player-civ special case is gone - all houses run the same
-logic. The opinion matrix stays module state (it lives in
-gilded.society.characters); get_state()/set_state() snapshot it and the
-last-ruler memory for saves."""
+logic. Opinion state and last-ruler memory ride on SocietyState per game;
+get_state()/set_state() snapshot them through the society carrier."""
 
 from typing import List
 
-from gilded.society.characters import opinion_matrix
 from gilded.society.characters import modify_opinion as _modify_opinion
 from gilded.society.dispositions import apply_drift
 
@@ -20,11 +18,9 @@ PLOT_CHANCE = 0.06
 FOREIGN_PLOT_CHANCE = 0.03
 MAX_MESSAGES = 4
 
-_last_rulers = {}
-
 
 def opinion_of(a, b) -> int:
-    return opinion_matrix.get((a.id, b.id), 0)
+    return a._society.opinions.get((a.id, b.id), 0)
 
 
 def modify_opinion(a, b, delta, reason: str = "") -> None:
@@ -57,8 +53,9 @@ def _succession_grievances(house, realm, rng) -> List[str]:
     """Passed-over kin resent the new ruler - the classic source of rivals."""
     msgs = []
     ruler = realm.ruler
-    last = _last_rulers.get(house)
-    _last_rulers[house] = ruler.id
+    lr = ruler._society.last_rulers
+    last = lr.get(house)
+    lr[house] = ruler.id
     if last is None or last == ruler.id or not ruler.is_alive:
         return msgs
     for c in realm.dynasty.all_characters.values():
@@ -148,14 +145,14 @@ def _maybe_start_plot(realms, house, realm, scheme_mgr, rng) -> List[str]:
     return msgs
 
 
-def get_state() -> dict:
-    """Snapshot the module-level relationship state for saves."""
-    return {"opinions": dict(opinion_matrix), "last_rulers": dict(_last_rulers)}
+def get_state(society) -> dict:
+    """Snapshot the per-game relationship state for saves."""
+    return {"opinions": dict(society.opinions), "last_rulers": dict(society.last_rulers)}
 
 
-def set_state(state: dict) -> None:
-    """Restore the module-level relationship state from a save."""
-    opinion_matrix.clear()
-    opinion_matrix.update(state.get("opinions", {}))
-    _last_rulers.clear()
-    _last_rulers.update(state.get("last_rulers", {}))
+def set_state(society, state: dict) -> None:
+    """Restore the per-game relationship state from a save."""
+    society.opinions.clear()
+    society.opinions.update(state.get("opinions", {}))
+    society.last_rulers.clear()
+    society.last_rulers.update(state.get("last_rulers", {}))

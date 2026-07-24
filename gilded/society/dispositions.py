@@ -88,12 +88,12 @@ def labels_for(dispositions: Dict[str, float]) -> List[str]:
     return out
 
 
-def initial_dispositions() -> Dict[str, float]:
+def initial_dispositions(rng: random.Random) -> Dict[str, float]:
     """Random starting spectrums: most people sit in the dead zone."""
     disp: Dict[str, float] = {}
     for key, pair in PAIRS.items():
         sigma = 20.0 if pair.family == "bloodline" else 30.0
-        disp[key] = max(-100.0, min(100.0, random.gauss(0.0, sigma)))
+        disp[key] = max(-100.0, min(100.0, rng.gauss(0.0, sigma)))
     return disp
 
 
@@ -120,12 +120,13 @@ def witness_drift(char, pair_key: str, magnitude: float, reason: str = "") -> Op
     Reformist, weighted by existing temperament)."""
     v = char.dispositions.get(pair_key, 0.0)
     p_high = 0.5 + 0.3 * (v / 100.0)   # 50/50 at 0, 80/20 at +/-100
-    direction = 1.0 if random.random() < p_high else -1.0
+    direction = 1.0 if char._rng.random() < p_high else -1.0
     return apply_drift(char, pair_key, direction * abs(magnitude), reason)
 
 
 def inherit_dispositions(parent_a: Dict[str, float],
-                         parent_b: Dict[str, float]) -> Dict[str, float]:
+                         parent_b: Dict[str, float],
+                         rng: random.Random) -> Dict[str, float]:
     """Conception-time spectrums (spec 3.3): Bloodline blends the parents'
     values with mutation jitter (Houses can breed for talent); Temperament
     and Conviction start near neutral - childhood shapes them (drift, M38)."""
@@ -133,9 +134,9 @@ def inherit_dispositions(parent_a: Dict[str, float],
     for key, pair in PAIRS.items():
         if pair.family == "bloodline":
             mid = (parent_a.get(key, 0.0) + parent_b.get(key, 0.0)) / 2.0
-            disp[key] = max(-100.0, min(100.0, mid + random.gauss(0.0, 12.0)))
+            disp[key] = max(-100.0, min(100.0, mid + rng.gauss(0.0, 12.0)))
         else:
-            disp[key] = max(-100.0, min(100.0, random.gauss(0.0, 10.0)))
+            disp[key] = max(-100.0, min(100.0, rng.gauss(0.0, 10.0)))
     return disp
 
 
