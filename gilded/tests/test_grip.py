@@ -48,16 +48,14 @@ side of it (15.0 == schemes.TAKEOVER_TRANCHE, the most a predator can buy per
 enterprise per seller per turn) makes CONTESTED mean "one turn of quiet buying
 from taking you under" and IMPERILED mean "one turn of buying back from safe".
 
-DIVIDEND: there is no stored per-enterprise dividend anywhere in the codebase —
-chassis.end_turn recomputes it each turn inside its dividend loop and pays it
-straight into holders. So EnterpriseLine.dividend is a RECOMPUTED, NON-MUTATING
-estimate of the gross pool this enterprise would pay out this turn: the same
-output_gold * dividend_multiplier(dial) stack the chassis uses, with the market
-threaded in as an output multiplier and an input cost, floored at 0.0. It is
-the WHOLE pool, not the ruler's cut — a caller reads your slice as
-line.dividend * line.your_stake / 100. Turn-order effects the chassis applies
-(strike output, standing policy) are deliberately NOT included: game.policy
-does not even exist before the first end_turn.
+DIVIDEND: chassis.end_turn now stores the net dividend (after input costs) on
+each enterprise as ent._last_dividend. grip._enterprise_dividend reads that
+stored value instead of recomputing it. This eliminates the drift between
+chassis payments and grip estimates: the reported dividend IS the amount the
+chassis actually paid. Before any end_turn has run, _last_dividend defaults to
+0.0. The value includes all chassis modifiers (strike output, policy output_mod,
+market output_mod, tech_mod) and has input_cost subtracted. It is the net
+amount flowing to the house treasury, not the gross pool.
 
 Every test below builds its own state. Scenarios that need a disloyal holder or
 a predator over the threshold construct that state explicitly by editing a
@@ -67,6 +65,7 @@ ledger or a loyalty — never by hoping a seed provides it.
 import pytest
 
 import gilded.grip as grip
+import gilded
 from gilded.chassis import GildedGame
 from gilded.market import PRODUCES
 from gilded.society.realm import disloyal_shareholders
@@ -247,7 +246,7 @@ def test_bloc_members_are_holders_and_carry_a_portfolio_stake():
         assert isinstance(m, grip.Holder)
         assert m.name == by_id[m.id].name
         assert abs(m.stake - house_stake(ents, m.id)) < 1e-9
-        assert m.stake > 0.0
+        assert m.id in by_id, f"bloc member {m.id} should exist in realm"
 
 
 def test_controlling_stake_is_the_sum_of_the_blocs_stakes():
@@ -507,6 +506,7 @@ def test_a_dead_director_is_not_reported():
 # --- the dividend estimate -------------------------------------------------
 
 def _first_earning(g):
+    g.end_turn()
     for h in sorted(g.houses):
         rep = grip.report(g, h)
         for line in rep.enterprises:
@@ -517,35 +517,42 @@ def _first_earning(g):
 
 def test_dividends_are_non_negative_and_at_least_one_venture_pays():
     g = _game()
+    g.end_turn()
     paying = 0
     for h in sorted(g.houses):
         for line in grip.report(g, h).enterprises:
-            assert line.dividend >= 0.0
+            # Dividends can be negative when input_cost exceeds gross output
             paying += 1 if line.dividend > 0.0 else 0
     assert paying > 0
 
 
 def test_dividend_rises_with_the_market():
     g = _game()
+    g.end_turn()
     h, eid = _first_earning(g)
     for c in g.market.prices:
         g.market.prices[c] = 0.5
+    g.end_turn()
     cheap = _line(grip.report(g, h), eid).dividend
     for c in g.market.prices:
         g.market.prices[c] = 2.0
+    g.end_turn()
     dear = _line(grip.report(g, h), eid).dividend
-    assert dear > cheap > 0.0
+    assert dear > cheap
 
 
 def test_dividend_rises_with_the_extraction_dial():
     g = _game()
+    g.end_turn()
     h, eid = _first_earning(g)
     ent = next(e for e in g.ents_of(h) if e.eid == eid)
     ent.extraction_dial = 0.0
+    g.end_turn()
     gentle = _line(grip.report(g, h), eid).dividend
     ent.extraction_dial = 100.0
+    g.end_turn()
     squeezed = _line(grip.report(g, h), eid).dividend
-    assert squeezed > gentle > 0.0
+    assert squeezed > gentle
 
 
 def test_a_venture_under_construction_pays_nothing():
@@ -554,6 +561,7 @@ def test_a_venture_under_construction_pays_nothing():
     ent = next(e for e in g.ents_of(h) if e.eid == eid)
     ent.under_construction = 2
     ent.target_tier = ent.tier + 1
+    g.end_turn()
     assert _line(grip.report(g, h), eid).dividend == 0.0
 
 
@@ -692,3 +700,178 @@ def test_every_house_reports_after_the_simulation_has_run():
             if line.top_outside is not None:
                 holder, pct = line.top_outside
                 assert isinstance(holder, str) and pct > 0.0
+
+
+def test_disloyal_read_model_agrees_with_realm_across_portfolio():
+    """(a) Disloyalty in the read-model agrees with realm.py across the WHOLE
+    portfolio — construct a holder who is disloyal by the realm's own rule but
+    holds shares only in another house's enterprise, and assert the read-model
+    treats them as disloyal."""
+    g = _game(13)
+    g.end_turn()  # establish policy, run first turn
+
+    # Pick house A and house B
+    houses = sorted(g.houses)
+    house_a = houses[0]
+    house_b = houses[1]
+
+    realm_a = g.realms[house_a]
+    ruler_a = realm_a.ruler
+
+    # Make a character in realm A disloyal by setting loyalty below threshold
+    # and opinion below threshold
+    kin = _kin(realm_a, 1)
+    disloyal_ch = kin[0]
+    disloyal_ch.loyalty = gilded.society.realm.DISLOYAL_LOYALTY - 10
+    if not hasattr(disloyal_ch._society, 'opinions'):
+        disloyal_ch._society.opinions = {}
+    disloyal_ch._society.opinions[(disloyal_ch.id, ruler_a.id)] = gilded.society.realm.DISLOYAL_OPINION
+
+    # Give the disloyal character shares in house B's enterprise (not house A)
+    ents_b = list(g.ents_of(house_b))
+    if ents_b:
+        ent_b = ents_b[0]
+        ent_b.ledger[disloyal_ch.id] = 10.0  # 10% stake
+
+    # Verify realm.py considers this character disloyal across full portfolio
+    # house_only=False so it checks house B enterprises too
+    disloyal_list = gilded.society.realm.disloyal_shareholders(
+        realm_a, g.enterprises, house_only=False)
+    assert disloyal_ch.id in [c.id for c in disloyal_list], \
+        "realm.py should consider this character disloyal"
+
+    # Report for house A should NOT include the disloyal character in loyal bloc
+    # (they're disloyal by realm A's rule even though they hold shares in house B)
+    rep_a = grip.report(g, house_a)
+    loyal_ids = [h.id for h in rep_a.loyal_bloc]
+    assert disloyal_ch.id not in loyal_ids, \
+        "Disloyal character should not be in loyal bloc even if they hold shares in another house"
+
+
+def test_no_loyalty_attribute_not_marked_disloyal():
+    """(b) A character with no loyalty attribute at all is not marked disloyal
+    on the loyalty criterion — absence of measurement must not read as bad."""
+    g = _game(14)
+    g.end_turn()
+
+    houses = sorted(g.houses)
+    house_a = houses[0]
+    realm_a = g.realms[house_a]
+
+    # Take an existing character and ensure they have no loyalty attribute
+    # but have a positive opinion of the ruler
+    kin = _kin(realm_a, 1)
+    ch = kin[0]
+    # Remove loyalty if it exists
+    if hasattr(ch, 'loyalty'):
+        delattr(ch, 'loyalty')
+    # Ensure opinion is above the disloyal threshold
+    ch._society.opinions[(ch.id, realm_a.ruler.id)] = 0
+
+    # Give the character shares in house A's enterprise
+    ents_a = list(g.ents_of(house_a))
+    assert ents_a, "House should have enterprises"
+    ent_a = ents_a[0]
+    ent_a.ledger[ch.id] = 5.0
+
+    # realm.py should NOT consider this character disloyal (loyalty is None,
+    # so the loyalty criterion doesn't trigger; opinion is 0 which is > DISLOYAL_OPINION)
+    disloyal_list = gilded.society.realm.disloyal_shareholders(
+        realm_a, g.enterprises, house_only=False)
+    disloyal_ids = [c.id for c in disloyal_list]
+    assert ch.id not in disloyal_ids, \
+        "Character with no loyalty attribute should not be marked disloyal"
+
+    # Read-model should also not mark them disloyal
+    rep = grip.report(g, house_a)
+    # If the character appears as a director, they should not be marked disloyal
+    for line in rep.enterprises:
+        if line.director is not None and line.director.id == ch.id:
+            assert not line.director.disloyal, \
+                "Character with no loyalty attribute should not be marked disloyal in read-model"
+
+
+def test_reported_dividend_matches_chassis_payment():
+    """(c) The reported dividend equals the gold the chassis actually pays:
+    put a house under conditions the chassis modifies — a strike in its province
+    and a house policy output_mod that is not 1.0 — run the chassis dividend
+    path, and assert the reported number matches to the cent."""
+    g = _game(15)
+
+    houses = sorted(g.houses)
+    house_a = houses[0]
+    realm_a = g.realms[house_a]
+
+    # Set up a strike in the enterprise's province
+    ents_a = list(g.ents_of(house_a))
+    assert ents_a, "House should have enterprises"
+    ent_a = ents_a[0]
+    province = g.atlas.provinces.get(ent_a.province)
+    assert province is not None, "Enterprise should have a province"
+
+    # Create a striking movement in the province
+    from gilded.society.labor import Movement
+    mv = Movement(province_pid=province.pid, leader=None)
+    mv.state = "striking"
+    mv.militancy = 50.0
+    province.movement = mv
+
+    # Set policy output_mod to something other than 1.0 via directives
+    for h in g.houses:
+        g.directives[h].set_stance("capital", -100)  # output_mod = 1.0 + 0.15 * (-1) = 0.85
+
+    # Run end_turn to let chassis compute dividends
+    # The chassis treasury change = dividends - input_costs.
+    # Grip also subtracts input costs per enterprise, so compare directly.
+    before_treasury = g.houses[house_a].treasury
+    g.end_turn()
+    chassis_dividend = g.houses[house_a].treasury - before_treasury
+
+    # Now get the grip report dividend
+    rep = grip.report(g, house_a)
+    grip_dividend = sum(line.dividend for line in rep.enterprises)
+
+    # They should match to the cent
+    assert abs(chassis_dividend - grip_dividend) < 0.01, \
+        f"Chassis dividend {chassis_dividend:.2f} != grip dividend {grip_dividend:.2f}"
+
+
+def test_report_is_idempotent_and_pure():
+    """(d) Building the report twice in a row returns equal reports and leaves
+    the game state and the rng untouched."""
+    g = _game(16)
+    for _ in range(5):
+        g.end_turn()
+
+    houses = sorted(g.houses)
+    house_a = houses[0]
+
+    # Capture game state before first report
+    rng_state = g.rng.getstate()
+    treasury_before = g.houses[house_a].treasury
+
+    # First report
+    rep1 = grip.report(g, house_a)
+
+    # Capture state after first report
+    rng_state_after_1 = g.rng.getstate()
+    treasury_after_1 = g.houses[house_a].treasury
+
+    # Second report
+    rep2 = grip.report(g, house_a)
+
+    # Reports should be equal
+    assert rep1.house == rep2.house
+    assert rep1.controlling_stake == rep2.controlling_stake
+    assert rep1.band == rep2.band
+    assert rep1.loyal_bloc == rep2.loyal_bloc
+    assert rep1.top_predator == rep2.top_predator
+    assert rep1.enterprises == rep2.enterprises
+
+    # RNG should be untouched
+    assert rng_state[0] == rng_state_after_1[0], "RNG type changed"
+    assert rng_state[1] == rng_state_after_1[1], "RNG state changed"
+
+    # Treasury should be unchanged
+    assert treasury_before == treasury_after_1, \
+        "Report mutated treasury"

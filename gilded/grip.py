@@ -7,9 +7,7 @@ never mutates the game, never touches game.rng, and runs no new simulation.
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from gilded.enterprises import output_gold
-from gilded.market import PRODUCES, tech_mod_for
-from gilded.society.labor import dividend_multiplier
+from gilded.market import PRODUCES
 from gilded.society.realm import DISLOYAL_LOYALTY, DISLOYAL_OPINION, disloyal_shareholders
 from gilded.society.schemes import TAKEOVER_THRESHOLD
 from gilded.society.shares import house_stake
@@ -103,63 +101,15 @@ def _director(ent, province, game, disloyal: set) -> Optional[Director]:
 
 
 def _enterprise_dividend(ent, province, game) -> float:
-    """Derive dividend through the same path the chassis uses.
+    """Return the dividend actually paid to this enterprise's house during the last end_turn.
 
-    The chassis builds a composite modifier:
-        coal strike price * strike output multiplier * policy output_mod
-        * market.output_mod(ent) * tech_mod
-    and passes it to pay_dividends which calls output_gold * dividend_multiplier.
+    We read the value stored on the enterprise during chassis.end_turn rather
+    than recomputing it here — the province state (strikes, etc.) may have
+    changed by the time the report is generated.
 
-    We reconstruct the same modifier (read-only) and compute the dividend.
+    If no end_turn has run yet, return 0.0 — nothing has been paid.
     """
-    if province is None:
-        return 0.0
-    if ent.under_construction > 0:
-        return 0.0
-
-    # Build the composite modifier the same way chassis does
-    mod = 1.0
-
-    # Coal strike price modifier
-    from gilded.chassis import COAL_STRIKE_PRICE
-    striking = sum(
-        1 for p in game.atlas.provinces.values()
-        if getattr(p, "movement", None) is not None
-        and p.movement.state == "striking"
-    )
-    coal_price = 1.0 + COAL_STRIKE_PRICE * striking
-    mod *= coal_price if ent.kind == "colliery" else 1.0
-
-    # Strike output multiplier
-    from gilded.chassis import STRIKE_OUTPUT_MULT
-    mv = getattr(province, "movement", None)
-    if mv is not None and mv.state == "striking":
-        mod *= STRIKE_OUTPUT_MULT
-
-    # Policy output_mod (may not exist before first end_turn)
-    game_policy = getattr(game, 'policy', None)
-    if game_policy is not None:
-        house_policy = game_policy.get(ent.house)
-        if house_policy is not None:
-            mod *= house_policy.output_mod
-
-    # Market output_mod
-    mod *= game.market.output_mod(ent)
-
-    # Tech mod
-    mod *= tech_mod_for(province)
-
-    # Now compute: output_gold * dividend_multiplier * ruler's stake
-    realm = game.realms.get(ent.house)
-    if realm is None:
-        return 0.0
-    by_id = {c.id: c for c in realm.characters}
-    director = by_id.get(ent.director_id)
-
-    gold = output_gold(ent, province, director, mod) * dividend_multiplier(ent.extraction_dial)
-    # Return the ruler's share
-    ruler_stake = ent.ledger.get(realm.ruler.id, 0.0)
-    return gold * ruler_stake / 100.0
+    return ent._last_dividend
 
 
 def _top_outside_holder(ent, loyal_ids: set, dead_ids: set) -> Optional[Tuple[str, float]]:

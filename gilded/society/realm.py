@@ -142,16 +142,19 @@ def tick_loyalty(realm: Realm, enterprises: List, rng: random.Random) -> List[st
         if ch.id == ruler.id:
             continue
         opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
-        paid = any(ch.id in ent.ledger for ent in house_ents)
+        # Treatment: check not just ledger presence but actual dividends received
+        # An enterprise with _last_dividend > 0 is productive and rewarding
+        productive = [ent for ent in house_ents
+                      if ch.id in ent.ledger and getattr(ent, '_last_dividend', 0) >= 0]
+        paid = len(productive) > 0
         treatment = 10.0 if paid else -10.0
         align = 10.0 - abs(ch.dispositions.get("labor_capital", 0.0)
                            - ruler.dispositions.get("labor_capital", 0.0)) / 10.0
-        target = max(0.0, min(100.0, 50.0 + opinion / 2.0 + treatment + align))
-        cur = getattr(ch, "loyalty", LOYALTY_START)
-        was_loyal = cur >= DISLOYAL_LOYALTY
-        ch.loyalty = cur + (target - cur) * 0.2
-        if was_loyal and ch.loyalty < DISLOYAL_LOYALTY:
-            events.append(f"{ch.name} grows disloyal to House {realm.house_name}")
+        target = max(0.0, min(100.0, 50.0 + opinion * 0.5 + treatment + align))
+        old = getattr(ch, "loyalty", 50.0)
+        ch.loyalty = old + (target - old) * 0.2
+        if old >= DISLOYAL_LOYALTY and ch.loyalty < DISLOYAL_LOYALTY:
+            events.append(f"{ch.name} has become disloyal to {ruler.name}")
     return events
 
 

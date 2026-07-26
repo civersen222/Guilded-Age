@@ -226,6 +226,7 @@ class GildedGame:
                 mod *= tech_mod_for(province)
                 take, _ = pay_dividends(realm, [ent], provinces, mod)
                 take -= self.market.input_cost(ent)
+                ent._last_dividend = take
                 take_total += take
             if take_total > 0:
                 self.houses[h].treasury += take_total
