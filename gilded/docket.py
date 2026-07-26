@@ -721,6 +721,46 @@ def _init_establish_informant(ctx, target_house=None, **kw) -> List[str]:
     return [f"{ctx.executor.name} places an informant inside House {target_house}"]
 
 
+def _init_buy_shares(ctx, eid=None, seller_id=None, pct=0.0, **kw) -> List[str]:
+    from gilded.society.shares import priced_transfer
+    ent = next((e for e in ctx.game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return ["There is no such enterprise to buy from"]
+    if pct <= 0:
+        return ["Nothing to buy: the percentage is zero"]
+    by_id = {c.id: c for r in ctx.game.realms.values() for c in r.characters}
+    seller = by_id.get(seller_id)
+    if seller is None:
+        return ["There is no such person to trade with"]
+    buyer = ctx.executor
+    pct = pct * ctx.scale
+    market = ctx.game.market
+    cost = priced_transfer(ent, seller, buyer, pct, market, ctx.game)
+    if cost <= 0:
+        return [f"{buyer.name} cannot afford the stake"]
+    return [f"{buyer.name} buys {pct:.1f}% of {ent.name} from {seller.name} for {cost:.0f} gold"]
+
+
+def _init_sell_shares(ctx, eid=None, buyer_id=None, pct=0.0, **kw) -> List[str]:
+    from gilded.society.shares import priced_transfer
+    ent = next((e for e in ctx.game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return ["There is no such enterprise to sell from"]
+    if pct <= 0:
+        return ["Nothing to sell: the percentage is zero"]
+    by_id = {c.id: c for r in ctx.game.realms.values() for c in r.characters}
+    buyer = by_id.get(buyer_id)
+    if buyer is None:
+        return ["There is no such person to trade with"]
+    seller = ctx.executor
+    pct = pct * ctx.scale
+    market = ctx.game.market
+    cost = priced_transfer(ent, seller, buyer, pct, market, ctx.game)
+    if cost <= 0:
+        return [f"{buyer.name} cannot afford the stake"]
+    return [f"{seller.name} sells {pct:.1f}% of {ent.name} to {buyer.name} for {cost:.0f} gold"]
+
+
 INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "propose_marriage": ("diplomacy", _init_propose_marriage),
     "found_enterprise": ("capital", _init_found_enterprise),
@@ -734,6 +774,8 @@ INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "negotiate_peace": ("diplomacy", _init_negotiate_peace),
     "start_takeover": ("capital", _init_start_takeover),
     "establish_informant": ("diplomacy", _init_establish_informant),
+    "buy_shares": ("capital", _init_buy_shares),
+    "sell_shares": ("capital", _init_sell_shares),
 }
 
 

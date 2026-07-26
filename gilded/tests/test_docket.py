@@ -12,7 +12,8 @@ from gilded.docket import (
     resolve_unattended,
     rule,
 )
-from gilded.enterprises import EXPAND_COST, found_enterprise
+from gilded.enterprises import EXPAND_COST, Enterprise, found_enterprise
+from gilded.market import Market
 from gilded.houses import assign_houses
 from gilded.society.characters import SocietyState
 from gilded.society.court import CourtPosition
@@ -324,3 +325,148 @@ def test_expansionist_policy_cheapens_expansion():
     eff = policy.effects(g, h)
     expected = EXPAND_COST[ent.tier + 1] * eff.expand_cost_mod
     assert expected < EXPAND_COST[ent.tier + 1]
+
+
+def _make_ent_with_ledger(g, house, ruler_id, kin_id):
+    """Create an enterprise with a ledger and attach a market to the FakeGame."""
+    from gilded.market import Market
+    from gilded.enterprises import ENTERPRISE_TYPES
+    g.market = Market()
+    # Pick a kind and a province that has the needed endowment
+    kind = "colliery"
+    needed = ENTERPRISE_TYPES[kind][0]  # "coalfield"
+    prov = next((p for p in g.atlas.provinces.values()
+                 if p.owner == house and needed in p.endowments),
+                next(p for p in g.atlas.provinces.values() if p.owner == house))
+    # If the province lacks the endowment, add it so the market values the enterprise
+    if needed and needed not in prov.endowments:
+        prov.endowments[needed] = 1
+    ent = Enterprise(eid=next((e.eid for e in g.enterprises), 0) + 1,
+                     kind=kind, name=f"{prov.name} Colliery",
+                     house=house, province=prov.pid)
+    ent.under_construction = 0
+    ent.assign_share(ruler_id, 60.0)
+    ent.assign_share(kin_id, 40.0)
+    g.enterprises.append(ent)
+    return ent
+
+
+# -- buy_shares / sell_shares tests --
+
+def test_buy_shares_happy_path():
+    """Executor (buyer) buys shares from a counterparty."""
+    g, h = _game(100)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ruler.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    g.rng = SeqRng([0.0])
+    kin_stake_before = ent.ledger.get(kin.id, 0.0)
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
+    assert len(msgs) >= 1
+    assert ent.ledger.get(kin.id, 0.0) < kin_stake_before
+    assert ent.ledger.get(ruler.id, 0.0) > 60.0
+
+
+def test_sell_shares_happy_path():
+    """Executor (seller) sells shares to a funded counterparty."""
+    g, h = _game(101)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    kin.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    g.rng = SeqRng([0.0])
+    ruler_stake_before = ent.ledger.get(ruler.id, 0.0)
+    msgs = initiative(g, h, "sell_shares", ruler, eid=ent.eid, buyer_id=kin.id, pct=10.0)
+    assert len(msgs) >= 1
+    assert ent.ledger.get(ruler.id, 0.0) < ruler_stake_before
+    assert ent.ledger.get(kin.id, 0.0) > 40.0
+
+
+def test_buy_shares_cross_house():
+    """Buy shares from a character in a different realm."""
+    g, h = _game(102, realm_count=2)
+    h2 = sorted(g.realms)[1]
+    realm1 = g.realms[h]
+    realm2 = g.realms[h2]
+    ruler = realm1.ruler
+    other = realm2.ruler
+    ruler.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, other.id)
+    g.rng = SeqRng([0.0])
+    other_stake_before = ent.ledger.get(other.id, 0.0)
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=other.id, pct=10.0)
+    assert len(msgs) >= 1
+    assert ent.ledger.get(other.id, 0.0) < other_stake_before
+
+
+def test_buy_shares_unknown_person():
+    """Unresolvable seller_id returns an event line, changes nothing."""
+    g, h = _game(103)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    ruler.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, 99999)
+    g.rng = SeqRng([0.0])
+    ledger_before = dict(ent.ledger)
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=99999, pct=10.0)
+    assert len(msgs) >= 1
+    assert ent.ledger == ledger_before
+
+
+def test_buy_shares_unknown_enterprise():
+    """Nonexistent eid returns an event line, changes nothing."""
+    g, h = _game(104)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    ruler.gold_reserve = 10_000.0
+    g.market = Market()
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "buy_shares", ruler, eid=99999, seller_id=1, pct=10.0)
+    assert len(msgs) >= 1
+
+
+def test_broke_buyer():
+    """Unfunded buyer sees no shares move."""
+    g, h = _game(105)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ruler.gold_reserve = 0.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    g.rng = SeqRng([0.0])
+    ledger_before = dict(ent.ledger)
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
+    assert len(msgs) >= 1
+    assert ent.ledger == ledger_before
+
+
+def test_buy_shares_fumble_halves():
+    """Fumble (scale=0.5) buys strictly less stake than a clean roll."""
+    g, h = _game(106)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ruler.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    g.rng = SeqRng()  # 0.99 forever -> fumble
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=20.0)
+    assert any("botches" in m for m in msgs)
+    moved = ent.ledger.get(ruler.id, 60.0) - 60.0
+    assert moved > 0 and moved < 20.0
+
+
+def test_buy_shares_zero_pct():
+    """pct <= 0 is a no-op event line."""
+    g, h = _game(107)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    g.rng = SeqRng([0.0])
+    ledger_before = dict(ent.ledger)
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=0.0)
+    assert len(msgs) >= 1
+    assert ent.ledger == ledger_before
