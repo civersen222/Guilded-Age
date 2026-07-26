@@ -162,13 +162,13 @@ def _enterprise_dividend(ent, province, game) -> float:
     return gold * ruler_stake / 100.0
 
 
-def _top_outside_holder(ent, loyal_ids: set, alive_ids: set) -> Optional[Tuple[str, float]]:
+def _top_outside_holder(ent, loyal_ids: set, dead_ids: set) -> Optional[Tuple[str, float]]:
     best_id = None
     best_pct = 0.0
     for char_id, pct in ent.ledger.items():
         if char_id in loyal_ids:
             continue
-        if char_id not in alive_ids:
+        if char_id in dead_ids:
             continue
         if pct > best_pct:
             best_pct = pct
@@ -216,10 +216,13 @@ def report(game, house: str) -> GripReport:
 
     # Collect all alive character ids for filtering dead holders
     all_alive_ids = set()
+    dead_ids = set()
     for r in game.realms.values():
         for ch in r.characters:
             if ch.is_alive:
                 all_alive_ids.add(ch.id)
+            else:
+                dead_ids.add(ch.id)
 
     # Ruler is always in the bloc while alive — they command the House
     if ruler.is_alive:
@@ -248,7 +251,7 @@ def report(game, house: str) -> GripReport:
         your_stake = ent.ledger.get(ruler.id, 0.0)
 
         # Top outside holder
-        top_outside = _top_outside_holder(ent, loyal_ids, all_alive_ids)
+        top_outside = _top_outside_holder(ent, loyal_ids, dead_ids)
 
         enterprises.append(EnterpriseLine(
             eid=ent.eid,
@@ -280,7 +283,7 @@ def report(game, house: str) -> GripReport:
     for char_id in sorted(all_ids):
         if char_id in loyal_ids:
             continue
-        if char_id not in all_alive_ids:
+        if char_id in dead_ids:
             continue
         stake = house_stake(house_ents, char_id)
         if stake > 0:
