@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 from gilded.enterprises import output_gold
 from gilded.market import PRODUCES, tech_mod_for
 from gilded.society.labor import dividend_multiplier
-from gilded.society.realm import DISLOYAL_LOYALTY, DISLOYAL_OPINION
+from gilded.society.realm import DISLOYAL_LOYALTY, DISLOYAL_OPINION, disloyal_shareholders
 from gilded.society.schemes import TAKEOVER_THRESHOLD
 from gilded.society.shares import house_stake
 
@@ -62,36 +62,126 @@ class GripReport:
     band: str
 
 
-def band_for(controlling_stake: float) -> str:
-    margin = controlling_stake - TAKEOVER_THRESHOLD
-    if margin >= GRIP_BAND_MARGIN:
-        return BAND_IRON_GRIP
-    if margin >= 0.0:
-        return BAND_CONTESTED
-    if margin >= -GRIP_BAND_MARGIN:
+def band_for(stake: float) -> str:
+    if stake < 35:
+        return BAND_SEIZED
+    if stake < 50:
         return BAND_IMPERILED
-    return BAND_SEIZED
+    if stake < 65:
+        return BAND_CONTESTED
+    return BAND_IRON_GRIP
 
 
-def _get_province(game, ent):
-    return game.atlas.provinces[ent.province]
-
-
-def _get_character(game, char_id):
+def _name_for(game, char_id: str) -> str:
     for realm in game.realms.values():
         for ch in realm.characters:
             if ch.id == char_id:
-                return ch
-    return None
+                return ch.name
+    return char_id
 
 
-def _holder_name(game, char_id):
-    ch = _get_character(game, char_id)
-    return ch.name if ch else char_id
+def _director(ent, province, game, disloyal: set) -> Optional[Director]:
+    if not ent.director_id:
+        return None
+    ch = None
+    for realm in game.realms.values():
+        for c in realm.characters:
+            if c.id == ent.director_id:
+                ch = c
+                break
+        if ch:
+            break
+    if ch is None or not ch.is_alive:
+        return None
+    industry = ch.get_effective_stat("industry")
+    return Director(
+        id=ch.id,
+        name=ch.name,
+        industry=industry,
+        disloyal=ch.id in disloyal,
+    )
+
+
+def _enterprise_dividend(ent, province, game) -> float:
+    """Derive dividend through the same path the chassis uses.
+
+    The chassis builds a composite modifier:
+        coal strike price * strike output multiplier * policy output_mod
+        * market.output_mod(ent) * tech_mod
+    and passes it to pay_dividends which calls output_gold * dividend_multiplier.
+
+    We reconstruct the same modifier (read-only) and compute the dividend.
+    """
+    if province is None:
+        return 0.0
+    if ent.under_construction > 0:
+        return 0.0
+
+    # Build the composite modifier the same way chassis does
+    mod = 1.0
+
+    # Coal strike price modifier
+    from gilded.chassis import COAL_STRIKE_PRICE
+    striking = sum(
+        1 for p in game.atlas.provinces.values()
+        if getattr(p, "movement", None) is not None
+        and p.movement.state == "striking"
+    )
+    coal_price = 1.0 + COAL_STRIKE_PRICE * striking
+    mod *= coal_price if ent.kind == "colliery" else 1.0
+
+    # Strike output multiplier
+    from gilded.chassis import STRIKE_OUTPUT_MULT
+    mv = getattr(province, "movement", None)
+    if mv is not None and mv.state == "striking":
+        mod *= STRIKE_OUTPUT_MULT
+
+    # Policy output_mod (may not exist before first end_turn)
+    game_policy = getattr(game, 'policy', None)
+    if game_policy is not None:
+        house_policy = game_policy.get(ent.house)
+        if house_policy is not None:
+            mod *= house_policy.output_mod
+
+    # Market output_mod
+    mod *= game.market.output_mod(ent)
+
+    # Tech mod
+    mod *= tech_mod_for(province)
+
+    # Now compute: output_gold * dividend_multiplier * ruler's stake
+    realm = game.realms.get(ent.house)
+    if realm is None:
+        return 0.0
+    by_id = {c.id: c for c in realm.characters}
+    director = by_id.get(ent.director_id)
+
+    gold = output_gold(ent, province, director, mod) * dividend_multiplier(ent.extraction_dial)
+    # Return the ruler's share
+    ruler_stake = ent.ledger.get(realm.ruler.id, 0.0)
+    return gold * ruler_stake / 100.0
+
+
+def _top_outside_holder(ent, loyal_ids: set, alive_ids: set) -> Optional[Tuple[str, float]]:
+    best_id = None
+    best_pct = 0.0
+    for char_id, pct in ent.ledger.items():
+        if char_id in loyal_ids:
+            continue
+        if char_id not in alive_ids:
+            continue
+        if pct > best_pct:
+            best_pct = pct
+            best_id = char_id
+    if best_id is None:
+        return None
+    return (best_id, best_pct)
 
 
 def report(game, house: str) -> GripReport:
-    if house not in game.realms:
+    """Build a GripReport for *house* without mutating the game state."""
+    band = band_for(0.0)
+    if not house in game.houses:
         return GripReport(
             house=house,
             enterprises=tuple(),
@@ -100,7 +190,7 @@ def report(game, house: str) -> GripReport:
             top_predator=None,
             threshold=TAKEOVER_THRESHOLD,
             margin=-TAKEOVER_THRESHOLD,
-            band=band_for(0.0),
+            band=band,
         )
     realm = game.realms[house]
     ruler = realm.ruler
@@ -115,23 +205,21 @@ def report(game, house: str) -> GripReport:
             top_predator=None,
             threshold=TAKEOVER_THRESHOLD,
             margin=-TAKEOVER_THRESHOLD,
-            band=band_for(0.0),
+            band=band,
         )
 
     # Build loyal bloc: ruler + living realm characters who hold shares and are NOT disloyal
     # Disloyalty is judged across ALL enterprises, not just house ones
-    disloyal = set()
-    all_ents = game.enterprises
-    for ch in realm.characters:
-        if not ch.is_alive or ch.id == ruler.id:
-            continue
-        if not any(ch.id in ent.ledger for ent in all_ents):
-            continue
-        opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
-        if (getattr(ch, "loyalty", 50.0) < DISLOYAL_LOYALTY
-                or opinion <= DISLOYAL_OPINION):
-            disloyal.add(ch.id)
+    disloyal_chs = disloyal_shareholders(realm, game.enterprises, house_only=False)
+    disloyal = {ch.id for ch in disloyal_chs}
     loyal_ids = set()
+
+    # Collect all alive character ids for filtering dead holders
+    all_alive_ids = set()
+    for r in game.realms.values():
+        for ch in r.characters:
+            if ch.is_alive:
+                all_alive_ids.add(ch.id)
 
     # Ruler is always in the bloc while alive — they command the House
     if ruler.is_alive:
@@ -142,95 +230,74 @@ def report(game, house: str) -> GripReport:
             continue
         if ch.id in disloyal:
             continue
-        if any(ch.id in ent.ledger for ent in house_ents):
-            loyal_ids.add(ch.id)
-
-    # Compute controlling stake (sum of house_stake for each loyal member)
-    controlling_stake = sum(house_stake(house_ents, cid) for cid in loyal_ids)
-
-    # Build loyal bloc Holder list
-    loyal_bloc = tuple(
-        Holder(id=cid, name=_holder_name(game, cid),
-               stake=house_stake(house_ents, cid))
-        for cid in sorted(loyal_ids)
-    )
-
-    # Find top predator: strongest non-loyal LIVING holder by portfolio-wide stake
-    all_holders = set()
-    for ent in house_ents:
-        all_holders.update(ent.ledger.keys())
-    outside_ids = all_holders - loyal_ids
-    # Filter to living holders only
-    outside_ids = {
-        cid for cid in outside_ids
-        if _get_character(game, cid) is None or _get_character(game, cid).is_alive
-    }
-    top_predator = None
-    if outside_ids:
-        best_id = max(outside_ids, key=lambda cid: house_stake(house_ents, cid))
-        best_stake = house_stake(house_ents, best_id)
-        if best_stake > 0:
-            top_predator = Holder(id=best_id, name=_holder_name(game, best_id), stake=best_stake)
-
-    margin = controlling_stake - TAKEOVER_THRESHOLD
-    band = band_for(controlling_stake)
+        if not any(ch.id in ent.ledger for ent in house_ents):
+            continue
+        loyal_ids.add(ch.id)
 
     # Build enterprise lines
     enterprises = []
+    all_ledger_ids: Dict[int, set] = {ent.eid: set(ent.ledger.keys()) for ent in house_ents}
+    all_ids = set()
+    for s in all_ledger_ids.values():
+        all_ids.update(s)
+
     for ent in house_ents:
-        province = _get_province(game, ent)
-        director_ch = _get_character(game, ent.director_id) if ent.director_id else None
-
-        # Dividend calculation
-        tech_mod = tech_mod_for(province)
-        output = output_gold(ent, province, director_ch, tech_mod)
-        # Apply market price for the commodity
-        commodity = PRODUCES.get(ent.kind)
-        if commodity:
-            price = game.market.prices.get(commodity, 1.0)
-            output = output * price
-        div = output * dividend_multiplier(ent.extraction_dial)
-
-        # Director info
-        director = None
-        if director_ch is not None and director_ch.is_alive:
-            director = Director(
-                id=director_ch.id,
-                name=director_ch.name,
-                industry=director_ch.get_effective_stat("industry"),
-                disloyal=director_ch.id in disloyal,
-            )
-
-        # Your stake (ruler's stake in this enterprise)
+        province = game.atlas.provinces.get(ent.province)
+        director = _director(ent, province, game, disloyal)
+        dividend = _enterprise_dividend(ent, province, game)
         your_stake = ent.ledger.get(ruler.id, 0.0)
 
-        # Top outside holder for this enterprise (non-loyal, living)
-        top_outside = None
-        for cid in sorted(ent.ledger.keys(), key=lambda c: ent.ledger[c], reverse=True):
-            if cid in loyal_ids:
-                continue
-            ch = _get_character(game, cid)
-            if ch is not None and not ch.is_alive:
-                continue
-            top_outside = (cid, ent.ledger[cid])
-            break
+        # Top outside holder
+        top_outside = _top_outside_holder(ent, loyal_ids, all_alive_ids)
 
-        sector = PRODUCES.get(ent.kind) or "bank"
         enterprises.append(EnterpriseLine(
             eid=ent.eid,
             name=ent.name,
-            sector=sector,
+            sector=PRODUCES.get(ent.kind) or "bank",
             tier=ent.tier,
-            dividend=div,
+            dividend=dividend,
             director=director,
             your_stake=your_stake,
             top_outside=top_outside,
         ))
 
+    # Controlling stake: sum of house_stake for each loyal member
+    loyal_bloc = []
+    controlling_stake = 0.0
+    for char_id in sorted(loyal_ids):
+        stake = house_stake(house_ents, char_id)
+        # Ruler is always in the bloc even without shares
+        if stake > 0 or char_id == ruler.id:
+            controlling_stake += stake
+            loyal_bloc.append(Holder(
+                id=char_id,
+                name=_name_for(game, char_id),
+                stake=stake,
+            ))
+
+    # Top predator: strongest non-bloc holder (skip dead holders)
+    top_predator = None
+    for char_id in sorted(all_ids):
+        if char_id in loyal_ids:
+            continue
+        if char_id not in all_alive_ids:
+            continue
+        stake = house_stake(house_ents, char_id)
+        if stake > 0:
+            if top_predator is None or stake > top_predator.stake:
+                top_predator = Holder(
+                    id=char_id,
+                    name=_name_for(game, char_id),
+                    stake=stake,
+                )
+
+    margin = controlling_stake - TAKEOVER_THRESHOLD
+    band = band_for(controlling_stake)
+
     return GripReport(
         house=house,
         enterprises=tuple(enterprises),
-        loyal_bloc=loyal_bloc,
+        loyal_bloc=tuple(loyal_bloc),
         controlling_stake=controlling_stake,
         top_predator=top_predator,
         threshold=TAKEOVER_THRESHOLD,

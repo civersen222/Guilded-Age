@@ -159,22 +159,33 @@ DISLOYAL_LOYALTY = 40.0   # sellers: loyalty below this...
 DISLOYAL_OPINION = -20    # ...or opinion of the ruler at or below this
 
 
-def disloyal_shareholders(realm: Realm, enterprises: List) -> List[Character]:
+def disloyal_shareholders(realm: Realm, enterprises: List,
+                          house_only: bool = True) -> List[Character]:
     """Hostile takeover's door (spec 6): the siblings, widows and denied
     heirs who hold House shares but no love for the House. Low loyalty or
     a grudge against the ruler marks them ready to sell. The ruler is
     never on this list - selling the House out from under yourself is a
-    different verb."""
+    different verb.
+
+    When *house_only* is True (default) the shareholder test is restricted
+    to enterprises whose .house matches the realm.  When False the check
+    spans every enterprise in *enterprises*, allowing a caller to judge
+    disloyalty across the full portfolio (e.g. grip.py read-model).
+    """
     ruler = realm.ruler
-    house_ents = [e for e in enterprises if e.house == realm.house_name]
+    if house_only:
+        check_ents = [e for e in enterprises if e.house == realm.house_name]
+    else:
+        check_ents = list(enterprises)
     out: List[Character] = []
     for ch in realm.characters:
         if not ch.is_alive or ch.id == ruler.id:
             continue
-        if not any(ch.id in ent.ledger for ent in house_ents):
+        if not any(ch.id in ent.ledger for ent in check_ents):
             continue
         opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
-        if (getattr(ch, "loyalty", LOYALTY_START) < DISLOYAL_LOYALTY
+        loyalty = getattr(ch, "loyalty", None)
+        if (loyalty is not None and loyalty < DISLOYAL_LOYALTY
                 or opinion <= DISLOYAL_OPINION):
             out.append(ch)
     return out
