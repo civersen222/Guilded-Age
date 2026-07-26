@@ -12,6 +12,27 @@ from gilded.society.characters import modify_opinion
 from gilded.society.labor import dividend_multiplier
 
 
+def priced_transfer(ent, seller, buyer, pct, market, game, dry_run=False) -> float:
+    """Sell a share tranche at the market's valuation.
+
+    Returns the gold actually paid (0.0 for every no-op path).
+    """
+    price = market.value(ent, game) * pct / 100.0
+    if dry_run:
+        return price
+    if price <= 0:
+        return 0.0
+    if buyer.gold_reserve < price:
+        return 0.0
+    moved = transfer_shares(ent, seller.id, buyer.id, pct)
+    cost = market.value(ent, game) * moved / 100.0
+    buyer.gold_reserve -= cost
+    seller.gold_reserve += cost
+    if moved > 0:
+        modify_opinion(seller, buyer, 5, "a generous buyer")
+    return cost
+
+
 def initial_ledger(ent, realm) -> None:
     """House founding stakes: the ruler keeps a controlling 60%; living
     dynasty kin split the remaining 40% evenly. No living kin = 100%."""
