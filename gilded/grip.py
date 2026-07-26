@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 from gilded.enterprises import output_gold
 from gilded.market import PRODUCES, tech_mod_for
 from gilded.society.labor import dividend_multiplier
-from gilded.society.realm import disloyal_shareholders
+from gilded.society.realm import DISLOYAL_LOYALTY, DISLOYAL_OPINION
 from gilded.society.schemes import TAKEOVER_THRESHOLD
 from gilded.society.shares import house_stake
 
@@ -91,6 +91,17 @@ def _holder_name(game, char_id):
 
 
 def report(game, house: str) -> GripReport:
+    if house not in game.realms:
+        return GripReport(
+            house=house,
+            enterprises=tuple(),
+            loyal_bloc=tuple(),
+            controlling_stake=0.0,
+            top_predator=None,
+            threshold=TAKEOVER_THRESHOLD,
+            margin=-TAKEOVER_THRESHOLD,
+            band=band_for(0.0),
+        )
     realm = game.realms[house]
     ruler = realm.ruler
     house_ents = list(game.ents_of(house))
@@ -108,11 +119,22 @@ def report(game, house: str) -> GripReport:
         )
 
     # Build loyal bloc: ruler + living realm characters who hold shares and are NOT disloyal
-    disloyal = set(c.id for c in disloyal_shareholders(realm, house_ents))
+    # Disloyalty is judged across ALL enterprises, not just house ones
+    disloyal = set()
+    all_ents = game.enterprises
+    for ch in realm.characters:
+        if not ch.is_alive or ch.id == ruler.id:
+            continue
+        if not any(ch.id in ent.ledger for ent in all_ents):
+            continue
+        opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
+        if (getattr(ch, "loyalty", 50.0) < DISLOYAL_LOYALTY
+                or opinion <= DISLOYAL_OPINION):
+            disloyal.add(ch.id)
     loyal_ids = set()
 
-    # Ruler is only in bloc if they hold shares
-    if any(ruler.id in ent.ledger for ent in house_ents):
+    # Ruler is always in the bloc while alive — they command the House
+    if ruler.is_alive:
         loyal_ids.add(ruler.id)
 
     for ch in realm.characters:

@@ -591,6 +591,76 @@ def test_report_does_not_pay_out_gold():
 
 # --- edges -----------------------------------------------------------------
 
+def test_report_unknown_house_returns_empty_report():
+    """report() should return an empty report for a house not in game.realms,
+    not raise KeyError."""
+    g = _game()
+    rep = grip.report(g, "NONEXISTENT")
+    assert rep.house == "NONEXISTENT"
+    assert rep.enterprises == ()
+    assert rep.loyal_bloc == ()
+    assert rep.controlling_stake == 0.0
+    assert rep.top_predator is None
+    assert rep.threshold == TAKEOVER_THRESHOLD
+    assert rep.band in grip.BANDS
+
+
+def test_ruler_in_loyal_bloc_even_without_shares():
+    """The ruler should always be in the loyal bloc while alive, even if they
+    personally hold no shares in any enterprise."""
+    g = _game()
+    h = _first_house(g)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    # Strip the ruler from all ledgers
+    house_ents = list(g.ents_of(h))
+    for ent in house_ents:
+        if ruler.id in ent.ledger:
+            del ent.ledger[ruler.id]
+    rep = grip.report(g, h)
+    ruler_in_bloc = any(m.id == ruler.id for m in rep.loyal_bloc)
+    assert ruler_in_bloc, "Ruler should be in the loyal bloc even without shares"
+
+
+def test_disloyalty_judged_across_all_enterprises():
+    """Disloyalty should be judged across every enterprise in the game, not just
+    the house's own enterprises. A kinsman's grudge does not stop mattering
+    because his shares happen to sit in someone else's company."""
+    g = _game()
+    h = _first_house(g)
+    realm = g.realms[h]
+    # Find a living non-ruler character
+    kin = _kin(realm, 1)[0]
+    # Set a very bad opinion of the ruler (below DISLOYAL_OPINION = -20)
+    g.society.opinions[(kin.id, realm.ruler.id)] = -50
+    # Make the character a director of a house enterprise
+    house_ents = list(g.ents_of(h))
+    assert len(house_ents) > 0
+    house_ents[0].director_id = kin.id
+    # Give this character shares ONLY in ANOTHER house's enterprise (not house_ents)
+    # Strip any shares they have in house enterprises
+    for ent in house_ents:
+        if kin.id in ent.ledger:
+            del ent.ledger[kin.id]
+    other_houses = [hh for hh in g.houses if hh != h]
+    assert other_houses, "Need at least two houses"
+    other_ent = None
+    for ent in g.enterprises:
+        if ent.house == other_houses[0]:
+            other_ent = ent
+            break
+    assert other_ent is not None, "Need an enterprise from another house"
+    other_ent.ledger[kin.id] = 10.0
+    # The character is a director of a house enterprise, but only holds shares
+    # in another house's company. With disloyal_shareholders called on house_ents,
+    # they won't be flagged (they don't hold shares in house_ents).
+    # With ALL enterprises, they should be flagged as disloyal.
+    rep = grip.report(g, h)
+    line = _line(rep, house_ents[0].eid)
+    assert line.director is not None
+    assert line.director.disloyal, "Director should be marked disloyal (bad opinion) even though their shares are in another house's enterprise"
+
+
 def test_a_house_with_no_enterprises_reports_cleanly():
     g = _game()
     h = _first_house(g)
