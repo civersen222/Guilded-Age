@@ -45,6 +45,7 @@ class Enterprise:
     ledger: Dict[str, float] = field(default_factory=dict)  # char_id -> pct, sums 100
     under_construction: int = 0    # turns remaining (founding or expansion)
     target_tier: int = 1
+    _last_dividend: float = 0.0    # dividend paid during last end_turn
 
     def workforce(self) -> int:
         return self.tier * WORKFORCE_PER_TIER

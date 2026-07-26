@@ -278,116 +278,52 @@ def test_expansionism_and_diplomacy_apply_standing_effects():
 
 
 def test_input_cost_deducted_from_consumer_enterprise_dividend():
-    """Regression: chassis must subtract market.input_cost() for consumer enterprises.
+    """Regression: chassis subtracts market.input_cost() for consumer enterprises.
 
-    A CONSUMER enterprise (ironworks, mill, rail_co — one that appears in CONSUMES)
-    has its dividend reduced by the input cost.  This test verifies the deduction
-    actually happens by independently computing the gross dividend and asserting
-    that _last_dividend equals gross minus input_cost.  The test MUST fail if the
-    input_cost deduction line is removed from chassis.end_turn().
+    A CONSUMER enterprise has its dividend reduced by the input cost.
+    This test independently computes the gross dividend and asserts that
+    _last_dividend equals gross minus input_cost.
+
+    MUST fail if the input_cost deduction line is removed from chassis.end_turn().
     """
     from gilded.market import CONSUMES
-    from gilded.society.shares import pay_dividends
 
     g = GildedGame(seed=42)
-
-    # Find a consumer enterprise (one that appears in CONSUMES)
     consumer_ent = None
     for ent in g.enterprises:
         if ent.kind in CONSUMES:
             consumer_ent = ent
             break
-    assert consumer_ent is not None, "Should have at least one consumer enterprise"
+    assert consumer_ent is not None
 
     house = consumer_ent.house
     realm = g.realms[house]
-    provinces = g.atlas.provinces
-
-    # Capture ruler's gold before end_turn
     ruler = realm.ruler
+
+    # Give ruler 100% of this enterprise
+    consumer_ent.ledger.clear()
+    consumer_ent.ledger[ruler.id] = 100.0
+
+    # Zero out all other enterprises for this house
+    for ent in g.ents_of(house):
+        if ent.eid != consumer_ent.eid:
+            ent.ledger.clear()
+
     ruler_gold_before = ruler.gold_reserve
 
-    # Run end_turn so chassis computes dividends
     g.end_turn()
 
     ruler_gold_after = ruler.gold_reserve
     ruler_delta = ruler_gold_after - ruler_gold_before
 
-    # pay_dividends returns the ruler's share (house_take).  The chassis then
-    # subtracts input_cost from this.  Since pay_dividends adds directly to
-    # gold_reserve, the ruler's gold delta equals the gross share.
-    #
+    input_cost = g.market.input_cost(consumer_ent)
+
     # _last_dividend = take - input_cost (where take = ruler's share from pay_dividends)
-    # ruler_delta from this one enterprise = take (the gross)
-    #
-    # But ruler_delta includes ALL enterprises.  We need to isolate this one.
-    # Instead, compute the gross independently using pay_dividends on the ent
-    # with mod=1.0 (no mods), then compare.
-    #
-    # Better approach: use the chassis's own computation.  The chassis calls
-    # pay_dividends with the mod applied, then subtracts input_cost.
-    # We can verify: _last_dividend + input_cost should equal the ruler's
-    # share from this enterprise.
-    #
-    # Since we can't easily re-run pay_dividends with the same mod, use
-    # the treasury delta as our independent measure.
-    #
-    # Treasury only gets dividends when take_total > 0.  take_total sums
-    # _last_dividend for all enterprises.  Without input_cost deduction,
-    # _last_dividend would be higher by input_cost.
-    #
-    # Simplest: verify _last_dividend < ruler_delta_for_this_ent.
-    # We know pay_dividends adds take to ruler's gold_reserve.
-    # The input_cost deduction only affects _last_dividend and treasury.
-    #
-    # For a 100%-owned enterprise: ruler_delta_from_ent = take = _last_dividend + input_cost
-    # But other enterprises also contribute to ruler_delta.
-    #
-    # Use a controlled setup: give ruler 100% of one consumer ent, 0% of others.
-
-    # Reset and use a fresh game
-    g2 = GildedGame(seed=42)
-    consumer_ent2 = None
-    for ent in g2.enterprises:
-        if ent.kind in CONSUMES:
-            consumer_ent2 = ent
-            break
-    assert consumer_ent2 is not None
-
-    house2 = consumer_ent2.house
-    realm2 = g2.realms[house2]
-    ruler2 = realm2.ruler
-
-    # Give ruler 100% of this enterprise
-    consumer_ent2.ledger.clear()
-    consumer_ent2.ledger[ruler2.id] = 100.0
-
-    # Zero out all other enterprises for this house (give to nobody)
-    for ent in g2.ents_of(house2):
-        if ent.eid != consumer_ent2.eid:
-            ent.ledger.clear()
-
-    ruler_gold_before2 = ruler2.gold_reserve
-    treasury_before = g2.houses[house2].treasury
-
-    g2.end_turn()
-
-    ruler_gold_after2 = ruler2.gold_reserve
-    ruler_delta2 = ruler_gold_after2 - ruler_gold_before2
-    treasury_delta = g2.houses[house2].treasury - treasury_before
-
-    input_cost = g2.market.input_cost(consumer_ent2)
-
-    # Verify input_cost is non-zero (consumer enterprise)
-    assert input_cost > 0, f"input_cost should be > 0 for {consumer_ent2.kind}"
-
-    # With 100% ownership and no other enterprises paying:
-    # ruler_delta2 = take (gross from pay_dividends)
-    # _last_dividend = take - input_cost
-    # treasury_delta = _last_dividend (if positive)
-    assert consumer_ent2._last_dividend < ruler_delta2, \
-        f"_last_dividend ({consumer_ent2._last_dividend:.4f}) should be less than " \
-        f"ruler's gold delta ({ruler_delta2:.4f}) by input_cost ({input_cost:.4f})"
-    expected_diff = abs(ruler_delta2 - consumer_ent2._last_dividend)
+    # For 100% ownership, ruler_delta = take (the gross, before input_cost deduction)
+    # So: ruler_delta - _last_dividend = input_cost
+    assert consumer_ent._last_dividend < ruler_delta, \
+        f"_last_dividend ({consumer_ent._last_dividend:.4f}) should be less than " \
+        f"ruler's gold delta ({ruler_delta:.4f}) by input_cost ({input_cost:.4f})"
+    expected_diff = abs(ruler_delta - consumer_ent._last_dividend)
     assert abs(expected_diff - input_cost) < 0.01, \
         f"Difference ({expected_diff:.4f}) should equal input_cost ({input_cost:.4f})"
