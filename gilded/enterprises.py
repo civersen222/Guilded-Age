@@ -46,6 +46,7 @@ class Enterprise:
     under_construction: int = 0    # turns remaining (founding or expansion)
     target_tier: int = 1
     _last_dividend: float = 0.0    # dividend paid during last end_turn
+    _prev_dividend: Optional[float] = None  # dividend from the turn before last (None = never paid twice)
 
     def workforce(self) -> int:
         return self.tier * WORKFORCE_PER_TIER

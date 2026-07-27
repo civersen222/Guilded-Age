@@ -43,6 +43,7 @@ class EnterpriseLine:
     sector: str
     tier: int
     dividend: float
+    dividend_delta: Optional[float]
     director: Optional[Director]
     your_stake: float
     top_outside: Optional[Tuple[str, float]]
@@ -200,6 +201,13 @@ def report(game, house: str) -> GripReport:
         dividend = _enterprise_dividend(ent, province, game)
         your_stake = ent.ledger.get(ruler.id, 0.0)
 
+        # Dividend delta: None until the venture has been paid on two separate turns
+        prev_div = getattr(ent, '_prev_dividend', None)
+        if prev_div is not None:
+            dividend_delta = dividend - prev_div
+        else:
+            dividend_delta = None
+
         # Top outside holder
         top_outside = _top_outside_holder(ent, loyal_ids, dead_ids)
 
@@ -209,6 +217,7 @@ def report(game, house: str) -> GripReport:
             sector=PRODUCES.get(ent.kind) or "bank",
             tier=ent.tier,
             dividend=dividend,
+            dividend_delta=dividend_delta,
             director=director,
             your_stake=your_stake,
             top_outside=top_outside,

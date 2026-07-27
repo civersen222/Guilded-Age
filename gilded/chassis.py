@@ -236,6 +236,9 @@ class GildedGame:
                 if skim_amt > 0 and director is not None:
                     director.gold_reserve = getattr(director, 'gold_reserve', 0.0) + skim_amt
                     take -= skim_amt
+                # Save previous dividend before overwriting
+                if ent._last_dividend != 0.0 or ent._prev_dividend is not None:
+                    ent._prev_dividend = ent._last_dividend
                 ent._last_dividend = take
                 take_total += take
             if take_total > 0:

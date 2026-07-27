@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple
 import pygame
 
 from gilded.dashboard import delta, scoreboard
-from gilded.grip import report as grip_report
+from gilded.grip import _name_for, report as grip_report
 from gilded.intel import report as intel_report, threat_rank
 from gilded.market import COMMODITIES
 from gilded.papers import compose
@@ -553,7 +553,74 @@ class BroadsheetView:
         lines.append(" | ".join(ticker_parts))
         # Venture count
         lines.append(f"Enterprises: {len(r.enterprises)}")
+        # Per-venture ledger rows
+        for el in r.enterprises:
+            # Director name or "vacant"
+            if el.director is not None:
+                dir_label = el.director.name
+            else:
+                dir_label = "vacant"
+            # Skim marker — use the row's own disloyal flag, not the name
+            skim = " [skim]" if (el.director is not None and el.director.disloyal) else ""
+            # Dividend delta
+            if el.dividend_delta is None:
+                delta_str = "new"
+            else:
+                sign = "+" if el.dividend_delta >= 0 else "-"
+                delta_str = f"{sign}{abs(el.dividend_delta):.1f}"
+            # Top outside holder — resolve ID to name
+            if el.top_outside is not None:
+                outside_id, outside_pct = el.top_outside
+                outside_name = _name_for(g, outside_id)
+                outside_str = f"{outside_name} {outside_pct:.1f}%"
+            else:
+                outside_str = "none"
+            lines.append(
+                f"  {el.name} | {el.sector} | tier {el.tier} | "
+                f"div {el.dividend:.1f} ({delta_str}) | "
+                f"dir: {dir_label}{skim} | "
+                f"stake: {el.your_stake:.1f}% | "
+                f"top outside: {outside_str}"
+            )
         return lines
+
+    def enterprise_actions(self) -> List[dict]:
+        g = self.game
+        r = grip_report(g, self.house)
+        from gilded.society.schemes import share_price
+        actions = []
+        # Per-venture actions
+        for el in r.enterprises:
+            eid = el.eid
+            actions.append({"label": f"Expand {el.name}", "action": {"expand_enterprise": eid}, "eid": eid})
+            actions.append({"label": f"Appoint Director for {el.name}", "action": {"appoint_director": eid}, "eid": eid})
+            actions.append({"label": f"Buy Shares in {el.name}", "action": {"buy_shares": eid}, "eid": eid})
+            actions.append({"label": f"Sell Shares in {el.name}", "action": {"sell_shares": eid}, "eid": eid})
+        # Found enterprise (page-level)
+        actions.append({"label": "Found Enterprise", "action": {"found_enterprise": True}, "eid": None})
+        # Defend buyouts — for each venture with outside holders
+        for el in r.enterprises:
+            if el.top_outside is not None:
+                outside_id, outside_pct = el.top_outside
+                ent = next((e for e in g.enterprises if e.eid == el.eid), None)
+                if ent is not None:
+                    price = share_price(ent, g) * outside_pct
+                    actions.append({
+                        "label": f"Buy out {_name_for(g, outside_id)}'s stake in {el.name}",
+                        "action": {"defend_buyout": (el.eid, outside_id)},
+                        "eid": el.eid,
+                        "price": price
+                    })
+        # Attack takeover — targeting the top threat
+        threats = threat_rank(g)
+        if threats:
+            target_house = threats[0]
+            actions.append({
+                "label": f"Hostile Takeover of {target_house}",
+                "action": {"attack_takeover": target_house},
+                "eid": None
+            })
+        return actions
 
     def _draw_enterprises(self, surface, content) -> None:
         title = _font(30, bold=True).render("ENTERPRISES", True, INK)
