@@ -813,15 +813,18 @@ def _init_appoint_director(ctx, eid=None, char_id=None, **kw) -> List[str]:
     ent = next((e for e in game.enterprises if e.eid == eid), None)
     if ent is None:
         return ["There is no such enterprise to appoint a Director for"]
-    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
-    pick = by_id.get(char_id)
-    if pick is None:
+    # Consult the candidate pool — refuse anyone not offered
+    pool = director_candidates(game, ctx.house, eid)
+    pool_ids = {c.id for c in pool}
+    if char_id not in pool_ids:
         return ["There is no such person to appoint as Director"]
+    pick = next(c for c in pool if c.id == char_id)
     ent.director_id = pick.id
     moved = transfer_shares(ent, realm.ruler.id, pick.id, DIRECTOR_SALARY_PCT)
     modify_opinion(pick, realm.ruler, int(15 * ctx.scale), "made Director")
     if moved > 0:
-        return [f"{pick.name} is appointed Director of {ent.name} ({moved:.0f}% shares salary)"]
+        pct = f"{moved:g}"
+        return [f"{pick.name} is appointed Director of {ent.name} ({pct}% shares salary)"]
     else:
         return [f"{pick.name} is appointed Director of {ent.name}"]
 

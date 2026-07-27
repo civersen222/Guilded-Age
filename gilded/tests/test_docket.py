@@ -705,3 +705,104 @@ def test_appoint_honors_scale():
     botched_delta = botched_after - before2
     assert clean_delta > 0, "clean appointment should improve opinion"
     assert botched_delta < clean_delta, "botched appointment should improve opinion less"
+
+
+def test_appoint_rejects_ineligible():
+    """Handler must refuse char_ids not in the candidate pool (ruler, council, sitting director)."""
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-reject", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    ent.ledger.clear()
+    ent.assign_share(realm.ruler.id, 100.0)
+    
+    # Try to appoint the ruler
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=realm.ruler.id)
+    assert ent.director_id != realm.ruler.id, "ruler should not be seated as director"
+    assert msgs, "should return a refusal line"
+    
+    # Try to appoint a council member
+    council = [c for c in realm.court.positions.values() if c is not None]
+    if council:
+        g.rng = SeqRng([0.0])
+        msgs = initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=council[0].id)
+        assert ent.director_id != council[0].id, "council member should not be seated as director"
+        assert msgs, "should return a refusal line"
+    
+    # Try to appoint a sitting director from another enterprise
+    other = found_enterprise("bank", h, prov, "test-bank-other", g.rng)
+    other.under_construction = 0
+    g.enterprises.append(other)
+    cands = director_candidates(g, h, other.eid)
+    if cands:
+        sitting = cands[0]
+        other.director_id = sitting.id
+        g.rng = SeqRng([0.0])
+        msgs = initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=sitting.id)
+        assert ent.director_id != sitting.id, "sitting director should not be seated again"
+        assert msgs, "should return a refusal line"
+
+
+def test_appoint_rejects_foreign():
+    """Handler must refuse a rival house's ruler (foreign character)."""
+    random.seed(99)
+    g = FakeGame()
+    g.rng = random.Random(99)
+    g.society = SocietyState(g.rng)
+    g.atlas = generate_atlas(99)
+    g.houses = assign_houses(g.atlas, 99)
+    names = sorted(g.houses)[:2]
+    g.realms = {n: create_house_realm(n, g.society) for n in names}
+    g.enterprises = []
+    g.wars = []
+    g.events = []
+    g.turn = 3
+    g.marriages = MarriageRegistry()
+    g.scheme_mgr = SchemeManager()
+    g.legitimacy = {n: 50.0 for n in g.houses}
+    g.directives = {n: Directives() for n in g.houses}
+    g.tide = IdeologicalTide()
+    
+    h = names[0]
+    realm = g.realms[h]
+    prov = next(p for p in sorted(g.atlas.provinces.values(), key=lambda p: p.pid) if p.owner == h)
+    ent = found_enterprise("bank", h, prov, "test-bank-fgn", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    ent.ledger.clear()
+    ent.assign_share(realm.ruler.id, 100.0)
+    
+    # Try to appoint the rival house's ruler
+    foreign_ruler = g.realms[names[1]].ruler
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=foreign_ruler.id)
+    assert ent.director_id != foreign_ruler.id, "foreign ruler should not be seated as director"
+    assert msgs, "should return a refusal line"
+
+
+def test_appoint_salary_line_matches_amount():
+    """The salary line must name the percentage that actually moved, not a rounded zero."""
+    import re
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-sal", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    # Give ruler 0.4% so transfer_shares clamps to 0.4% (less than 0.5% -> .0f rounds to 0)
+    ent.ledger.clear()
+    ent.assign_share(realm.ruler.id, 0.4)
+    pick = director_candidates(g, h, ent.eid)[0]
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=pick.id)
+    moved = ent.ledger.get(pick.id, 0.0)
+    assert moved > 0, "something should have moved"
+    line = " ".join(msgs)
+    # Extract the percentage from the line
+    m = re.search(r'(\d+(?:\.\d+)?)\s*%', line)
+    assert m, f"no percentage in line: {line}"
+    line_pct = float(m.group(1))
+    assert abs(line_pct - moved) < 0.01, f"line says {line_pct}% but {moved}% actually moved: {line}"
