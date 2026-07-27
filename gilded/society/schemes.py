@@ -329,6 +329,19 @@ def compromise(agent, target, rng=_random, legitimacy=None,
 TAKEOVER_THRESHOLD = 50.0   # average portfolio stake that flips the House
 TAKEOVER_PRICE = 2.0        # gold per 1% of one enterprise
 TAKEOVER_TRANCHE = 15.0     # max pct bought per enterprise, per seller, per turn
+TAKEOVER_REFERENCE = 4.2    # median market value at base rate (seed 42, turn 3)
+BAND_LO = 0.25
+BAND_HI = 4.0
+
+
+def share_price(ent, game) -> float:
+    """Gold a predator pays for ONE PERCENT of *ent*, priced off the market."""
+    val = game.market.value(ent, game)
+    if val <= 0:
+        raw = TAKEOVER_PRICE
+    else:
+        raw = TAKEOVER_PRICE * (val / TAKEOVER_REFERENCE)
+    return max(TAKEOVER_PRICE * BAND_LO, min(TAKEOVER_PRICE * BAND_HI, raw))
 
 
 class Takeover:
@@ -344,10 +357,10 @@ class Takeover:
         self.target_house = target_house
         self.complete = False
 
-    def advance(self, realms, enterprises, rng=_random) -> List[str]:
+    def advance(self, realms, enterprises, rng, game) -> List[str]:
         """One turn of quiet buying: approach every disloyal holder and
         take up to a tranche of each stake, gold changing hands at
-        TAKEOVER_PRICE. Completes when the average stake clears the
+        share_price. Completes when the average stake clears the
         threshold."""
         from gilded.society.realm import disloyal_shareholders
         if self.complete:
@@ -360,12 +373,13 @@ class Takeover:
         target_ents = [e for e in enterprises if e.house == self.target_house]
         for seller in disloyal_shareholders(target_realm, enterprises):
             for ent in target_ents:
-                want = min(TAKEOVER_TRANCHE, self.buyer.gold_reserve / TAKEOVER_PRICE)
+                price = share_price(ent, game)
+                want = min(TAKEOVER_TRANCHE, self.buyer.gold_reserve / price)
                 if want <= 0:
                     break
                 moved = transfer_shares(ent, seller.id, self.buyer.id, want)
                 if moved > 0:
-                    cost = moved * TAKEOVER_PRICE
+                    cost = moved * price
                     self.buyer.gold_reserve -= cost
                     seller.gold_reserve += cost
                     modify_opinion(seller, self.buyer, 5, "a generous buyer")

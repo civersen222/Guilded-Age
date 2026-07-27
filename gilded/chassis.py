@@ -279,7 +279,7 @@ class GildedGame:
         self._emit(self.scheme_mgr.advance_all(self.realms, self.legitimacy,
                                                self.rng), "gazette")
         for tk in list(self.takeovers):
-            self._emit(tk.advance(self.realms, self.enterprises, self.rng),
+            self._emit(tk.advance(self.realms, self.enterprises, self.rng, self),
                        "gazette")
             if tk.complete:
                 self.takeovers.remove(tk)

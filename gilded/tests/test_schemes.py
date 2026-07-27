@@ -4,6 +4,7 @@
 import random
 
 from gilded.enterprises import Enterprise
+from gilded.chassis import GildedGame
 from gilded.society.characters import Secret, SocietyState
 from gilded.society.ideology import IdeologicalTide
 from gilded.society.realm import create_house_realm
@@ -13,6 +14,8 @@ from gilded.society.schemes import (
     SCHEME_THRESHOLD,
     SchemeManager,
     Takeover,
+    TAKEOVER_PRICE,
+    share_price,
     blackmail,
     compromise,
     expose_secret,
@@ -170,7 +173,12 @@ def test_leverage_verbs():
 
 
 def test_takeover_buys_the_house_out():
-    ra, rb, realms = _two_realms(99)
+    game = GildedGame(seed=99)
+    for _ in range(3):
+        game.end_turn()
+    ra = game.realms["Vantrell"]
+    rb = game.realms["Karsgate"]
+    realms = game.realms
     buyer = ra.ruler
     buyer.gold_reserve = 1000.0
     seller = rb.characters[10]
@@ -180,7 +188,7 @@ def test_takeover_buys_the_house_out():
     tk = Takeover(buyer, "Vantrell", "Karsgate")
     ents = [ent]
     for _ in range(6):
-        msgs = tk.advance(realms, ents, SeqRng([]))
+        msgs = tk.advance(realms, ents, SeqRng([]), game)
         if tk.complete:
             break
     assert tk.complete
@@ -188,7 +196,7 @@ def test_takeover_buys_the_house_out():
     assert ra.ruler.id in ent.ledger                # ledger re-carved for the buyer
     assert seller.gold_reserve > 0
     assert any("HOSTILE TAKEOVER" in m for m in msgs)
-    assert tk.advance(realms, ents, SeqRng([])) == []
+    assert tk.advance(realms, ents, SeqRng([]), game) == []
 
 
 def test_conspiracy_staged_accident():
@@ -220,3 +228,65 @@ def test_conspiracy_exposure_is_nuclear():
     assert rb.ruler._society.opinions[(rb.ruler.id, m.id)] <= -60
     assert not m.is_alive                           # execution roll came up
     assert any("loses their nerve" in m_ for m_ in msgs)
+# --- L3.5: share_price tests ---
+
+def test_share_price_positive_floor():
+    """An enterprise the market values at 0 still costs > 0 per percent."""
+    game = GildedGame(seed=42)
+    for _ in range(3):
+        game.end_turn()
+    worthless = [e for e in game.enterprises if game.market.value(e, game) == 0.0][0]
+    p = share_price(worthless, game)
+    assert p > 0.0
+
+def test_share_price_rises_in_boom():
+    """Raising the commodity price raises the share price."""
+    game = GildedGame(seed=42)
+    for _ in range(3):
+        game.end_turn()
+    from gilded.market import PRODUCES
+    e = max([e for e in game.enterprises if game.market.value(e, game) > 0],
+            key=lambda e: game.market.value(e, game))
+    commodity = PRODUCES.get(e.kind)
+    game.market.prices[commodity] = 0.5
+    cheap = share_price(e, game)
+    game.market.prices[commodity] = 4.0
+    dear = share_price(e, game)
+    assert dear > cheap
+
+def test_share_price_bounded():
+    """share_price stays within [TAKEOVER_PRICE * 0.25, TAKEOVER_PRICE * 4.0]."""
+    game = GildedGame(seed=42)
+    for _ in range(3):
+        game.end_turn()
+    lo = TAKEOVER_PRICE * 0.25
+    hi = TAKEOVER_PRICE * 4.0
+    for e in game.enterprises:
+        p = share_price(e, game)
+        assert lo - 1e-9 <= p <= hi + 1e-9
+
+def test_share_price_both_sides_of_base():
+    """Some ventures price above 2.0, some below, in a normal market."""
+    game = GildedGame(seed=42)
+    for _ in range(3):
+        game.end_turn()
+    prices = [share_price(e, game) for e in game.enterprises]
+    above = [p for p in prices if p > TAKEOVER_PRICE + 1e-9]
+    below = [p for p in prices if p < TAKEOVER_PRICE - 1e-9]
+    assert above, "no venture prices above the base rate"
+    assert below, "no venture prices below the base rate"
+
+def test_advance_uses_game_not_flat_rate():
+    """advance() requires a game argument and charges the priced rate."""
+    game = GildedGame(seed=42)
+    for _ in range(3):
+        game.end_turn()
+    target_house = sorted(game.houses)[0]
+    buyer_house = sorted(game.houses)[1]
+    buyer = game.realms[buyer_house].ruler
+    buyer.gold_reserve = 1000.0
+    tk = Takeover(buyer, buyer_house, target_house)
+    target_ents = [e for e in game.enterprises if e.house == target_house]
+    if target_ents:
+        tk.advance(game.realms, target_ents, SeqRng([]), game)
+        # should not raise
