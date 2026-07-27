@@ -449,3 +449,119 @@ def test_enterprises_banner_carries_the_market_ticker():
     banner = "\n".join(lines)
     for commodity in COMMODITIES:
         assert commodity in banner, f"banner should mention commodity '{commodity}'"
+
+
+# ─────────────────────────────────────────────────────────────────
+# L4.1d — five holes the L4.1c suite did not measure
+# ─────────────────────────────────────────────────────────────────
+
+def _distinct_enterprises_view(seed=314, turns=5):
+    """Fixture with five pairwise-distinct figures and a non-kin predator.
+    
+    seed=314, turns=5 yields:
+      stake=87.5, threshold=50.0, margin=37.5, pred_stake=7.5, shortfall=42.5
+      predator=Cyrus Ferrenholt (not kin)
+    """
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView
+    from gilded.agenda import ensure_agenda
+    g = GildedGame(seed=seed)
+    player = next(iter(g.houses))
+    for h in g.houses:
+        if h != player:
+            ensure_agenda(g, h)
+    for _ in range(turns):
+        g.end_turn()
+    view = BroadsheetView(g, player)
+    view.active_tab = "Enterprises"
+    return g, view
+
+
+def test_enterprises_stake_and_threshold_not_swapped():
+    """L4.1d-1: the stake sits behind 'stake' and the threshold behind 'threshold'."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    grip_line = [ln for ln in v.enterprises_lines() if ln.startswith("Grip:")][0]
+    # Adjacency: the rendered form label-and-value together
+    assert f"stake {r.controlling_stake:.1f}%" in grip_line, (
+        f"Grip line should contain 'stake {r.controlling_stake:.1f}%': {grip_line}"
+    )
+    assert f"threshold {r.threshold:.1f}%" in grip_line, (
+        f"Grip line should contain 'threshold {r.threshold:.1f}%': {grip_line}"
+    )
+    # Guard: the two figures must be distinct so the test is meaningful
+    assert f"{r.controlling_stake:.1f}" != f"{r.threshold:.1f}", (
+        "fixture collision: stake == threshold"
+    )
+
+
+def test_enterprises_margin_sign_correct():
+    """L4.1d-2: the margin renders with the correct sign, not flipped."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    grip_line = [ln for ln in v.enterprises_lines() if ln.startswith("Grip:")][0]
+    # Adjacency: exact rendered form "margin X%"
+    expected = f"margin {r.margin:.1f}%"
+    assert expected in grip_line, (
+        f"Grip line should contain '{expected}': {grip_line}"
+    )
+    # Guard: margin must differ from all other figures
+    margin_str = f"{r.margin:.1f}"
+    for name, val in [("stake", r.controlling_stake), ("threshold", r.threshold)]:
+        assert margin_str != f"{val:.1f}", f"fixture collision: margin == {name}"
+
+
+def test_enterprises_predator_line_states_own_stake():
+    """L4.1d-3: the predator line states the predator's own stake, not its shortfall."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    pred = r.top_predator
+    assert pred is not None, "fixture requires a predator"
+    lines = v.enterprises_lines()
+    pred_line = [ln for ln in lines if ln.startswith("Top predator:")][0]
+    shortfall = r.threshold - pred.stake
+    # Adjacency: the exact rendered form "{stake}%, needs"
+    expected = f"{pred.stake:.1f}%, needs"
+    assert expected in pred_line, (
+        f"Predator line should contain '{expected}': {pred_line}"
+    )
+    # Guard: stake must differ from shortfall so the test is meaningful
+    assert f"{pred.stake:.1f}" != f"{shortfall:.1f}", (
+        "fixture collision: predator stake == shortfall"
+    )
+
+
+def test_enterprises_predator_not_kin_is_not_marked():
+    """L4.1d-4: a predator who is NOT kin is not marked with (kin)."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    pred = r.top_predator
+    assert pred is not None, "fixture requires a predator"
+    # Prove the predator is genuinely not kin
+    realm = g.realms.get(v.house)
+    is_kin = False
+    if realm is not None:
+        for ch in realm.characters:
+            if ch.id == pred.id:
+                is_kin = True
+                break
+    assert not is_kin, (
+        f"fixture failure: predator {pred.name} ({pred.id}) is kin to {v.house}"
+    )
+    lines = v.enterprises_lines()
+    pred_line = [ln for ln in lines if ln.startswith("Top predator:")][0]
+    assert "(kin)" not in pred_line, (
+        f"Non-kin predator should not carry (kin) marker: {pred_line}"
+    )
+
+
+def test_enterprises_banner_counts_ventures():
+    """L4.1d-5: the banner states the correct number of enterprises."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    lines = v.enterprises_lines()
+    ventures_line = [ln for ln in lines if ln.startswith("Enterprises:")][0]
+    expected = f"Enterprises: {len(r.enterprises)}"
+    assert ventures_line == expected, (
+        f"Expected '{expected}', got '{ventures_line}'"
+    )
