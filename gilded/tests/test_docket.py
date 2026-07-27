@@ -7,6 +7,7 @@ from gilded.directives import Directives
 from gilded.docket import (
     DOMAIN_PRIORITY,
     MAX_PETITIONS,
+    director_candidates,
     generate_petitions,
     initiative,
     resolve_unattended,
@@ -555,3 +556,152 @@ def test_sell_shares_small_price_format():
     text = " ".join(msgs)
     if gold_received > 0:
         assert "0 gold" not in text
+
+
+def test_director_candidates_ranked():
+    """The pool comes back best-industry-first and is not empty."""
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-1", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    cands = director_candidates(g, h, ent.eid)
+    assert len(cands) > 0, "pool should not be empty"
+    inds = [c.get_effective_stat("industry") for c in cands]
+    assert inds == sorted(inds, reverse=True), "pool must be sorted industry descending"
+
+
+def test_director_candidates_excludes_ruler():
+    """The ruler is never offered as a candidate."""
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-2", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    cands = director_candidates(g, h, ent.eid)
+    assert all(c.id != realm.ruler.id for c in cands), "ruler should not be in candidate pool"
+
+
+def test_director_candidates_excludes_council():
+    """Council members are never offered as candidates."""
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-3", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    cands = director_candidates(g, h, ent.eid)
+    court_ids = {ch.id for ch in realm.court.positions.values() if ch}
+    assert not any(c.id in court_ids for c in cands), "council members should not be in pool"
+
+
+def test_director_candidates_excludes_sitting_directors():
+    """A character already directing any enterprise is excluded from the pool."""
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    # Create two enterprises
+    ent1 = found_enterprise("bank", h, prov, "test-bank-4a", g.rng)
+    ent1.under_construction = 0
+    g.enterprises.append(ent1)
+    ent2 = found_enterprise("bank", h, prov, "test-bank-4b", g.rng)
+    ent2.under_construction = 0
+    g.enterprises.append(ent2)
+    # Seat a director on ent1
+    pick = _adult_not_seated(realm)
+    ent1.director_id = pick.id
+    # ent2's candidate pool should NOT include the sitting director
+    cands = director_candidates(g, h, ent2.eid)
+    assert not any(c.id == pick.id for c in cands), "sitting director should be excluded"
+
+
+def test_appoint_sets_director():
+    """appoint_director initiative sets director_id on the enterprise."""
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-5", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    ent.ledger.clear()
+    ent.assign_share(realm.ruler.id, 100.0)
+    pick = director_candidates(g, h, ent.eid)[0]
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=pick.id)
+    assert ent.director_id == pick.id, "director_id should be set to the appointee"
+
+
+def test_appoint_survives_tick():
+    """An appointed director survives a tick_directors call (persistence guard)."""
+    from gilded.society.realm import tick_directors
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-6", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    ent.ledger.clear()
+    ent.assign_share(realm.ruler.id, 100.0)
+    pick = director_candidates(g, h, ent.eid)[0]
+    g.rng = SeqRng([0.0])
+    initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=pick.id)
+    tick_directors(realm, g.enterprises, g.rng)
+    assert ent.director_id == pick.id, "director_id should survive tick_directors"
+
+
+def test_appoint_salary_paid():
+    """Appointment moves DIRECTOR_SALARY_PCT from ruler's stake to director's."""
+    from gilded.society.realm import DIRECTOR_SALARY_PCT
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-7", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    ent.ledger.clear()
+    ent.assign_share(realm.ruler.id, 100.0)
+    pick = director_candidates(g, h, ent.eid)[0]
+    ruler_before = ent.ledger.get(realm.ruler.id, 0.0)
+    g.rng = SeqRng([0.0])
+    initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=pick.id)
+    ruler_after = ent.ledger.get(realm.ruler.id, 0.0)
+    director_stake = ent.ledger.get(pick.id, 0.0)
+    assert director_stake >= DIRECTOR_SALARY_PCT - 0.01, f"director should receive salary stake ({director_stake})"
+    assert ruler_before - ruler_after >= DIRECTOR_SALARY_PCT - 0.01, "salary should come from ruler's stake"
+
+
+def test_appoint_honors_scale():
+    """A botched appointment wins the appointee over by less than a clean one."""
+    g, h = _game(42)
+    realm = g.realms[h]
+    prov = _owned_province(g, h)
+    ent = found_enterprise("bank", h, prov, "test-bank-8", g.rng)
+    ent.under_construction = 0
+    g.enterprises.append(ent)
+    ent.ledger.clear()
+    ent.assign_share(realm.ruler.id, 100.0)
+    pick = director_candidates(g, h, ent.eid)[0]
+    before = g.society.opinions.get((pick.id, realm.ruler.id), 0)
+    g.rng = SeqRng([0.0])
+    initiative(g, h, "appoint_director", realm.ruler, eid=ent.eid, char_id=pick.id)
+    clean_after = g.society.opinions.get((pick.id, realm.ruler.id), 0)
+    clean_delta = clean_after - before
+    # Now test botched
+    g2, h2 = _game(42)
+    realm2 = g2.realms[h2]
+    prov2 = _owned_province(g2, h2)
+    ent2 = found_enterprise("bank", h2, prov2, "test-bank-8b", g2.rng)
+    ent2.under_construction = 0
+    g2.enterprises.append(ent2)
+    ent2.ledger.clear()
+    ent2.assign_share(realm2.ruler.id, 100.0)
+    pick2 = director_candidates(g2, h2, ent2.eid)[0]
+    before2 = g2.society.opinions.get((pick2.id, realm2.ruler.id), 0)
+    g2.rng = SeqRng([0.99])
+    initiative(g2, h2, "appoint_director", realm2.ruler, eid=ent2.eid, char_id=pick2.id)
+    botched_after = g2.society.opinions.get((pick2.id, realm2.ruler.id), 0)
+    botched_delta = botched_after - before2
+    assert clean_delta > 0, "clean appointment should improve opinion"
+    assert botched_delta < clean_delta, "botched appointment should improve opinion less"

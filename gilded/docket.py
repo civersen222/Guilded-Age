@@ -26,7 +26,8 @@ from gilded.society.court import Court, CourtPosition
 from gilded.society.characters import modify_opinion
 from gilded.society.dispositions import apply_drift
 from gilded.society.labor import buy_off_leader, cover_up, martyr_leader
-from gilded.society.shares import initial_ledger
+from gilded.society.realm import DIRECTOR_SALARY_PCT
+from gilded.society.shares import initial_ledger, transfer_shares
 
 FESTER_TURNS = 2                  # unattended + no seat -> auto-resolution after this
 MAX_PETITIONS = 6                 # per house per turn
@@ -587,6 +588,28 @@ def resolve_unattended(game, house_name: str, petitions) -> List[str]:
 
 # --- initiatives -------------------------------------------------------------
 
+def director_candidates(game, house, eid) -> List:
+    """Return eligible characters who could take a Director chair at enterprise eid,
+    ranked by effective industry descending."""
+    realm = game.realms[house]
+    ent = next((e for e in game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return []
+    by_id = {ch.id: ch for ch in realm.characters}
+    court_ids = {ch.id for ch in realm.court.positions.values() if ch}
+    # Already-directing characters (any house enterprise)
+    taken = set()
+    for e in game.enterprises:
+        d = by_id.get(e.director_id)
+        if d is not None and d.is_alive:
+            taken.add(d.id)
+    pool = [ch for ch in realm.characters
+            if ch.is_alive and ch.age >= 16 and ch.id != realm.ruler.id
+            and ch.id not in taken and ch.id not in court_ids]
+    pool.sort(key=lambda ch: ch.get_effective_stat("industry"), reverse=True)
+    return pool
+
+
 def _init_propose_marriage(ctx, target_house=None, **kw) -> List[str]:
     msg = ctx.game.marriages.arrange_match_between(
         ctx.house, target_house, ctx.game.realms, ctx.game.houses,
@@ -783,6 +806,26 @@ def _init_sell_shares(ctx, eid=None, buyer_id=None, pct=0.0, **kw) -> List[str]:
     return _exec_share_trade(ctx, seller, buyer, ent, pct, "sell")
 
 
+def _init_appoint_director(ctx, eid=None, char_id=None, **kw) -> List[str]:
+    """Seat char_id as Director of enterprise eid, pay salary from ruler's stake."""
+    game = ctx.game
+    realm = game.realms[ctx.house]
+    ent = next((e for e in game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return ["There is no such enterprise to appoint a Director for"]
+    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
+    pick = by_id.get(char_id)
+    if pick is None:
+        return ["There is no such person to appoint as Director"]
+    ent.director_id = pick.id
+    moved = transfer_shares(ent, realm.ruler.id, pick.id, DIRECTOR_SALARY_PCT)
+    modify_opinion(pick, realm.ruler, int(15 * ctx.scale), "made Director")
+    if moved > 0:
+        return [f"{pick.name} is appointed Director of {ent.name} ({moved:.0f}% shares salary)"]
+    else:
+        return [f"{pick.name} is appointed Director of {ent.name}"]
+
+
 INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "propose_marriage": ("diplomacy", _init_propose_marriage),
     "found_enterprise": ("capital", _init_found_enterprise),
@@ -798,6 +841,7 @@ INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "establish_informant": ("diplomacy", _init_establish_informant),
     "buy_shares": ("capital", _init_buy_shares),
     "sell_shares": ("capital", _init_sell_shares),
+    "appoint_director": ("capital", _init_appoint_director),
 }
 
 
