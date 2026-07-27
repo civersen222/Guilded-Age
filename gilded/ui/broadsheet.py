@@ -1,5 +1,5 @@
 """The broadsheet screens (mission G22, Stage 1 reframe): the century read as a
-newspaper, now fronted by a persistent scoreboard HUD and a Council briefing.
+newspaper, fronted by a persistent scoreboard HUD, Council briefing, and Enterprises banner.
 
 BroadsheetView renders one House's world across seven tabs. A HUD strip (the
 Stage 1 read-model) rides above every tab so the four axes, the Tide, the era,

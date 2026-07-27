@@ -1,4 +1,4 @@
-"""G22 broadsheet screens: tabs, headless draw, and the click actions."""
+"""G22 broadsheet screens: tabs, headless draw, click actions, and Enterprises banner."""
 
 import os
 
