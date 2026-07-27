@@ -192,54 +192,54 @@ def test_enterprises_banner_shows_margin():
     banner = "\n".join(lines)
     r = grip_report(g, v.house)
     margin = r.margin
-    # Guard: margin must differ from threshold and stake so the test is meaningful
-    # At turn 5 seed 42, margin should be distinguishable from threshold
     margin_str = f"{margin:.1f}"
-    threshold_str = f"{r.threshold:.1f}"
-    assert margin_str != threshold_str, (
-        f"CANNOT MEASURE: margin ({margin_str}) equals threshold ({threshold_str}) "
-        f"at seed=42 turn=5 — fixture collision"
+    # Assert the margin line contains the 'margin' label — not just the number,
+    # which could appear as the predator's shortfall on a different line.
+    grip_line = [ln for ln in lines if ln.startswith("Grip:")][0]
+    assert "margin" in grip_line and margin_str in grip_line, (
+        f"grip line should contain 'margin {margin_str}'. grip_line='{grip_line}'"
     )
-    assert margin_str in banner, f"banner should contain margin '{margin_str}'"
 
 
 def test_enterprises_banner_says_predator_still_needs():
     """A3: banner states how much the top predator still needs to reach threshold."""
-    # Use Ashworth house at turn=7 where shortfall (45.0) != margin (40.0)
-    # so the test is actually measuring something, not a fixture collision.
+    # Use Ferrenholt at turn=3 where a predator exists (Alexios Ashworth, 15.0%)
+    # and shortfall (35.0%) == margin (35.0%) — the fixture collision.
+    # The test must assert the shortfall appears WITH the predator's name
+    # on the same line, so the margin number on line 1 cannot satisfy it.
     from gilded.chassis import GildedGame
     from gilded.ui.broadsheet import BroadsheetView
     from gilded import agenda
     g = GildedGame(seed=42)
-    player = "Ashworth"
-    assert player in g.houses, f"expected Ashworth in houses, got {list(g.houses)}"
+    player = "Ferrenholt"
+    assert player in g.houses, f"expected Ferrenholt in houses, got {list(g.houses)}"
     g.houses[player].is_player = True
     for h in g.houses:
         if h != player:
             agenda.ensure_agenda(g, h)
-    for _ in range(7):
+    for _ in range(3):
         g.end_turn()
     view = BroadsheetView(g, player)
     lines = view.enterprises_lines()
     banner = "\n".join(lines)
     r = grip_report(g, player)
-    if r.top_predator is None:
-        assert any("none" in ln for ln in lines)
-        return
+    # This fixture MUST have a predator — if not, the test cannot measure
+    assert r.top_predator is not None, (
+        f"fixture has no top predator at seed=42 turn=3 player={player} — "
+        f"test cannot measure the shortfall assertion"
+    )
     pred = r.top_predator
     shortfall = r.threshold - pred.stake
     shortfall_str = f"{shortfall:.1f}"
-    margin_str = f"{r.margin:.1f}"
-    # Guard: shortfall must differ from margin so the test is actually measuring
-    assert shortfall_str != margin_str, (
-        f"CANNOT MEASURE: shortfall ({shortfall_str}) equals margin ({margin_str}) "
-        f"— fixture collision, test cannot distinguish the two values"
-    )
-    # The shortfall should appear in the banner as "needs X.X% more"
     needs_str = f"needs {shortfall_str}% more"
-    assert needs_str in banner, (
-        f"banner should contain '{needs_str}' "
-        f"(predator {pred.name} needs {shortfall_str}% more)"
+    # Assert the shortfall appears on the SAME LINE as the predator's name.
+    # This prevents the margin (which equals the shortfall at this fixture)
+    # from satisfying the assertion from line 1.
+    predator_line = [ln for ln in lines if pred.name in ln][0]
+    assert needs_str in predator_line, (
+        f"predator line should contain '{needs_str}' "
+        f"(predator {pred.name} needs {shortfall_str}% more). "
+        f"predator_line='{predator_line}'"
     )
 
 
@@ -268,11 +268,21 @@ def test_enterprises_delta_is_none_before_first_clearing():
 
 def test_enterprises_snapshot_before_clearing():
     """Mutation 2: verify snapshot is taken BEFORE clearing (delta reflects real change)."""
-    g, v = _enterprises_view(turns=1)
-    # After one clearing, delta should be a real number (not None)
-    for commodity in COMMODITIES:
-        d = g.market.delta(commodity)
-        assert d is not None, f"delta('{commodity}') should not be None after clearing"
+    # Run two clearings so we can measure what a correct snapshot produces
+    # that a late snapshot cannot: after the FIRST clearing, delta reflects
+    # the actual price movement. After the SECOND clearing, a late snapshot
+    # would make every delta exactly 0.0 (post-clearing prices snapshot,
+    # then post-clearing prices again). A correct pre-clearing snapshot
+    # produces non-zero deltas when prices moved between turns.
+    g, v = _enterprises_view(turns=2)
+    # At least one commodity must have a non-zero delta after two clearings
+    # (a late snapshot would make all deltas 0.0)
+    deltas = [g.market.delta(c) for c in COMMODITIES]
+    non_zero = sum(1 for d in deltas if d is not None and abs(d) > 1e-9)
+    assert non_zero > 0, (
+        f"All deltas are zero after two clearings — snapshot must be taken "
+        f"BEFORE clearing to capture real price changes. deltas={dict(zip(COMMODITIES, deltas))}"
+    )
 
 
 def test_enterprises_ticker_direction_rising():
@@ -359,13 +369,11 @@ def test_enterprises_banner_is_a_pure_read():
 
 def test_enterprises_tab_puts_ink_on_the_page():
     """Mutation 8: _draw_enterprises actually draws content (not a blank page)."""
+    from gilded.ui.broadsheet import TAB_H, HUD_H, PAPER_BG
     g, v = _enterprises_view(turns=3)
     surf = pygame.Surface((1280, 900))
     v.draw(surf)
-    # Check pixels in the content area are not all background (PAPER_BG = (245, 235, 220))
-    PAPER_BG = (245, 235, 220)
-    TAB_H = 40
-    HUD_H = 30
+    # Check pixels in the content area are not all background
     content_y = TAB_H + HUD_H
     found_ink = False
     for x in range(10, 400):
