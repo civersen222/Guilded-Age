@@ -4,7 +4,7 @@ Coal → Steel → Freight (+ Farm), prices cleared each turn from real supply
 and demand. Deterministic: no game.rng in clearing.
 """
 
-from typing import Dict
+from typing import Dict, List, Optional
 
 COMMODITIES = ["coal", "steel", "freight", "farm"]
 
@@ -162,13 +162,31 @@ class Market:
 
     def __init__(self):
         self.prices: Dict[str, float] = {c: TARGET for c in COMMODITIES}
+        self._previous_prices: Dict[str, Optional[float]] = {c: None for c in COMMODITIES}
 
     def price(self, commodity: str) -> float:
         """Current price of a commodity."""
         return self.prices.get(commodity, TARGET)
 
+    def delta(self, commodity: str) -> Optional[float]:
+        """Change in price since the last clearing.
+
+        Returns None when there is no previous reading (market has never
+        cleared yet).  This distinguishes "no movement measured" from
+        "the price held steady" (which returns 0.0).
+        """
+        prev = self._previous_prices.get(commodity)
+        if prev is None:
+            return None
+        return self.prices.get(commodity, TARGET) - prev
+
     def clear(self, game) -> None:
         """Clear all commodity markets for this turn."""
+        # Snapshot BEFORE clearing — the previous reading is the price
+        # before this turn's supply/demand resolved
+        for c in COMMODITIES:
+            self._previous_prices[c] = self.prices[c]
+
         supply = supply_by_commodity(game)
         demand = demand_by_commodity(game)
 
