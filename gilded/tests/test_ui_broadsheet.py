@@ -54,7 +54,7 @@ def test_briefing_agenda_rules_a_petition():
 
 # ── Enterprises view helpers ─────────────────────────────────────────────
 
-def _enterprises_view(seed=42, turns=3):
+def _enterprises_view(seed=42, turns=0):
     """Game with agendas, advanced `turns` turns, view on Enterprises tab."""
     from gilded import agenda
     pygame.init()
@@ -617,24 +617,6 @@ def test_powers_tab_lists_houses_by_threat():
 # ─────────────────────────────────────────────────────────────────
 # Enterprises tab tests — Stage 4 L4.1b
 # ─────────────────────────────────────────────────────────────────
-
-def _enterprises_view(seed=42, turns=0):
-    """Return a game advanced `turns` turns and a BroadsheetView for the Enterprises tab."""
-    from gilded.chassis import GildedGame
-    from gilded.ui.broadsheet import BroadsheetView
-    from gilded import agenda
-    g = GildedGame(seed=seed)
-    player = next(iter(g.houses))
-    g.houses[player].is_player = True
-    for h in g.houses:
-        if h != player:
-            agenda.ensure_agenda(g, h)
-    for _ in range(turns):
-        g.end_turn()
-    view = BroadsheetView(g, player)
-    view.active_tab = "Enterprises"
-    return g, view
-
 
 
 def test_enterprises_band_is_spelled_for_a_player():
@@ -1354,5 +1336,94 @@ def test_attack_takeover_targets_top_threat():
     # It should NOT target the bottom threat
     assert target != bottom_threat, (
         f"Attack takeover incorrectly targets '{bottom_threat}' (least threatening)"
+    )
+
+
+# ── L4.2c: three behaviours a withheld mutation set found unmeasured ──
+
+def test_defend_buyout_action_payload_names_correct_venture():
+    """defend_buyout action tuple must name the correct venture in position 0."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    acts = v.enterprise_actions()
+    defend_actions = [a for a in acts if "defend_buyout" in a["action"]]
+
+    # Fixture adequacy: at least two ventures with outside holders
+    ventures_with_outside = [el for el in r.enterprises if el.top_outside is not None]
+    assert len(ventures_with_outside) >= 2, (
+        "fixture must have >=2 ventures with outside holders to discriminate payloads"
+    )
+
+    eids = [el.eid for el in ventures_with_outside]
+    for action in defend_actions:
+        payload = action["action"]["defend_buyout"]
+        assert isinstance(payload, tuple) and len(payload) == 2, (
+            f"defend_buyout action payload should be a 2-tuple: {payload!r}"
+        )
+        # Position 0 must be the venture eid from the descriptor's eid key
+        assert payload[0] == action["eid"], (
+            f"defend_buyout payload[0]={payload[0]} must equal descriptor eid={action['eid']}"
+        )
+        # Position 0 must be one of the actual venture eids
+        assert payload[0] in eids, (
+            f"defend_buyout payload[0]={payload[0]} not a valid venture eid"
+        )
+        # Position 1 must be the outside holder (not an eid)
+        assert payload[1] not in eids, (
+            f"defend_buyout payload[1]={payload[1]} looks like an eid, should be a holder id"
+        )
+
+
+def test_found_enterprise_offered_exactly_once():
+    """Found Enterprise action must appear exactly once per page."""
+    g, v = _enterprises_view(seed=42, turns=3)
+    r = grip_report(g, v.house)
+    acts = v.enterprise_actions()
+
+    # Fixture adequacy: at least two ventures so that once-per-page != once-per-venture
+    assert len(r.enterprises) >= 2, (
+        "fixture must have >=2 ventures to distinguish once-per-page from once-per-venture"
+    )
+
+    found_actions = [a for a in acts if "found_enterprise" in a["action"]]
+    assert len(found_actions) == 1, (
+        f"Found Enterprise must appear exactly once, got {len(found_actions)}"
+    )
+
+
+def test_vacant_director_prints_vacant():
+    """A venture with no Director must render 'dir: vacant', not a person's name."""
+    g, v = _enterprises_view(seed=42, turns=3)
+
+    # Get the player's enterprise eids (only these appear in enterprises_lines)
+    r = grip_report(g, v.house)
+    player_eids = {el.eid for el in r.enterprises}
+    assert len(player_eids) >= 1, "fixture must have at least one player enterprise"
+
+    # Vacate a director on a player enterprise and record its name
+    vacated_name = None
+    for ent in g.enterprises:
+        if ent.eid in player_eids and ent.director_id is not None:
+            vacated_name = ent.name
+            ent.director_id = None
+            break
+
+    assert vacated_name is not None, "could not find a player venture with a director to vacate"
+
+    lines = v.enterprises_lines()
+    # Find the row for the vacated venture
+    vacated_row = None
+    for ln in lines:
+        if vacated_name in ln and "dir: " in ln:
+            vacated_row = ln
+            break
+
+    assert vacated_row is not None, (
+        f"Could not find row for vacated venture '{vacated_name}'. Lines:\n" + "\n".join(lines)
+    )
+    # Extract the director field from that specific row
+    dir_part = vacated_row.split("dir: ")[1].split(" |")[0].replace(" [skim]", "").strip()
+    assert dir_part == "vacant", (
+        f"Director field '{dir_part}' for '{vacated_name}' is not 'vacant' — empty chair reads as a person"
     )
 
