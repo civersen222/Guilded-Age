@@ -161,3 +161,40 @@ def test_cover_up_relieves_unrest_and_stresses_ruler():
     assert ruler.stress >= labor.COVERUP_STRESS
     assert ("cover_up", prov.owner) in tide.atrocities
     assert events
+
+
+def test_accident_chance_with_director_none():
+    assert labor.accident_chance_with_director(70.0, None, None) == labor.accident_chance(70.0)
+
+
+def test_accident_chance_with_director_loyal():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 80.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    assert labor.accident_chance_with_director(70.0, ch, ruler) == labor.accident_chance(70.0)
+
+
+def test_accident_chance_with_director_disloyal():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 30.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    base = labor.accident_chance(70.0)
+    got = labor.accident_chance_with_director(70.0, ch, ruler)
+    assert got > base
+    assert got <= 1.0
+
+
+def test_accident_chance_with_director_zero_stays_zero():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 30.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    assert labor.accident_chance_with_director(40.0, ch, ruler) == 0.0

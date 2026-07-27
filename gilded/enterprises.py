@@ -114,3 +114,22 @@ def tick_construction(ent: Enterprise) -> bool:
         ent.tier = max(ent.tier, ent.target_tier)
         return True
     return False
+
+
+DIRECTOR_SKIM_PCT = 0.15  # fraction of dividend a disloyal Director diverts
+
+
+def director_skim(take: float, director, ruler) -> float:
+    """Gold the Director diverts from one enterprise's dividend.
+
+    Zero when the seat is empty, the Director is loyal, or the take is
+    non-positive.  Otherwise a fixed fraction of ``take``.
+    """
+    if director is None:
+        return 0.0
+    from gilded.society.realm import director_is_disloyal
+    if not director_is_disloyal(director, ruler):
+        return 0.0
+    if take <= 0:
+        return 0.0
+    return take * DIRECTOR_SKIM_PCT

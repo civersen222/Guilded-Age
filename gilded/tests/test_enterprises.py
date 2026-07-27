@@ -3,9 +3,11 @@
 import random
 
 from gilded.enterprises import (
+    DIRECTOR_SKIM_PCT,
     ENTERPRISE_TYPES,
     Enterprise,
     capacity_out,
+    director_skim,
     found_enterprise,
     output_gold,
     tick_construction,
@@ -151,3 +153,56 @@ def test_seize_enterprises():
     assert n == 1
     assert ent.house == "Victor" and ent.ledger == {victor.id: 100.0}
     assert other.house == "Third"
+
+
+def test_director_skim_zero_without_director():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    assert director_skim(100.0, None, ruler) == 0.0
+
+
+def test_director_skim_zero_when_loyal():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 80.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    assert director_skim(100.0, ch, ruler) == 0.0
+
+
+def test_director_skim_positive_when_disloyal():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 30.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    skim = director_skim(100.0, ch, ruler)
+    assert skim > 0
+    assert skim < 100.0
+    assert skim == 100.0 * DIRECTOR_SKIM_PCT
+
+
+def test_director_skim_scales():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 30.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    s1 = director_skim(100.0, ch, ruler)
+    s2 = director_skim(200.0, ch, ruler)
+    assert s2 == s1 * 2
+
+
+def test_director_skim_zero_on_negative():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 30.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    assert director_skim(-10.0, ch, ruler) == 0.0
+    assert director_skim(0.0, ch, ruler) == 0.0

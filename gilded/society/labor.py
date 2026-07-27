@@ -43,6 +43,21 @@ def accident_chance(dial: float) -> float:
     return over * over / 18000.0
 
 
+def accident_chance_with_director(dial: float, director, ruler) -> float:
+    """Accident chance scaled by Director neglect.
+
+    Returns exactly accident_chance(dial) when there is no Director or
+    the Director is loyal.  With a disloyal Director, multiplies the
+    base risk upward (up to 1.0).  Multiplicative, not additive, so
+    a safe dial stays safe.
+    """
+    from gilded.society.realm import director_is_disloyal
+    base = accident_chance(dial)
+    if director is None or not director_is_disloyal(director, ruler):
+        return base
+    return min(1.0, base * 2.0)
+
+
 def dial_from_ruler(ruler) -> float:
     """Where an AI ruler sets the dial, from conviction dispositions.
 
@@ -90,7 +105,8 @@ def tick_extraction(ent, province, realm, rng, tide) -> List[str]:
     """
     events: List[str] = []
     province.unrest += unrest_gain(ent.extraction_dial) * _tide_mult(tide, "movement_multiplier")
-    p = accident_chance(ent.extraction_dial) * max(0.25, min(2.0, (ent.tier) / WORKFORCE_REF))
+    director = _director_of(ent, realm)
+    p = accident_chance_with_director(ent.extraction_dial, director, realm.ruler) * max(0.25, min(2.0, (ent.tier) / WORKFORCE_REF))
     if rng.random() < p:
         events.extend(resolve_accident(ent, province, realm, rng, tide))
     events.extend(tick_movement(province, realm, rng))

@@ -14,8 +14,8 @@ from typing import Dict, List, Optional
 
 from gilded.world import generate_atlas
 from gilded.houses import assign_houses
-from gilded.enterprises import (Enterprise, capacity_out, found_enterprise,
-                                tick_construction)
+from gilded.enterprises import (Enterprise, capacity_out, director_skim,
+                                found_enterprise, tick_construction)
 from gilded.market import Market, tech_mod_for
 from gilded.directives import DIRECTIVE_KEYS, Directives, tick_friction
 from gilded.docket import (DOMAIN_SEAT, MAX_PETITIONS, Petition,
@@ -226,6 +226,16 @@ class GildedGame:
                 mod *= tech_mod_for(province)
                 take, _ = pay_dividends(realm, [ent], provinces, mod)
                 take -= self.market.input_cost(ent)
+                director = None
+                if hasattr(ent, 'director_id') and ent.director_id:
+                    for c in realm.characters:
+                        if c.id == ent.director_id:
+                            director = c
+                            break
+                skim_amt = director_skim(take, director, realm.ruler)
+                if skim_amt > 0 and director is not None:
+                    director.gold_reserve = getattr(director, 'gold_reserve', 0.0) + skim_amt
+                    take -= skim_amt
                 ent._last_dividend = take
                 take_total += take
             if take_total > 0:

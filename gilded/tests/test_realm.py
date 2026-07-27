@@ -3,14 +3,15 @@
 import random
 
 from gilded.enterprises import Enterprise
-from gilded.society.characters import SocietyState
+from gilded.society.characters import Character, SocietyState
 from gilded.society.court import CourtPosition
 from gilded.society.population import bulk_pass, promote, relevance_set
 from gilded.society.realm import (
-    DISLOYAL_LOYALTY,
+    DISLOYAL_LOYALTY, DISLOYAL_OPINION,
     Realm,
     create_house_realm,
     disloyal_shareholders,
+    director_is_disloyal,
     tick_directors,
     tick_loyalty,
 )
@@ -180,4 +181,48 @@ def test_relevance_set_and_promote():
                     if c.id not in rs)
     promote(realm, outsider)
     assert outsider.id in relevance_set(realm, set())
+
+
+def test_director_is_disloyal_none():
+    assert director_is_disloyal(None, None) is False
+
+
+def test_director_is_disloyal_loyal():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 60.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    assert director_is_disloyal(ch, ruler) is False
+
+
+def test_director_is_disloyal_low_loyalty():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 30.0
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    assert director_is_disloyal(ch, ruler) is True
+
+
+def test_director_is_disloyal_grudge():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    ch.loyalty = 80.0
+    ch._society.opinions[(ch.id, ruler.id)] = DISLOYAL_OPINION
+    assert director_is_disloyal(ch, ruler) is True
+
+
+def test_director_is_disloyal_missing_loyalty():
+    rng = random.Random(42)
+    society = SocietyState(rng)
+    ruler = Character(name="Ruler", stats={}, traits=[], age=45, gender="Male", society=society)
+    ch = Character(name="Sub", stats={}, traits=[], age=30, gender="Male", society=society)
+    # No loyalty attribute set
+    ch._society.opinions[(ch.id, ruler.id)] = 0
+    assert director_is_disloyal(ch, ruler) is False
 

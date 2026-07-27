@@ -189,3 +189,20 @@ def disloyal_shareholders(realm: Realm, enterprises: List,
                 or opinion <= DISLOYAL_OPINION):
             out.append(ch)
     return out
+
+
+def director_is_disloyal(director, ruler) -> bool:
+    """A Director is disloyal by the same standard as disloyal_shareholders.
+
+    Low loyalty OR a grudge (opinion <= DISLOYAL_OPINION) against the ruler.
+    An empty seat (None) and an absent loyalty attribute are not disloyalty.
+    """
+    if director is None:
+        return False
+    opinion = director._society.opinions.get((director.id, ruler.id), 0)
+    loyalty = getattr(director, "loyalty", None)
+    if loyalty is not None and loyalty < DISLOYAL_LOYALTY:
+        return True
+    if opinion <= DISLOYAL_OPINION:
+        return True
+    return False
