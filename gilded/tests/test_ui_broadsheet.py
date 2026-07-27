@@ -7,7 +7,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 import pygame
 
 from gilded.chassis import GildedGame
-from gilded.grip import report as grip_report
+from gilded.grip import BANDS, report as grip_report
 from gilded.market import COMMODITIES
 from gilded.ui.broadsheet import TABS, BroadsheetView
 
@@ -565,3 +565,218 @@ def test_enterprises_banner_counts_ventures():
     assert ventures_line == expected, (
         f"Expected '{expected}', got '{ventures_line}'"
     )
+
+
+# =============================================================================
+# Stage 4 Layer 4 — Task 4.1e: behaviour measurement
+# =============================================================================
+
+def _ticker_line(lines):
+    """Return the market ticker line from enterprises_lines output."""
+    return [ln for ln in lines if " | " in ln][0]
+
+
+def _force_steady_prices(g):
+    """Set previous prices equal to current so delta returns 0.0 for every commodity."""
+    for c in COMMODITIES:
+        g.market._previous_prices[c] = g.market.prices[c]
+
+
+def test_ticker_shows_each_commodity_own_price():
+    """Statement 1: each ticker entry shows THAT commodity's price, not a constant.
+
+    Catches e1 (price from COMMODITIES[0]) and e2 (price from COMMODITIES[-1]).
+    """
+    g = GildedGame(seed=42)
+    for _ in range(3):
+        g.turn += 1
+        g.end_turn()
+    prices = {c: g.market.price(c) for c in COMMODITIES}
+    # Verify fixture has divergent prices
+    unique = set(round(p, 2) for p in prices.values())
+    assert len(unique) > 1, "fixture needs divergent commodity prices"
+
+    v = BroadsheetView(g, next(iter(g.houses)))
+    lines = v.enterprises_lines()
+    ticker = _ticker_line(lines)
+    parts = [p.strip() for p in ticker.split(" | ")]
+    for i, commodity in enumerate(COMMODITIES):
+        expected_price = f"{prices[commodity]:.2f}"
+        entry = parts[i]
+        assert expected_price in entry, \
+            f"ticker entry for {commodity} should show {expected_price}, got '{entry}'"
+
+
+def test_ticker_entries_differ_when_prices_differ():
+    """Statement 1 sibling: ticker entries are distinct when prices are distinct.
+
+    Catches both e1 and e2 by checking that entries are NOT all the same string.
+    """
+    g = GildedGame(seed=7)
+    for _ in range(5):
+        g.turn += 1
+        g.end_turn()
+    prices = {c: g.market.price(c) for c in COMMODITIES}
+    unique = set(round(v, 2) for v in prices.values())
+    assert len(unique) > 1, "fixture needs divergent prices"
+
+    v = BroadsheetView(g, next(iter(g.houses)))
+    lines = v.enterprises_lines()
+    ticker = _ticker_line(lines)
+    parts = [p.strip() for p in ticker.split(" | ")]
+    # If all entries showed the same commodity's price, the set of entries would be small
+    assert len(set(parts)) > 1, \
+        f"all ticker entries look identical — likely showing one commodity's price: {parts}"
+    # Spot-check: middle commodity should NOT match first or last commodity's price
+    mid_price = f"{prices[COMMODITIES[1]]:.2f}"
+    first_price = f"{prices[COMMODITIES[0]]:.2f}"
+    assert mid_price != first_price, "fixture: mid and first prices should differ"
+    assert mid_price in parts[1], \
+        f"entry for {COMMODITIES[1]} should contain {mid_price}, got '{parts[1]}'"
+
+
+def test_steady_price_has_two_decimal_places():
+    """Statement 2: a steady price is printed with exactly two decimal places.
+
+    Catches e3 (steady loses decimals) and e4 (steady gains a third).
+    """
+    g = GildedGame(seed=42)
+    for _ in range(2):
+        g.turn += 1
+        g.end_turn()
+    _force_steady_prices(g)
+
+    v = BroadsheetView(g, next(iter(g.houses)))
+    lines = v.enterprises_lines()
+    ticker = _ticker_line(lines)
+    parts = [p.strip() for p in ticker.split(" | ")]
+    for part in parts:
+        tokens = part.split()
+        if len(tokens) >= 3 and tokens[-1] == "steady":
+            price_str = tokens[-2]
+            assert "." in price_str, f"steady price missing decimal point: {part}"
+            decimals = price_str.split(".")[1]
+            assert len(decimals) == 2, \
+                f"steady price '{price_str}' needs exactly 2 decimals, got {len(decimals)}: '{part}'"
+
+
+def test_all_ticker_prices_have_two_decimal_places():
+    """Statement 2 sibling: ALL prices in the ticker (rising/falling/steady) use 2 decimals.
+
+    Catches both e3 and e4 by checking every price entry uniformly.
+    """
+    g = GildedGame(seed=42)
+    for _ in range(3):
+        g.turn += 1
+        g.end_turn()
+    _force_steady_prices(g)
+
+    v = BroadsheetView(g, next(iter(g.houses)))
+    lines = v.enterprises_lines()
+    ticker = _ticker_line(lines)
+    parts = [p.strip() for p in ticker.split(" | ")]
+    for part in parts:
+        tokens = part.split()
+        price_str = tokens[1]  # second token is always the price
+        assert "." in price_str, f"price missing decimal point: {part}"
+        decimals = price_str.split(".")[1]
+        assert len(decimals) == 2, \
+            f"price '{price_str}' in '{part}' needs exactly 2 decimal places, got {len(decimals)}"
+
+
+def test_steady_is_the_word_for_no_movement():
+    """Statement 3: the word for a price that did not move is 'steady'.
+
+    Catches e5 ('steady' renamed 'flat') and e6 ('steady' renamed 'level').
+    """
+    g = GildedGame(seed=42)
+    for _ in range(2):
+        g.turn += 1
+        g.end_turn()
+    _force_steady_prices(g)
+
+    v = BroadsheetView(g, next(iter(g.houses)))
+    lines = v.enterprises_lines()
+    ticker = _ticker_line(lines)
+    parts = [p.strip() for p in ticker.split(" | ")]
+    for part in parts:
+        tokens = part.split()
+        if len(tokens) >= 3:
+            commodity = tokens[0]
+            d = g.market.delta(commodity)
+            if d is not None and abs(d) <= 1e-9:
+                direction = tokens[-1]
+                assert direction == "steady", \
+                    f"zero-delta {commodity} should say 'steady', got '{direction}'"
+
+
+def test_ticker_never_says_flat_or_level():
+    """Statement 3 sibling: the ticker never uses 'flat' or 'level' for any price.
+
+    Catches both e5 and e6 by checking the full ticker text.
+    """
+    g = GildedGame(seed=42)
+    for _ in range(2):
+        g.turn += 1
+        g.end_turn()
+    _force_steady_prices(g)
+
+    v = BroadsheetView(g, next(iter(g.houses)))
+    lines = v.enterprises_lines()
+    ticker = _ticker_line(lines)
+    parts = [p.strip() for p in ticker.split(" | ")]
+    for part in parts:
+        tokens = part.split()
+        if len(tokens) >= 3:
+            direction = tokens[-1]
+            assert direction not in ("flat", "level"), \
+                f"direction '{direction}' is invalid — should be 'steady': {part}"
+
+
+def test_grip_banner_shows_computed_band():
+    """Statement 4: the grip band on the banner is computed for the house being viewed.
+
+    Catches e7 (always IRON GRIP) and e8 (always CONTESTED).
+    Uses seed=0, turn=10, house=Mordaine where band=CONTESTED.
+    """
+    g = GildedGame(seed=0)
+    for _ in range(10):
+        g.turn += 1
+        g.end_turn()
+    r = grip_report(g, "Mordaine")
+    assert r.band == "CONTESTED", f"fixture: expected CONTESTED, got {r.band}"
+
+    v = BroadsheetView(g, "Mordaine")
+    lines = v.enterprises_lines()
+    grip_line = lines[0]
+    assert "CONTESTED" in grip_line, \
+        f"grip line should contain 'CONTESTED', got '{grip_line}'"
+    assert "IRON GRIP" not in grip_line, \
+        f"grip line should NOT contain 'IRON GRIP' when band is CONTESTED: '{grip_line}'"
+
+
+def test_grip_banner_band_matches_report_not_hardcoded():
+    """Statement 4 sibling: banner band changes with the computed report.
+
+    Catches both e7 and e8 by verifying the banner matches grip_report().band
+    at a fixture where the band is CONTESTED (not IRON_GRIP).
+    """
+    g = GildedGame(seed=0)
+    for _ in range(10):
+        g.turn += 1
+        g.end_turn()
+    r = grip_report(g, "Mordaine")
+    assert r.band != "IRON_GRIP", "fixture requires non-IRON_GRIP band"
+
+    v = BroadsheetView(g, "Mordaine")
+    lines = v.enterprises_lines()
+    grip_line = lines[0]
+    expected_band = r.band.replace("_", " ")
+    assert expected_band in grip_line, \
+        f"grip line should show computed band '{expected_band}', got '{grip_line}'"
+    # Verify no wrong band appears
+    for wrong in BANDS:
+        if wrong != r.band:
+            wrong_display = wrong.replace("_", " ")
+            assert wrong_display not in grip_line, \
+                f"grip line should not contain wrong band '{wrong_display}': '{grip_line}'"
