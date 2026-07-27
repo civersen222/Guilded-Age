@@ -24,13 +24,15 @@ from typing import Dict, List, Optional, Tuple
 import pygame
 
 from gilded.dashboard import delta, scoreboard
+from gilded.grip import report as grip_report
 from gilded.intel import report as intel_report, threat_rank
+from gilded.market import COMMODITIES
 from gilded.papers import compose
 from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 
-TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Atlas", "Powers", "House")
+TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
 TAB_H = 40
 HUD_H = 96
@@ -150,6 +152,8 @@ class BroadsheetView:
             self._draw_policies(surface, content)
         elif self.active_tab == "Powers":
             self._draw_powers(surface, content)
+        elif self.active_tab == "Enterprises":
+            self._draw_enterprises(surface, content)
         elif self.active_tab == "House":
             self._draw_house(surface, content)
 
@@ -494,6 +498,70 @@ class BroadsheetView:
         lines = self.powers_lines()
         if not lines:
             lines = ["(no rival House stands against you)"]
+        for ln in lines:
+            for wln in _wrap(ln, body, width):
+                if y > content.bottom - 20:
+                    return
+                surface.blit(body.render(wln, True, INK), (PAD, y))
+                y += body.get_height() + 2
+            y += 6
+
+    def enterprises_lines(self) -> List[str]:
+        """Return the Grip banner lines for the Enterprises tab."""
+        g, name = self.game, self.house
+        r = grip_report(g, name)
+        lines = []
+        # Grip band (A1: display as words a player reads, not enum spelling)
+        band_display = r.band.replace("_", " ")
+        # A2: margin between stake and threshold
+        lines.append(
+            f"Grip: {band_display}  —  stake {r.controlling_stake:.1f}% "
+            f"vs threshold {r.threshold:.1f}%  —  margin {r.margin:.1f}%"
+        )
+        # Top predator
+        if r.top_predator is not None:
+            pred = r.top_predator
+            kin = ""
+            # Check if the predator is kin (belongs to the same house)
+            realm = g.realms.get(name)
+            if realm is not None:
+                for char in realm.characters:
+                    if char.id == pred.id:
+                        kin = " (kin)"
+                        break
+            # A3: what the predator still needs to reach threshold
+            shortfall = r.threshold - pred.stake
+            lines.append(
+                f"Top predator: {pred.name} ({pred.stake:.1f}%, needs {shortfall:.1f}% more){kin}"
+            )
+        else:
+            lines.append("Top predator: none")
+        # Market ticker
+        ticker_parts = []
+        for commodity in COMMODITIES:
+            price = g.market.price(commodity)
+            d = g.market.delta(commodity)
+            if d is None:
+                ticker_parts.append(f"{commodity} {price:.2f}")
+            # A4: tolerance of 1e-9 on either side of zero
+            elif d > 1e-9:
+                ticker_parts.append(f"{commodity} {price:.2f} rising")
+            elif d < -1e-9:
+                ticker_parts.append(f"{commodity} {price:.2f} falling")
+            else:
+                ticker_parts.append(f"{commodity} {price:.2f} steady")
+        lines.append(" | ".join(ticker_parts))
+        # Venture count
+        lines.append(f"Enterprises: {len(r.enterprises)}")
+        return lines
+
+    def _draw_enterprises(self, surface, content) -> None:
+        title = _font(30, bold=True).render("ENTERPRISES", True, INK)
+        surface.blit(title, (PAD, content.y + 6))
+        y = content.y + 6 + title.get_height() + 10
+        body = _font(18)
+        width = content.width - 2 * PAD
+        lines = self.enterprises_lines()
         for ln in lines:
             for wln in _wrap(ln, body, width):
                 if y > content.bottom - 20:
