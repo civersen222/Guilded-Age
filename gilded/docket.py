@@ -721,8 +721,39 @@ def _init_establish_informant(ctx, target_house=None, **kw) -> List[str]:
     return [f"{ctx.executor.name} places an informant inside House {target_house}"]
 
 
-def _init_buy_shares(ctx, eid=None, seller_id=None, pct=0.0, **kw) -> List[str]:
+def _fmt_gold(x: float) -> str:
+    """Format gold so that small sums never round to zero."""
+    if x < 10:
+        return f"{x:.2f}"
+    return f"{x:.0f}"
+
+
+def _exec_share_trade(ctx, seller, buyer, ent, pct: float, verb: str) -> List[str]:
+    """Shared handler for buy_shares / sell_shares.
+
+    *seller* is the current owner of the shares; *buyer* is the purchaser.
+    *pct* is the requested percentage (already scaled by ctx.scale).
+    *verb* is "buy" or "sell" — controls the wording of the result line.
+    """
     from gilded.society.shares import priced_transfer
+    market = ctx.game.market
+    available = ent.ledger.get(seller.id, 0.0)
+    actual_pct = min(pct, available)
+
+    if actual_pct <= 0:
+        return [f"{seller.name} has no stake in {ent.name}"]
+
+    quote = priced_transfer(ent, seller, buyer, actual_pct, market, ctx.game, dry_run=True)
+    if buyer.gold_reserve < quote:
+        return [f"{buyer.name} cannot afford the stake ({_fmt_gold(quote)} gold)"]
+
+    cost = priced_transfer(ent, seller, buyer, actual_pct, market, ctx.game)
+    if verb == "sell":
+        return [f"{seller.name} sells {actual_pct:.1f}% of {ent.name} to {buyer.name} for {_fmt_gold(cost)} gold"]
+    return [f"{buyer.name} buys {actual_pct:.1f}% of {ent.name} from {seller.name} for {_fmt_gold(cost)} gold"]
+
+
+def _init_buy_shares(ctx, eid=None, seller_id=None, pct=0.0, **kw) -> List[str]:
     ent = next((e for e in ctx.game.enterprises if e.eid == eid), None)
     if ent is None:
         return ["There is no such enterprise to buy from"]
@@ -734,15 +765,10 @@ def _init_buy_shares(ctx, eid=None, seller_id=None, pct=0.0, **kw) -> List[str]:
         return ["There is no such person to trade with"]
     buyer = ctx.executor
     pct = pct * ctx.scale
-    market = ctx.game.market
-    cost = priced_transfer(ent, seller, buyer, pct, market, ctx.game)
-    if cost <= 0:
-        return [f"{buyer.name} cannot afford the stake"]
-    return [f"{buyer.name} buys {pct:.1f}% of {ent.name} from {seller.name} for {cost:.0f} gold"]
+    return _exec_share_trade(ctx, seller, buyer, ent, pct, "buy")
 
 
 def _init_sell_shares(ctx, eid=None, buyer_id=None, pct=0.0, **kw) -> List[str]:
-    from gilded.society.shares import priced_transfer
     ent = next((e for e in ctx.game.enterprises if e.eid == eid), None)
     if ent is None:
         return ["There is no such enterprise to sell from"]
@@ -754,11 +780,7 @@ def _init_sell_shares(ctx, eid=None, buyer_id=None, pct=0.0, **kw) -> List[str]:
         return ["There is no such person to trade with"]
     seller = ctx.executor
     pct = pct * ctx.scale
-    market = ctx.game.market
-    cost = priced_transfer(ent, seller, buyer, pct, market, ctx.game)
-    if cost <= 0:
-        return [f"{buyer.name} cannot afford the stake"]
-    return [f"{seller.name} sells {pct:.1f}% of {ent.name} to {buyer.name} for {cost:.0f} gold"]
+    return _exec_share_trade(ctx, seller, buyer, ent, pct, "sell")
 
 
 INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention

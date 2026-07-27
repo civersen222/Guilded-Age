@@ -470,3 +470,88 @@ def test_buy_shares_zero_pct():
     msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=0.0)
     assert len(msgs) >= 1
     assert ent.ledger == ledger_before
+
+
+def test_buy_shares_no_stake():
+    """Seller with no stake gets a 'no stake' message, not 'cannot afford'."""
+    g, h = _game(108)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ruler.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, 99999)
+    assert kin.id not in ent.ledger, "kin should not be in the ledger"
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
+    line = " ".join(msgs).lower()
+    assert "stake" in line or "no" in line
+    assert "cannot afford" not in line
+
+
+def test_buy_shares_partial_fill():
+    """Asking for more than seller has: line reports actual amount moved."""
+    g, h = _game(109)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ruler.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    ent.ledger[kin.id] = 2.0
+    ent.ledger[ruler.id] = 98.0
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=5.0)
+    text = " ".join(msgs)
+    assert "2.0%" in text
+    assert "5.0%" not in text
+
+
+def test_buy_shares_small_price_format():
+    """Price under 10 gold shows two decimal places, not zero."""
+    g, h = _game(110)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ruler.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    ent.ledger[kin.id] = 2.0
+    ent.ledger[ruler.id] = 98.0
+    g.rng = SeqRng([0.0])
+    gold_before = ruler.gold_reserve
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=2.0)
+    gold_paid = gold_before - ruler.gold_reserve
+    text = " ".join(msgs)
+    if gold_paid > 0:
+        assert "0 gold" not in text
+
+
+def test_sell_shares_no_stake():
+    """Executor selling from an enterprise they don't own gets 'no stake'."""
+    g, h = _game(111)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    kin.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, kin.id, 99999)
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "sell_shares", ruler, eid=ent.eid, buyer_id=kin.id, pct=10.0)
+    line = " ".join(msgs).lower()
+    assert "stake" in line or "no" in line
+
+
+def test_sell_shares_small_price_format():
+    """Sell-side price under 10 gold shows two decimal places."""
+    g, h = _game(112)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    kin.gold_reserve = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    ent.ledger[ruler.id] = 2.0
+    ent.ledger[kin.id] = 98.0
+    g.rng = SeqRng([0.0])
+    gold_before = ruler.gold_reserve
+    msgs = initiative(g, h, "sell_shares", ruler, eid=ent.eid, buyer_id=kin.id, pct=2.0)
+    gold_received = ruler.gold_reserve - gold_before
+    text = " ".join(msgs)
+    if gold_received > 0:
+        assert "0 gold" not in text
