@@ -108,6 +108,22 @@ def _apply_action(state: AppState, action: dict) -> None:
         g.attention[h] -= 1
         docket_rule(g, petition, option_key, executor)
         g.docket_by_house[h].remove(petition)
+    eid = action.get("expand_enterprise")
+    if eid is not None:
+        venture = next((e for e in g.enterprises if e.eid == eid and e.house == h), None)
+        if venture is None:
+            return
+        if g.attention.get(h, 0) <= 0:
+            return
+        from gilded.docket import INITIATIVES, initiative
+        domain = INITIATIVES["expand_enterprise"][0]
+        executor = _executor_by_id(state, None, domain)
+        g.attention[h] -= 1
+        lines = initiative(g, h, "expand_enterprise", executor, eid=eid)
+        from gilded.chassis import TurnEvent
+        for line in lines:
+            g.events.append(TurnEvent(line, "ledger", h))
+        return
 
 
 def _quicksave(state: AppState) -> str:

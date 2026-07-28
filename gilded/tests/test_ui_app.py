@@ -92,3 +92,68 @@ def test_place_informant_action_spends_attention_and_sets_flag():
     gapp._apply_action(state, {"place_informant": target})
     assert (player, target) in g.informants
     assert g.attention.get(player, 0) == before - 1
+
+
+def test_expand_enterprise_own_venture_costs_attention():
+    """Expanding a venture the House owns costs exactly one attention."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    own = next(e for e in g.enterprises if e.house == h)
+    pre_attention = g.attention[h]
+    pre_uc = own.under_construction
+    gapp._apply_action(state, {"expand_enterprise": own.eid})
+    assert g.attention[h] == pre_attention - 1
+    assert own.under_construction != pre_uc
+
+
+def test_expand_enterprise_foreign_venture_changes_nothing():
+    """A venture belonging to another House costs nothing and changes nothing."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    other = next((e for e in g.enterprises if e.house != h), None)
+    if other is None:
+        return  # skip if no foreign ventures exist
+    pre_attention = g.attention[h]
+    pre_uc = other.under_construction
+    gapp._apply_action(state, {"expand_enterprise": other.eid})
+    assert g.attention[h] == pre_attention
+    assert other.under_construction == pre_uc
+
+
+def test_expand_enterprise_nonexistent_eid_changes_nothing():
+    """An eid that matches no venture at all costs nothing and changes nothing."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    pre_attention = g.attention[h]
+    gapp._apply_action(state, {"expand_enterprise": 99999})
+    assert g.attention[h] == pre_attention
+
+
+def test_expand_enterprise_zero_attention_refuses():
+    """Zero attention refuses the action and leaves the venture untouched."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    own = next(e for e in g.enterprises if e.house == h)
+    pre_uc = own.under_construction
+    g.attention[h] = 0
+    gapp._apply_action(state, {"expand_enterprise": own.eid})
+    assert own.under_construction == pre_uc
+
+
+def test_expand_enterprise_lines_land_in_events():
+    """The lines initiative returns land in game.events with register 'ledger'."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    own = next(e for e in g.enterprises if e.house == h)
+    pre_count = len(g.events)
+    gapp._apply_action(state, {"expand_enterprise": own.eid})
+    new_events = g.events[pre_count:]
+    assert len(new_events) > 0
+    for ev in new_events:
+        assert ev.register == "ledger"
+        assert ev.house == h
