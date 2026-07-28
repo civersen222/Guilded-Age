@@ -824,6 +824,115 @@ def _distinct_enterprises_view(seed=314, turns=5):
 
 
 
+def test_per_venture_payload_identity():
+    """4.2d-1: each row's action payload carries that row's venture eid, not another's."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    # Fixture guard: at least two ventures with distinct eids
+    assert len(r.enterprises) >= 2, "fixture must yield >= 2 ventures"
+    eids = {el.eid for el in r.enterprises}
+    assert len(eids) >= 2, "fixture ventures must have distinct eids"
+    acts = v.enterprise_actions()
+    verbs = ("expand_enterprise", "appoint_director", "buy_shares", "sell_shares")
+    for ent in r.enterprises:
+        for verb in verbs:
+            row = [a for a in acts if a.get("eid") == ent.eid and verb in a["action"]]
+            assert len(row) == 1, f"expected one {verb} row for {ent.name}"
+            # Payload value must equal THIS venture's eid — compare against grip_report,
+            # not against the row's own eid key (which could be wrong together).
+            assert row[0]["action"][verb] == ent.eid, (
+                f"{verb} payload for {ent.name} carries eid {row[0]['action'][verb]}, "
+                f"expected {ent.eid}"
+            )
+
+
+def test_per_venture_label_identity():
+    """4.2d-2: each row's label names that row's venture, not another's."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    # Fixture guard: distinct names
+    assert len(r.enterprises) >= 2, "fixture must yield >= 2 ventures"
+    names = {el.name for el in r.enterprises}
+    assert len(names) >= 2, "fixture ventures must have distinct names"
+    acts = v.enterprise_actions()
+    for ent in r.enterprises:
+        rows = [a for a in acts if a.get("eid") == ent.eid]
+        for row in rows:
+            label = row["label"]
+            # Label must contain this venture's name
+            assert ent.name in label, (
+                f"label '{label}' for eid {ent.eid} does not contain venture name '{ent.name}'"
+            )
+            # Label must NOT contain any OTHER venture's name
+            for other in r.enterprises:
+                if other.eid != ent.eid:
+                    assert other.name not in label, (
+                        f"label '{label}' for {ent.name} (eid {ent.eid}) "
+                        f"incorrectly contains '{other.name}' (eid {other.eid})"
+                    )
+
+
+def test_per_venture_label_completeness():
+    """4.2d-3: every per-venture label states which venture it acts on (not a bare verb)."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    assert len(r.enterprises) >= 2, "fixture must yield >= 2 ventures"
+    acts = v.enterprise_actions()
+    for ent in r.enterprises:
+        rows = [a for a in acts if a.get("eid") == ent.eid]
+        for row in rows:
+            label = row["label"]
+            # Label must contain the venture name — a bare verb like 'Expand' or
+            # 'Appoint Director' without a name is incomplete.
+            assert ent.name in label, (
+                f"label '{label}' for eid {ent.eid} does not name venture '{ent.name}'"
+            )
+            # Negative check: label must not be a bare verb template
+            bare_prefixes = ("Expand", "Appoint Director", "Buy Shares", "Sell Shares")
+            for prefix in bare_prefixes:
+                assert label != prefix, (
+                    f"label '{label}' is a bare verb without naming the venture"
+                )
+
+
+def test_per_venture_label_verb_consistency():
+    """4.2d-4: each row's label promises a verb that matches the action's verb key."""
+    g, v = _distinct_enterprises_view()
+    r = grip_report(g, v.house)
+    assert len(r.enterprises) >= 2, "fixture must yield >= 2 ventures"
+    acts = v.enterprise_actions()
+    # Only the four per-venture verbs from the first loop
+    per_venture_verbs = ("expand_enterprise", "appoint_director", "buy_shares", "sell_shares")
+    # Map what each label keyword expects as its verb
+    label_verb_map = {
+        "Expand": "expand_enterprise",
+        "Appoint Director": "appoint_director",
+        "Buy Shares": "buy_shares",
+        "Sell Shares": "sell_shares",
+    }
+    for ent in r.enterprises:
+        rows = [a for a in acts if a.get("eid") == ent.eid]
+        for row in rows:
+            verb_key = list(row["action"].keys())[0]
+            # Skip non per-venture actions (defend_buyout, etc.)
+            if verb_key not in per_venture_verbs:
+                continue
+            label = row["label"]
+            # Find which label keyword this row's label matches
+            expected_verb = None
+            for kw, v_verb in label_verb_map.items():
+                if kw in label:
+                    expected_verb = v_verb
+                    break
+            assert expected_verb is not None, (
+                f"label '{label}' for eid {ent.eid} does not match any known verb keyword"
+            )
+            assert verb_key == expected_verb, (
+                f"label '{label}' for {ent.name} promises {expected_verb}, "
+                f"but action verb is {verb_key}"
+            )
+
+
 def test_enterprises_stake_and_threshold_not_swapped():
     """L4.1d-1: the stake sits behind 'stake' and the threshold behind 'threshold'."""
     g, v = _distinct_enterprises_view()
