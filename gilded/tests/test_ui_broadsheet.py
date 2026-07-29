@@ -2363,3 +2363,47 @@ def test_backing_out_is_free():
         f"turn should be unchanged after back: was {turn_before}, now {g.turn}"
     )
 
+
+def test_pressed_row_appoints_to_that_venture():
+    """Pressing a picker row for venture X returns eid==X, not another venture.
+
+    Catches the mutation that swaps the eid so the appointment lands on a
+    different venture — right person, wrong works.
+    """
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    assert len(owned) >= 2, "need at least 2 owned ventures"
+    eid = owned[0].eid
+
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    # Open picker for this specific venture
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if action.get("appoint_director") == eid:
+            v.handle_click(rect.center)
+            break
+    assert v._director_picker is not None
+
+    v.draw(surf)
+
+    # Press any name row
+    name_hits = []
+    for rect, act in v._director_picker_hits:
+        action = act.get("action", act)
+        if action.get("char_id"):
+            name_hits.append((rect, action))
+    assert len(name_hits) >= 1
+
+    rect0, action0 = name_hits[0]
+    result = v.handle_click(rect0.center)
+    assert result is not None
+    assert result.get("appoint_director") == eid, (
+        f"Expected appointment on eid={eid}, got eid={result.get('appoint_director')}"
+    )
+

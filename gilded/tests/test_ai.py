@@ -348,3 +348,29 @@ def test_player_house_not_played_for():
     # The player house should NOT have ai_turn called for it
     assert player not in called_for, f"ai_turn was called for player house {player}"
 
+
+def test_rival_appoints_named_candidate():
+    """A rival appoints the candidate it named, not pool[-1].
+
+    Catches the mutation that seats pool[-1] instead of the picked candidate.
+    """
+    import random
+    g = _game()
+    rival = sorted(g.houses)[0]
+    realm = g.realms[rival]
+    from gilded.docket import director_candidates, RulingContext, _init_appoint_director
+    # Find a venture owned by rival with empty director seat
+    for ent in g.enterprises:
+        if ent.house == rival and ent.director_id == "":
+            pool = director_candidates(g, rival, ent.eid)
+            if not pool:
+                continue
+            named_char_id = pool[0].id
+            ctx = RulingContext(game=g, house=rival, executor=realm.ruler, rng=random.Random(SEED))
+            msgs = _init_appoint_director(ctx, eid=ent.eid, char_id=named_char_id)
+            assert ent.director_id == named_char_id, \
+                f"Expected director {named_char_id}, got {ent.director_id}"
+            break
+    else:
+        pytest.skip("No venture with empty director seat found")
+
