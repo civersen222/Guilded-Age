@@ -13,6 +13,7 @@ from gilded.ui.broadsheet import TABS, BroadsheetView
 from gilded.agenda import ensure_agenda
 from gilded.intel import threat_rank
 from gilded.society.schemes import share_price
+from gilded.enterprises import TIER_MAX
 
 
 def _view():
@@ -1592,7 +1593,13 @@ def test_enterprises_click_on_empty_pixel_returns_none():
 
 
 def test_enterprises_no_undispatchable_verbs_clickable():
-    """No hit region carries a verb _apply_action will not dispatch."""
+    """Only expand_enterprise verbs appear in hit regions, not inventory-only verbs.
+
+    enterprise_actions() returns appoint_director, buy_shares, sell_shares,
+    found_enterprise — but _draw_enterprises gives a rect only to
+    expand_enterprise.  Assert the SET of verbs in hit regions, not just that
+    expand_enterprise is present.
+    """
     pygame.init()
     g = GildedGame(seed=42)
     player = next(iter(g.houses))
@@ -1600,13 +1607,13 @@ def test_enterprises_no_undispatchable_verbs_clickable():
     v.active_tab = "Enterprises"
     surf = pygame.Surface((1280, 900))
     v.draw(surf)
-    dispatchable = {"expand_enterprise"}
-    for rect, act in v._enterprise_hits:
+    verbs = set()
+    for _, act in v._enterprise_hits:
         action_dict = act.get("action", {})
-        verbs = set(action_dict.keys())
-        assert verbs.issubset(dispatchable), (
-            f"Hit region carries undispatchable verb(s): {verbs - dispatchable}"
-        )
+        verbs.update(action_dict.keys())
+    assert verbs == {"expand_enterprise"}, (
+        f"Hit regions carry verbs the dispatcher will not obey: {verbs}"
+    )
 
 
 def test_enterprises_construction_blocks_expand_offer():
@@ -1637,5 +1644,160 @@ def test_enterprises_construction_blocks_expand_offer():
     uc_eids = [act["eid"] for _, act in v._enterprise_hits]
     assert eid not in uc_eids, (
         f"Under-construction venture eid={eid} still offered in hit regions"
+    )
+
+
+def test_enterprises_tier_max_not_offered():
+    """A venture at TIER_MAX is not offered an Expand button.
+
+    Same venture asserted offered at tier 1 first, then capped at TIER_MAX
+    and asserted not offered — so the control cannot rot away.
+    """
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+
+    # Find an owned venture and assert it's offered at tier 1
+    owned = [e for e in g.enterprises if e.house == player and e.under_construction == 0]
+    assert len(owned) > 0, "No owned ventures to test"
+    target = owned[0]
+    eid = target.eid
+
+    # Control: offered at current tier (1)
+    v.draw(surf)
+    offered_eids = [act["eid"] for _, act in v._enterprise_hits]
+    assert eid in offered_eids, (
+        f"Control failed: {target.name} at tier {target.tier} not offered, "
+        "so absence at TIER_MAX proves nothing"
+    )
+
+    # Cap the venture at TIER_MAX
+    target.tier = TIER_MAX
+    target.target_tier = TIER_MAX
+    v.draw(surf)
+    capped_eids = [act["eid"] for _, act in v._enterprise_hits]
+    assert eid not in capped_eids, (
+        f"{target.name} at TIER_MAX ({TIER_MAX}) still offered an Expand button; "
+        "the press can never be accepted on any turn"
+    )
+
+
+def test_enterprises_every_eligible_venture_is_reachable():
+    """Every eligible venture is reachable by a click, not just the first.
+
+    Seeds the eligible set from the game state and compares it to the set of
+    eids reachable via handle_click — so the test keeps working when the
+    fixture changes.
+    """
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    # Compute eligible set from game state
+    eligible_eids = set()
+    for ent in g.enterprises:
+        if ent.house != player:
+            continue
+        if ent.tier >= TIER_MAX:
+            continue
+        if ent.under_construction > 0:
+            continue
+        eligible_eids.add(ent.eid)
+
+    # Compute reachable set by sweeping every hit region
+    reachable_eids = set()
+    for rect, act in v._enterprise_hits:
+        result = v.handle_click(rect.center)
+        if result is not None:
+            eid = result.get("expand_enterprise") or result.get("eid")
+            if eid is not None:
+                reachable_eids.add(eid)
+
+    assert eligible_eids == reachable_eids, (
+        f"Eligible ventures {sorted(eligible_eids)} != reachable "
+        f"{sorted(reachable_eids)} — "
+        f"missing: {sorted(eligible_eids - reachable_eids)}"
+    )
+
+
+def test_enterprises_draw_is_read_only():
+    """Drawing the Enterprises tab changes nothing in the game state.
+
+    Draw is a report, not a move.  Snapshot every mutable field before and
+    compare after — attention, treasuries, venture tiers/construction,
+    events, enterprises count, and turn.
+    """
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+
+    # Snapshot before
+    before_attention = dict(g.attention)
+    before_treasuries = {h: g.houses[h].treasury for h in g.houses}
+    before_ventures = [(e.eid, e.tier, e.target_tier, e.under_construction)
+                       for e in g.enterprises]
+    before_events = len(g.events)
+    before_enterprises = len(g.enterprises)
+    before_turn = g.turn
+
+    # Draw
+    v.draw(surf)
+
+    # Compare after
+    assert dict(g.attention) == before_attention, (
+        f"Draw changed attention: {before_attention} -> {dict(g.attention)}"
+    )
+    for h in g.houses:
+        assert g.houses[h].treasury == before_treasuries[h], (
+            f"Draw changed {h}'s treasury: {before_treasuries[h]} -> "
+            f"{g.houses[h].treasury}"
+        )
+    after_ventures = [(e.eid, e.tier, e.target_tier, e.under_construction)
+                      for e in g.enterprises]
+    assert after_ventures == before_ventures, (
+        "Draw changed venture state (tier/target_tier/under_construction)"
+    )
+    assert len(g.events) == before_events, (
+        f"Draw changed event count: {before_events} -> {len(g.events)}"
+    )
+    assert len(g.enterprises) == before_enterprises, (
+        f"Draw changed enterprises count: {before_enterprises} -> "
+        f"{len(g.enterprises)}"
+    )
+    assert g.turn == before_turn, (
+        f"Draw changed turn: {before_turn} -> {g.turn}"
+    )
+
+
+def test_enterprises_click_outside_buttons_returns_none():
+    """A click on the Enterprises tab outside any Expand button returns None.
+
+    Proves the panel does not swallow presses — only pixels inside a hit
+    region produce a descriptor.
+    """
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    # Pick a point in the content area far from any button
+    # Buttons are drawn at PAD (left margin), so the right side should be empty
+    test_pos = (surf.get_width() - 50, 200)
+    result = v.handle_click(test_pos)
+    assert result is None, (
+        f"Click at {test_pos} on Enterprises tab returned {result} instead of None"
     )
 
