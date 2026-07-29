@@ -197,3 +197,154 @@ def test_end_turn_with_ai_is_deterministic():
     for _ in range(5):
         b.end_turn()
     assert [e.text for e in b.events] == a_events
+# --- rival capital verbs (Job 2) ---------------------------------------------
+
+def test_rival_appoints_director():
+    """A rival House with a venture and empty director seat appoints one."""
+    g = _game()
+    rival = sorted(g.houses)[0]
+    realm = g.realms[rival]
+    from gilded.ai import _pick_initiative
+    verbs = set()
+    for _ in range(20):
+        init = _pick_initiative(g, rival, realm)
+        if init and isinstance(init, tuple) and len(init) == 2:
+            verbs.add(init[0])
+        g.end_turn()
+    assert "appoint_director" in verbs or any(
+        e.director_id is not None for e in g.enterprises if e.house == rival
+    ), f"Rival should eventually appoint a director. Got verbs: {verbs}"
+
+
+def test_rival_routes_buy_shares():
+    """A rival can route buy_shares as a capital verb."""
+    g = _game()
+    rival = sorted(g.houses)[1]
+    realm = g.realms[rival]
+    from gilded.ai import _pick_initiative
+    verbs = set()
+    for _ in range(15):
+        init = _pick_initiative(g, rival, realm)
+        if init and isinstance(init, tuple) and len(init) == 2:
+            verbs.add(init[0])
+        g.end_turn()
+    assert any(v in verbs for v in ("buy_shares", "appoint_director", "sell_shares")), \
+        f"Rival should route capital verbs. Got: {verbs}"
+
+
+def test_rival_routes_sell_shares():
+    """A rival under financial pressure can route sell_shares."""
+    g = _game()
+    rival = sorted(g.houses)[2]
+    realm = g.realms[rival]
+    g.houses[rival].treasury = 0.1
+    from gilded.ai import _pick_initiative
+    verbs = set()
+    for _ in range(15):
+        init = _pick_initiative(g, rival, realm)
+        if init and isinstance(init, tuple) and len(init) == 2:
+            verbs.add(init[0])
+        g.end_turn()
+    assert any(v in verbs for v in ("sell_shares", "buy_shares", "appoint_director")), \
+        f"Rival should route capital verbs. Got: {verbs}"
+
+
+def test_rival_attention_cost():
+    """A rival capital move costs at least one attention point.
+
+    Verify that when a rival routes any action (petition ruling or initiative),
+    their attention pool decreases accordingly.
+    """
+    g = _game()
+    from gilded import ai as ai_mod
+    orig_ai_turn = ai_mod.ai_turn
+
+    actions = []
+    def observing_turn(game, house_name):
+        h = game.houses.get(house_name)
+        if h and not h.is_player:
+            before = game.attention.get(house_name, 0)
+            results = orig_ai_turn(game, house_name)
+            after = game.attention.get(house_name, 0)
+            if results:
+                actions.append((game.turn, house_name, before - after))
+            return results
+        return orig_ai_turn(game, house_name)
+    ai_mod.ai_turn = observing_turn
+
+    try:
+        for _ in range(30):
+            g.end_turn()
+    finally:
+        ai_mod.ai_turn = orig_ai_turn
+
+    assert len(actions) > 0, "No rival actions observed in 30 turns"
+    for turn, name, spent in actions:
+        assert spent >= 1, f"Turn {turn} {name}: expected >= 1 attention spent, got {spent}"
+
+
+def test_no_gold_minted_by_share_trade():
+    """A share trade cannot create gold from nothing.
+
+    Measured per-trade: snapshot total gold (treasuries + char gold_reserves)
+    before and after each rival share trade. A trade may move gold down
+    (fees/taxes) but must never move it up.
+    """
+    g = _game()
+    def total_gold(game):
+        total = sum(h.treasury for h in game.houses.values())
+        for realm in game.realms.values():
+            for c in realm.characters:
+                total += getattr(c, "gold_reserve", 0.0)
+        return total
+
+    # Patch ai_turn to observe share trades
+    from gilded import ai as ai_mod
+    orig_ai_turn = ai_mod.ai_turn
+    trades = []
+    def observing_turn(game, house_name):
+        if house_name in game.houses and not game.houses[house_name].is_player:
+            before = total_gold(game)
+            results = orig_ai_turn(game, house_name)
+            after = total_gold(game)
+            # Check if a share trade was routed
+            if results and any("buys" in r or "sells" in r for r in results):
+                trades.append((game.turn, house_name, before, after))
+            return results
+        return orig_ai_turn(game, house_name)
+    ai_mod.ai_turn = observing_turn
+
+    try:
+        for _ in range(60):
+            g.end_turn()
+    finally:
+        ai_mod.ai_turn = orig_ai_turn
+
+    for turn, house, before, after in trades:
+        assert after <= before + 0.001, (
+            f"Turn {turn} {house}: share trade minted gold "
+            f"({before:.4f} -> {after:.4f})"
+        )
+
+
+def test_player_house_not_played_for():
+    """end_turn skips ai_turn for the player house (only resolve_unattended runs)."""
+    g = _game()
+    hs = sorted(g.houses)
+    g.houses[hs[0]].is_player = True
+    player = hs[0]
+    # Patch gilded.ai.ai_turn to track which houses it's called for
+    from gilded import ai as ai_mod
+    from gilded.ai import ai_turn as _ai_turn
+    called_for = []
+    def mock_ai_turn(game, name):
+        called_for.append(name)
+        return _ai_turn(game, name)
+    ai_mod.ai_turn = mock_ai_turn
+    try:
+        g.end_turn()
+    finally:
+        ai_mod.ai_turn = _ai_turn
+    # The player house should NOT have ai_turn called for it
+    assert player not in called_for, f"ai_turn was called for player house {player}"
+

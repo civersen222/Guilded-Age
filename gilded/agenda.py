@@ -262,10 +262,22 @@ def goal_initiative(game, house_name: str, goal: Goal
                 return "found_enterprise", {"kind": kind, "province_pid": pid}
         return None
     if fam == "Buyout":
+        # Try to start a takeover (primary verb — reach it before buy_shares)
         if (target in game.houses and target != house_name
                 and not any(t.target_house == target and t.buyer_house == house_name
                             and not t.complete for t in game.takeovers)):
             return "start_takeover", {"target_house": target}
+        # Fall back to buying shares to accumulate stake
+        if target in game.houses and target != house_name:
+            for ent in game.enterprises:
+                if ent.house == target:
+                    seller_realm = game.realms.get(target)
+                    if seller_realm is None:
+                        continue
+                    for c in seller_realm.characters:
+                        if c.is_alive and c.age >= 16 and c.id != seller_realm.ruler.id:
+                            return "buy_shares", {"eid": ent.eid, "seller_id": c.id, "pct": 5.0}
+                    break
         return None
     if fam == "Dynasty":
         if (target in game.houses and _marriageable(realm, realm.ruler)
@@ -282,6 +294,20 @@ def goal_initiative(game, house_name: str, goal: Goal
                                     "target_house": target}
         return None
     if fam == "Consolidation":
+        # Sell shares to raise gold when treasury is low
+        if house.treasury < 100:
+            for ent in game.enterprises:
+                if ent.house == house_name:
+                    for rival_name in game.realms:
+                        if rival_name == house_name:
+                            continue
+                        rival_realm = game.realms.get(rival_name)
+                        if rival_realm is None:
+                            continue
+                        for buyer in rival_realm.characters:
+                            if buyer.is_alive and buyer.age >= 16:
+                                return "sell_shares", {"eid": ent.eid, "buyer_id": buyer.id, "pct": 5.0}
+                    break
         worst = _worst_province(game, house_name)
         if worst is not None and worst.unrest > 0:
             return "tour_province", {"province_pid": worst.pid}

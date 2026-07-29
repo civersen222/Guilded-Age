@@ -130,6 +130,11 @@ def _gen_capital_request(game, house_name, realm, rng) -> Optional[Petition]:
     cost = EXPAND_COST[ent.tier + 1] * _eff.expand_cost_mod
 
     def _grant(ctx) -> List[str]:
+        # Stale guard: the venture may have reached TIER_MAX by another road
+        # (initiative or an earlier petition) between request and ruling.
+        # A House cannot be billed for a tier that does not exist.
+        if ent.tier >= TIER_MAX or ent.target_tier >= TIER_MAX:
+            return [f"{ent.name} has already reached the top tier; request withdrawn"]
         house = ctx.game.houses[ctx.house]
         if house.treasury < cost:
             return [f"The treasury cannot meet {director.name}'s request ({cost:.0f} gold)"]

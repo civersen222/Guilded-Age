@@ -101,10 +101,32 @@ def _pick_initiative(game, house_name: str, realm, goal=None):
     """The goal's signature verb first, then leftover attention by disposition."""
     house = game.houses[house_name]
     ruler = realm.ruler
+    # Sell shares if treasury is low — check before goal so it always runs
+    if house.treasury < 500:
+        for ent in game.enterprises:
+            if ent.house == house_name:
+                # Find a buyer from rival houses
+                for rival in game.realms:
+                    if rival == house_name:
+                        continue
+                    rival_realm = game.realms.get(rival)
+                    if rival_realm is None:
+                        continue
+                    for c in rival_realm.characters:
+                        if c.is_alive and c.age >= 16 and c.id != rival_realm.ruler.id:
+                            return "sell_shares", {"eid": ent.eid, "buyer_id": c.id, "pct": 5.0}
+                break
     if goal is not None:
         sig = goal_initiative(game, house_name, goal)
         if sig is not None:
             return sig
+    # Fill an empty Director seat — always worth doing, costs nothing
+    from gilded.docket import director_candidates
+    for ent in game.enterprises:
+        if ent.house == house_name and ent.director_id == "":
+            pool = director_candidates(game, house_name, ent.eid)
+            if pool:
+                return "appoint_director", {"eid": ent.eid, "char_id": pool[0].id}
     if ruler.dispositions.get("ambitious_content", 0.0) > AMBITION_BAR:
         ents = sorted((e for e in game.enterprises
                        if e.house == house_name and e.tier < TIER_MAX
@@ -118,6 +140,7 @@ def _pick_initiative(game, house_name: str, realm, goal=None):
             kind, pid = spot
             if house.treasury > ENTERPRISE_TYPES[kind][3]:
                 return "found_enterprise", {"kind": kind, "province_pid": pid}
+ 
     if _conviction(ruler, "war") > WAR_CONVICTION and not house.at_war_with:
         target = _weaker_neighbor(game, house_name)
         if target is not None:

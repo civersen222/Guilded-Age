@@ -217,6 +217,31 @@ def test_appoint_director_seats_that_person():
     assert ent.director_id == char_id, f"Director not seated: got {ent.director_id}"
 
 
+def test_appoint_director_seats_named_person_not_best():
+    """Appointment seats the char_id named, not pool[0].
+
+    Catches the mutation that always seats the pool's best candidate
+    regardless of who was actually named. Press a name further down
+    the list and verify that person — not pool[0] — is seated.
+    """
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    owned = [e for e in g.enterprises if e.house == h]
+    eid = owned[0].eid
+    from gilded.docket import director_candidates
+    pool = director_candidates(g, h, eid)
+    assert len(pool) >= 2, "need at least 2 candidates"
+    # Use the SECOND candidate — not pool[0]
+    char_id = pool[1].id
+    assert char_id != pool[0].id, "candidates should differ"
+    gapp._apply_action(state, {"appoint_director": eid, "char_id": char_id})
+    ent = next(e for e in g.enterprises if e.eid == eid)
+    assert ent.director_id == char_id, (
+        f"Should seat {char_id} (pool[1]), not {pool[0].id} (pool[0]): got {ent.director_id}"
+    )
+
+
 def test_appoint_director_no_char_id_refused_for_free():
     """{"appoint_director": eid} with no char_id: zero lines, zero attention."""
     import gilded.ui.app as gapp
@@ -259,3 +284,36 @@ def test_appoint_director_not_ours_refused_for_free():
     gapp._apply_action(state, {"appoint_director": eid, "char_id": "000000ae"})
     assert len(g.events) == pre_events, "Not-ours appointment wrote events"
     assert g.attention[h] == pre_attention, "Not-ours appointment cost attention"
+
+def test_backing_out_of_picker_costs_no_attention():
+    """Opening then closing the director picker must not spend attention, treasury, or events."""
+    import gilded.ui.app as gapp
+    from gilded.docket import director_candidates
+
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    owned = [e for e in g.enterprises if e.house == h]
+    ent = owned[0]
+    pool = director_candidates(g, h, ent.eid)
+    assert pool, "need at least one candidate"
+
+    # Snapshot state before opening the picker
+    pre_attention = g.attention[h]
+    pre_treasury = g.houses[h].treasury
+    pre_events = len(g.events)
+    pre_turn = g.turn
+    pre_director_id = ent.director_id
+
+    # Simulate opening the director picker via navigation then backing out
+    # The picker is opened through the broadsheet view; we test the action
+    # that closes it without confirming
+    state.view._director_picker = ent.eid
+    gapp._apply_action(state, {"close_director_picker": True})
+
+    assert g.attention[h] == pre_attention, (
+        f"Backing out cost {pre_attention - g.attention[h]} attention"
+    )
+    assert g.houses[h].treasury == pre_treasury, "Backing out changed treasury"
+    assert len(g.events) == pre_events, "Backing out wrote events"
+    assert g.turn == pre_turn, "Backing out advanced the turn"
+    assert ent.director_id == pre_director_id, "Backing out seated a director"
