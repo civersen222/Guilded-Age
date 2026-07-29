@@ -352,19 +352,27 @@ def test_player_house_not_played_for():
 def test_rival_appoints_named_candidate():
     """A rival appoints the candidate it named, not pool[-1].
 
-    Pinned on three axes:
+    Pinned on four axes:
       WHO  — the seated id equals the id named (neither pool[0] nor pool[-1])
       WHERE — the venture asked for is the one that changed
-      WHAT ELSE — no other enterprise's director_id changed
+      WHAT ELSE (board) — no other enterprise changed in any way
+      WHAT ELSE (ledger) — the named venture's ledger shifted shares from
+        ruler to director (salary), and nothing else in the enterprise
+        changed (extraction_dial, tier, etc.)
 
     Uses a NON-first venture so that a handler seating the pick on the
     House's first venture (regardless of which was asked for) is caught.
+
+    Captures the full board state (enterprises + the people who hold/run them)
+    before and after, then asserts exactly which parts differ: the ones the
+    appointment is supposed to change, changed; everything else byte-identical.
     """
     import random
     g = _game()
     rival = sorted(g.houses)[0]
     realm = g.realms[rival]
     from gilded.docket import director_candidates, RulingContext, _init_appoint_director
+    from gilded.society.realm import DIRECTOR_SALARY_PCT
     # Collect ventures owned by rival with empty director seat
     owned = [e for e in g.enterprises if e.house == rival and e.director_id == ""]
     assert len(owned) >= 2, "need at least 2 ventures to test WHERE"
@@ -374,22 +382,95 @@ def test_rival_appoints_named_candidate():
     assert len(pool) >= 3, "need at least 3 candidates to pick the middle one"
     # Pick someone who is neither pool[0] nor pool[-1]
     named_char_id = pool[1].id
-    # Capture every enterprise's director_id before the call
-    directors_before = {e.eid: e.director_id for e in g.enterprises}
+    pick = pool[1]
+
+    # --- capture the FULL board state before the call ---
+    # Enterprise state: director_id, ledger, extraction_dial, tier
+    ents_before = {e.eid: {
+        "director_id": e.director_id,
+        "ledger": dict(e.ledger),
+        "extraction_dial": e.extraction_dial,
+        "tier": e.tier,
+    } for e in g.enterprises}
+    # Opinion: pick -> ruler
+    ruler = realm.ruler
+    opinions_before = dict(pick._society.opinions)
+
     ctx = RulingContext(game=g, house=rival, executor=realm.ruler, rng=random.Random(SEED))
     msgs = _init_appoint_director(ctx, eid=ent.eid, char_id=named_char_id)
+
+    # --- capture the FULL board state after the call ---
+    ents_after = {e.eid: {
+        "director_id": e.director_id,
+        "ledger": dict(e.ledger),
+        "extraction_dial": e.extraction_dial,
+        "tier": e.tier,
+    } for e in g.enterprises}
+    opinions_after = dict(pick._society.opinions)
+
     # WHO — the right person
     assert ent.director_id == named_char_id, \
         f"Expected director {named_char_id}, got {ent.director_id}"
     assert named_char_id != pool[0].id and named_char_id != pool[-1].id, \
         "named candidate must not be pool[0] or pool[-1]"
-    # WHERE — the venture asked for is the one that changed
-    directors_after = {e.eid: e.director_id for e in g.enterprises}
-    changed = [eid for eid in directors_before if directors_before[eid] != directors_after[eid]]
-    assert ent.eid in changed, f"Expected {ent.eid} to change; changed={changed}"
-    # WHAT ELSE — no other enterprise changed
-    for eid, d_before in directors_before.items():
+
+    # WHERE — find which enterprise(s) changed
+    changed_eids = set()
+    for eid in ents_before:
+        if ents_before[eid] != ents_after[eid]:
+            changed_eids.add(eid)
+    assert ent.eid in changed_eids, f"Expected {ent.eid} to change; changed={changed_eids}"
+
+    # WHAT ELSE (board) — no OTHER enterprise changed at all
+    for eid in ents_before:
         if eid != ent.eid:
-            assert directors_after[eid] == d_before, \
-                f"Enterprise {eid} director changed from {d_before} to {directors_after[eid]}"
+            assert ents_before[eid] == ents_after[eid], \
+                f"Enterprise {eid} should not have changed. Before: {ents_before[eid]}, After: {ents_after[eid]}"
+
+    # WHAT ELSE (ledger on the named venture) — exactly the right changes
+    # director_id changed from "" to pick.id
+    assert ents_before[ent.eid]["director_id"] == "", "director was empty before"
+    assert ents_after[ent.eid]["director_id"] == named_char_id
+
+    # extraction_dial did NOT change
+    assert ents_before[ent.eid]["extraction_dial"] == ents_after[ent.eid]["extraction_dial"], \
+        f"extraction_dial changed from {ents_before[ent.eid]['extraction_dial']} to {ents_after[ent.eid]['extraction_dial']}"
+
+    # tier did NOT change
+    assert ents_before[ent.eid]["tier"] == ents_after[ent.eid]["tier"], \
+        f"tier changed from {ents_before[ent.eid]['tier']} to {ents_after[ent.eid]['tier']}"
+
+    # ledger: ruler lost shares, pick gained shares (salary transfer)
+    ledger_b = ents_before[ent.eid]["ledger"]
+    ledger_a = ents_after[ent.eid]["ledger"]
+    ruler_id = ruler.id
+    pick_id = pick.id
+    ruler_held_b = ledger_b.get(ruler_id, 0.0)
+    pick_held_b = ledger_b.get(pick_id, 0.0)
+    ruler_held_a = ledger_a.get(ruler_id, 0.0)
+    pick_held_a = ledger_a.get(pick_id, 0.0)
+
+    # Ruler should have lost approximately DIRECTOR_SALARY_PCT
+    ruler_loss = ruler_held_b - ruler_held_a
+    assert ruler_loss >= DIRECTOR_SALARY_PCT - 0.1, \
+        f"Ruler lost {ruler_loss:.2f} shares, expected ~{DIRECTOR_SALARY_PCT}"
+
+    # Pick should have gained approximately DIRECTOR_SALARY_PCT
+    pick_gain = pick_held_a - pick_held_b
+    assert pick_gain >= DIRECTOR_SALARY_PCT - 0.1, \
+        f"Pick gained {pick_gain:.2f} shares, expected ~{DIRECTOR_SALARY_PCT}"
+
+    # No other ledger keys changed on this venture
+    all_keys = set(ledger_b.keys()) | set(ledger_a.keys())
+    for k in all_keys:
+        if k != ruler_id and k != pick_id:
+            assert ledger_b.get(k, 0.0) == ledger_a.get(k, 0.0), \
+                f"Ledger key {k} changed from {ledger_b.get(k, 0.0)} to {ledger_a.get(k, 0.0)}"
+
+    # Opinion: pick -> ruler should have increased
+    pair = (pick_id, ruler_id)
+    opinion_b = opinions_before.get(pair, 0)
+    opinion_a = opinions_after.get(pair, 0)
+    assert opinion_a > opinion_b, \
+        f"Opinion {pair} did not increase: {opinion_b} -> {opinion_a}"
 
