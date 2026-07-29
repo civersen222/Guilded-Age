@@ -191,3 +191,71 @@ def test_expand_enterprise_real_vs_ghost_in_same_file():
     gapp._apply_action(state, {"expand_enterprise": 1013})
     ghost_lines = len(g.events) - pre_count2
     assert ghost_lines == 0, f"Ghost eid wrote {ghost_lines} event(s)"
+
+
+def test_appoint_director_seats_that_person():
+    """A complete appointment seats that char_id at that eid, costs one attention,
+    and appends the initiative's lines as ledger events."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    owned = [e for e in g.enterprises if e.house == h]
+    eid = owned[0].eid
+    # Pick a character from the pool
+    from gilded.docket import director_candidates
+    pool = director_candidates(g, h, eid)
+    char_id = pool[0].id
+    pre_events = len(g.events)
+    pre_attention = g.attention[h]
+    gapp._apply_action(state, {"appoint_director": eid, "char_id": char_id})
+    # Should have written events
+    assert len(g.events) > pre_events, "Appointment wrote no events"
+    # Should cost one attention
+    assert g.attention[h] == pre_attention - 1, "Appointment did not cost attention"
+    # Director should be seated
+    ent = next(e for e in g.enterprises if e.eid == eid)
+    assert ent.director_id == char_id, f"Director not seated: got {ent.director_id}"
+
+
+def test_appoint_director_no_char_id_refused_for_free():
+    """{"appoint_director": eid} with no char_id: zero lines, zero attention."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    owned = [e for e in g.enterprises if e.house == h]
+    eid = owned[0].eid
+    pre_events = len(g.events)
+    pre_attention = g.attention[h]
+    gapp._apply_action(state, {"appoint_director": eid})
+    assert len(g.events) == pre_events, "No-char appointment wrote events"
+    assert g.attention[h] == pre_attention, "No-char appointment cost attention"
+
+
+def test_appoint_director_char_id_none_refused_for_free():
+    """char_id: None: zero lines, zero attention."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    owned = [e for e in g.enterprises if e.house == h]
+    eid = owned[0].eid
+    pre_events = len(g.events)
+    pre_attention = g.attention[h]
+    gapp._apply_action(state, {"appoint_director": eid, "char_id": None})
+    assert len(g.events) == pre_events, "None-char appointment wrote events"
+    assert g.attention[h] == pre_attention, "None-char appointment cost attention"
+
+
+def test_appoint_director_not_ours_refused_for_free():
+    """An appointment naming a venture that is not ours: zero lines, zero attention."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    unowned = [e for e in g.enterprises if e.house != h]
+    if not unowned:
+        return  # skip if no unowned ventures
+    eid = unowned[0].eid
+    pre_events = len(g.events)
+    pre_attention = g.attention[h]
+    gapp._apply_action(state, {"appoint_director": eid, "char_id": "000000ae"})
+    assert len(g.events) == pre_events, "Not-ours appointment wrote events"
+    assert g.attention[h] == pre_attention, "Not-ours appointment cost attention"

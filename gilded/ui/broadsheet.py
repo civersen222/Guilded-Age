@@ -111,6 +111,10 @@ class BroadsheetView:
         self._dial_hits: List[Tuple[pygame.Rect, str]] = []
         self._atlas_polys: Dict[int, List[Tuple[int, int]]] = {}
         self._enterprise_hits: List[Tuple[pygame.Rect, dict]] = []
+        self._appoint_hits: List[Tuple[pygame.Rect, dict]] = []
+        # director picker state: None or eid whose picker is open
+        self._director_picker: Optional[int] = None
+        self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         self._w = 0
         self._h = 0
 
@@ -138,6 +142,8 @@ class BroadsheetView:
         self._exec_hits = []
         self._dial_hits = []
         self._enterprise_hits = []
+        self._appoint_hits = []
+        self._director_picker_hits = []
         surface.fill(PAPER_BG)
         content = pygame.Rect(0, TAB_H + HUD_H, self._w,
                               self._h - TAB_H - HUD_H - BOTTOM_H)
@@ -639,15 +645,19 @@ class BroadsheetView:
                 y += body.get_height() + 2
             y += 6
 
-        # Draw Expand buttons for eligible ventures
+        # If a director picker is open, draw it instead of buttons
+        if self._director_picker is not None:
+            self._draw_director_picker(surface, content, y, body)
+            return
+
+        # Draw Expand and Appoint buttons for eligible ventures
         from gilded.enterprises import TIER_MAX
+        from gilded.docket import director_candidates
         actions = self.enterprise_actions()
         y += 8
         for act in actions:
             action_dict = act.get("action", {})
             verb = list(action_dict.keys())[0] if action_dict else None
-            if verb != "expand_enterprise":
-                continue
             eid = act.get("eid")
             if eid is None:
                 continue
@@ -656,24 +666,91 @@ class BroadsheetView:
                 continue
             if ent.house != self.house:
                 continue
-            if ent.tier >= TIER_MAX:
-                continue
-            if ent.under_construction > 0:
-                continue
-            # Draw the button
-            btn_text = act.get("label", f"Expand {eid}")
-            btn_surf = body.render(btn_text, True, INK)
-            btn_w = btn_surf.get_width() + 16
-            btn_h = body.get_height() + 8
-            btn_rect = pygame.Rect(PAD, y, btn_w, btn_h)
-            if y + btn_h > content.bottom:
+
+            if verb == "expand_enterprise":
+                if ent.tier >= TIER_MAX:
+                    continue
+                if ent.under_construction > 0:
+                    continue
+                btn_text = act.get("label", f"Expand {eid}")
+                btn_surf = body.render(btn_text, True, INK)
+                btn_w = btn_surf.get_width() + 16
+                btn_h = body.get_height() + 8
+                btn_rect = pygame.Rect(PAD, y, btn_w, btn_h)
+                if y + btn_h > content.bottom:
+                    return
+                pygame.draw.rect(surface, (50, 70, 50), btn_rect)
+                pygame.draw.rect(surface, INK, btn_rect, 2)
+                surface.blit(btn_surf, (PAD + 8, y + 4))
+                self._enterprise_hits.append((btn_rect, act))
+                y += btn_h + 4
+
+            elif verb == "appoint_director":
+                pool = director_candidates(self.game, self.house, eid)
+                if not pool:
+                    continue
+                btn_text = act.get("label", f"Appoint Director for {ent.name}")
+                btn_surf = body.render(btn_text, True, INK)
+                btn_w = btn_surf.get_width() + 16
+                btn_h = body.get_height() + 8
+                btn_rect = pygame.Rect(PAD, y, btn_w, btn_h)
+                if y + btn_h > content.bottom:
+                    return
+                pygame.draw.rect(surface, (50, 50, 70), btn_rect)
+                pygame.draw.rect(surface, INK, btn_rect, 2)
+                surface.blit(btn_surf, (PAD + 8, y + 4))
+                self._appoint_hits.append((btn_rect, act))
+                y += btn_h + 4
+
+    def _draw_director_picker(self, surface, content, y, body) -> None:
+        """Draw the director candidate picker for the open venture."""
+        eid = self._director_picker
+        ent = next((e for e in self.game.enterprises if e.eid == eid), None)
+        if ent is None:
+            return
+        from gilded.docket import director_candidates
+        pool = director_candidates(self.game, self.house, eid)
+        if not pool:
+            return
+
+        # Back button
+        back_text = "Back"
+        back_surf = body.render(back_text, True, INK)
+        back_w = back_surf.get_width() + 16
+        back_h = body.get_height() + 8
+        back_rect = pygame.Rect(PAD, y, back_w, back_h)
+        pygame.draw.rect(surface, (70, 70, 50), back_rect)
+        pygame.draw.rect(surface, INK, back_rect, 2)
+        surface.blit(back_surf, (PAD + 8, y + 4))
+        self._director_picker_hits.append((back_rect, {"close_director_picker": True}))
+        y += back_h + 4
+
+        # Header showing venture name and pool count
+        cap = 8
+        shown = min(cap, len(pool))
+        header = body.render(f"Directors for {ent.name} ({shown} of {len(pool)})", True, INK)
+        surface.blit(header, (PAD, y))
+        y += body.get_height() + 8
+
+        # Draw top N candidates
+        small = _font(16)
+        for c in pool[:cap]:
+            if y > content.bottom - 20:
                 return
-            # Draw button background
-            pygame.draw.rect(surface, (50, 70, 50), btn_rect)
-            pygame.draw.rect(surface, INK, btn_rect, 2)
-            surface.blit(btn_surf, (PAD + 8, y + 4))
-            self._enterprise_hits.append((btn_rect, act))
-            y += btn_h + 4
+            name = c.name
+            industry = c.get_effective_stat("industry")
+            line = f"{name} (industry {industry})"
+            ln_surf = small.render(line, True, INK)
+            ln_w = ln_surf.get_width() + 16
+            ln_h = small.get_height() + 8
+            ln_rect = pygame.Rect(PAD, y, ln_w, ln_h)
+            pygame.draw.rect(surface, (60, 60, 60), ln_rect)
+            pygame.draw.rect(surface, INK, ln_rect, 1)
+            surface.blit(ln_surf, (PAD + 8, y + 4))
+            self._director_picker_hits.append((ln_rect, {
+                "appoint_director": eid, "char_id": c.id
+            }))
+            y += ln_h + 2
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
@@ -735,7 +812,23 @@ class BroadsheetView:
                 self.selected_pid = pid
                 return {"select_province": pid}
         if self.active_tab == "Enterprises":
+            if self._director_picker is not None:
+                for rect, action in self._director_picker_hits:
+                    if rect.collidepoint(pos):
+                        if "close_director_picker" in action:
+                            self._director_picker = None
+                            self._director_picker_hits.clear()
+                        return action
             for rect, act in self._enterprise_hits:
                 if rect.collidepoint(pos):
                     return act.get("action", act)
+            for rect, act in self._appoint_hits:
+                if rect.collidepoint(pos):
+                    action = act.get("action", act)
+                    if "appoint_director" in action and "char_id" not in action:
+                        eid = action["appoint_director"]
+                        self._director_picker = eid
+                        self._director_picker_hits.clear()
+                        return {"open_director_picker": eid}
+                    return action
         return None

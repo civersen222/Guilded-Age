@@ -1,5 +1,6 @@
 """G22 broadsheet screens: tabs, headless draw, click actions, and Enterprises banner."""
 
+import copy
 import os
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -7,6 +8,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 import pygame
 
 from gilded.chassis import GildedGame
+from gilded.docket import director_candidates
 from gilded.grip import BANDS, report as grip_report
 from gilded.market import COMMODITIES
 from gilded.ui.broadsheet import TABS, BroadsheetView
@@ -1593,12 +1595,8 @@ def test_enterprises_click_on_empty_pixel_returns_none():
 
 
 def test_enterprises_no_undispatchable_verbs_clickable():
-    """Only expand_enterprise verbs appear in hit regions, not inventory-only verbs.
-
-    enterprise_actions() returns appoint_director, buy_shares, sell_shares,
-    found_enterprise — but _draw_enterprises gives a rect only to
-    expand_enterprise.  Assert the SET of verbs in hit regions, not just that
-    expand_enterprise is present.
+    """Every verb held by a hit region is dispatchable, and both expand and
+    appoint are actually present so a blank panel cannot pass by holding nothing.
     """
     pygame.init()
     g = GildedGame(seed=42)
@@ -1607,13 +1605,16 @@ def test_enterprises_no_undispatchable_verbs_clickable():
     v.active_tab = "Enterprises"
     surf = pygame.Surface((1280, 900))
     v.draw(surf)
-    verbs = set()
-    for _, act in v._enterprise_hits:
-        action_dict = act.get("action", {})
-        verbs.update(action_dict.keys())
-    assert verbs == {"expand_enterprise"}, (
-        f"Hit regions carry verbs the dispatcher will not obey: {verbs}"
-    )
+    allowed = {"expand_enterprise", "appoint_director", "char_id",
+               "open_director_picker", "close_director_picker"}
+    found_verbs = set()
+    for _, act in v._enterprise_hits + v._appoint_hits:
+        action = act.get("action", act)
+        for key in action:
+            assert key in allowed, f"undispatchable verb {key!r} in hit region"
+            found_verbs.add(key)
+    assert "expand_enterprise" in found_verbs, "Expand offers must be present in hit regions"
+    assert "appoint_director" in found_verbs, "Appoint offers must be present in hit regions"
 
 
 def test_enterprises_construction_blocks_expand_offer():
@@ -1799,5 +1800,311 @@ def test_enterprises_click_outside_buttons_returns_none():
     result = v.handle_click(test_pos)
     assert result is None, (
         f"Click at {test_pos} on Enterprises tab returned {result} instead of None"
+    )
+
+
+def test_mid_tier_venture_still_offered_expand():
+    """Mid-tier ventures (1-4) are offered Expand; TIER_MAX (5) is not."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    ent = owned[0]
+    eid = ent.eid
+    for tier in range(1, 6):
+        ent.tier = tier
+        ent.target_tier = tier
+        v = BroadsheetView(g, player)
+        v.active_tab = "Enterprises"
+        surf = pygame.Surface((1280, 900))
+        v.draw(surf)
+        hits = [act.get("action", act) for _, act in v._enterprise_hits]
+        hit_eids = [a.get("expand_enterprise") for a in hits if "expand_enterprise" in a]
+        if tier < 5:
+            assert eid in hit_eids, f"tier {tier}: should offer Expand for eid {eid}"
+        else:
+            assert eid not in hit_eids, f"tier {tier}: should NOT offer Expand for eid {eid}"
+
+
+def test_appoint_control_opens_picker():
+    """Pressing the Appoint control returns {"open_director_picker": eid}."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    eid = owned[0].eid
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if action.get("appoint_director") == eid:
+            result = v.handle_click(rect.center)
+            assert result == {"open_director_picker": eid}, f"got {result}"
+            return
+    pytest.fail("No Appoint control found for owned venture")
+
+
+def test_opening_picker_changes_nothing():
+    """Opening the picker changes nothing: attention, treasury, director_id, events, turn."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    before = {
+        "attention": dict(g.attention),
+        "treasury": {h: g.houses[h].treasury for h in g.houses},
+        "directors": [(e.eid, e.director_id) for e in g.enterprises],
+        "events": len(g.events),
+        "turn": g.turn,
+    }
+
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if "appoint_director" in action:
+            v.handle_click(rect.center)
+            break
+
+    assert dict(g.attention) == before["attention"]
+    for h in g.houses:
+        assert g.houses[h].treasury == before["treasury"][h]
+    after_directors = [(e.eid, e.director_id) for e in g.enterprises]
+    assert after_directors == before["directors"]
+    assert len(g.events) == before["events"]
+    assert g.turn == before["turn"]
+
+
+def test_picker_names_in_candidates_pool():
+    """Every char_id the open picker offers is in director_candidates for that eid."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    eid = owned[0].eid
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if action.get("appoint_director") == eid:
+            v.handle_click(rect.center)
+            break
+
+    pool = director_candidates(g, player, eid)
+    pool_ids = set(c.id for c in pool)
+    for _, act in v._director_picker_hits:
+        action = act.get("action", act)
+        if action.get("char_id"):
+            assert action["char_id"] in pool_ids
+
+
+def test_picker_lists_top_candidates_in_order():
+    """The offered names are the top of the pool, in its order."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    eid = owned[0].eid
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if action.get("appoint_director") == eid:
+            v.handle_click(rect.center)
+            break
+
+    pool = director_candidates(g, player, eid)
+    # Collect offered char_ids in display order
+    offered_ids = []
+    for _, act in v._director_picker_hits:
+        action = act.get("action", act)
+        if action.get("char_id"):
+            offered_ids.append(action["char_id"])
+
+    # Should match the top N of the pool
+    pool_ids = [c.id for c in pool]
+    assert offered_ids == pool_ids[:len(offered_ids)]
+
+
+def test_picker_names_match_venture_pressed():
+    """Appoint on venture A lists names for A, on venture B lists names for B."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    if len(owned) < 2:
+        pytest.skip("Need at least 2 owned ventures")
+    eid_a, eid_b = owned[0].eid, owned[1].eid
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    # Open picker for A
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if action.get("appoint_director") == eid_a:
+            v.handle_click(rect.center)
+            break
+    pool_a = director_candidates(g, player, eid_a)
+    pool_a_ids = set(c.id for c in pool_a)
+    for _, act in v._director_picker_hits:
+        action = act.get("action", act)
+        if action.get("char_id"):
+            assert action["char_id"] in pool_a_ids
+
+    # Close and open picker for B
+    v._director_picker = None
+    v.draw(surf)
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if action.get("appoint_director") == eid_b:
+            v.handle_click(rect.center)
+            break
+    pool_b = director_candidates(g, player, eid_b)
+    pool_b_ids = set(c.id for c in pool_b)
+    for _, act in v._director_picker_hits:
+        action = act.get("action", act)
+        if action.get("char_id"):
+            assert action["char_id"] in pool_b_ids
+
+
+def test_unowned_venture_no_appoint_control():
+    """A venture the House does not own offers no Appoint control."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    unowned = [e for e in g.enterprises if e.house != player]
+    if not unowned:
+        pytest.skip("No unowned ventures")
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    for _, act in v._appoint_hits:
+        action = act.get("action", act)
+        eid = action.get("appoint_director")
+        assert eid not in [e.eid for e in unowned], (
+            f"Unowned venture {eid} offered an Appoint control"
+        )
+
+
+def test_empty_pool_no_appoint_control():
+    """A venture whose pool is empty offers no Appoint control."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    eid = owned[0].eid
+    # First confirm it DOES offer an Appoint control
+    v1 = BroadsheetView(g, player)
+    v1.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v1.draw(surf)
+    hits_before = [act.get("action", act).get("appoint_director")
+                   for _, act in v1._appoint_hits]
+    assert eid in hits_before, "Should have offered Appoint before emptying pool"
+
+    # Empty the characters
+    g.realms[player].characters.clear()
+    v2 = BroadsheetView(g, player)
+    v2.active_tab = "Enterprises"
+    v2.draw(surf)
+    hits_after = [act.get("action", act).get("appoint_director")
+                  for _, act in v2._appoint_hits]
+    assert eid not in hits_after, (
+        f"Empty pool still offered Appoint for eid {eid}"
+    )
+
+
+def test_back_returns_to_ventures():
+    """Back returns to the ventures: Expand offers come back, names disappear."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    eid = owned[0].eid
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    # Open picker by pressing Appoint
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if action.get("appoint_director") == eid:
+            v.handle_click(rect.center)
+            break
+    assert v._director_picker is not None, "Picker should be open"
+
+    # Re-draw to populate picker hits
+    v.draw(surf)
+    assert len(v._director_picker_hits) > 0, "Picker should have hits after draw"
+
+    # Expand offers should be hidden while picker is open
+    expand_eids = [a.get("action", a).get("expand_enterprise") for _, a in v._enterprise_hits
+                   if "expand_enterprise" in a.get("action", a)]
+    assert eid not in expand_eids, "Expand should be hidden while picker is open"
+
+    # Press Back
+    back_rect = v._director_picker_hits[0][0]  # Back is first in the list
+    result = v.handle_click(back_rect.center)
+    assert v._director_picker is None, "Picker should be closed after Back"
+
+    # Re-draw to restore venture list
+    v.draw(surf)
+    # Expand offers should be back
+    expand_eids_after = [a.get("action", a).get("expand_enterprise") for _, a in v._enterprise_hits
+                         if "expand_enterprise" in a.get("action", a)]
+    assert eid in expand_eids_after, "Expand should be back after closing picker"
+
+
+def test_completed_appointment_closes_list():
+    """A completed appointment closes the list — venture list is on screen again."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    owned = [e for e in g.enterprises if e.house == player]
+    eid = owned[0].eid
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+
+    # Open picker
+    for rect, act in v._appoint_hits:
+        action = act.get("action", act)
+        if action.get("appoint_director") == eid:
+            v.handle_click(rect.center)
+            break
+    assert v._director_picker is not None
+
+    # Re-draw to populate picker hits
+    v.draw(surf)
+
+    # Press a name (first non-Back hit)
+    from gilded.ui.app import _apply_action, AppState
+    from types import SimpleNamespace
+    for rect, act in v._director_picker_hits:
+        action = act.get("action", act)
+        if action.get("char_id"):
+            result = v.handle_click(rect.center)
+            # Apply through _apply_action
+            state = SimpleNamespace(game=g, house=player, view=v)
+            _apply_action(state, result)
+            break
+
+    assert v._director_picker is None, (
+        "Picker should be closed after a completed appointment"
     )
 

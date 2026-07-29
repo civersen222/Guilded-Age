@@ -124,6 +124,32 @@ def _apply_action(state: AppState, action: dict) -> None:
         for line in lines:
             g.events.append(TurnEvent(line, "ledger", h))
         return
+    if action.get("close_director_picker"):
+        state.view._director_picker = None
+        state.view._director_picker_hits.clear()
+        return
+    # appoint_director branch — only fires when char_id is present and truthy
+    if "appoint_director" in action:
+        eid = action["appoint_director"]
+        char_id = action.get("char_id")
+        if not char_id:
+            return
+        venture = next((e for e in g.enterprises if e.eid == eid and e.house == h), None)
+        if venture is None:
+            return
+        if g.attention.get(h, 0) <= 0:
+            return
+        from gilded.docket import INITIATIVES, initiative
+        domain = INITIATIVES["appoint_director"][0]
+        executor = _executor_by_id(state, None, domain)
+        g.attention[h] -= 1
+        lines = initiative(g, h, "appoint_director", executor, eid=eid, char_id=char_id)
+        from gilded.chassis import TurnEvent
+        for line in lines:
+            g.events.append(TurnEvent(line, "ledger", h))
+        state.view._director_picker = None
+        state.view._director_picker_hits.clear()
+        return
 
 
 def _quicksave(state: AppState) -> str:
