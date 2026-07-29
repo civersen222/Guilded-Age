@@ -110,6 +110,7 @@ class BroadsheetView:
         self._exec_hits: List[Tuple[pygame.Rect, int]] = []
         self._dial_hits: List[Tuple[pygame.Rect, str]] = []
         self._atlas_polys: Dict[int, List[Tuple[int, int]]] = {}
+        self._enterprise_hits: List[Tuple[pygame.Rect, dict]] = []
         self._w = 0
         self._h = 0
 
@@ -136,6 +137,7 @@ class BroadsheetView:
         self._option_hits = []
         self._exec_hits = []
         self._dial_hits = []
+        self._enterprise_hits = []
         surface.fill(PAPER_BG)
         content = pygame.Rect(0, TAB_H + HUD_H, self._w,
                               self._h - TAB_H - HUD_H - BOTTOM_H)
@@ -637,6 +639,42 @@ class BroadsheetView:
                 y += body.get_height() + 2
             y += 6
 
+        # Draw Expand buttons for eligible ventures
+        from gilded.enterprises import TIER_MAX
+        actions = self.enterprise_actions()
+        y += 8
+        for act in actions:
+            action_dict = act.get("action", {})
+            verb = list(action_dict.keys())[0] if action_dict else None
+            if verb != "expand_enterprise":
+                continue
+            eid = act.get("eid")
+            if eid is None:
+                continue
+            ent = next((e for e in self.game.enterprises if e.eid == eid), None)
+            if ent is None:
+                continue
+            if ent.house != self.house:
+                continue
+            if ent.tier >= TIER_MAX:
+                continue
+            if ent.under_construction > 0:
+                continue
+            # Draw the button
+            btn_text = act.get("label", f"Expand {eid}")
+            btn_surf = body.render(btn_text, True, INK)
+            btn_w = btn_surf.get_width() + 16
+            btn_h = body.get_height() + 8
+            btn_rect = pygame.Rect(PAD, y, btn_w, btn_h)
+            if y + btn_h > content.bottom:
+                return
+            # Draw button background
+            pygame.draw.rect(surface, (50, 70, 50), btn_rect)
+            pygame.draw.rect(surface, INK, btn_rect, 2)
+            surface.blit(btn_surf, (PAD + 8, y + 4))
+            self._enterprise_hits.append((btn_rect, act))
+            y += btn_h + 4
+
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
         house = g.houses[name]
@@ -696,4 +734,8 @@ class BroadsheetView:
             if pid is not None:
                 self.selected_pid = pid
                 return {"select_province": pid}
+        if self.active_tab == "Enterprises":
+            for rect, act in self._enterprise_hits:
+                if rect.collidepoint(pos):
+                    return act.get("action", act)
         return None

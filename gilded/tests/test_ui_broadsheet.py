@@ -1536,3 +1536,106 @@ def test_vacant_director_prints_vacant():
         f"Director field '{dir_part}' for '{vacated_name}' is not 'vacant' — empty chair reads as a person"
     )
 
+
+# ---- L4.4: Enterprises panel clickability ----
+
+
+def test_enterprises_draw_produces_hit_regions():
+    """Drawing the Enterprises panel produces at least one hit region."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    assert len(v._enterprise_hits) > 0, (
+        "Enterprises panel drew no hit regions for Expand buttons"
+    )
+
+
+def test_enterprises_click_returns_descriptor_with_eid():
+    """A click at the centre of an Expand button returns a descriptor naming that venture's eid."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    # Pick the first hit region and click its center
+    rect, act = v._enterprise_hits[0]
+    result = v.handle_click(rect.center)
+    assert result is not None, "Click at button center returned None"
+    assert "expand_enterprise" in result, (
+        f"Click returned {result}, expected expand_enterprise key"
+    )
+    assert result["expand_enterprise"] == act["eid"], (
+        f"Descriptor eid {result['expand_enterprise']} != action eid {act['eid']}"
+    )
+
+
+def test_enterprises_click_on_empty_pixel_returns_none():
+    """A click on a pixel with no button returns None."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    # Click at the far right of the content area (no buttons there)
+    result = v.handle_click((1200, 200))
+    assert result is None, (
+        f"Click on empty pixel returned {result}, expected None"
+    )
+
+
+def test_enterprises_no_undispatchable_verbs_clickable():
+    """No hit region carries a verb _apply_action will not dispatch."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    dispatchable = {"expand_enterprise"}
+    for rect, act in v._enterprise_hits:
+        action_dict = act.get("action", {})
+        verbs = set(action_dict.keys())
+        assert verbs.issubset(dispatchable), (
+            f"Hit region carries undispatchable verb(s): {verbs - dispatchable}"
+        )
+
+
+def test_enterprises_construction_blocks_expand_offer():
+    """An idle venture offers Expand; the same venture with under_construction > 0 does not."""
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    v.active_tab = "Enterprises"
+    surf = pygame.Surface((1280, 900))
+    # Find an owned venture
+    owned = [e for e in g.enterprises if e.house == player]
+    assert len(owned) > 0, "No owned ventures to test"
+    target = owned[0]
+    eid = target.eid
+
+    # Half 1: idle venture should offer Expand
+    target.under_construction = 0
+    v.draw(surf)
+    idle_eids = [act["eid"] for _, act in v._enterprise_hits]
+    assert eid in idle_eids, (
+        f"Idle venture eid={eid} not offered in hit regions"
+    )
+
+    # Half 2: under construction must not offer Expand
+    target.under_construction = 2
+    v.draw(surf)
+    uc_eids = [act["eid"] for _, act in v._enterprise_hits]
+    assert eid not in uc_eids, (
+        f"Under-construction venture eid={eid} still offered in hit regions"
+    )
+

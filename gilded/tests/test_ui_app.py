@@ -157,3 +157,37 @@ def test_expand_enterprise_lines_land_in_events():
     for ev in new_events:
         assert ev.register == "ledger"
         assert ev.house == h
+
+
+def test_expand_enterprise_ghost_eid_appends_nothing():
+    """A click naming an eid that matches no venture appends nothing to events."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    pre_count = len(g.events)
+    pre_attention = g.attention.get(h, 0)
+    gapp._apply_action(state, {"expand_enterprise": 1013})
+    assert len(g.events) == pre_count, (
+        f"Ghost eid appended {len(g.events) - pre_count} event(s)"
+    )
+    assert g.attention.get(h, 0) == pre_attention, (
+        f"Ghost eid cost {pre_attention - g.attention.get(h, 0)} attention"
+    )
+
+
+def test_expand_enterprise_real_vs_ghost_in_same_file():
+    """Real expansion writes lines; ghost eid writes nothing — in one test."""
+    import gilded.ui.app as gapp
+    state = gapp.new_app_state(seed=42)
+    g, h = state.game, state.house
+    own = next(e for e in g.enterprises if e.house == h)
+    # Real expansion should write lines
+    pre_count = len(g.events)
+    gapp._apply_action(state, {"expand_enterprise": own.eid})
+    real_lines = len(g.events) - pre_count
+    assert real_lines > 0, "Real expansion wrote no events"
+    # Ghost eid should write nothing
+    pre_count2 = len(g.events)
+    gapp._apply_action(state, {"expand_enterprise": 1013})
+    ghost_lines = len(g.events) - pre_count2
+    assert ghost_lines == 0, f"Ghost eid wrote {ghost_lines} event(s)"
