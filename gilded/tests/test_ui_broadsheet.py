@@ -1968,8 +1968,7 @@ def test_picker_names_match_venture_pressed():
     g = GildedGame(seed=42)
     player = next(iter(g.houses))
     owned = [e for e in g.enterprises if e.house == player]
-    if len(owned) < 2:
-        pytest.skip("Need at least 2 owned ventures")
+    assert len(owned) >= 2, "Need at least 2 owned ventures"
     eid_a, eid_b = owned[0].eid, owned[1].eid
     v = BroadsheetView(g, player)
     v.active_tab = "Enterprises"
@@ -2011,8 +2010,7 @@ def test_unowned_venture_no_appoint_control():
     g = GildedGame(seed=42)
     player = next(iter(g.houses))
     unowned = [e for e in g.enterprises if e.house != player]
-    if not unowned:
-        pytest.skip("No unowned ventures")
+    assert unowned, "No unowned ventures"
     v = BroadsheetView(g, player)
     v.active_tab = "Enterprises"
     surf = pygame.Surface((1280, 900))
@@ -2367,43 +2365,47 @@ def test_backing_out_is_free():
 def test_pressed_row_appoints_to_that_venture():
     """Pressing a picker row for venture X returns eid==X, not another venture.
 
-    Catches the mutation that swaps the eid so the appointment lands on a
-    different venture — right person, wrong works.
+    Tests TWO ventures so that a handler wiring every row to owned[0] is caught.
     """
     pygame.init()
     g = GildedGame(seed=42)
     player = next(iter(g.houses))
     owned = [e for e in g.enterprises if e.house == player]
     assert len(owned) >= 2, "need at least 2 owned ventures"
-    eid = owned[0].eid
 
     v = BroadsheetView(g, player)
     v.active_tab = "Enterprises"
     surf = pygame.Surface((1280, 900))
-    v.draw(surf)
 
-    # Open picker for this specific venture
-    for rect, act in v._appoint_hits:
-        action = act.get("action", act)
-        if action.get("appoint_director") == eid:
-            v.handle_click(rect.center)
-            break
-    assert v._director_picker is not None
+    # Test BOTH ventures — owned[0] and owned[1]
+    for ent in owned[:2]:
+        eid = ent.eid
+        # Re-draw to refresh _appoint_hits for each venture
+        v.draw(surf)
+        # Open picker for this specific venture
+        for rect, act in v._appoint_hits:
+            action = act.get("action", act)
+            if action.get("appoint_director") == eid:
+                v.handle_click(rect.center)
+                break
+        assert v._director_picker is not None, f"Could not open picker for eid={eid}"
 
-    v.draw(surf)
+        v.draw(surf)
 
-    # Press any name row
-    name_hits = []
-    for rect, act in v._director_picker_hits:
-        action = act.get("action", act)
-        if action.get("char_id"):
-            name_hits.append((rect, action))
-    assert len(name_hits) >= 1
+        # Press any name row
+        name_hits = []
+        for rect, act in v._director_picker_hits:
+            action = act.get("action", act)
+            if action.get("char_id"):
+                name_hits.append((rect, action))
+        assert len(name_hits) >= 1, f"No name rows for eid={eid}"
 
-    rect0, action0 = name_hits[0]
-    result = v.handle_click(rect0.center)
-    assert result is not None
-    assert result.get("appoint_director") == eid, (
-        f"Expected appointment on eid={eid}, got eid={result.get('appoint_director')}"
-    )
+        rect0, action0 = name_hits[0]
+        result = v.handle_click(rect0.center)
+        assert result is not None
+        assert result.get("appoint_director") == eid, (
+            f"Expected appointment on eid={eid}, got eid={result.get('appoint_director')}"
+        )
+        # Close picker for next iteration
+        v._director_picker = None
 
