@@ -352,25 +352,44 @@ def test_player_house_not_played_for():
 def test_rival_appoints_named_candidate():
     """A rival appoints the candidate it named, not pool[-1].
 
-    Catches the mutation that seats pool[-1] instead of the picked candidate.
+    Pinned on three axes:
+      WHO  — the seated id equals the id named (neither pool[0] nor pool[-1])
+      WHERE — the venture asked for is the one that changed
+      WHAT ELSE — no other enterprise's director_id changed
+
+    Uses a NON-first venture so that a handler seating the pick on the
+    House's first venture (regardless of which was asked for) is caught.
     """
     import random
     g = _game()
     rival = sorted(g.houses)[0]
     realm = g.realms[rival]
     from gilded.docket import director_candidates, RulingContext, _init_appoint_director
-    # Find a venture owned by rival with empty director seat
-    for ent in g.enterprises:
-        if ent.house == rival and ent.director_id == "":
-            pool = director_candidates(g, rival, ent.eid)
-            if not pool:
-                continue
-            named_char_id = pool[0].id
-            ctx = RulingContext(game=g, house=rival, executor=realm.ruler, rng=random.Random(SEED))
-            msgs = _init_appoint_director(ctx, eid=ent.eid, char_id=named_char_id)
-            assert ent.director_id == named_char_id, \
-                f"Expected director {named_char_id}, got {ent.director_id}"
-            break
-    else:
-        pytest.skip("No venture with empty director seat found")
+    # Collect ventures owned by rival with empty director seat
+    owned = [e for e in g.enterprises if e.house == rival and e.director_id == ""]
+    assert len(owned) >= 2, "need at least 2 ventures to test WHERE"
+    # Use the SECOND venture — not the first — so the "seats on first" mutation fails
+    ent = owned[1]
+    pool = director_candidates(g, rival, ent.eid)
+    assert len(pool) >= 3, "need at least 3 candidates to pick the middle one"
+    # Pick someone who is neither pool[0] nor pool[-1]
+    named_char_id = pool[1].id
+    # Capture every enterprise's director_id before the call
+    directors_before = {e.eid: e.director_id for e in g.enterprises}
+    ctx = RulingContext(game=g, house=rival, executor=realm.ruler, rng=random.Random(SEED))
+    msgs = _init_appoint_director(ctx, eid=ent.eid, char_id=named_char_id)
+    # WHO — the right person
+    assert ent.director_id == named_char_id, \
+        f"Expected director {named_char_id}, got {ent.director_id}"
+    assert named_char_id != pool[0].id and named_char_id != pool[-1].id, \
+        "named candidate must not be pool[0] or pool[-1]"
+    # WHERE — the venture asked for is the one that changed
+    directors_after = {e.eid: e.director_id for e in g.enterprises}
+    changed = [eid for eid in directors_before if directors_before[eid] != directors_after[eid]]
+    assert ent.eid in changed, f"Expected {ent.eid} to change; changed={changed}"
+    # WHAT ELSE — no other enterprise changed
+    for eid, d_before in directors_before.items():
+        if eid != ent.eid:
+            assert directors_after[eid] == d_before, \
+                f"Enterprise {eid} director changed from {d_before} to {directors_after[eid]}"
 

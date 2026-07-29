@@ -146,6 +146,10 @@ def _snapshot_state(g):
 
     Walks the entire __dict__ of the game object and every reachable attribute,
     so that any mutation anywhere in the world is visible in the snapshot.
+
+    Includes underscore-prefixed fields (e.g. Enterprise._last_dividend)
+    because they carry real game state.  Also captures the RNG position via
+    getstate() — the sole state not visible through any __dict__ walk.
     """
     def _walk(obj, seen):
         """Recursively deep-copy an object, handling cycles."""
@@ -161,9 +165,13 @@ def _snapshot_state(g):
         if oid in seen:
             return None  # cycle — skip
         seen[oid] = True
+        # Special-case random.Random: its internal state isn't in __dict__,
+        # but in the C-level mt array.  getstate() returns a tuple that
+        # round-trips through setstate().
+        if type(obj).__name__ == "Random" and type(obj).__module__ == "random":
+            return {"__rng_state__": obj.getstate()}
         if hasattr(obj, "__dict__"):
-            return {k: _walk(v, seen) for k, v in obj.__dict__.items()
-                    if not k.startswith("_")}
+            return {k: _walk(v, seen) for k, v in obj.__dict__.items()}
         return None  # unserializable — skip
 
     return _walk(g, {})
