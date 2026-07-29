@@ -142,12 +142,28 @@ def test_capital_request_at_tier_max_does_not_raise():
 
 
 def _snapshot_state(g):
-    """Deep-copy serializable state for purity check."""
-    snap = {
-        'turn': g.turn,
-        'houses': [(name, h.treasury) for name, h in g.houses.items()],
-        'enterprises': [(e.eid, e.tier, e.target_tier) for e in g.enterprises],
-        'events_len': len(g.events),
-        'events_text': list(g.events),
-    }
-    return snap
+    """Deep-copy serializable state for purity check.
+
+    Walks the entire __dict__ of the game object and every reachable attribute,
+    so that any mutation anywhere in the world is visible in the snapshot.
+    """
+    def _walk(obj, seen):
+        """Recursively deep-copy an object, handling cycles."""
+        if obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj
+        if isinstance(obj, (list, tuple)):
+            return type(obj)(_walk(v, seen) for v in obj)
+        if isinstance(obj, dict):
+            return {k: _walk(v, seen) for k, v in obj.items()}
+        if isinstance(obj, set):
+            return {_walk(v, seen) for v in obj}
+        oid = id(obj)
+        if oid in seen:
+            return None  # cycle — skip
+        seen[oid] = True
+        if hasattr(obj, "__dict__"):
+            return {k: _walk(v, seen) for k, v in obj.__dict__.items()
+                    if not k.startswith("_")}
+        return None  # unserializable — skip
+
+    return _walk(g, {})
