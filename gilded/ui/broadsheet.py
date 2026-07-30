@@ -35,6 +35,7 @@ from gilded.ui.atlas_view import (
 from gilded.ui.widgets import (
     CARD_BG, CARD_EDGE, FADED, INK, PAPER_BG,
     Chip, Column, Meter, Table, TableLayout, font as _font, wrap as _wrap,
+    column_plan, flow_columns, FlowResult,
 )
 from gilded.grip import (
     BAND_CONTESTED, BAND_IMPERILED, BAND_IRON_GRIP, BAND_SEIZED,
@@ -1012,21 +1013,38 @@ class BroadsheetView:
             report = self.narrator.render(report, self.game.director, self.game)
         items = {"Gazette": report.gazette, "Ledger": report.ledger,
                  "Letters": report.letters}[self.active_tab]
-        head = _font(30, bold=True).render(
+        head_font = _font(30, bold=True)
+        head = head_font.render(
             f"THE {self.active_tab.upper()} - {report.year}", True, INK)
         surface.blit(head, (PAD, content.y + 6))
+        # Horizontal rule under the head, in the gap before body text
+        rule_y = content.y + 6 + head.get_height() + 4
+        pygame.draw.line(surface, INK,
+                         (PAD, rule_y),
+                         (content.width - PAD, rule_y), 1)
         body = _font(18)
-        y = content.y + 6 + head.get_height() + 10
-        width = content.width - 2 * PAD
+        # Content area for columns: below the rule
+        body_top = rule_y + 6
+        body_rect = pygame.Rect(content.x, body_top,
+                                content.width, content.bottom - body_top)
         if not items:
             items = ["(nothing to report)"]
-        for item in items:
-            for line in _wrap(item, body, width):
-                if y > content.bottom - 20:
-                    return
-                surface.blit(body.render(line, True, INK), (PAD, y))
-                y += body.get_height() + 2
-            y += 6
+
+        result = flow_columns(items, body, body_rect, line_gap=4)
+
+        for (text, x, y, _ci) in result.placements:
+            surface.blit(body.render(text, True, INK), (x, y))
+
+        # Continuation marker when overflow > 0
+        if result.overflow > 0:
+            marker_text = f"+ {result.overflow} more"
+            marker = body.render(marker_text, True, FADED)
+            # Place marker at bottom of last column that has content
+            last_ci = max(p[3] for p in result.placements) if result.placements else 0
+            cols = column_plan(body_rect, body)
+            mx = cols[last_ci].x
+            my = content.bottom - marker.get_height() - 8
+            surface.blit(marker, (mx, my))
 
     def _draw_docket(self, surface, content: pygame.Rect) -> None:
         title = _font(30, bold=True).render("THE DOCKET", True, INK)

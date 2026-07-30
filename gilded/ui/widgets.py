@@ -24,6 +24,13 @@ PAPER_BG = (238, 232, 218)
 CARD_BG = (248, 244, 234)
 CARD_EDGE = (120, 108, 92)
 
+# ────────────────────────────────────────────────────────────────────────────
+# Typographic constants (Wave 5)
+# ────────────────────────────────────────────────────────────────────────────
+
+MEASURE_CHARS = 66   # comfortable line length at 18pt
+COLUMN_GAP = 24      # gutter between columns in pixels
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # TONES – colour meaning
@@ -158,6 +165,90 @@ def rows(rect: pygame.Rect, heights: Sequence[float], gap: int = 0) -> list[pyga
         row_rects.append(pygame.Rect(rect.left, y, rect.width, h))
         y += h + gap
     return row_rects
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Column layout helpers (Wave 5)
+# ────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class FlowResult:
+    """Result of flowing items into columns."""
+    placements: list  # list of (text, x, y, col_index)
+    overflow: int     # number of lines that did not fit
+
+
+def column_plan(
+    rect: pygame.Rect,
+    font: pygame.font.Font,
+    *,
+    chars: int = MEASURE_CHARS,
+    gap: int = COLUMN_GAP,
+) -> list[pygame.Rect]:
+    """Compute column rects: measure-capped, centred in *rect*.
+
+    Returns a list of non-overlapping rects left-to-right, all inside *rect*,
+    horizontally centred (left/right margins differ by at most 1px).
+    """
+    measure_px = font.size("x" * chars)[0]
+    n = max(1, (rect.width + gap) // (measure_px + gap))
+    col_w = min(measure_px, (rect.width - gap * (n - 1)) // n)
+    block = col_w * n + gap * (n - 1)
+    margin = (rect.width - block) // 2
+    # Shift rect right by margin, then use columns() to tile
+    shifted = pygame.Rect(rect.left + margin, rect.top, block, rect.height)
+    raw = columns(shifted, n, gap)
+    # Cap each column to col_w (columns() may give the last one extra for remainder)
+    return [pygame.Rect(c.x, c.y, col_w, c.height) for c in raw]
+
+
+def flow_columns(
+    items: list[str],
+    font: pygame.font.Font,
+    rect: pygame.Rect,
+    line_gap: int,
+) -> FlowResult:
+    """Flow *items* into columns, column-major order.
+
+    Each item is wrapped to the column width.  Lines fill column 0, then column 1, etc.
+    Returns a FlowResult with placements and overflow count.
+    """
+    cols = column_plan(rect, font)
+    if not cols:
+        return FlowResult(placements=[], overflow=0)
+
+    col_w = cols[0].width
+    line_h = font.size("x")[1]
+
+    # Pre-wrap all items to column width
+    all_lines = []
+    for item in items:
+        lines = wrap(item, font, col_w)
+        all_lines.extend(lines)
+
+    # Calculate capacity per column
+    capacity = 0
+    y = rect.top
+    while y + line_h <= rect.bottom:
+        capacity += 1
+        y += line_h + line_gap
+
+    # Flow column-major: fill col 0, then col 1, etc.
+    placements = []
+    idx = 0
+    for ci, col in enumerate(cols):
+        y = col.top
+        for _ in range(capacity):
+            if idx >= len(all_lines):
+                break
+            line_text = all_lines[idx]
+            idx += 1
+            placements.append((line_text, col.x, y, ci))
+            y += line_h + line_gap
+
+    overflow = len(all_lines) - len(placements)
+    return FlowResult(placements=placements, overflow=max(0, overflow))
 
 
 # ────────────────────────────────────────────────────────────────────────────
