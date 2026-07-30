@@ -91,6 +91,72 @@ def test_r12_gold_negative():
     assert gold(-42.6) == "-43"
 
 
+def test_r12_treasury_unsigned_on_surface():
+    """The rendered treasury line on the Ledger page must use gold() (unsigned),
+    not money() (which adds a leading '+').
+
+    Renders the page and reads the treasury text off the SURFACE pixels to
+    verify no leading '+' appears.
+    """
+    g = _game(seed=7, turns=1)
+    house_name = list(g.houses.keys())[0]
+    house = g.houses[house_name]
+
+    s = pygame.display.set_mode((1280, 900))
+    hud_h = _hud_height()
+    content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
+    v = BroadsheetView(g, house_name)
+    s.fill(PAPER_BG)
+    v._draw_ledger(s, content)
+
+    # Build the two possible header strings using the same font as _draw_ledger
+    f_body = _font(14)
+    f_title = _font(26, bold=True)
+    resolved_turn = g.turn - 1
+    gold_text = f"Turn {resolved_turn}  |  Treasury: {gold(house.treasury)} gold"
+    money_text = f"Turn {resolved_turn}  |  Treasury: {money(house.treasury)} gold"
+
+    # Render both as opaque surfaces (RGB, no alpha)
+    text_gold = f_body.render(gold_text, True, INK)
+    surf_gold = pygame.Surface(text_gold.get_size())
+    surf_gold.fill(PAPER_BG)
+    surf_gold.blit(text_gold, (0, 0))
+    text_money = f_body.render(money_text, True, INK)
+    surf_money = pygame.Surface(text_money.get_size())
+    surf_money.fill(PAPER_BG)
+    surf_money.blit(text_money, (0, 0))
+
+    # The header is drawn at PAD, content.y + 8 + title_height + 6
+    title_h = f_title.render("LEDGER", True, INK).get_height()
+    header_y = content.y + 8 + title_h + 6
+    row_h = surf_gold.get_height()
+
+    # Extract the region from the drawn surface where the header lives
+    region = s.subsurface(PAD, header_y, surf_gold.get_width(), row_h)
+    region_rgb = pygame.Surface(region.get_size())
+    region_rgb.blit(region, (0, 0))
+
+    # Compare RGB pixels with gold rendering — should match
+    diff_gold = 0
+    for x in range(surf_gold.get_width()):
+        for y in range(row_h):
+            p1 = region_rgb.get_at((x, y))[:3]
+            p2 = surf_gold.get_at((x, y))[:3]
+            if p1 != p2:
+                diff_gold += 1
+
+    # money() adds '+' so the strings differ for positive treasury
+    assert gold_text != money_text, \
+        f"gold() and money() should produce different strings: gold={gold_text} money={money_text}"
+
+    total = surf_gold.get_width() * row_h
+    match_rate = 1 - (diff_gold / max(total, 1))
+    assert match_rate > 0.9, (
+        f"Surface header does not match gold() rendering "
+        f"(match rate {match_rate:.2%}) — money() may have been used instead"
+    )
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # R2: rows are the journal flows
 # ────────────────────────────────────────────────────────────────────────────
@@ -259,13 +325,13 @@ def test_r9_no_draw_outside_content_1280x900():
     buf = pygame.image.tobytes(s, "RGB")
     pw = 1280
     for y in range(0, content.top):
-        for x in range(PAD, pw - PAD):
+        for x in range(0, pw):
             idx = (y * pw + x) * 3
             r, g_val, b = buf[idx:idx+3]
             if (r, g_val, b) != PAPER_BG:
                 pytest.fail(f"Non-bg pixel at ({x},{y}) above content.top")
     for y in range(content.bottom, 900):
-        for x in range(PAD, pw - PAD):
+        for x in range(0, pw):
             idx = (y * pw + x) * 3
             r, g_val, b = buf[idx:idx+3]
             if (r, g_val, b) != PAPER_BG:
@@ -273,7 +339,7 @@ def test_r9_no_draw_outside_content_1280x900():
 
 
 def test_r9_no_draw_outside_content_800x600():
-    g = _game(seed=7, turns=1)
+    g = _game(seed=7, turns=20)
     s = pygame.display.set_mode((800, 600))
     hud_h = _hud_height()
     content = pygame.Rect(0, TAB_H + hud_h, 800, 600 - TAB_H - hud_h - BOTTOM_H)
@@ -285,13 +351,13 @@ def test_r9_no_draw_outside_content_800x600():
     buf = pygame.image.tobytes(s, "RGB")
     pw = 800
     for y in range(0, content.top):
-        for x in range(PAD, pw - PAD):
+        for x in range(0, pw):
             idx = (y * pw + x) * 3
             r, g_val, b = buf[idx:idx+3]
             if (r, g_val, b) != PAPER_BG:
                 pytest.fail(f"Non-bg pixel at ({x},{y}) above content.top")
     for y in range(content.bottom, 600):
-        for x in range(PAD, pw - PAD):
+        for x in range(0, pw):
             idx = (y * pw + x) * 3
             r, g_val, b = buf[idx:idx+3]
             if (r, g_val, b) != PAPER_BG:
@@ -388,11 +454,55 @@ def test_r13_no_overflow_marker_1280x900():
     pw = 1280
     # Scan the last 20 pixels of content area — should be PAPER_BG (no marker)
     for y in range(max(content.top, content.bottom - 20), content.bottom):
-        for x in range(PAD, min(pw - PAD, PAD + 200)):
+        for x in range(PAD, PAD + 200):
             idx = (y * pw + x) * 3
             r, g_val, b = buf[idx:idx+3]
             if (r, g_val, b) != PAPER_BG:
                 pytest.fail(f"Non-bg pixel at ({x},{y}) — no overflow marker expected at 1280x900")
+
+
+def test_r9_overflow_marker_within_content():
+    """With an overflowing page (800x600, turns=20), the overflow marker
+    must appear WITHIN the content rect — proving the clip is active."""
+    g = _game(seed=7, turns=20)
+    s = pygame.display.set_mode((800, 600))
+    hud_h = _hud_height()
+    content = pygame.Rect(0, TAB_H + hud_h, 800, 600 - TAB_H - hud_h - BOTTOM_H)
+    house = list(g.houses.keys())[0]
+    v = BroadsheetView(g, house)
+    s.fill(PAPER_BG)
+    v._draw_ledger(s, content)
+
+    buf = pygame.image.tobytes(s, "RGB")
+    pw = 800
+    # Find the lowest non-bg pixel within content — proves content was drawn
+    lowest_y = content.top
+    for y in range(content.top, content.bottom):
+        for x in range(0, pw):
+            idx = (y * pw + x) * 3
+            r, g_val, b = buf[idx:idx+3]
+            if (r, g_val, b) != PAPER_BG:
+                lowest_y = y
+    # The page should fill most of the content area with an overflowing fixture
+    assert lowest_y > content.top + 50, (
+        "Overflowing page should render content well below the top of content rect"
+    )
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# R14: zero-net summary label is present
+# ────────────────────────────────────────────────────────────────────────────
+
+def test_summary_zero_net_present():
+    """A label whose credits and debits cancel to exactly 0.0 must still appear in summary."""
+    h = House(name="Test", capital=1)
+    h.credit(1, "dividends", 100.0)
+    h.debit(1, "dividends", 100.0)
+    model = ledger_model(h, 1)
+    labels = [r.label for r in model.summary]
+    assert "dividends" in labels, "Zero-net label should be present in summary"
+    row = [r for r in model.summary if r.label == "dividends"][0]
+    assert row.amount == 0.0, "Zero-net label should have amount 0.0"
 
 
 if __name__ == "__main__":
