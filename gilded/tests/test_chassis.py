@@ -332,7 +332,7 @@ def test_input_cost_deducted_from_consumer_enterprise_dividend():
 
 # ── L4.7: strike-is-local ──────────────────────────────────────────────
 
-def test_a_strike_where_there_is_no_colliery_pays_no_colliery():
+def test_a_strike_where_there_is_no_colliery_pays_no_colliery(monkeypatch):
     """A strike in a province with no colliery does NOT pay every colliery.
 
     Neutralises market.STRIKE_SUPPLY_REDUCTION so the market channel
@@ -368,13 +368,9 @@ def test_a_strike_where_there_is_no_colliery_pays_no_colliery():
             target = p
             break
 
-    # If all calm movement provinces have collieries, just pick any calm
-    # movement province (the test still works; we just won't distinguish
-    # between "local" and "remote" effects)
-    if target is None:
-        target = calm_movements[0]
-
-    assert target is not None, "no calm movement province found"
+    assert target is not None, \
+        "fixture: no calm movement province without a colliery — this test " \
+        "cannot distinguish a remote strike from a local one without one"
     assert target.movement.state != "striking", "target should not be striking"
 
     # Deep copy into two branches
@@ -400,10 +396,9 @@ def test_a_strike_where_there_is_no_colliery_pays_no_colliery():
         f"Fixture: expected {calm_striking + 1} striking, got {struck_striking}"
 
     # End turn in both branches, neutralising market channel
-    market.STRIKE_SUPPLY_REDUCTION = 1.0
+    monkeypatch.setattr(market, "STRIKE_SUPPLY_REDUCTION", 1.0)
     calm.end_turn()
     struck.end_turn()
-    market.STRIKE_SUPPLY_REDUCTION = 0.5  # restore
 
     # Every colliery's _last_dividend must be identical
     for ce in collieries:
@@ -414,15 +409,16 @@ def test_a_strike_where_there_is_no_colliery_pays_no_colliery():
             f"Colliery {ce.name}: calm={calm_ent._last_dividend:.6f}, struck={struck_ent._last_dividend:.6f}"
 
 
-def test_a_colliery_still_loses_output_when_its_own_province_strikes():
+def test_a_colliery_still_loses_output_when_its_own_province_strikes(monkeypatch):
     """Guard: STRIKE_OUTPUT_MULT must still cut output for a local strike."""
     from copy import deepcopy
     from gilded.society.labor import STRIKE_OUTPUT_MULT
     import gilded.market as market
 
     g = GildedGame(seed=42)
-    # Run enough turns for movements to spawn (seed 42: turn 9)
-    for _ in range(9):
+    # Run enough turns for a colliery province to have a movement
+    # (seed 42: Ravnbourne Colliery gets one at turn 11)
+    for _ in range(11):
         g.end_turn()
 
     # Find a colliery whose province has a movement
@@ -437,14 +433,8 @@ def test_a_colliery_still_loses_output_when_its_own_province_strikes():
                 target_ent = ent
                 break
 
-    if target_ent is None:
-        # Fallback: pick first colliery, force its province movement
-        target_ent = collieries[0]
-        prov = g.atlas.provinces.get(target_ent.province)
-        assert prov is not None
-        if getattr(prov, "movement", None) is None:
-            prov.movement = Movement(prov.pid)
-        prov.movement.state = "idle"
+    assert target_ent is not None, \
+        "fixture: no colliery sits in a province with a non-striking movement"
 
     prov = g.atlas.provinces.get(target_ent.province)
 
@@ -452,18 +442,18 @@ def test_a_colliery_still_loses_output_when_its_own_province_strikes():
     calm = deepcopy(g)
     struck = deepcopy(g)
 
-    # Force strike in the struck branch
+    # Force a strike in the struck branch
     struck_prov = struck.atlas.provinces.get(target_ent.province)
+    assert struck_prov is not None
+    assert getattr(struck_prov, "movement", None) is not None
     struck_prov.movement.state = "striking"
 
-    # Neutralise market channel
-    market.STRIKE_SUPPLY_REDUCTION = 1.0
-
+    # End turn in both branches, neutralising market channel
+    monkeypatch.setattr(market, "STRIKE_SUPPLY_REDUCTION", 1.0)
     calm.end_turn()
     struck.end_turn()
-    market.STRIKE_SUPPLY_REDUCTION = 0.5  # restore
 
-    # The struck colliery's dividend must be lower
+    # The struck colliery's dividend must be lower (STRIKE_OUTPUT_MULT = 0.5)
     calm_ent = next(e for e in calm.enterprises if e.eid == target_ent.eid)
     struck_ent = next(e for e in struck.enterprises if e.eid == target_ent.eid)
     assert struck_ent._last_dividend < calm_ent._last_dividend, \
