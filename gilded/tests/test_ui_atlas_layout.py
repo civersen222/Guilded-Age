@@ -31,6 +31,7 @@ from gilded.ui.atlas_view import (
 )
 from gilded.world import MINOR_OWNER
 from gilded.ui.broadsheet import BroadsheetView, TAB_H, BOTTOM_H, _hud_height
+from collections import Counter
 
 
 def _make_game(seed):
@@ -712,3 +713,253 @@ def test_render_does_not_mutate_game_state():
         draw_atlas(surf, g, rect)
         draw_atlas(surf, g, rect, selected_pid=list(g.atlas.provinces.keys())[0])
     assert g.turn == 1  # game should still be at turn 1
+
+
+# ── Wave 4b: Atlas tests earn their rules ────────────────────────────────────
+# Rule 1-5: label order, tie-breaking, most populous, glyph subset, glyph floors
+
+def _expected_label_order(game):
+    """Return the canonical sort order: (-population, name)."""
+    pids = list(game.atlas.provinces.keys())
+    pids.sort(key=lambda pid: (
+        -game.atlas.provinces[pid].population,
+        game.atlas.provinces[pid].name,
+    ))
+    return pids
+
+
+def _restricted_order(expected, labelled_pids):
+    """Return *expected* filtered to only the labelled pids, preserving order."""
+    return [pid for pid in expected if pid in labelled_pids]
+
+
+def _pop_only_order(game):
+    """Population-only stable sort (ties break by dict insertion order)."""
+    pids = list(game.atlas.provinces.keys())
+    pids.sort(key=lambda pid: -game.atlas.provinces[pid].population)
+    return pids
+
+
+# ── Rule 1: returned order == (-pop, name) order restricted to labelled pids ─
+
+def test_rule1_label_order_seed7_1280x900():
+    _check_rule1(7, 1280, 900)
+
+
+def test_rule1_label_order_seed7_1024x768():
+    _check_rule1(7, 1024, 768)
+
+
+def test_rule1_label_order_seed7_900x400():
+    _check_rule1(7, 900, 400)
+
+
+def test_rule1_label_order_seed42_1280x900():
+    _check_rule1(42, 1280, 900)
+
+
+def test_rule1_label_order_seed42_1024x768():
+    _check_rule1(42, 1024, 768)
+
+
+def test_rule1_label_order_seed42_900x400():
+    _check_rule1(42, 900, 400)
+
+
+def _check_rule1(seed, w, h):
+    g = _make_game(seed)
+    rect = _content_rect(w, h)
+    transform = atlas_transform(g.atlas, rect)
+    labels = atlas_label_rects(g, transform, rect)
+    labelled_pids = set(pid for pid, _ in labels)
+    returned_order = [pid for pid, _ in labels]
+    expected = _restricted_order(_expected_label_order(g), labelled_pids)
+    assert returned_order == expected, (
+        f"seed={seed} size={w}x{h}: label order differs from (-pop, name) "
+        f"restricted to labelled set"
+    )
+
+
+# ── Rule 2: returned order != population-only stable sort ────────────────────
+
+def test_rule2_tie_fixture_seed7():
+    """Seed 7 has population ties — at least one value shared by 2+ provinces."""
+    g = _make_game(7)
+    pops = [g.atlas.provinces[pid].population for pid in g.atlas.provinces]
+    counts = Counter(pops)
+    ties = {v: c for v, c in counts.items() if c >= 2}
+    assert len(ties) > 0, "Seed 7 should have population ties"
+
+
+def test_rule2_tie_fixture_seed42():
+    """Seed 42 has population ties — at least one value shared by 2+ provinces."""
+    g = _make_game(42)
+    pops = [g.atlas.provinces[pid].population for pid in g.atlas.provinces]
+    counts = Counter(pops)
+    ties = {v: c for v, c in counts.items() if c >= 2}
+    assert len(ties) > 0, "Seed 42 should have population ties"
+
+
+def test_rule2_order_differs_seed7_1280x900():
+    _check_rule2(7, 1280, 900)
+
+
+def test_rule2_order_differs_seed7_1024x768():
+    _check_rule2(7, 1024, 768)
+
+
+def test_rule2_order_differs_seed7_900x400():
+    _check_rule2(7, 900, 400)
+
+
+def test_rule2_order_differs_seed42_1280x900():
+    _check_rule2(42, 1280, 900)
+
+
+def test_rule2_order_differs_seed42_1024x768():
+    _check_rule2(42, 1024, 768)
+
+
+def _check_rule2(seed, w, h):
+    g = _make_game(seed)
+    rect = _content_rect(w, h)
+    transform = atlas_transform(g.atlas, rect)
+    labels = atlas_label_rects(g, transform, rect)
+    labelled_pids = set(pid for pid, _ in labels)
+    returned_order = [pid for pid, _ in labels]
+    pop_only = _restricted_order(_pop_only_order(g), labelled_pids)
+    assert returned_order != pop_only, (
+        f"seed={seed} size={w}x{h}: label order identical to pop-only sort "
+        f"(tie-breaking by name not exercised)"
+    )
+
+
+# ── Rule 3: most populous province is always labelled ────────────────────────
+
+def test_rule3_most_populous_seed7_1280x900():
+    _check_rule3(7, 1280, 900)
+
+
+def test_rule3_most_populous_seed7_1024x768():
+    _check_rule3(7, 1024, 768)
+
+
+def test_rule3_most_populous_seed7_900x400():
+    _check_rule3(7, 900, 400)
+
+
+def test_rule3_most_populous_seed42_1280x900():
+    _check_rule3(42, 1280, 900)
+
+
+def test_rule3_most_populous_seed42_1024x768():
+    _check_rule3(42, 1024, 768)
+
+
+def test_rule3_most_populous_seed42_900x400():
+    _check_rule3(42, 900, 400)
+
+
+def _check_rule3(seed, w, h):
+    g = _make_game(seed)
+    rect = _content_rect(w, h)
+    transform = atlas_transform(g.atlas, rect)
+    labels = atlas_label_rects(g, transform, rect)
+    labelled_pids = {pid for pid, _ in labels}
+    most_populous_pid = max(
+        g.atlas.provinces,
+        key=lambda pid: g.atlas.provinces[pid].population
+    )
+    assert most_populous_pid in labelled_pids, (
+        f"seed={seed} size={w}x{h}: most populous province {most_populous_pid} "
+        f"not in labelled set"
+    )
+
+
+# ── Rule 4: every glyph pid is a labelled pid ────────────────────────────────
+
+def test_rule4_glyph_subset_seed7_1280x900():
+    _check_rule4(7, 1280, 900)
+
+
+def test_rule4_glyph_subset_seed7_1024x768():
+    _check_rule4(7, 1024, 768)
+
+
+def test_rule4_glyph_subset_seed7_900x400():
+    _check_rule4(7, 900, 400)
+
+
+def test_rule4_glyph_subset_seed42_1280x900():
+    _check_rule4(42, 1280, 900)
+
+
+def test_rule4_glyph_subset_seed42_1024x768():
+    _check_rule4(42, 1024, 768)
+
+
+def test_rule4_glyph_subset_seed42_900x400():
+    _check_rule4(42, 900, 400)
+
+
+def _check_rule4(seed, w, h):
+    g = _make_game(seed)
+    rect = _content_rect(w, h)
+    transform = atlas_transform(g.atlas, rect)
+    labels = atlas_label_rects(g, transform, rect)
+    glyphs = atlas_glyph_rects(g, transform, rect)
+    label_pids = {pid for pid, _ in labels}
+    glyph_pids = {pid for pid, _ in glyphs}
+    assert glyph_pids <= label_pids, (
+        f"seed={seed} size={w}x{h}: glyphs under unlabelled provinces: "
+        f"{glyph_pids - label_pids}"
+    )
+
+
+# ── Rule 5: glyph cluster floors ─────────────────────────────────────────────
+
+def test_rule5_glyph_floor_seed7_1280x900():
+    _check_rule5_floor(7, 1280, 900, 11)
+
+
+def test_rule5_glyph_floor_seed7_1024x768():
+    _check_rule5_floor(7, 1024, 768, 10)
+
+
+def test_rule5_glyph_floor_seed42_1280x900():
+    _check_rule5_floor(42, 1280, 900, 6)
+
+
+def test_rule5_glyph_floor_seed42_1024x768():
+    _check_rule5_floor(42, 1024, 768, 6)
+
+
+def test_rule5_glyph_render_seed7_900x400():
+    """At 900x400 seed 7: render without raising, glyph pids subset of labels."""
+    _check_rule5_render(7, 900, 400)
+
+
+def test_rule5_glyph_render_seed42_900x400():
+    """At 900x400 seed 42: render without raising, glyph pids subset of labels."""
+    _check_rule5_render(42, 900, 400)
+
+
+def _check_rule5_floor(seed, w, h, floor):
+    g = _make_game(seed)
+    rect = _content_rect(w, h)
+    transform = atlas_transform(g.atlas, rect)
+    glyphs = atlas_glyph_rects(g, transform, rect)
+    assert len(glyphs) >= floor, (
+        f"seed={seed} size={w}x{h}: {len(glyphs)} glyph clusters < floor {floor}"
+    )
+
+
+def _check_rule5_render(seed, w, h):
+    g = _make_game(seed)
+    rect = _content_rect(w, h)
+    transform = atlas_transform(g.atlas, rect)
+    labels = atlas_label_rects(g, transform, rect)
+    glyphs = atlas_glyph_rects(g, transform, rect)
+    label_pids = {pid for pid, _ in labels}
+    glyph_pids = {pid for pid, _ in glyphs}
+    assert glyph_pids <= label_pids

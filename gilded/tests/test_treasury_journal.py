@@ -413,6 +413,34 @@ def test_outlay_other_turn_zero():
     assert h.outlay(5) == 50.0
 
 
+# ── Rule 6 (Wave 4b) — trade income turn stamp from live game ────────────────
+
+def test_rule6_trade_turn_stamp_seed7():
+    """Trade income entries carry the correct turn number from a live game."""
+    _check_rule6_trade_stamp(7)
+
+
+def test_rule6_trade_turn_stamp_seed42():
+    """Trade income entries carry the correct turn number from a live game."""
+    _check_rule6_trade_stamp(42)
+
+
+def _check_rule6_trade_stamp(seed):
+    g = GildedGame(seed=seed, player_house="Vantrell")
+    g.directives["Vantrell"].set_stance("diplomacy", 100)
+    for _ in range(12):
+        g.end_turn()
+    trade_entries = [
+        entry for entry in g.houses["Vantrell"].journal
+        if entry[1] == "trade"
+    ]
+    assert len(trade_entries) == 12, f"Expected 12 trade entries, got {len(trade_entries)}"
+    for i, (turn, label, amount) in enumerate(trade_entries, 1):
+        assert turn == i, f"Entry {i}: expected turn={i}, got turn={turn}"
+        assert label == "trade"
+        assert amount == 2.0, f"Entry {i}: expected amount=2.0, got {amount}"
+
+
 def test_flows_returns_correct_tuples():
     h = House(name="X", capital=0, treasury=500.0)
     h.credit(1, "dividends", 100.0)
