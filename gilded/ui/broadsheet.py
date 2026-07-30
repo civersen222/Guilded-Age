@@ -19,11 +19,12 @@ rule-action will carry.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import pygame
 
-from gilded.dashboard import delta, scoreboard
+from gilded.dashboard import Delta, delta, scoreboard
 from gilded.grip import _name_for, report as grip_report
 from gilded.intel import report as intel_report, threat_rank
 from gilded.market import COMMODITIES
@@ -33,21 +34,221 @@ from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 from gilded.ui.widgets import (
     CARD_BG, CARD_EDGE, FADED, INK, PAPER_BG,
-    font as _font, wrap as _wrap,
+    Chip, Meter, font as _font, wrap as _wrap,
 )
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
 TAB_H = 40
-HUD_LINES = 5  # number of text rows in the HUD
 BOTTOM_H = 56
+
+# Danger thresholds
+LEGIT_DANGER = 20.0
+TIDE_DANGER = 70.0
+
+# HUD geometry: 3 rows (axes + legitimacy/tide, chips + texts, rival row always reserved)
+_HUD_ROWS = 3
+_METER_BAR_H = 14
+_CHIP_H = 18
+_TEXT_PT = 13
+_ROW_GAP = 4
+_PAD = 6
 
 
 def _hud_height() -> int:
-    """Height the HUD needs for HUD_LINES rows.  Derived from content, not a constant."""
-    fs = _font(15)
-    line_h = fs.get_height() + 3
-    return 6 + HUD_LINES * line_h
+    """Fixed band height derived from row structure and widget metrics."""
+    fs = _font(_TEXT_PT)
+    text_h = fs.get_height()
+
+    row1_h = max(_METER_BAR_H, text_h) + 2
+    row2_h = max(_METER_BAR_H, text_h) + 2
+    row3_h = max(_CHIP_H, text_h) + 2
+    row4_h = max(_METER_BAR_H, text_h) + 2
+    row5_h = text_h + 2
+
+    return _PAD + row1_h + _ROW_GAP + row2_h + _ROW_GAP + row3_h + _ROW_GAP + row4_h + _ROW_GAP + row5_h + _PAD
+
+
+@dataclass(frozen=True)
+class HudModel:
+    meters: Dict[str, Meter]
+    chips: Dict[str, Chip]
+    texts: Dict[str, str]
+
+
+def hud_model(board, d: Delta) -> HudModel:
+    """Pure builder: Scoreboard + Delta -> HudModel."""
+    meters: Dict[str, Meter] = {}
+    chips: Dict[str, Chip] = {}
+    texts: Dict[str, str] = {}
+
+    # Axis meters
+    for name in ("capital", "standing", "blood", "world"):
+        value = board.axes[name]
+        delta_val = None if d.first_session else d.axes[name].change
+        meters[name] = Meter(
+            label=name.capitalize(),
+            value=value,
+            lo=0,
+            hi=100,
+            delta=delta_val,
+            fmt="{:.0f}",
+        )
+
+    # Legitimacy meter
+    legit_delta = None if d.first_session else d.legitimacy.change
+    meters["legitimacy"] = Meter(
+        label="Legitimacy",
+        value=board.legitimacy,
+        lo=0,
+        hi=100,
+        delta=legit_delta,
+        danger=("below", LEGIT_DANGER),
+        fmt="{:.0f}",
+    )
+
+    # Tide meter
+    tide_delta = None if d.first_session else d.tide_level.change
+    meters["tide"] = Meter(
+        label="Tide",
+        value=board.tide_level,
+        lo=0,
+        hi=100,
+        delta=tide_delta,
+        invert=True,
+        danger=("above", TIDE_DANGER),
+        fmt="{:.0f}",
+    )
+
+    # Rival axis meters (only when rival_axes exists)
+    if board.rival_axes is not None:
+        rival_label = board.rival_name or "Rival"
+        for name in ("capital", "standing", "blood", "world"):
+            meters[f"rival:{name}"] = Meter(
+                label=f"{rival_label} {name.capitalize()}",
+                value=board.rival_axes[name],
+                lo=0,
+                hi=100,
+                delta=None,
+                fmt="{:.0f}",
+            )
+        texts["rival"] = f"Rival: House {board.rival_name}"
+    else:
+        texts["rival"] = "No rival has emerged"
+
+    # Chips
+    treasury_dir = d.treasury.direction if not d.first_session else 0
+    treasury_tone = "good" if treasury_dir > 0 else ("bad" if treasury_dir < 0 else "neutral")
+    chips["treasury"] = Chip(
+        text=f"Treasury {board.treasury:.0f}",
+        tone=treasury_tone,
+    )
+
+    chips["atrocities"] = Chip(
+        text=f"Atrocities {board.atrocities:.0f}",
+        tone="bad" if board.atrocities > 0 else "neutral",
+    )
+
+    chips["phase"] = Chip(
+        text=board.tide_phase,
+        tone="neutral",
+    )
+
+    # Texts
+    texts["era"] = f"{board.era_title} · {board.year} ({board.century_pct * 100:.0f}%)"
+    texts["rank"] = f"Rank #{board.rank}"
+    # intent placeholder — filled by _draw_hud when game object is available
+    texts["intent"] = ""
+
+    return HudModel(meters=meters, chips=chips, texts=texts)
+
+
+def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
+    """Pure layout: assign a pygame.Rect to every key in the model, 5 rows."""
+    result: Dict[str, pygame.Rect] = {}
+    fs = _font(_TEXT_PT)
+    text_h = fs.get_height()
+
+    margin = 8
+    x0 = band.left + margin
+    y0 = band.top + _PAD
+    usable_w = band.width - 2 * margin
+
+    rh = max(_METER_BAR_H, text_h) + 2  # standard row height
+
+    # --- Row 1: 4 axis meters ---
+    y = y0
+    meter_w = (usable_w - 3 * _ROW_GAP) // 4
+    for i, name in enumerate(("capital", "standing", "blood", "world")):
+        rx = x0 + i * (meter_w + _ROW_GAP)
+        result[name] = pygame.Rect(rx, y, meter_w, rh)
+
+    y += rh + _ROW_GAP
+
+    # --- Row 2: legitimacy + tide meters ---
+    half_w = (usable_w - _ROW_GAP) // 2
+    result["legitimacy"] = pygame.Rect(x0, y, half_w, rh)
+    result["tide"] = pygame.Rect(x0 + half_w + _ROW_GAP, y, half_w, rh)
+
+    y += rh + _ROW_GAP
+
+    # --- Row 3: chips (treasury, atrocities, phase) + era text ---
+    chip_specs = []
+    for key in ["treasury", "atrocities", "phase"]:
+        surf = fs.render(model.chips[key].text, True, INK)
+        w = surf.get_width() + 16
+        chip_specs.append((key, w))
+    surf_era = fs.render(model.texts["era"], True, INK)
+    era_w = surf_era.get_width() + 8
+    chip_specs.append(("era", era_w))
+
+    n_items = len(chip_specs)
+    total_gap = (n_items - 1) * 12
+    total_needed = sum(w for _, w in chip_specs) + total_gap
+    if total_needed > usable_w:
+        scale = usable_w / total_needed
+        chip_specs = [(key, int(w * scale)) for key, w in chip_specs]
+
+    cx = x0
+    row3_h = max(_CHIP_H, text_h) + 2
+    for key, w in chip_specs:
+        result[key] = pygame.Rect(cx, y, w, row3_h)
+        cx += w + 12
+
+    y += row3_h + _ROW_GAP
+
+    # --- Row 4: rival label + rank (both text, drawn in HUD_INK) ---
+    surf_rival = fs.render(model.texts["rival"], True, INK)
+    rival_w = surf_rival.get_width() + 8
+    surf_rank = fs.render(model.texts["rank"], True, INK)
+    rank_w = surf_rank.get_width() + 8
+    result["rival"] = pygame.Rect(x0, y, rival_w, rh)
+    result["rank"] = pygame.Rect(x0 + rival_w + 12, y, rank_w, rh)
+
+    y += rh + _ROW_GAP
+
+    # --- Row 5: rival meters (if any) + intent ---
+    rival_keys = [k for k in model.meters if k.startswith("rival:")]
+    row5_h = max(_METER_BAR_H, text_h) + 2
+
+    if rival_keys:
+        n = len(rival_keys)
+        intent_min = 40
+        space_for_rivals = usable_w - intent_min - (n - 1) * _ROW_GAP - 12
+        rival_meter_w = max(40, space_for_rivals // n)
+        for i, key in enumerate(rival_keys):
+            rx = x0 + i * (rival_meter_w + _ROW_GAP)
+            result[key] = pygame.Rect(rx, y, rival_meter_w, row5_h)
+        used = n * rival_meter_w + (n - 1) * _ROW_GAP
+        intent_w = max(intent_min, usable_w - used - 12)
+        intent_x = x0 + used + 12
+        if intent_x + intent_w > band.right - margin:
+            intent_w = band.right - margin - intent_x
+        result["intent"] = pygame.Rect(intent_x, y, intent_w, row5_h)
+    else:
+        result["intent"] = pygame.Rect(x0, y, usable_w, row5_h)
+
+    return result
 
 PAD = 16
 
@@ -164,40 +365,40 @@ class BroadsheetView:
 
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
+        d = delta(self.prev_board, b)
+        model = hud_model(b, d)
         y0 = TAB_H
-        pygame.draw.rect(surface, HUD_BG, (0, y0, self._w, _hud_height()))
-        strong = _font(16, bold=True)
-        fs = _font(15)
-        line_h = fs.get_height() + 3
-        x = PAD
-        y = y0 + 6
-        axis_str = "    ".join(
-            f"{name.capitalize()} {b.axes[name]:.0f}"
-            for name in ("capital", "standing", "blood", "world"))
-        surface.blit(strong.render(axis_str, True, HUD_INK), (x, y))
-        y += line_h
-        surface.blit(fs.render(
-            f"Legitimacy {b.legitimacy:.0f}    Treasury {b.treasury:.0f}    "
-            f"Tide {b.tide_level:.0f} ({b.tide_phase})    "
-            f"Atrocities {b.atrocities:.0f}", True, HUD_INK), (x, y))
-        y += line_h
-        surface.blit(fs.render(
-            f"{b.era_title}   -   {b.next_era}   -   "
-            f"{b.year} ({b.century_pct * 100:.0f}% of the century)",
-            True, HUD_INK), (x, y))
-        y += line_h
-        rival = (f"Rival: House {b.rival_name}" if b.rival_name
-                 else "Rival: none yet")
-        surface.blit(fs.render(
-            f"{rival}    You rank #{b.rank} of {len(self.game.houses)}",
-            True, HUD_INK), (x, y))
-        y += line_h
+        hud_h = _hud_height()
+        band = pygame.Rect(0, y0, self._w, hud_h)
+        pygame.draw.rect(surface, HUD_BG, band)
+        layout = hud_layout(model, band)
+        fs = _font(_TEXT_PT)
+
+        # Draw meters
+        for key, rect in layout.items():
+            if key in model.meters:
+                model.meters[key].draw(surface, rect)
+            elif key in model.chips:
+                chip = model.chips[key]
+                chip_surf = fs.render(chip.text, True, INK)
+                pygame.draw.rect(surface, chip.bg(), rect, border_radius=4)
+                surface.blit(chip_surf, (rect.left + 6, rect.centery - chip_surf.get_height() // 2))
+            elif key in model.texts:
+                text = model.texts[key]
+                text_surf = fs.render(text, True, HUD_INK)
+                surface.blit(text_surf, (rect.left, rect.centery - text_surf.get_height() // 2))
+
+        # Draw intent text in row 5
         spotlight = b.rival_name or (
             threat_rank(self.game)[0] if threat_rank(self.game) else None)
         if spotlight is not None:
             intent = intel_report(self.game, self.house, spotlight).apparent_intent
-            surface.blit(fs.render(f"Their design: {intent}", True, HUD_INK),
-                         (x, y))
+            intent_text = f"Their design: {intent}"
+        else:
+            intent_text = "No clear threat"
+        intent_rect = layout["intent"]
+        intent_surf = fs.render(intent_text, True, HUD_INK)
+        surface.blit(intent_surf, (intent_rect.left, intent_rect.centery - intent_surf.get_height() // 2))
 
     def _draw_bottom_bar(self, surface) -> None:
         y = self._h - BOTTOM_H

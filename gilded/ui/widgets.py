@@ -357,6 +357,7 @@ class Meter:
         danger: tuple[str, float] | None = None,
         invert: bool = False,
         size: int = 14,
+        fmt: str = "{:.0f}",
     ):
         self.label = label
         self.value = value
@@ -366,6 +367,10 @@ class Meter:
         self.danger = danger
         self.invert = invert
         self.size = size
+        self.fmt = fmt
+
+    def value_text(self) -> str:
+        return self.fmt.format(self.value)
 
     def fraction(self) -> float:
         if self.hi == self.lo:
@@ -404,7 +409,7 @@ class Meter:
     def layout(self, rect: pygame.Rect) -> MeterLayout:
         f = font(self.size)
         label_surf = f.render(self.label, True, INK)
-        value_surf = f.render(str(self.value), True, INK)
+        value_surf = f.render(self.value_text(), True, INK)
         arrow_surf = None
         if self.delta is not None:
             arrow_surf = f.render(self.arrow(), True, TONES.get(self.delta_tone(), INK))
@@ -482,7 +487,7 @@ class Meter:
             pygame.draw.rect(surface, tone_color, lay.fill_rect)
 
         # value
-        value_surf = f.render(str(self.value), True, INK)
+        value_surf = f.render(self.value_text(), True, INK)
         surface.blit(value_surf, lay.value_rect.topleft)
 
         # arrow
