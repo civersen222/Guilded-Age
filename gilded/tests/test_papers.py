@@ -1,9 +1,9 @@
 """G14 papers tests: register scoping, the standing summary, press slant,
 and the broadsheet's type."""
 
-from gilded.chassis import GildedGame, TurnEvent
+from gilded.chassis import GildedGame, TurnEvent, year_of
 from gilded.papers import (MASTHEAD, SLANT_PREFIX, WRAP_WIDTH, TurnReport,
-                           YEAR_ZERO, compose, format_broadsheet)
+                           compose, format_broadsheet)
 from gilded.society.court import CourtPosition
 
 SEED = 42
@@ -36,7 +36,7 @@ def test_compose_dates_the_paper():
     h, _ = _two_houses(g)
     rep = compose(g, h)
     assert rep.turn == g.turn
-    assert rep.year == YEAR_ZERO + g.turn >= 1900
+    assert rep.year == year_of(g.turn) >= 1900
 
 
 def test_registers_scope_to_the_reading_house():

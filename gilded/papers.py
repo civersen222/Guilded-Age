@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from typing import List
 
 from gilded.society.court import CourtPosition
+from gilded.chassis import year_of
 
-YEAR_ZERO = 1899                  # turn 1 dawns in 1900
 PRESS_SLANT_INTRIGUE = 12         # the Master of the Press starts earning it here
 SLANT_PREFIX = "It is rumoured, no doubt falsely, that "
 SCANDAL_MARKERS = ("Scandal", "scandal", "EXPOSED")
@@ -79,7 +79,7 @@ def compose(game, house_name: str) -> TurnReport:
                   f"dividends {dividends:.0f}; "
                   f"{len(game.ents_of(house_name))} enterprises; "
                   f"{strikes} strikes active")
-    return TurnReport(game.turn, YEAR_ZERO + game.turn, gazette, ledger, letters)
+    return TurnReport(game.turn, year_of(game.turn), gazette, ledger, letters)
 
 
 def format_broadsheet(report: TurnReport) -> str:

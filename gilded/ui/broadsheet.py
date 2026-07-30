@@ -35,9 +35,26 @@ from gilded.ui.atlas_view import (
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
 TAB_H = 40
-HUD_H = 96
+HUD_LINES = 5  # number of text rows in the HUD
 BOTTOM_H = 56
+
+
+def _hud_height() -> int:
+    """Height the HUD needs for HUD_LINES rows.  Derived from content, not a constant."""
+    fs = _font(15)
+    line_h = fs.get_height() + 3
+    return 6 + HUD_LINES * line_h
+
+HUD_H = 0  # backward-compat alias; populated by _ensure_hud_h() on first use
 PAD = 16
+
+
+def _ensure_hud_h() -> int:
+    """Return HUD_H, computing it on first call if still zero."""
+    global HUD_H
+    if HUD_H == 0:
+        HUD_H = _hud_height()
+    return HUD_H
 
 PAPER_BG = (238, 232, 218)
 INK = (28, 24, 20)
@@ -145,8 +162,9 @@ class BroadsheetView:
         self._appoint_hits = []
         self._director_picker_hits = []
         surface.fill(PAPER_BG)
-        content = pygame.Rect(0, TAB_H + HUD_H, self._w,
-                              self._h - TAB_H - HUD_H - BOTTOM_H)
+        hud_h = _ensure_hud_h()
+        content = pygame.Rect(0, TAB_H + hud_h, self._w,
+                              self._h - TAB_H - hud_h - BOTTOM_H)
 
         if self.active_tab == "Briefing":
             self._draw_briefing(surface, content)
@@ -187,7 +205,7 @@ class BroadsheetView:
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
         y0 = TAB_H
-        pygame.draw.rect(surface, HUD_BG, (0, y0, self._w, HUD_H))
+        pygame.draw.rect(surface, HUD_BG, (0, y0, self._w, _ensure_hud_h()))
         strong = _font(16, bold=True)
         fs = _font(15)
         line_h = fs.get_height() + 3
@@ -474,7 +492,7 @@ class BroadsheetView:
         font = _font(16)
         w = max(font.size(l)[0] for l in lines) + 2 * PAD
         h = len(lines) * (font.get_height() + 2) + 2 * PAD
-        rect = pygame.Rect(self._w - w - PAD, TAB_H + HUD_H + PAD, w, h)
+        rect = pygame.Rect(self._w - w - PAD, TAB_H + _ensure_hud_h() + PAD, w, h)
         panel = pygame.Surface(rect.size)
         panel.set_alpha(225)
         panel.fill((18, 16, 14))
