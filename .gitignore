@@ -25,6 +25,10 @@ saves/
 
 # Local code engine
 .cynco-*
-.localcode*/
+.localcode/
+.localcode-*
+*.log
+crash_log.txt
+commit_msg*.txt
 .claude/
 .cynco*/

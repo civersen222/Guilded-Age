@@ -1,5 +1,0 @@
-Fix GUI startup and color compatibility issues
-
-- main.py: Launch GUI by default instead of CLI text mode
-- game_data.py: Replace non-standard Tkinter color names with hex codes
-- city.py: Add stability key to get_total_yields() to prevent KeyError
