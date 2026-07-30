@@ -40,6 +40,10 @@ from gilded.ui.widgets import (
 from gilded.grip import (
     BAND_CONTESTED, BAND_IMPERILED, BAND_IRON_GRIP, BAND_SEIZED,
 )
+from gilded.ui.ledger import (
+    LedgerModel, LedgerRow, TurnLine,
+    money, ledger_model, HISTORY_SPAN,
+)
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
@@ -806,7 +810,11 @@ class BroadsheetView:
             self._draw_briefing(surface, content)
         elif self.active_tab == "Atlas":
             self._draw_atlas(surface)
-        elif self.active_tab in ("Gazette", "Ledger", "Letters"):
+        elif self.active_tab == "Gazette":
+            self._draw_paper(surface, content)
+        elif self.active_tab == "Ledger":
+            self._draw_ledger(surface, content)
+        elif self.active_tab == "Letters":
             self._draw_paper(surface, content)
         elif self.active_tab == "Docket":
             self._draw_docket(surface, content)
@@ -1045,6 +1053,172 @@ class BroadsheetView:
             mx = cols[last_ci].x
             my = content.bottom - marker.get_height() - 8
             surface.blit(marker, (mx, my))
+
+    def _draw_ledger(self, surface, content: pygame.Rect) -> None:
+        """Draw the Ledger tab: financial page built on the house journal."""
+        g, name = self.game, self.house
+        resolved_turn = g.turn - 1
+        report = compose(g, name)
+        notices = tuple(report.ledger) if report.ledger else ()
+        house = g.houses[name]
+        model = ledger_model(house, resolved_turn, notices)
+
+        surface.set_clip(content)
+        f_title = _font(26, bold=True)
+        f_body = _font(14)
+        f_small = _font(12)
+        y = content.y + 8
+
+        # Title
+        title = f_title.render("LEDGER", True, INK)
+        surface.blit(title, (PAD, y))
+        y += title.get_height() + 6
+
+        # Turn and treasury line
+        turn_line = f_body.render(
+            f"Turn {model.turn}  |  Treasury: {money(model.treasury)} gold",
+            True, INK,
+        )
+        surface.blit(turn_line, (PAD, y))
+        y += turn_line.get_height() + 10
+
+        # Totals bar
+        totals_text = f_body.render(
+            f"Income: {money(model.income)}  |  Outlay: {money(model.outlay)}  |  Net: {money(model.net)}",
+            True, INK,
+        )
+        surface.blit(totals_text, (PAD, y))
+        y += totals_text.get_height() + 8
+
+        # Horizontal rule
+        pygame.draw.line(surface, INK, (PAD, y), (content.width - PAD, y), 1)
+        y += 8
+
+        # Flows table
+        if model.rows:
+            cols = [Column("Label", width=2.0, align="left"),
+                    Column("Amount", width=1.0, align="right")]
+            data = [[r.label, money(r.amount)] for r in model.rows]
+            tbl = Table(cols, data, size=14)
+            tbl_h = tbl.height()
+            tbl_rect = pygame.Rect(PAD, y, content.width - 2 * PAD, tbl_h)
+            tbl_layout = tbl.layout(tbl_rect)
+
+            # Draw table header
+            f_h = _font(tbl.size, bold=True)
+            for i, col in enumerate(tbl.cols):
+                if i < len(tbl_layout.header_rects):
+                    txt = f_h.render(col.header, True, INK)
+                    text_rect = tbl_layout.text_rects[0][i] if tbl_layout.text_rects and i < len(tbl_layout.text_rects[0]) else tbl_layout.header_rects[i]
+                    surface.blit(txt, text_rect)
+
+            # Draw rule
+            pygame.draw.line(surface, INK,
+                             (tbl_rect.left, tbl_layout.rule_y),
+                             (tbl_rect.right, tbl_layout.rule_y))
+
+            # Draw rows
+            f_b = _font(tbl.size)
+            for row_idx, row in enumerate(tbl.data):
+                for col_idx, cell in enumerate(row):
+                    if col_idx < len(tbl_layout.cell_rects[row_idx]):
+                        cell_rect = tbl_layout.cell_rects[row_idx][col_idx]
+                        text_rect = tbl_layout.text_rects[row_idx][col_idx] if row_idx < len(tbl_layout.text_rects) and col_idx < len(tbl_layout.text_rects[row_idx]) else cell_rect
+                        txt = f_b.render(cell, True, INK)
+                        surface.blit(txt, text_rect)
+
+            y = tbl_rect.bottom + 10
+        else:
+            # Empty turn placeholder
+            placeholder = f_small.render("No financial activity this turn.", True, FADED)
+            surface.blit(placeholder, (PAD, y))
+            y += placeholder.get_height() + 10
+
+        # History table
+        if model.history:
+            hist_title = f_title.render("HISTORY", True, INK)
+            surface.blit(hist_title, (PAD, y))
+            y += hist_title.get_height() + 6
+
+            h_cols = [Column("Turn", width=0.8, align="right"),
+                      Column("Income", width=1.0, align="right"),
+                      Column("Outlay", width=1.0, align="right"),
+                      Column("Net", width=1.0, align="right")]
+            h_data = [[str(tl.turn), money(tl.income), money(tl.outlay), money(tl.net)]
+                      for tl in model.history]
+            h_tbl = Table(h_cols, h_data, size=12)
+            h_tbl_h = h_tbl.height()
+            h_tbl_rect = pygame.Rect(PAD, y, content.width - 2 * PAD, h_tbl_h)
+            h_tbl_layout = h_tbl.layout(h_tbl_rect)
+
+            f_h = _font(h_tbl.size, bold=True)
+            for i, col in enumerate(h_tbl.cols):
+                if i < len(h_tbl_layout.header_rects):
+                    txt = f_h.render(col.header, True, INK)
+                    text_rect = h_tbl_layout.text_rects[0][i] if h_tbl_layout.text_rects and i < len(h_tbl_layout.text_rects[0]) else h_tbl_layout.header_rects[i]
+                    surface.blit(txt, text_rect)
+
+            pygame.draw.line(surface, INK,
+                             (h_tbl_rect.left, h_tbl_layout.rule_y),
+                             (h_tbl_rect.right, h_tbl_layout.rule_y))
+
+            f_b = _font(h_tbl.size)
+            for row_idx, row in enumerate(h_tbl.data):
+                for col_idx, cell in enumerate(row):
+                    if col_idx < len(h_tbl_layout.cell_rects[row_idx]):
+                        text_rect = h_tbl_layout.text_rects[row_idx][col_idx] if row_idx < len(h_tbl_layout.text_rects) and col_idx < len(h_tbl_layout.text_rects[row_idx]) else h_tbl_layout.cell_rects[row_idx][col_idx]
+                        txt = f_b.render(cell, True, INK)
+                        surface.blit(txt, text_rect)
+
+            y = h_tbl_rect.bottom + 10
+
+        # Summary table
+        if model.summary:
+            sum_title = f_title.render("SUMMARY (Last {} Turns)".format(len(model.history)), True, INK)
+            surface.blit(sum_title, (PAD, y))
+            y += sum_title.get_height() + 6
+
+            s_cols = [Column("Label", width=2.0, align="left"),
+                      Column("Total", width=1.0, align="right")]
+            s_data = [[r.label, money(r.amount)] for r in model.summary]
+            s_tbl = Table(s_cols, s_data, size=12)
+            s_tbl_h = s_tbl.height()
+            s_tbl_rect = pygame.Rect(PAD, y, content.width - 2 * PAD, s_tbl_h)
+            s_tbl_layout = s_tbl.layout(s_tbl_rect)
+
+            f_h = _font(s_tbl.size, bold=True)
+            for i, col in enumerate(s_tbl.cols):
+                if i < len(s_tbl_layout.header_rects):
+                    txt = f_h.render(col.header, True, INK)
+                    text_rect = s_tbl_layout.text_rects[0][i] if s_tbl_layout.text_rects and i < len(s_tbl_layout.text_rects[0]) else s_tbl_layout.header_rects[i]
+                    surface.blit(txt, text_rect)
+
+            pygame.draw.line(surface, INK,
+                             (s_tbl_rect.left, s_tbl_layout.rule_y),
+                             (s_tbl_rect.right, s_tbl_layout.rule_y))
+
+            f_b = _font(s_tbl.size)
+            for row_idx, row in enumerate(s_tbl.data):
+                for col_idx, cell in enumerate(row):
+                    if col_idx < len(s_tbl_layout.cell_rects[row_idx]):
+                        text_rect = s_tbl_layout.text_rects[row_idx][col_idx] if row_idx < len(s_tbl_layout.text_rects) and col_idx < len(s_tbl_layout.text_rects[row_idx]) else s_tbl_layout.cell_rects[row_idx][col_idx]
+                        txt = f_b.render(cell, True, INK)
+                        surface.blit(txt, text_rect)
+
+            y = s_tbl_rect.bottom + 10
+
+        # Notices (prose from papers)
+        if model.notices:
+            notices_title = f_title.render("FROM THE PAPERS", True, INK)
+            surface.blit(notices_title, (PAD, y))
+            y += notices_title.get_height() + 6
+
+            for notice in model.notices:
+                if notice:
+                    n_surf = f_small.render(notice, True, INK)
+                    surface.blit(n_surf, (PAD, y))
+                    y += n_surf.get_height() + 3
+        surface.set_clip(None)
 
     def _draw_docket(self, surface, content: pygame.Rect) -> None:
         title = _font(30, bold=True).render("THE DOCKET", True, INK)
