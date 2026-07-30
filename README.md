@@ -42,3 +42,9 @@ python -m pytest gilded/tests -q
 
 The earlier CivKings prototype (hex-map 4X with pygame client) now lives under
 `legacy/civkings/`. It is archived, unmaintained, and not imported by the game.
+
+## License
+
+GNU Affero General Public License v3.0 — see [LICENSE](LICENSE). Copyleft: if you
+run a modified version and let others interact with it over a network, you owe
+them the source.
