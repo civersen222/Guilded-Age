@@ -297,6 +297,285 @@ DELTA_COL = 4
 
 _ENT_TABLE_H_MAX = 600  # max pixel height for the table before overflow
 
+# ────────────────────────────────────────────────────────────────────────────
+# Powers table
+# ────────────────────────────────────────────────────────────────────────────
+
+POWER_COLS: Tuple[Column, ...] = (
+    Column("House", width=1.0, align="left"),
+    Column("Threat", width=0.6, align="right"),
+    Column("Intel", width=0.6, align="right"),
+    Column("Ties", width=3.0, align="left"),
+    Column("Apparent intent", width=5.0, align="left"),
+)
+INTEL_COL = 2
+
+
+class PowersTable(Table):
+    """Table subclass that truncates cell text to fit pixel widths."""
+
+    def layout(self, rect: pygame.Rect) -> TableLayout:
+        from gilded.ui.widgets import (
+            TableLayout,
+            _weighted_columns,
+            _place_text,
+            font,
+        )
+
+        f_header = font(self.size, bold=True)
+        f_body = font(self.size)
+        header_h = f_header.get_linesize()
+        body_h = f_body.get_linesize()
+        gap = 2
+        rule_h = 1 if self.row_rule else 1
+
+        weights = [c.width for c in self.cols]
+        col_rects = _weighted_columns(rect, weights, gap=0)
+        header_rects = [r.copy() for r in col_rects]
+        for r in header_rects:
+            r.height = header_h
+
+        rule_y = rect.top + header_h + rule_h
+
+        data_top = rule_y + gap
+        data_bottom = rect.bottom
+        available_data_h = data_bottom - data_top
+        row_count = len(self.data)
+        if row_count == 0:
+            row_rects: list[pygame.Rect] = []
+            cell_rects: list[list[pygame.Rect]] = []
+            text_rects: list[list[pygame.Rect]] = []
+        else:
+            row_h = available_data_h // row_count
+            row_rects = []
+            y = data_top
+            for i in range(row_count):
+                h = row_h
+                if i == row_count - 1:
+                    h = data_bottom - y
+                row_rects.append(pygame.Rect(rect.left, y, rect.width, h))
+                y += h + 2
+
+            cell_rects = []
+            text_rects = []
+            for row_idx, row_rect in enumerate(row_rects):
+                row = self.data[row_idx] if row_idx < len(self.data) else []
+                row_cells = _weighted_columns(row_rect, weights, gap=0)
+                cell_rects.append(list(row_cells))
+                row_text_rects: list[pygame.Rect] = []
+                for col_idx in range(len(self.cols)):
+                    cell = row[col_idx] if col_idx < len(row) else ""
+                    align = self._resolve_align(col_idx)
+                    cell = self._fit(cell, f_body, row_cells[col_idx])
+                    text_rect = _place_text(
+                        cell, f_body, row_cells[col_idx], align, body_h
+                    )
+                    row_text_rects.append(text_rect)
+                text_rects.append(row_text_rects)
+
+        return TableLayout(
+            header_rects=header_rects,
+            rule_y=rule_y,
+            row_rects=row_rects,
+            cell_rects=cell_rects,
+            text_rects=text_rects,
+        )
+
+    @staticmethod
+    def _fit(text: str, f: pygame.font.Font, cell: pygame.Rect) -> str:
+        if not text.strip():
+            return text
+        max_w = cell.width - 8
+        while len(text) > 1:
+            surf = f.render(text, True, (0, 0, 0))
+            if surf.get_width() <= max_w:
+                break
+            text = text[:-1]
+        return text
+
+_POW_TABLE_H_MAX = 600  # max pixel height for the powers table before overflow
+
+
+@dataclass(frozen=True)
+class PowerLine:
+    house: str
+    tier: int
+    breakdown: Tuple[str, ...]
+    apparent_intent: str
+    can_place_informant: bool
+
+
+@dataclass(frozen=True)
+class PowersModel:
+    table: Table
+    row_houses: Tuple[str, ...]
+    intel_tones: Tuple[str, ...]
+    blind_rows: Tuple[int, ...]
+    informant_rows: Tuple[int, ...]
+    selected_row: Optional[int]
+    texts: Dict[str, str]
+    overflow_name: Optional[str]
+    overflow_count: int
+
+
+def powers_report(game, house) -> Tuple[PowerLine, ...]:
+    """Impure: collect intel data for every rival house, return PowerLines."""
+    lines: List[PowerLine] = []
+    attention = game.attention.get(house, 0)
+    for h in threat_rank(game):
+        r = intel_report(game, house, h)
+        can_place = (attention > 0 and (house, h) not in game.informants)
+        lines.append(PowerLine(
+            house=h,
+            tier=r.tier,
+            breakdown=tuple(r.breakdown),
+            apparent_intent=r.apparent_intent,
+            can_place_informant=can_place,
+        ))
+    return tuple(lines)
+
+
+def _intel_tone(tier: int) -> str:
+    if tier == 0:
+        return "dead"
+    elif tier == 1:
+        return "warn"
+    elif tier == 2:
+        return "neutral"
+    else:
+        return "good"
+
+
+def _truncate(s: str, max_chars: int) -> str:
+    if len(s) > max_chars:
+        return s[:max_chars - 1] + "…"
+    return s
+
+
+def powers_model(lines, selected=None) -> PowersModel:
+    """Build a pure PowersModel from a tuple of PowerLine objects."""
+    rows: List[List[str]] = []
+    row_houses: List[str] = []
+    intel_tones: List[str] = []
+    blind_rows: List[int] = []
+    informant_rows: List[int] = []
+
+    for i, ln in enumerate(lines):
+        # Threat = 1-based rank
+        threat_str = str(i + 1)
+        # Intel = "{tier}/3"
+        intel_str = f"{ln.tier}/3"
+        # Ties cell — truncate long lists
+        if ln.breakdown:
+            ties_str = ", ".join(ln.breakdown)
+        else:
+            ties_str = "—"
+        ties_str = _truncate(ties_str, 60)
+        # Apparent intent — truncate long descriptions
+        intent_str = ln.apparent_intent or "—"
+        intent_str = _truncate(intent_str, 55)
+
+        def _clean(s: str) -> str:
+            return s.replace("|", "")
+
+        rows.append([
+            _clean(_truncate(f"House {ln.house}", 20)),
+            threat_str,
+            intel_str,
+            _clean(ties_str),
+            _clean(intent_str),
+        ])
+        row_houses.append(ln.house)
+        intel_tones.append(_intel_tone(ln.tier))
+        if ln.tier == 0:
+            blind_rows.append(i)
+        if ln.can_place_informant:
+            informant_rows.append(i)
+
+    # Selection
+    selected_row = None
+    if selected is not None:
+        try:
+            selected_row = row_houses.index(selected)
+        except ValueError:
+            pass
+
+    # Build table
+    tbl = PowersTable(POWER_COLS, rows)
+
+    # Overflow
+    overflow_name = None
+    overflow_count = 0
+    max_h = _POW_TABLE_H_MAX
+    needed_h = tbl.height()
+    if needed_h > max_h:
+        # Count rows that won't fit
+        row_h_pixels = tbl.height() / max(1, len(lines)) if lines else 0
+        rows_fit = int(max_h / row_h_pixels) if row_h_pixels > 0 else len(lines)
+        overflow_count = max(0, len(lines) - rows_fit)
+        if overflow_count > 0 and lines:
+            overflow_name = row_houses[rows_fit] if rows_fit < len(row_houses) else None
+
+    # Texts
+    texts: Dict[str, str] = {}
+    if not lines:
+        texts["empty"] = "(no rival House stands against you)"
+    if selected_row is not None and selected_row < len(lines):
+        texts[f"intent_{selected_row}"] = lines[selected_row].apparent_intent
+
+    return PowersModel(
+        table=tbl,
+        row_houses=tuple(row_houses),
+        intel_tones=tuple(intel_tones),
+        blind_rows=tuple(blind_rows),
+        informant_rows=tuple(informant_rows),
+        selected_row=selected_row,
+        texts=texts,
+        overflow_name=overflow_name,
+        overflow_count=overflow_count,
+    )
+
+
+def powers_layout(model, content: pygame.Rect) -> Dict[str, pygame.Rect]:
+    """Compute layout rects for the Powers tab."""
+    margin = 4
+    x = content.left + margin
+    y = content.top + margin
+    w = content.width - 2 * margin
+    bottom_limit = content.bottom - margin
+
+    # Title
+    f_title = _font(24, bold=True)
+    title_h = f_title.get_linesize()
+    title_rect = pygame.Rect(x, y, w, title_h)
+    y += title_h + 8
+
+    # Reserve space for detail + buttons at bottom
+    detail_reserve = 36
+    btn_reserve = 28 if model.informant_rows else 0
+    bottom_reserve = detail_reserve + btn_reserve
+
+    # Table height: what's left after title and bottom reserve
+    tbl_max_h = bottom_limit - bottom_reserve - y
+    tbl = model.table
+    tbl_h = min(tbl.height(), max(40, tbl_max_h))
+    tbl_rect = pygame.Rect(x, y, w, tbl_h)
+
+    # Detail area (below table)
+    detail_y = y + tbl_h + 4
+    detail_rect = pygame.Rect(x, detail_y, w, detail_reserve)
+
+    # Informant buttons area (below detail)
+    btn_y = min(detail_rect.bottom + 4, bottom_limit - btn_reserve)
+    btn_rect = pygame.Rect(x, btn_y, w, min(btn_reserve, bottom_limit - btn_y))
+
+    return {
+        "title": title_rect,
+        "table": tbl_rect,
+        "detail": detail_rect,
+        "buttons": btn_rect,
+    }
+
 
 @dataclass(frozen=True)
 class EnterprisesModel:
@@ -484,6 +763,7 @@ class BroadsheetView:
         self._atlas_polys: Dict[int, List[Tuple[int, int]]] = {}
         self._enterprise_hits: List[Tuple[pygame.Rect, dict]] = []
         self._appoint_hits: List[Tuple[pygame.Rect, dict]] = []
+        self._informant_hits: List[Tuple[pygame.Rect, dict]] = []
         # director picker state: None or eid whose picker is open
         self._director_picker: Optional[int] = None
         self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
@@ -515,6 +795,7 @@ class BroadsheetView:
         self._dial_hits = []
         self._enterprise_hits = []
         self._appoint_hits = []
+        self._informant_hits = []
         self._director_picker_hits = []
         surface.fill(PAPER_BG)
         hud_h = _hud_height()
@@ -871,21 +1152,81 @@ class BroadsheetView:
         return lines
 
     def _draw_powers(self, surface, content) -> None:
-        title = _font(30, bold=True).render("THE POWERS", True, INK)
-        surface.blit(title, (PAD, content.y + 6))
-        y = content.y + 6 + title.get_height() + 10
-        body = _font(18)
-        width = content.width - 2 * PAD
-        lines = self.powers_lines()
+        """Draw the Powers tab: model -> layout -> draw."""
+        g, name = self.game, self.house
+        lines = powers_report(g, name)
+        model = powers_model(lines, selected=None)
+        layout = powers_layout(model, content)
+
+        title_rect = layout["title"]
+        tbl_rect = layout["table"]
+        detail_rect = layout["detail"]
+
+        # Title
+        f_title = _font(24, bold=True)
+        title_surf = f_title.render("THE POWERS", True, INK)
+        surface.blit(title_surf, (title_rect.left, title_rect.top))
+
+        # Table
+        tbl = model.table
+        tbl_layout = tbl.layout(tbl_rect)
+
+        # Draw header
+        f_h = _font(tbl.size, bold=True)
+        for i, col in enumerate(tbl.cols):
+            if i < len(tbl_layout.header_rects):
+                h_rect = tbl_layout.header_rects[i]
+                txt = f_h.render(col.header, True, INK)
+                text_rect = tbl_layout.text_rects[0][i] if i < len(tbl_layout.text_rects[0]) else h_rect
+                surface.blit(txt, text_rect)
+
+        # Draw rule
+        pygame.draw.line(surface, INK,
+                         (tbl_rect.left, tbl_layout.rule_y),
+                         (tbl_rect.right, tbl_layout.rule_y))
+
+        # Draw rows
+        f_b = _font(tbl.size)
+        from gilded.ui.widgets import TONES
+        for ri, row in enumerate(tbl.data):
+            if ri >= len(tbl_layout.row_rects):
+                break
+            row_rect = tbl_layout.row_rects[ri]
+            for ci, cell in enumerate(row):
+                if ci >= len(tbl_layout.cell_rects[ri]):
+                    continue
+                cell_rect = tbl_layout.cell_rects[ri][ci]
+                text_rect = tbl_layout.text_rects[ri][ci]
+                txt = f_b.render(cell, True, INK)
+                surface.blit(txt, text_rect)
+
+        # Overflow warning
+        if model.overflow_name is not None:
+            warn = f_b.render(f"⚠ {model.overflow_name}", True, TONES.get("warn", INK))
+            surface.blit(warn, (tbl_rect.left, tbl_rect.bottom + 4))
+
+        # Empty roster message
         if not lines:
-            lines = ["(no rival House stands against you)"]
-        for ln in lines:
-            for wln in _wrap(ln, body, width):
-                if y > content.bottom - 20:
-                    return
-                surface.blit(body.render(wln, True, INK), (PAD, y))
-                y += body.get_height() + 2
-            y += 6
+            empty_text = model.texts.get("empty", "(no rival House stands against you)")
+            empty_surf = f_b.render(empty_text, True, INK)
+            surface.blit(empty_surf, (detail_rect.left + 8, detail_rect.top + 4))
+
+        # Informant buttons
+        self._informant_hits.clear()
+        btn_rect = layout["buttons"]
+        btn_y = btn_rect.top
+        for ri in model.informant_rows:
+            house = model.row_houses[ri]
+            btn_label = f"Place informant: {house}"
+            btn_surf = f_b.render(btn_label, True, INK)
+            btn_x = btn_rect.left + 8
+            btn_h = btn_surf.get_height() + 4
+            btn_r = pygame.Rect(btn_x, btn_y, btn_surf.get_width() + 12, btn_h)
+            pygame.draw.rect(surface, CARD_BG, btn_r)
+            pygame.draw.rect(surface, CARD_EDGE, btn_r, 1)
+            surface.blit(btn_surf, (btn_r.left + 6, btn_r.top + 2))
+            self._informant_hits.append((btn_r, {"place_informant": house}))
+            btn_y += btn_h + 4
 
     def enterprises_lines(self) -> List[str]:
         """Return the Grip banner lines for the Enterprises tab."""
@@ -1256,6 +1597,10 @@ class BroadsheetView:
             if pid is not None:
                 self.selected_pid = pid
                 return {"select_province": pid}
+        if self.active_tab == "Powers":
+            for rect, act in self._informant_hits:
+                if rect.collidepoint(pos):
+                    return {"place_informant": act["place_informant"]}
         if self.active_tab == "Enterprises":
             if self._director_picker is not None:
                 for rect, action in self._director_picker_hits:
