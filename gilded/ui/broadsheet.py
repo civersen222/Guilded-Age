@@ -386,12 +386,18 @@ class PowersTable(Table):
         if not text.strip():
             return text
         max_w = cell.width - 8
+        surf = f.render(text, True, (0, 0, 0))
+        if surf.get_width() <= max_w:
+            return text  # fits, no truncation needed
+        # Text is too long — shorten and append ellipsis
+        ellipsis = "…"
         while len(text) > 1:
-            surf = f.render(text, True, (0, 0, 0))
+            candidate = text + ellipsis
+            surf = f.render(candidate, True, (0, 0, 0))
             if surf.get_width() <= max_w:
-                break
+                return candidate
             text = text[:-1]
-        return text
+        return text + ellipsis
 
 _POW_TABLE_H_MAX = 600  # max pixel height for the powers table before overflow
 
@@ -446,12 +452,6 @@ def _intel_tone(tier: int) -> str:
         return "good"
 
 
-def _truncate(s: str, max_chars: int) -> str:
-    if len(s) > max_chars:
-        return s[:max_chars - 1] + "…"
-    return s
-
-
 def powers_model(lines, selected=None) -> PowersModel:
     """Build a pure PowersModel from a tuple of PowerLine objects."""
     rows: List[List[str]] = []
@@ -470,16 +470,15 @@ def powers_model(lines, selected=None) -> PowersModel:
             ties_str = ", ".join(ln.breakdown)
         else:
             ties_str = "—"
-        ties_str = _truncate(ties_str, 60)
-        # Apparent intent — truncate long descriptions
+        # ties_str used as-is; _fit handles truncation
+        # Apparent intent — _fit handles truncation
         intent_str = ln.apparent_intent or "—"
-        intent_str = _truncate(intent_str, 55)
 
         def _clean(s: str) -> str:
             return s.replace("|", "")
 
         rows.append([
-            _clean(_truncate(f"House {ln.house}", 20)),
+            _clean(f"House {ln.house}"),
             threat_str,
             intel_str,
             _clean(ties_str),

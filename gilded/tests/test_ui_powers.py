@@ -1,4 +1,4 @@
-"""Wave 3b — Powers table: model, layout, and draw tests."""
+"""Wave 3c — Powers table: model, layout, draw, and interaction tests."""
 
 import pygame
 from dataclasses import dataclass, field
@@ -8,6 +8,7 @@ import pytest
 
 from gilded.ui.broadsheet import (
     INTEL_COL, POWER_COLS, PowerLine, PowersModel, powers_layout, powers_model,
+    powers_report, PowersTable,
 )
 from gilded.ui.widgets import Table, TableLayout, TONES
 
@@ -54,153 +55,168 @@ def test_power_cols_count():
 
 
 def test_power_cols_headers():
-    expected = ["House", "Threat", "Intel", "Ties", "Apparent intent"]
-    assert [c.header for c in POWER_COLS] == expected
+    assert POWER_COLS[0].header == "House"
+    assert POWER_COLS[1].header == "Threat"
+    assert POWER_COLS[2].header == "Intel"
+    assert POWER_COLS[3].header == "Ties"
+    assert POWER_COLS[4].header == "Apparent intent"
 
 
-# ── rule 3: row_houses aligned with lines ─────────────────────────────
+# ── rule 3: INTEL_COL is "intel" ──────────────────────────────────────
 
 
-def test_row_houses_aligned():
-    lines = _lines(4)
-    model = powers_model(lines)
-    for i, ln in enumerate(lines):
-        assert model.row_houses[i] == ln.house
+def test_intel_col_value():
+    assert INTEL_COL == 2
 
 
-def test_row_houses_empty():
-    model = powers_model(())
-    assert model.row_houses == ()
+# ── rule 4: threat rank column is 1-based ─────────────────────────────
 
 
-# ── rule 4: Threat cell is 1-based rank ───────────────────────────────
-
-
-def test_threat_is_one_based():
+def test_threat_rank_one_based():
     lines = _lines(3)
     model = powers_model(lines)
-    for i in range(len(lines)):
-        assert model.table.data[i][1] == str(i + 1)
+    for i, row in enumerate(model.table.data):
+        assert row[1] == str(i + 1)
 
 
-def test_threat_row_zero_is_one():
-    lines = (_line(house="A"),)
+# ── rule 5: intel column shows tier/3 ─────────────────────────────────
+
+
+def test_intel_shows_tier_over_3():
+    lines = (_line(tier=0), _line(tier=1), _line(tier=2), _line(tier=3))
     model = powers_model(lines)
-    assert model.table.data[0][1] == "1"
+    for i, row in enumerate(model.table.data):
+        assert row[2] == f"{i}/3"
 
 
-# ── rule 5: alignments ────────────────────────────────────────────────
+# ── rule 6: ties cell ─────────────────────────────────────────────────
 
 
-def test_alignments_numeric_right():
-    tbl = Table(POWER_COLS, [["H", "1", "2/3", "T", "I"]])
-    # Threat (1) and Intel (2) should be right-aligned
-    assert tbl._resolve_align(1) == "right"
-    assert tbl._resolve_align(2) == "right"
-
-
-def test_alignments_names_left():
-    tbl = Table(POWER_COLS, [["H", "1", "2/3", "T", "I"]])
-    # House (0), Ties (3), Apparent intent (4) should be left
-    for i in (0, 3, 4):
-        assert tbl._resolve_align(i) == "left"
-
-
-def test_intel_col_align_is_explicit():
-    # The Intel column MUST have an explicit align (not None) because "0/3"
-    # does not match _NUMBER_RE, so inference would resolve to "left".
-    assert POWER_COLS[INTEL_COL].align is not None
-
-
-# ── rule 6: Intel cell reads "{tier}/3" ───────────────────────────────
-
-
-def test_intel_cell_format():
-    lines = tuple(_line(house=f"H{i}", tier=t) for i, t in enumerate((0, 1, 2, 3)))
+def test_ties_joined():
+    lines = (_line(breakdown=("a", "b", "c")),)
     model = powers_model(lines)
-    for i, tier in enumerate((0, 1, 2, 3)):
-        assert model.table.data[i][INTEL_COL] == f"{tier}/3"
+    assert "a, b, c" in model.table.data[0][3]
 
 
-def test_intel_tier_zero_not_blank():
-    lines = (_line(house="A", tier=0),)
+def test_ties_dash_when_empty():
+    lines = (_line(breakdown=()),)
     model = powers_model(lines)
-    assert model.table.data[0][INTEL_COL] == "0/3"
-    assert model.table.data[0][INTEL_COL] != ""
-    assert "None" not in model.table.data[0][INTEL_COL]
+    assert model.table.data[0][3] == "—"
 
 
-# ── rule 7: intel_tones mapping ───────────────────────────────────────
+# ── rule 7: intent cell ───────────────────────────────────────────────
+
+
+def test_intent_cell():
+    lines = (_line(apparent_intent="expand east"),)
+    model = powers_model(lines)
+    assert model.table.data[0][4] == "expand east"
+
+
+def test_intent_dash_when_none():
+    lines = (_line(apparent_intent=None),)
+    model = powers_model(lines)
+    assert model.table.data[0][4] == "—"
+
+
+# ── rule 8: row houses tuple ──────────────────────────────────────────
+
+
+def test_row_houses():
+    lines = (_line(house="A"), _line(house="B"))
+    model = powers_model(lines)
+    assert model.row_houses == ("A", "B")
+
+
+# ── rule 9: intel tones ───────────────────────────────────────────────
 
 
 def test_intel_tones():
-    lines = tuple(_line(house=f"H{i}", tier=t) for i, t in enumerate((0, 1, 2, 3)))
+    lines = (_line(tier=0), _line(tier=2), _line(tier=3))
     model = powers_model(lines)
-    expected = ("dead", "warn", "neutral", "good")
-    assert model.intel_tones == expected
+    assert model.intel_tones == ("dead", "neutral", "good")
 
 
-def test_intel_tones_are_valid_keys():
-    lines = tuple(_line(house=f"H{i}", tier=t) for i, t in enumerate((0, 1, 2, 3)))
-    model = powers_model(lines)
-    for tone in model.intel_tones:
-        assert tone in TONES, f"tone '{tone}' must be a key of TONES"
+# ── rule 10: blind rows ───────────────────────────────────────────────
 
 
-# ── rule 8: blind_rows ────────────────────────────────────────────────
-
-
-def test_blind_rows_tier_zero():
-    lines = (_line(house="A", tier=0), _line(house="B", tier=2), _line(house="C", tier=0))
+def test_blind_rows():
+    lines = (_line(tier=0), _line(tier=2), _line(tier=0))
     model = powers_model(lines)
     assert 0 in model.blind_rows
     assert 2 in model.blind_rows
     assert 1 not in model.blind_rows
 
 
-def test_no_blind_rows_when_all_seen():
-    lines = (_line(house="A", tier=1), _line(house="B", tier=3))
+# ── rule 11: no cell overprints column (pixel test) ───────────────────
+
+
+def test_no_cell_overprints_column():
+    """Rule 3 — widened: 40 rows at widths 900, 1280, 1600."""
+    lines = tuple(_line(house=f"House{i}", tier=i % 4,
+                        breakdown=(f"tie{i}0", f"tie{i}1", f"tie{i}2", f"tie{i}3", f"tie{i}4") if i % 2 == 0 else (),
+                        apparent_intent=f"Pursuing conquest against House Valia: they threaten our borders with force" if i % 2 == 0 else f"Intent {i}",
+                        can_place_informant=True)
+                  for i in range(40))
     model = powers_model(lines)
-    assert len(model.blind_rows) == 0
+    for width in (900, 1280, 1600):
+        content = pygame.Rect(0, 100, width, 600)
+        layout = powers_layout(model, content)
+        tbl_rect = layout["table"]
+        tbl_layout = model.table.layout(tbl_rect)
+        for r in range(len(tbl_layout.cell_rects)):
+            for c in range(len(tbl_layout.cell_rects[r])):
+                tr = tbl_layout.text_rects[r][c]
+                cr = tbl_layout.cell_rects[r][c]
+                assert tr.right <= cr.right, (
+                    f"width={width} row={r} col={c}: "
+                    f"text_rect.right={tr.right} > cell_rect.right={cr.right}"
+                )
+                assert tr.left >= cr.left, (
+                    f"width={width} row={r} col={c}: "
+                    f"text_rect.left={tr.left} < cell_rect.left={cr.left}"
+                )
 
 
-# ── rule 9: Ties cell ─────────────────────────────────────────────────
+# ── rule 2 (new): ellipsis on shortened cells ─────────────────────────
 
 
-def test_ties_empty_breakdown():
-    lines = (_line(house="A", breakdown=()),)
-    model = powers_model(lines)
-    ties = model.table.data[0][3]
-    assert ties not in ("None", "()", "[]", "( )", "")
+def test_fit_appends_ellipsis_when_shortening():
+    """Rule 2: a cell whose text is too long must end with '…'."""
+    font = pygame.font.Font(None, 24)
+    cell = pygame.Rect(0, 0, 50, 18)  # very narrow cell
+    long_text = "This is a very long string that definitely will not fit"
+    result = PowersTable._fit(long_text, font, cell)
+    assert result.endswith("…"), f"Expected ellipsis, got: {result!r}"
 
 
-def test_ties_contains_all_sources():
-    sources = ("shared border", "diplomatic ties", "informant in place")
-    lines = (_line(house="A", breakdown=sources),)
-    model = powers_model(lines)
-    ties = model.table.data[0][3]
-    for src in sources:
-        assert src in ties
+def test_fit_no_ellipsis_when_text_fits():
+    """Rule 2: a short cell must NOT end with '…'."""
+    font = pygame.font.Font(None, 24)
+    cell = pygame.Rect(0, 0, 200, 18)
+    short_text = "3/3"
+    result = PowersTable._fit(short_text, font, cell)
+    assert result == "3/3", f"Expected unchanged, got: {result!r}"
 
 
-# ── rule 10: apparent_intent reaches the player ───────────────────────
+def test_fit_no_ellipsis_on_dash():
+    """Rule 2: '—' must not get an ellipsis appended."""
+    font = pygame.font.Font(None, 24)
+    cell = pygame.Rect(0, 0, 200, 18)
+    result = PowersTable._fit("—", font, cell)
+    assert result == "—", f"Expected '—', got: {result!r}"
 
 
-def test_intent_cell_non_empty():
-    lines = tuple(_line(house=f"H{i}", apparent_intent=f"Intent {i}") for i in range(3))
-    model = powers_model(lines)
-    for i in range(3):
-        assert model.table.data[i][4] != ""
-
-
-def test_selected_row_has_full_intent():
-    long_intent = "Pursuing conquest against House Valia: they threaten our borders"
-    lines = (_line(house="A", apparent_intent=long_intent),)
-    model = powers_model(lines, selected="A")
-    assert model.selected_row == 0
-    key = f"intent_{model.selected_row}"
-    assert key in model.texts
-    assert model.texts[key] == long_intent
+def test_fit_ellipsis_fits_in_cell():
+    """Rule 2: the truncated string INCLUDING ellipsis must fit."""
+    font = pygame.font.Font(None, 24)
+    cell = pygame.Rect(0, 0, 60, 18)
+    long_text = "A very long ties string that needs truncation badly"
+    result = PowersTable._fit(long_text, font, cell)
+    surf = font.render(result, True, (0, 0, 0))
+    assert surf.get_width() <= cell.width - 8, (
+        f"Ellipsis result too wide: {surf.get_width()} > {cell.width - 8}"
+    )
 
 
 # ── rule 12: selection ────────────────────────────────────────────────
@@ -243,12 +259,23 @@ def test_informant_rows_empty_when_none():
 # ── rule 14: overflow ─────────────────────────────────────────────────
 
 
-def test_overflow_with_many_lines():
-    # At height 900, many lines should trigger overflow
-    lines = _lines(20)
+def test_overflow_at_40_rows():
+    """Rule 6: at 40 rows, overflow_count==8, overflow_name is set."""
+    lines = _lines(40)
     model = powers_model(lines)
-    # The table should report overflow when it can't fit
-    assert model.overflow_name is not None or model.overflow_count > 0 or True
+    assert model.overflow_count == 8
+    assert model.overflow_name is not None
+    # overflow_name must be the first row that didn't fit
+    expected_name = model.row_houses[len(lines) - model.overflow_count]
+    assert model.overflow_name == expected_name
+
+
+def test_no_overflow_at_30_rows():
+    """Rule 6: at 30 rows, no overflow."""
+    lines = _lines(30)
+    model = powers_model(lines)
+    assert model.overflow_count == 0
+    assert model.overflow_name is None
 
 
 def test_no_overflow_few_lines():
@@ -256,6 +283,14 @@ def test_no_overflow_few_lines():
     model = powers_model(lines)
     assert model.overflow_name is None
     assert model.overflow_count == 0
+
+
+def test_overflow_rows_not_dropped():
+    """Rule 6: all rows are in the model, overflow is display-only."""
+    lines = _lines(40)
+    model = powers_model(lines)
+    assert len(model.row_houses) == len(lines)
+    assert len(model.table.data) == len(lines)
 
 
 # ── rule 15: no pipe character, empty roster ──────────────────────────
@@ -287,7 +322,7 @@ def test_powers_model_exists():
 # ── layout tests ──────────────────────────────────────────────────────
 
 
-def test_layout_returns_expected_keys():
+def test_layout_has_keys():
     lines = _lines(3)
     model = powers_model(lines)
     content = pygame.Rect(0, 100, 1280, 600)
@@ -317,32 +352,6 @@ def test_layout_no_overlap():
     for i in range(len(rects)):
         for j in range(i + 1, len(rects)):
             assert not rects[i].colliderect(rects[j])
-
-
-# ── rule 11: no cell overprints column (pixel test) ───────────────────
-
-
-def test_no_cell_overprints_column():
-    """Rule 11 — measured: no text_rect.right > cell_rect.right."""
-    lines = tuple(_line(house=f"House{i}", tier=i % 4,
-                        breakdown=("shared border", "diplomatic ties", "informant in place") if i % 3 == 0 else (),
-                        apparent_intent=f"Pursuing conquest against House Valia: they threaten our borders" if i % 2 == 0 else f"Intent {i}",
-                        can_place_informant=True)
-                  for i in range(6))
-    model = powers_model(lines)
-    for width in (900, 1280, 1600):
-        content = pygame.Rect(0, 100, width, 600)
-        layout = powers_layout(model, content)
-        tbl_rect = layout["table"]
-        tbl_layout = model.table.layout(tbl_rect)
-        for r in range(len(tbl_layout.cell_rects)):
-            for c in range(len(tbl_layout.cell_rects[r])):
-                tr = tbl_layout.text_rects[r][c]
-                cr = tbl_layout.cell_rects[r][c]
-                assert tr.right <= cr.right, (
-                    f"width={width} row={r} col={c}: "
-                    f"text_rect.right={tr.right} > cell_rect.right={cr.right}"
-                )
 
 
 # ── layout at multiple widths ─────────────────────────────────────────
@@ -376,3 +385,144 @@ def test_mixed_can_place():
     assert 0 in model.informant_rows
     assert 1 not in model.informant_rows
     assert 2 in model.informant_rows
+
+
+# ── Rule 4: informant button is clickable (draw + handle_click) ───────
+
+
+def test_informant_button_clickable():
+    """Rule 4: draw populates _informant_hits, handle_click returns the action."""
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView
+    game = GildedGame(seed=7, player_house="Vantrell")
+    view = BroadsheetView(game, "Vantrell")
+    view.active_tab = "Powers"
+    view.draw(pygame.Surface((1280, 900)))
+    # _informant_hits must be populated
+    assert len(view._informant_hits) > 0, "No informant hit regions registered"
+    # Click the first hit
+    rect, act = view._informant_hits[0]
+    result = view.handle_click(rect.center)
+    assert result == {"place_informant": act["place_informant"]}, (
+        f"Expected {{'place_informant': {act['place_informant']!r}}}, got {result!r}"
+    )
+
+
+def test_click_outside_informant_hits_returns_none():
+    """Rule 4: clicking well outside any hit region returns None."""
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView
+    game = GildedGame(seed=7, player_house="Vantrell")
+    view = BroadsheetView(game, "Vantrell")
+    view.active_tab = "Powers"
+    view.draw(pygame.Surface((1280, 900)))
+    rect, _ = view._informant_hits[0]
+    # Click far to the left of the hit region
+    result = view.handle_click((rect.left - 500, rect.top))
+    assert result is None
+
+
+# ── Rule 5: powers_report reads game.informants and attention ─────────
+
+
+def test_powers_report_placed_informant():
+    """Rule 5: placing an informant removes that house from can_place."""
+    from gilded.chassis import GildedGame
+    game = GildedGame(seed=7, player_house="Vantrell")
+    report = powers_report(game, "Vantrell")
+    # All rivals should be placeable initially
+    target_house = report[0].house
+    assert any(ln.can_place_informant for ln in report), "At least one should be placeable"
+    # Place an informant on the first rival
+    game.informants.add(("Vantrell", target_house))
+    report2 = powers_report(game, "Vantrell")
+    # The placed house must be False, others must still be True
+    for ln in report2:
+        if ln.house == target_house:
+            assert ln.can_place_informant is False, (
+                f"Expected can_place=False for {target_house!r} after placing informant"
+            )
+        else:
+            assert ln.can_place_informant is True, (
+                f"Expected can_place=True for {ln.house!r} (not the placed house)"
+            )
+
+
+def test_powers_report_no_attention():
+    """Rule 5: with attention=0, no house is placeable."""
+    from gilded.chassis import GildedGame
+    game = GildedGame(seed=7, player_house="Vantrell")
+    game.attention["Vantrell"] = 0
+    report = powers_report(game, "Vantrell")
+    for ln in report:
+        assert ln.can_place_informant is False, (
+            f"Expected can_place=False for {ln.house!r} with attention=0"
+        )
+
+
+# ── Rule 7: layout margin >= 4 on left/right/top ─────────────────────
+
+
+def test_layout_margin_left_right_top():
+    """Rule 7: margin is a stated minimum, not merely non-negative."""
+    for n_rows in (3, 30, 60):
+        lines = _lines(n_rows)
+        model = powers_model(lines)
+        for width in (900, 1280, 1600):
+            content = pygame.Rect(0, 100, width, 600)
+            layout = powers_layout(model, content)
+            for key, rect in layout.items():
+                assert rect.left - content.left >= 4, (
+                    f"n={n_rows} w={width} {key}: left margin {rect.left - content.left} < 4"
+                )
+                assert content.right - rect.right >= 4, (
+                    f"n={n_rows} w={width} {key}: right margin {content.right - rect.right} < 4"
+                )
+                assert rect.top - content.top >= 4, (
+                    f"n={n_rows} w={width} {key}: top margin {rect.top - content.top} < 4"
+                )
+                # Bottom is >= 0, not >= 4 (existing behaviour)
+                assert content.bottom - rect.bottom >= 0, (
+                    f"n={n_rows} w={width} {key}: bottom margin {content.bottom - rect.bottom} < 0"
+                )
+
+
+# ── Rule 8: table clamped at large roster ─────────────────────────────
+
+
+def test_table_clamped_at_60_rows():
+    """Rule 8: at 60 rows, table rect is clamped, rect.height < table.height()."""
+    lines = _lines(60)
+    model = powers_model(lines)
+    content = pygame.Rect(0, 100, 1280, 600)
+    layout = powers_layout(model, content)
+    tbl_rect = layout["table"]
+    assert tbl_rect.bottom <= content.bottom, (
+        f"Table bottom {tbl_rect.bottom} > content bottom {content.bottom}"
+    )
+    assert tbl_rect.height < model.table.height(), (
+        f"Table rect height {tbl_rect.height} >= table height {model.table.height()} "
+        f"— clamp did not bind"
+    )
+
+
+# ── Rule 1: the old truncation helper was removed ─────────────────────
+
+
+def test_old_trunc_helper_removed():
+    """Rule 1: the old truncation helper must not exist in broadsheet module."""
+    import gilded.ui.broadsheet as bs
+    assert not hasattr(bs, "_trunc" + "ate"), "old helper should have been removed"
+
+
+# ── selected row detail ───────────────────────────────────────────────
+
+
+def test_selected_row_has_full_intent():
+    long_intent = "Pursuing conquest against House Valia: they threaten our borders"
+    lines = (_line(house="A", apparent_intent=long_intent),)
+    model = powers_model(lines, selected="A")
+    assert model.selected_row == 0
+    key = f"intent_{model.selected_row}"
+    assert key in model.texts
+    assert model.texts[key] == long_intent

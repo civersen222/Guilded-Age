@@ -62,7 +62,8 @@ def test_rival_arc_opens_and_tracks_real_deeds():
     from gilded.saga.facts import WorldFact
     d.facts.add(WorldFact(g.turn, "house", d.rival, "went_to_war", object="X"))
     ev = d._advance(g)
-    assert any("rival" not in e.text.lower() or True for e in ev)  # payoff emitted
+    assert len(ev) == 1
+    assert d.rival in ev[0].text
     assert d.beats["rival_first_blood"].state == "complete"
 
 
