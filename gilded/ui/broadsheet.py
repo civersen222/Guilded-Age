@@ -42,7 +42,7 @@ from gilded.grip import (
 )
 from gilded.ui.ledger import (
     LedgerModel, LedgerRow, TurnLine,
-    money, ledger_model, HISTORY_SPAN,
+    money, gold, ledger_model, HISTORY_SPAN,
 )
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
@@ -1068,6 +1068,8 @@ class BroadsheetView:
         f_body = _font(14)
         f_small = _font(12)
         y = content.y + 8
+        bottom = content.bottom
+        overflow_items = 0
 
         # Title
         title = f_title.render("LEDGER", True, INK)
@@ -1076,7 +1078,7 @@ class BroadsheetView:
 
         # Turn and treasury line
         turn_line = f_body.render(
-            f"Turn {model.turn}  |  Treasury: {money(model.treasury)} gold",
+            f"Turn {model.turn}  |  Treasury: {gold(model.treasury)} gold",
             True, INK,
         )
         surface.blit(turn_line, (PAD, y))
@@ -1091,8 +1093,10 @@ class BroadsheetView:
         y += totals_text.get_height() + 8
 
         # Horizontal rule
-        pygame.draw.line(surface, INK, (PAD, y), (content.width - PAD, y), 1)
-        y += 8
+        pygame.draw.line(surface, INK,
+                         (PAD, y),
+                         (content.width - PAD, y))
+        y += 10
 
         # Flows table
         if model.rows:
@@ -1117,17 +1121,22 @@ class BroadsheetView:
                              (tbl_rect.left, tbl_layout.rule_y),
                              (tbl_rect.right, tbl_layout.rule_y))
 
-            # Draw rows
+            # Draw rows (check each row fits)
             f_b = _font(tbl.size)
+            drawn_rows = 0
             for row_idx, row in enumerate(tbl.data):
+                row_bottom = tbl_layout.cell_rects[row_idx][0].bottom if row_idx < len(tbl_layout.cell_rects) else y + tbl_h
+                if row_bottom > bottom:
+                    overflow_items += len(tbl.data) - row_idx
+                    break
                 for col_idx, cell in enumerate(row):
                     if col_idx < len(tbl_layout.cell_rects[row_idx]):
                         cell_rect = tbl_layout.cell_rects[row_idx][col_idx]
                         text_rect = tbl_layout.text_rects[row_idx][col_idx] if row_idx < len(tbl_layout.text_rects) and col_idx < len(tbl_layout.text_rects[row_idx]) else cell_rect
                         txt = f_b.render(cell, True, INK)
                         surface.blit(txt, text_rect)
-
-            y = tbl_rect.bottom + 10
+                drawn_rows += 1
+            y = tbl_rect.top + (drawn_rows + 1) * tbl_layout.row_h + 10
         else:
             # Empty turn placeholder
             placeholder = f_small.render("No financial activity this turn.", True, FADED)
@@ -1135,10 +1144,12 @@ class BroadsheetView:
             y += placeholder.get_height() + 10
 
         # History table
-        if model.history:
+        if model.history and y < bottom:
             hist_title = f_title.render("HISTORY", True, INK)
-            surface.blit(hist_title, (PAD, y))
-            y += hist_title.get_height() + 6
+            hist_title_h = hist_title.get_height() + 6
+            if y + hist_title_h < bottom:
+                surface.blit(hist_title, (PAD, y))
+                y += hist_title_h
 
             h_cols = [Column("Turn", width=0.8, align="right"),
                       Column("Income", width=1.0, align="right"),
@@ -1163,20 +1174,30 @@ class BroadsheetView:
                              (h_tbl_rect.right, h_tbl_layout.rule_y))
 
             f_b = _font(h_tbl.size)
+            drawn_rows = 0
             for row_idx, row in enumerate(h_tbl.data):
+                row_bottom = h_tbl_layout.cell_rects[row_idx][0].bottom if row_idx < len(h_tbl_layout.cell_rects) else y + h_tbl_h
+                if row_bottom > bottom:
+                    overflow_items += len(h_tbl.data) - row_idx
+                    break
                 for col_idx, cell in enumerate(row):
                     if col_idx < len(h_tbl_layout.cell_rects[row_idx]):
-                        text_rect = h_tbl_layout.text_rects[row_idx][col_idx] if row_idx < len(h_tbl_layout.text_rects) and col_idx < len(h_tbl_layout.text_rects[row_idx]) else h_tbl_layout.cell_rects[row_idx][col_idx]
+                        cell_rect = h_tbl_layout.cell_rects[row_idx][col_idx]
+                        text_rect = h_tbl_layout.text_rects[row_idx][col_idx] if row_idx < len(h_tbl_layout.text_rects) and col_idx < len(h_tbl_layout.text_rects[row_idx]) else cell_rect
                         txt = f_b.render(cell, True, INK)
                         surface.blit(txt, text_rect)
-
-            y = h_tbl_rect.bottom + 10
+                drawn_rows += 1
+            y = h_tbl_rect.top + (drawn_rows + 1) * h_tbl_layout.row_h + 10
+        elif model.history:
+            overflow_items += len(model.history)
 
         # Summary table
-        if model.summary:
-            sum_title = f_title.render("SUMMARY (Last {} Turns)".format(len(model.history)), True, INK)
-            surface.blit(sum_title, (PAD, y))
-            y += sum_title.get_height() + 6
+        if model.summary and y < bottom:
+            summary_title = f_title.render("SUMMARY (Last {} Turns)".format(HISTORY_SPAN), True, INK)
+            summary_title_h = summary_title.get_height() + 6
+            if y + summary_title_h < bottom:
+                surface.blit(summary_title, (PAD, y))
+                y += summary_title_h
 
             s_cols = [Column("Label", width=2.0, align="left"),
                       Column("Total", width=1.0, align="right")]
@@ -1198,26 +1219,48 @@ class BroadsheetView:
                              (s_tbl_rect.right, s_tbl_layout.rule_y))
 
             f_b = _font(s_tbl.size)
+            drawn_rows = 0
             for row_idx, row in enumerate(s_tbl.data):
+                row_bottom = s_tbl_layout.cell_rects[row_idx][0].bottom if row_idx < len(s_tbl_layout.cell_rects) else y + s_tbl_h
+                if row_bottom > bottom:
+                    overflow_items += len(s_tbl.data) - row_idx
+                    break
                 for col_idx, cell in enumerate(row):
                     if col_idx < len(s_tbl_layout.cell_rects[row_idx]):
-                        text_rect = s_tbl_layout.text_rects[row_idx][col_idx] if row_idx < len(s_tbl_layout.text_rects) and col_idx < len(s_tbl_layout.text_rects[row_idx]) else s_tbl_layout.cell_rects[row_idx][col_idx]
+                        cell_rect = s_tbl_layout.cell_rects[row_idx][col_idx]
+                        text_rect = s_tbl_layout.text_rects[row_idx][col_idx] if row_idx < len(s_tbl_layout.text_rects) and col_idx < len(s_tbl_layout.text_rects[row_idx]) else cell_rect
                         txt = f_b.render(cell, True, INK)
                         surface.blit(txt, text_rect)
+                drawn_rows += 1
+            y = s_tbl_rect.top + (drawn_rows + 1) * s_tbl_layout.row_h + 10
+        elif model.summary:
+            overflow_items += len(model.summary)
 
-            y = s_tbl_rect.bottom + 10
-
-        # Notices (prose from papers)
-        if model.notices:
-            notices_title = f_title.render("FROM THE PAPERS", True, INK)
-            surface.blit(notices_title, (PAD, y))
-            y += notices_title.get_height() + 6
+        # Notices
+        if model.notices and y < bottom:
+            notices_header = f_title.render("NOTICES", True, INK)
+            notices_header_h = notices_header.get_height() + 6
+            if y + notices_header_h < bottom:
+                surface.blit(notices_header, (PAD, y))
+                y += notices_header_h
 
             for notice in model.notices:
                 if notice:
                     n_surf = f_small.render(notice, True, INK)
+                    if y + n_surf.get_height() > bottom:
+                        overflow_items += 1
+                        break
                     surface.blit(n_surf, (PAD, y))
                     y += n_surf.get_height() + 3
+        elif model.notices:
+            overflow_items += len([n for n in model.notices if n])
+
+        # Overflow marker
+        if overflow_items > 0:
+            marker = f_small.render(f"+ {overflow_items} more", True, FADED)
+            my = content.bottom - marker.get_height() - 8
+            surface.blit(marker, (PAD, my))
+
         surface.set_clip(None)
 
     def _draw_docket(self, surface, content: pygame.Rect) -> None:

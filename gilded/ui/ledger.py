@@ -42,6 +42,15 @@ def money(amount: float) -> str:
     return f"{sign}{formatted}"
 
 
+def gold(amount: float) -> str:
+    """Format a stock (treasury balance) — no sign for non-negative."""
+    magnitude = round(amount)
+    formatted = f"{magnitude:,}"
+    if magnitude < 0:
+        return f"-{-magnitude:,}"
+    return formatted
+
+
 def ledger_model(house, turn: int, notices: Tuple[str, ...] = ()) -> LedgerModel:
     """Build a LedgerModel from a House's journal for a given resolved turn."""
     flows = house.flows(turn)

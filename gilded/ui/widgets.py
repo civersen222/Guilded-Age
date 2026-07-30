@@ -269,9 +269,11 @@ class Column:
 class TableLayout:
     header_rects: list[pygame.Rect]
     rule_y: int
-    row_rects: list[pygame.Rect]
-    cell_rects: list[list[pygame.Rect]]
-    text_rects: list[list[pygame.Rect]]
+    row_h: int = 0
+    row_rects: list[pygame.Rect] | None = None
+    cell_rects: list[list[pygame.Rect]] | None = None
+    text_rects: list[list[pygame.Rect]] | None = None
+
 
 
 class Table:
@@ -336,6 +338,7 @@ class Table:
             row_rects: list[pygame.Rect] = []
             cell_rects: list[list[pygame.Rect]] = []
             text_rects: list[list[pygame.Rect]] = []
+            row_h = 0
         else:
             row_h = available_data_h // row_count
             row_gap = 2
@@ -369,6 +372,7 @@ class Table:
         return TableLayout(
             header_rects=header_rects,
             rule_y=rule_y,
+            row_h=row_h,
             row_rects=row_rects,
             cell_rects=cell_rects,
             text_rects=text_rects,
