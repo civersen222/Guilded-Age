@@ -1,5 +1,6 @@
 """G18 AI tests: the AI ruler plays the same levers as the player."""
 
+import pytest
 from gilded.ai import (_executor_for, _weaker_neighbor, ai_peace_check,
                        ai_turn)
 from gilded.chassis import ATTENTION_PER_TURN, GildedGame
@@ -473,4 +474,58 @@ def test_rival_appoints_named_candidate():
     opinion_a = opinions_after.get(pair, 0)
     assert opinion_a > opinion_b, \
         f"Opinion {pair} did not increase: {opinion_b} -> {opinion_a}"
+
+
+def test_director_salary_comes_from_ruler_not_largest_holder():
+    """The Director's salary is paid by the ruler, not the largest holder.
+
+    Gives a third party 70% of the enterprise, the ruler 30%.  After
+    appointment, the stranger must be untouched at 70.0, the ruler must
+    have paid DIRECTOR_SALARY_PCT, and the appointee holds exactly that.
+    """
+    g = _game()
+    rival = sorted(g.houses)[0]
+    realm = g.realms[rival]
+    from gilded.docket import director_candidates, RulingContext, _init_appoint_director
+    from gilded.society.realm import DIRECTOR_SALARY_PCT
+
+    # Pick an enterprise with no director
+    owned = [e for e in g.enterprises if e.house == rival and e.director_id == ""]
+    assert len(owned) >= 1
+    ent = owned[0]
+
+    # Pick characters from the actual candidate pool (director_candidates filters
+    # out court holders, directors, ruler, dead, and underage)
+    ruler = realm.ruler
+    cands = director_candidates(g, rival, ent.eid)
+    assert len(cands) >= 2, "need at least 2 director candidates besides ruler"
+
+    stranger = cands[0]
+    appointee = cands[1]
+
+    # Clear ledger, give stranger 70%, ruler 30%
+    ent.ledger.clear()
+    ent.ledger[stranger.id] = 70.0
+    ent.ledger[ruler.id] = 30.0
+
+    # Fixture check: stranger is the largest holder
+    largest = max(ent.ledger, key=lambda k: ent.ledger[k])
+    assert largest == stranger.id, \
+        f"Stranger {stranger.id} should be largest holder, not {largest}"
+
+    # Appoint the appointee
+    import random
+    ctx = RulingContext(g, rival, executor=realm.ruler, rng=random.Random(SEED))
+    ent.director_id = ""
+    _init_appoint_director(ctx, eid=ent.eid, char_id=appointee.id)
+
+    # Assertions
+    assert ent.ledger.get(stranger.id, 0.0) == pytest.approx(70.0, abs=1e-9), \
+        f"Stranger should still hold 70.0, got {ent.ledger.get(stranger.id, 0.0)}"
+    assert ent.ledger.get(ruler.id, 0.0) == pytest.approx(
+        30.0 - DIRECTOR_SALARY_PCT, abs=1e-9), \
+        f"Ruler should hold {30.0 - DIRECTOR_SALARY_PCT}, got {ent.ledger.get(ruler.id, 0.0)}"
+    assert ent.ledger.get(appointee.id, 0.0) == pytest.approx(
+        DIRECTOR_SALARY_PCT, abs=1e-9), \
+        f"Appointee should hold {DIRECTOR_SALARY_PCT}, got {ent.ledger.get(appointee.id, 0.0)}"
 
