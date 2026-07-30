@@ -138,7 +138,7 @@ def _gen_capital_request(game, house_name, realm, rng) -> Optional[Petition]:
         house = ctx.game.houses[ctx.house]
         if house.treasury < cost:
             return [f"The treasury cannot meet {director.name}'s request ({cost:.0f} gold)"]
-        house.treasury -= cost
+        house.debit(ctx.game.turn, "expansion", cost)
         _turns = EXPAND_TURNS[ent.tier + 1]
         if _eff.build_speed_mod > 0:
             _turns = max(1, int(round(_turns / _eff.build_speed_mod)))
@@ -220,7 +220,7 @@ def _gen_union_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
         house = ctx.game.houses[ctx.house]
         if house.treasury < BUYOFF_COST:
             return [f"The House cannot raise the {BUYOFF_COST:.0f} gold to buy peace"]
-        house.treasury -= BUYOFF_COST
+        house.debit(ctx.game.turn, "strike buyoff", BUYOFF_COST)
         return buy_off_leader(mv, province)
 
     def _break(ctx) -> List[str]:
@@ -301,7 +301,7 @@ def _gen_heir_demand(game, house_name, realm, rng) -> Optional[Petition]:
         house = ctx.game.houses[ctx.house]
         if house.treasury < HEIR_ALLOWANCE:
             return [f"The treasury cannot spare {heir.name}'s allowance"]
-        house.treasury -= HEIR_ALLOWANCE
+        house.debit(ctx.game.turn, "heir allowance", HEIR_ALLOWANCE)
         modify_opinion(heir, realm.ruler, int(10 * ctx.scale), "an allowance")
         return [f"{heir.name} is granted an allowance of {HEIR_ALLOWANCE:.0f} gold"]
 
@@ -343,7 +343,7 @@ def _gen_disaster_inquiry(game, house_name, realm, rng) -> Optional[Petition]:
         house = ctx.game.houses[ctx.house]
         if house.treasury < COMPENSATE_COST:
             return ["The widows' fund is promised money the House does not have"]
-        house.treasury -= COMPENSATE_COST
+        house.debit(ctx.game.turn, "compensation", COMPENSATE_COST)
         province.unrest = max(0.0, province.unrest - 8.0 * ctx.scale)
         return [f"The families of {province.name} are compensated ({COMPENSATE_COST:.0f} gold)"]
 
@@ -388,7 +388,7 @@ def _gen_rail_proposal(game, house_name, realm, rng) -> Optional[Petition]:
         house = ctx.game.houses[ctx.house]
         if house.treasury < RAIL_COST:
             return [f"The {pa}-{pb} line stays on the drawing board ({RAIL_COST:.0f} gold short)"]
-        house.treasury -= RAIL_COST
+        house.debit(ctx.game.turn, "railway", RAIL_COST)
         link.rail = True
         return [f"Iron roads: the {pa}-{pb} line opens ({RAIL_COST:.0f} gold)"]
 
@@ -632,7 +632,7 @@ def _init_found_enterprise(ctx, kind=None, province_pid=None, **kw) -> List[str]
     ent = found_enterprise(kind, ctx.house, province, eid, ctx.rng)
     if ent is None:
         return [f"{province.name} lacks what a {KIND_TITLES[kind]} needs"]
-    house.treasury -= cost
+    house.debit(ctx.game.turn, "charter", cost)
     initial_ledger(ent, ctx.game.realms[ctx.house])
     ctx.game.enterprises.append(ent)
     return [f"{ent.name} is chartered ({cost:.0f} gold)"]
@@ -647,7 +647,7 @@ def _init_expand_enterprise(ctx, eid=None, **kw) -> List[str]:
     cost = EXPAND_COST[ent.tier + 1]
     if house.treasury < cost:
         return [f"The expansion of {ent.name} wants {cost:.0f} gold the House lacks"]
-    house.treasury -= cost
+    house.debit(ctx.game.turn, "expansion", cost)
     ent.under_construction = EXPAND_TURNS[ent.tier + 1]
     ent.target_tier = ent.tier + 1
     return [f"{ent.name} breaks ground on tier {ent.tier + 1} ({cost:.0f} gold)"]
@@ -660,7 +660,7 @@ def _init_build_rail(ctx, a=None, b=None, **kw) -> List[str]:
     house = ctx.game.houses[ctx.house]
     if house.treasury < RAIL_COST:
         return [f"The line wants {RAIL_COST:.0f} gold the House lacks"]
-    house.treasury -= RAIL_COST
+    house.debit(ctx.game.turn, "railway", RAIL_COST)
     link.rail = True
     pa = ctx.game.atlas.provinces[link.a].name
     pb = ctx.game.atlas.provinces[link.b].name
@@ -726,7 +726,7 @@ def _init_acquire_minor(ctx, province_pid=None, **kw) -> List[str]:
     house = ctx.game.houses[ctx.house]
     if house.treasury < cost:
         return [f"{province.name} would cost {cost:.0f} gold; the vault says no"]
-    house.treasury -= cost
+    house.debit(ctx.game.turn, "province purchase", cost)
     province.owner = ctx.house
     return [f"{province.name} is bought into the House for {cost:.0f} gold"]
 

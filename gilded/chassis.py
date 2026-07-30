@@ -87,6 +87,7 @@ class GildedGame:
         self.capacity: Dict[str, Dict[str, float]] = {}    # strategic capacity per house
         self.last_accidents: List[tuple] = []              # (ent, province) this turn
         self.brewing_turns: Dict[str, int] = {}            # revolution preconditions held
+        self.resolved_turn: Optional[int] = None           # last turn fully resolved
         self.agendas: Dict[str, object] = {}   # house -> agenda.Goal (Stage 2)
         self.informants: set = set()           # (viewer_house, target_house) intel lever
         self.takeovers: List[object] = []      # society.schemes.Takeover in flight
@@ -242,7 +243,7 @@ class GildedGame:
                 ent._last_dividend = take
                 take_total += take
             if take_total > 0:
-                self.houses[h].treasury += take_total
+                self.houses[h].credit(self.turn, "dividends", take_total)
                 self._emit([f"Dividends: {take_total:.0f} gold to the House treasury"],
                            "ledger", h)
 
@@ -337,7 +338,7 @@ class GildedGame:
                         rel.get(other, 0) + drift))))
             # Trade income from expansion
             if eff.trade_income:
-                self.houses[h].treasury += eff.trade_income
+                self.houses[h].credit(self.turn, "trade", eff.trade_income)
             # Unrest add from labor policy
             if eff.unrest_add:
                 for p in provs:
@@ -381,6 +382,7 @@ class GildedGame:
         self.events.extend(self.director.observe(self))
 
         # 9. endings, then the next morning's paper
+        self.resolved_turn = self.turn
         self.turn += 1
         from gilded.endings import check_ending    # local: endings imports our constants
         judged = next((h for h in sorted(self.houses)

@@ -408,6 +408,23 @@ def test_informant_button_clickable():
     )
 
 
+def test_every_informant_region_returns_its_own_house():
+    """Rule 15: every informant hit region's centre returns its own house action."""
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView
+    game = GildedGame(seed=7, player_house="Vantrell")
+    view = BroadsheetView(game, "Vantrell")
+    view.active_tab = "Powers"
+    view.draw(pygame.Surface((1280, 900)))
+    hits = list(view._informant_hits)
+    assert len(hits) >= 2, f"Need >=2 regions to discriminate, got {len(hits)}"
+    for rect, act in hits:
+        result = view.handle_click(rect.center)
+        assert result == {"place_informant": act["place_informant"]}, (
+            f"Region for {act['place_informant']!r} returned {result!r}"
+        )
+
+
 def test_click_outside_informant_hits_returns_none():
     """Rule 4: clicking well outside any hit region returns None."""
     from gilded.chassis import GildedGame

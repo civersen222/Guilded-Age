@@ -5,9 +5,15 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from gilded.world import MINOR_OWNER, Atlas
+
+TREASURY_LABELS = frozenset({
+    "dividends", "trade", "expansion", "strike buyoff", "heir allowance",
+    "compensation", "railway", "charter", "province purchase",
+    "reparations paid", "reparations received",
+})
 
 HOUSE_NAMES = ["Vantrell", "Karsgate", "Mordaine", "Ashworth", "Ferrenholt",
                "Duval-Corse", "Brandtner", "Ostreval"]
@@ -29,6 +35,46 @@ class House:
     at_war_with: Set[str] = field(default_factory=set)
     truces: Dict[str, int] = field(default_factory=dict)      # house -> expiry turn
     relations: Dict[str, int] = field(default_factory=dict)   # house -> -100..100
+    journal: List[Tuple[int, str, float]] = field(default_factory=list)
+
+    def credit(self, turn: int, label: str, amount: float) -> None:
+        if amount < 0:
+            raise ValueError("amount must be non-negative")
+        if label not in TREASURY_LABELS:
+            raise ValueError(f"unknown label: {label}")
+        if amount == 0.0:
+            return
+        self.treasury += amount
+        self.journal.append((turn, label, amount))
+
+    def debit(self, turn: int, label: str, amount: float) -> None:
+        if amount < 0:
+            raise ValueError("amount must be non-negative")
+        if label not in TREASURY_LABELS:
+            raise ValueError(f"unknown label: {label}")
+        if amount == 0.0:
+            return
+        if amount > self.treasury:
+            raise ValueError(f"insufficient treasury: {amount} > {self.treasury}")
+        self.treasury -= amount
+        self.journal.append((turn, label, -amount))
+
+    def flows(self, turn: int) -> Tuple[Tuple[str, float], ...]:
+        entries = [(label, amt) for t, label, amt in self.journal if t == turn]
+        if not entries:
+            return ()
+        grouped: Dict[str, float] = {}
+        for label, amt in entries:
+            grouped[label] = grouped.get(label, 0.0) + amt
+        result = [(label, amt) for label, amt in grouped.items()]
+        result.sort(key=lambda x: (-abs(x[1]), x[0]))
+        return tuple(result)
+
+    def income(self, turn: int) -> float:
+        return sum(amt for t, label, amt in self.journal if t == turn and amt > 0)
+
+    def outlay(self, turn: int) -> float:
+        return abs(sum(amt for t, label, amt in self.journal if t == turn and amt < 0))
 
 
 def assign_houses(atlas: Atlas, seed: int) -> Dict[str, House]:

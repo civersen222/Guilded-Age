@@ -374,8 +374,8 @@ def negotiate_peace(game, war: War, terms: PeaceTerms) -> List[str]:
             msgs.append(f"{p.name} is ceded to House {winner}")
     if terms.gold > 0.0:
         paid = min(terms.gold, game.houses[loser].treasury)
-        game.houses[loser].treasury -= paid
-        game.houses[winner].treasury += paid
+        game.houses[loser].debit(game.turn, "reparations paid", paid)
+        game.houses[winner].credit(game.turn, "reparations received", paid)
         msgs.append(f"House {loser} pays {paid:.0f} gold in reparations")
     if terms.shares_pct > 0.0 and ceded:
         spoils = [e for e in game.enterprises
