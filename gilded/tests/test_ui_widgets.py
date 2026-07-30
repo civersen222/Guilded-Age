@@ -78,6 +78,35 @@ def test_rows_last_bottom():
     assert rows[-1].bottom == r.bottom
 
 
+def test_rows_last_bottom_non_divisible():
+    """rows with weights (1,1,1) on height 10 — 10/3 is not an integer.
+
+    Without the last-row override: int(1*3.333)=3 for each row,
+    bottom = 9 != 10.  With the override: last row gets height 4,
+    bottom = 10.  Total heights sum to rect.height with no leftover.
+    """
+    _init()
+    r = pygame.Rect(0, 0, 200, 10)
+    rows = widgets.rows(r, (1, 1, 1), 0)
+    assert rows[-1].bottom == r.bottom
+    assert sum(row.height for row in rows) == r.height
+
+
+def test_rows_last_bottom_with_gap():
+    """rows with weights (1,2) on height 100, gap=5.
+
+    available = 95, base = 31.667.  Naive: row0=31, row1=63 → 31+63+5=99.
+    Override: row1 = 100 - (31+5) = 64 → 31+64+5=100.
+    """
+    _init()
+    gap = 5
+    r = pygame.Rect(0, 0, 200, 100)
+    rows = widgets.rows(r, (1, 2), gap)
+    assert rows[-1].bottom == r.bottom
+    total = sum(row.height for row in rows) + gap * (len(rows) - 1)
+    assert total == r.height
+
+
 def test_rows_gap_heights():
     _init()
     gap = 10
@@ -85,6 +114,27 @@ def test_rows_gap_heights():
     rows = widgets.rows(r, (1, 1), gap)
     total_h = rows[0].height + rows[1].height
     assert total_h == r.height - gap
+
+
+def test_font_caching():
+    """font(size, bold) returns the same instance on repeated calls."""
+    _init()
+    f1 = widgets.font(14)
+    f2 = widgets.font(14)
+    assert f1 is f2
+    f3 = widgets.font(14, bold=True)
+    assert f3 is not f1
+
+
+def test_wrap_returns_lines():
+    """wrap splits text into lines that fit within the given width."""
+    _init()
+    f = widgets.font(14)
+    text = "one two three four five"
+    lines = widgets.wrap(text, f, 100)
+    assert len(lines) >= 1
+    for line in lines:
+        assert f.size(line)[0] <= 100
 
 
 # ── Table ────────────────────────────────────────────────────────────────────
@@ -427,6 +477,24 @@ def test_panel_inner_strictly_inside():
     assert inner.top > p.rect.top
     assert inner.right < p.rect.right
     assert inner.bottom < p.rect.bottom
+
+
+def test_panel_inner_minimum_clearance():
+    """Content must have real clearance from the border, not merely nonzero.
+
+    Asserts each side has at least 4 px of clearance.  This catches the
+    case where _PANEL_PAD is set to 0 (border alone gives only 1 px).
+    """
+    _init()
+    p = widgets.Panel(pygame.Rect(0, 0, 200, 100))
+    inner = p.inner()
+    left_clear = inner.left - p.rect.left
+    right_clear = p.rect.right - inner.right
+    top_clear = inner.top - p.rect.top
+    bottom_clear = p.rect.bottom - inner.bottom
+    for name, val in [("left", left_clear), ("right", right_clear),
+                      ("top", top_clear), ("bottom", bottom_clear)]:
+        assert val >= 4, f"Panel {name} clearance is {val}, expected >= 4"
 
 
 def test_panel_titled_inner_lower():
