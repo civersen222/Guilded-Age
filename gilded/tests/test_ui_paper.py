@@ -24,7 +24,7 @@ from gilded.ui.widgets import (
     columns, font as _font, wrap as _wrap,
     INK, FADED,
 )
-from gilded.ui.broadsheet import BroadsheetView, PAD, TAB_H, _hud_height
+from gilded.ui.broadsheet import BroadsheetView, PAD, TAB_H, _hud_height, BOTTOM_H
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -307,37 +307,72 @@ def test_rule9_placement_inside_rect():
 # ────────────────────────────────────────────────────────────────────────────
 
 def test_rule10_column_major_fill():
+    """Column-major fill: items fill col 0 completely before spilling to col 1.
+
+    With 48 items and 24 capacity per column, col 0 gets items 0-23,
+    col 1 gets items 24-47.  The last item of col 0 is 'Line 23'.
+    A round-robin implementation would interleave items across columns,
+    placing 'Line 23' in column 0 at a different row index.
+    """
     f = _font18()
     rect = _rect(1248, 600)
-    items = [f"Line {i}" for i in range(13)]
+    items = [f"Line {i}" for i in range(48)]
     res = flow_columns(items, f, rect, line_gap=4)
     cols = column_plan(rect, f)
     assert len(cols) == 2
-    ci0 = [p[3] for p in res.placements if p[0] == "Line 0"]
-    assert ci0[0] == 0
+    # Every item in col 0 must come before every item in col 1 in the
+    # original items list.  The last col-0 item is the one with the
+    # highest original index among col-0 placements.
+    col0_items = [p for p in res.placements if p[3] == 0]
+    col1_items = [p for p in res.placements if p[3] == 1]
+    assert len(col0_items) == 24  # column capacity
+    assert len(col1_items) == 24
+    # In column-major order, the last item placed in col 0 is item 23
+    # and the first item in col 1 is item 24.
+    col0_texts = [p[0] for p in col0_items]
+    col1_texts = [p[0] for p in col1_items]
+    assert col0_texts[-1] == "Line 23"
+    assert col1_texts[0] == "Line 24"
 
 def test_rule10_second_column_used():
+    """With 48 items, both columns are used, and col 0 is full before col 1 starts."""
     f = _font18()
     rect = _rect(1248, 600)
-    items = [f"Line {i}" for i in range(50)]
+    items = [f"Line {i}" for i in range(48)]
     res = flow_columns(items, f, rect, line_gap=4)
     cols = column_plan(rect, f)
     assert len(cols) == 2
     ci_values = set(p[3] for p in res.placements)
     assert 0 in ci_values
     assert 1 in ci_values
+    # Verify col 0 fills completely before col 1 — items 0-23 in col 0, 24-47 in col 1
+    col0_indices = sorted([int(p[0].split()[-1]) for p in res.placements if p[3] == 0])
+    col1_indices = sorted([int(p[0].split()[-1]) for p in res.placements if p[3] == 1])
+    assert col0_indices == list(range(24))
+    assert col1_indices == list(range(24, 48))
 
 def test_rule10_rows_increasing_within_column():
+    """Within each column, items appear in original order (item 0 before item 1, etc.).
+
+    Uses 48 items so both columns are populated.  In each column the text
+    labels must be in ascending index order — a round-robin fill would place
+    them out of original order within a column.
+    """
     f = _font18()
     rect = _rect(1248, 600)
-    items = [f"Line {i}" for i in range(13)]
+    items = [f"Line {i}" for i in range(48)]
     res = flow_columns(items, f, rect, line_gap=4)
     cols = column_plan(rect, f)
     line_h = f.size("x")[1]
     for ci in range(len(cols)):
-        ys = [p[2] for p in res.placements if p[3] == ci]
+        placements = [p for p in res.placements if p[3] == ci]
+        ys = [p[2] for p in placements]
         for i in range(len(ys) - 1):
             assert ys[i] + line_h <= ys[i + 1]
+        # Items must appear in original order within the column
+        texts = [p[0] for p in placements]
+        indices = [int(t.split()[-1]) for t in texts]
+        assert indices == sorted(indices)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -372,12 +407,51 @@ def test_rule11_overflow_equals_unplaced():
 # ────────────────────────────────────────────────────────────────────────────
 
 def test_rule12_continuation_marker():
-    f = _font18()
-    rect = _rect(1248, 100)
-    items = [f"Line {i}" for i in range(50)]
-    res = flow_columns(items, f, rect, line_gap=4)
-    if res.overflow > 0:
-        assert res.overflow > 0
+    """When there is overflow, _draw_paper must render a continuation marker.
+
+    Uses a tall game (10 turns) for more content, and a surface short enough
+    that the body area is only 30px, forcing overflow.  Then probes for
+    non-background pixels in the marker region (which would not be there if
+    the `if result.overflow > 0:` block were deleted).
+    """
+    g = _game(seed=7, turns=10)
+    hud_h = _hud_height()
+    body_font = _font18()
+    head_font = _font(30, bold=True)
+    house = list(g.houses.keys())[0]
+
+    # Compute where the body area starts
+    head = head_font.render("THE GAZETTE - 1066", True, INK)
+    rule_y = TAB_H + hud_h + 6 + head.get_height() + 4
+    body_top = rule_y + 6
+
+    # Surface height gives body area of 30px (fits ~1 line, forcing overflow)
+    body_h = 30
+    short_h = body_top + body_h + BOTTOM_H
+    s = pygame.display.set_mode((1280, short_h))
+
+    v = BroadsheetView(g, house)
+    v.active_tab = "Gazette"
+    v.draw(s)
+
+    # content.bottom = TAB_H + hud_h + (short_h - TAB_H - hud_h - BOTTOM_H) = short_h - BOTTOM_H
+    content_bottom = short_h - BOTTOM_H
+
+    # The marker is placed at content.bottom - marker_height - 8
+    marker_h = body_font.size("+ 6 more")[1]
+    marker_y = content_bottom - marker_h - 8
+
+    # Probe for non-PAPER_BG pixels in the marker region
+    from gilded.ui.widgets import PAPER_BG
+    non_bg = 0
+    for y in range(marker_y - 2, content_bottom):
+        for x in range(PAD + 5, min(PAD + 150, 1200)):
+            if s.get_at((x, y)) != PAPER_BG:
+                non_bg += 1
+    assert non_bg > 20, (
+        f"No continuation marker found: only {non_bg} non-bg pixels "
+        f"near y={marker_y}-{content_bottom}"
+    )
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -385,12 +459,29 @@ def test_rule12_continuation_marker():
 # ────────────────────────────────────────────────────────────────────────────
 
 def test_rule13_horizontal_rule_draws():
-    f = _font18()
-    s = pygame.Surface((600, 600))
-    surf = pygame.Surface((600, 600))
-    surf.fill((255, 255, 255))
-    pygame.draw.line(surf, FADED, (50, 100), (550, 100), 2)
-    assert surf.get_at((300, 100)) != (255, 255, 255)
+    """_draw_paper must draw a horizontal rule (pygame.draw.line) under the head.
+
+    Renders the broadsheet and probes for a dark horizontal line just below
+    the head text.  The rule colour is INK (28, 24, 20).
+    """
+    g = _game(seed=7, turns=1)
+    s = pygame.display.set_mode((1280, 900))
+    house = list(g.houses.keys())[0]
+    v = BroadsheetView(g, house)
+    v.active_tab = "Gazette"
+    v.draw(s)
+    head_font = _font(30, bold=True)
+    head_text = head_font.render(f"THE GAZETTE - 1066", True, INK)
+    # _draw_paper: rule_y = content.y + 6 + head_height + 4, where content.y = TAB_H + hud_h
+    hud_h = _hud_height()
+    rule_y = TAB_H + hud_h + 6 + head_text.get_height() + 4
+    # Probe for INK-colored pixels on the rule line
+    ink_pixels = 0
+    for x in range(PAD + 10, min(PAD + 300, 1280 - PAD)):
+        col = s.get_at((x, rule_y))
+        if col == INK:
+            ink_pixels += 1
+    assert ink_pixels > 50, f"Horizontal rule not found: only {ink_pixels} ink pixels at y={rule_y}"
 
 
 # ────────────────────────────────────────────────────────────────────────────
