@@ -34,7 +34,10 @@ from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 from gilded.ui.widgets import (
     CARD_BG, CARD_EDGE, FADED, INK, PAPER_BG,
-    Chip, Meter, font as _font, wrap as _wrap,
+    Chip, Column, Meter, Table, TableLayout, font as _font, wrap as _wrap,
+)
+from gilded.grip import (
+    BAND_CONTESTED, BAND_IMPERILED, BAND_IRON_GRIP, BAND_SEIZED,
 )
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
@@ -263,6 +266,197 @@ BUTTON_TEXT = (238, 240, 232)
 EXEC_BG = (78, 66, 96)
 ENDTURN_BG = (140, 60, 52)
 ATTN_COLOR = (150, 110, 40)
+
+# ── Enterprises table ─────────────────────────────────────────────────
+
+_BAND_TONE = {
+    BAND_SEIZED: "bad",
+    BAND_IMPERILED: "bad",
+    BAND_CONTESTED: "warn",
+    BAND_IRON_GRIP: "good",
+}
+
+_BAND_DISPLAY = {
+    BAND_SEIZED: "Seized",
+    BAND_IMPERILED: "Imperiled",
+    BAND_CONTESTED: "Contested",
+    BAND_IRON_GRIP: "Iron Grip",
+}
+
+ENT_COLS: Tuple[Column, ...] = (
+    Column("Venture", width=2.0, align="left"),
+    Column("Sector", width=1.0, align="left"),
+    Column("Tier", width=0.8, align="right"),
+    Column("Dividend", width=1.0, align="right"),
+    Column("Δ", width=0.8, align="right"),
+    Column("Director", width=1.5, align="left"),
+    Column("Stake", width=0.8, align="right"),
+    Column("Top outside", width=1.2, align="left"),
+)
+DELTA_COL = 4
+
+_ENT_TABLE_H_MAX = 600  # max pixel height for the table before overflow
+
+
+@dataclass(frozen=True)
+class EnterprisesModel:
+    table: Table
+    row_eids: Tuple[int, ...]
+    delta_tones: Tuple[str, ...]
+    skim_rows: Tuple[int, ...]
+    band_chip: Chip
+    margin_meter: Meter
+    texts: Dict[str, str]
+    overflow_name: Optional[str]
+    overflow_count: int
+
+
+def enterprises_model(report) -> EnterprisesModel:
+    """Build a pure EnterprisesModel from a GripReport."""
+    rows: List[List[str]] = []
+    eids: List[int] = []
+    deltas: List[str] = []
+    skims: List[int] = []
+
+    for el in report.enterprises:
+        # Director cell
+        if el.director is not None:
+            dir_name = el.director.name
+            if el.director.disloyal:
+                dir_name = f"{dir_name} [skim]"
+        else:
+            dir_name = "Vacant"
+
+        # Delta cell
+        if el.dividend_delta is None:
+            delta_str = ""
+        else:
+            delta_str = f"{el.dividend_delta:+.1f}"
+
+        # Top outside cell
+        if el.top_outside is None:
+            outside_str = "—"
+        else:
+            outside_str = f"{el.top_outside[0]} {el.top_outside[1]:.1f}%"
+
+        def _clean(s: str) -> str:
+            """Strip pipe characters from cell values."""
+            return s.replace("|", "")
+
+        rows.append([
+            _clean(el.name),
+            _clean(el.sector),
+            str(el.tier),
+            f"{el.dividend:.1f}",
+            delta_str,
+            _clean(dir_name),
+            f"{el.your_stake:.1f}%",
+            _clean(outside_str),
+        ])
+        eids.append(el.eid)
+        deltas.append(delta_str)
+
+        # Skim tracking
+        if el.director is not None and el.director.disloyal:
+            skims.append(len(rows) - 1)
+
+    # Delta tones
+    delta_tones = []
+    for el in report.enterprises:
+        if el.dividend_delta is None:
+            delta_tones.append("neutral")
+        elif el.dividend_delta > 0:
+            delta_tones.append("good")
+        elif el.dividend_delta < 0:
+            delta_tones.append("bad")
+        else:
+            delta_tones.append("neutral")
+
+    tbl = Table(ENT_COLS, rows)
+    tbl_h = tbl.height()
+
+    # Overflow detection
+    if tbl_h > _ENT_TABLE_H_MAX:
+        # Estimate how many rows fit
+        f = _font(14)
+        body_h = f.get_linesize()
+        header_h = _font(14, bold=True).get_linesize()
+        gap = 2
+        rule_h = 1
+        available_data_h = _ENT_TABLE_H_MAX - header_h - rule_h - gap
+        rows_fit = available_data_h // (body_h + gap)
+        overflow_count = max(0, len(rows) - rows_fit)
+        overflow_name = f"{overflow_count} ventures did not fit"
+    else:
+        overflow_name = None
+        overflow_count = 0
+
+    # Band chip
+    band_text = _BAND_DISPLAY.get(report.band, report.band.replace("_", " "))
+    band_tone = _BAND_TONE.get(report.band, "neutral")
+    band_chip = Chip(band_text, tone=band_tone)
+
+    # Margin meter
+    margin_meter = Meter(
+        label="Margin",
+        value=report.margin,
+        lo=-30.0,
+        hi=30.0,
+        danger=("below", 0.0),
+        fmt="{:.1f}",
+    )
+
+    # Texts
+    texts: Dict[str, str] = {}
+    if report.top_predator is not None:
+        texts["predator"] = (
+            f"Top threat: {report.top_predator.name} "
+            f"({report.top_predator.stake:.1f}%)"
+        )
+    texts["stake"] = f"Controlling stake: {report.controlling_stake:.1f}%"
+
+    return EnterprisesModel(
+        table=tbl,
+        row_eids=tuple(eids),
+        delta_tones=tuple(delta_tones),
+        skim_rows=tuple(skims),
+        band_chip=band_chip,
+        margin_meter=margin_meter,
+        texts=texts,
+        overflow_name=overflow_name,
+        overflow_count=overflow_count,
+    )
+
+
+def enterprises_layout(model, content: pygame.Rect) -> Dict[str, pygame.Rect]:
+    """Lay out the enterprises table and controls inside content."""
+    margin = 4
+    x = content.left + margin
+    y = content.top + margin
+    w = content.width - 2 * margin
+
+    # Top row: band chip + margin meter
+    chip_size = model.band_chip.size()
+    chip_rect = pygame.Rect(x, y, chip_size[0], chip_size[1])
+    meter_w = w - chip_size[0] - 8
+    meter_rect = pygame.Rect(x + chip_size[0] + 8, y, meter_w, chip_size[1])
+
+    # Table
+    tbl_y = y + chip_size[1] + 8
+    tbl_h = min(model.table.height(), _ENT_TABLE_H_MAX)
+    tbl_rect = pygame.Rect(x, tbl_y, w, tbl_h)
+
+    # Action area (below table)
+    action_y = tbl_y + tbl_h + 8
+    action_h = content.bottom - action_y - margin
+    action_rect = pygame.Rect(x, action_y, w, max(action_h, 50))
+
+    return {
+        "chip": chip_rect,
+        "meter": meter_rect,
+        "table": tbl_rect,
+        "action": action_rect,
+    }
 
 
 class BroadsheetView:
@@ -810,30 +1004,105 @@ class BroadsheetView:
         return actions
 
     def _draw_enterprises(self, surface, content) -> None:
-        title = _font(30, bold=True).render("ENTERPRISES", True, INK)
-        surface.blit(title, (PAD, content.y + 6))
-        y = content.y + 6 + title.get_height() + 10
-        body = _font(18)
-        width = content.width - 2 * PAD
-        lines = self.enterprises_lines()
-        for ln in lines:
-            for wln in _wrap(ln, body, width):
-                if y > content.bottom - 20:
-                    return
-                surface.blit(body.render(wln, True, INK), (PAD, y))
-                y += body.get_height() + 2
-            y += 6
+        """Draw the Enterprises tab: model → layout → draw."""
+        g, name = self.game, self.house
+        r = grip_report(g, name)
+        model = enterprises_model(r)
+        layout = enterprises_layout(model, content)
+
+        chip_rect = layout["chip"]
+        meter_rect = layout["meter"]
+        tbl_rect = layout["table"]
+        action_rect = layout["action"]
+
+        # Band chip
+        model.band_chip.draw(surface, (chip_rect.left, chip_rect.top))
+
+        # Margin meter — draw as a bar
+        from gilded.ui.widgets import TONES
+        meter = model.margin_meter
+        f = _font(meter.size)
+        label_surf = f.render(f"{meter.label}: {meter.value_text()}%", True, INK)
+        surface.blit(label_surf, (meter_rect.left, meter_rect.top))
+        bar_h = 8
+        bar_y = meter_rect.top + meter_rect.height - bar_h
+        bar_rect = pygame.Rect(meter_rect.left + label_surf.get_width() + 8, bar_y,
+                               meter_rect.width - label_surf.get_width() - 12, bar_h)
+        pygame.draw.rect(surface, CARD_EDGE, bar_rect)
+        frac = meter.fraction()
+        fill_w = max(2, int(bar_rect.width * frac))
+        tone = meter.tone()
+        fill_color = TONES.get(tone, INK) if tone in TONES else INK
+        fill_rect = pygame.Rect(bar_rect.left, bar_rect.top, fill_w, bar_h)
+        pygame.draw.rect(surface, fill_color, fill_rect)
+
+        # Table
+        tbl = model.table
+        tbl_layout = tbl.layout(tbl_rect)
+
+        # Draw header
+        f_h = _font(tbl.size, bold=True)
+        for i, col in enumerate(tbl.cols):
+            if i < len(tbl_layout.header_rects):
+                h_rect = tbl_layout.header_rects[i]
+                text_rect = tbl_layout.text_rects[0][i] if i < len(tbl_layout.text_rects[0]) else h_rect
+                txt = f_h.render(col.header, True, INK)
+                surface.blit(txt, text_rect)
+
+        # Draw rule
+        pygame.draw.line(surface, INK,
+                         (tbl_rect.left, tbl_layout.rule_y),
+                         (tbl_rect.right, tbl_layout.rule_y))
+
+        # Draw rows
+        f_b = _font(tbl.size)
+        for ri, row in enumerate(tbl.data):
+            if ri >= len(tbl_layout.row_rects):
+                break
+            row_rect = tbl_layout.row_rects[ri]
+            # Highlight skim rows
+            if ri in model.skim_rows:
+                pygame.draw.rect(surface, (240, 220, 210), row_rect)
+            for ci, cell in enumerate(row):
+                if ci >= len(tbl_layout.cell_rects[ri]):
+                    continue
+                cell_rect = tbl_layout.cell_rects[ri][ci]
+                text_rect = tbl_layout.text_rects[ri][ci]
+                # Delta column tone
+                if ci == DELTA_COL and cell != "" and ri < len(model.delta_tones):
+                    tone = model.delta_tones[ri]
+                    color = TONES.get(tone, INK)
+                else:
+                    color = INK
+                txt = f_b.render(cell, True, color)
+                surface.blit(txt, text_rect)
+
+        # Overflow warning
+        if model.overflow_name is not None:
+            warn = f_b.render(f"⚠ {model.overflow_name}", True, TONES["warn"])
+            surface.blit(warn, (tbl_rect.left, tbl_rect.bottom + 4))
+
+        # Predator / stake text
+        y = tbl_rect.bottom + 4
+        if model.overflow_name is not None:
+            y += f_b.get_height() + 4
+        for key in ("predator", "stake"):
+            if key in model.texts and y < action_rect.top - 4:
+                txt = f_b.render(model.texts[key], True, INK)
+                surface.blit(txt, (action_rect.left, y))
+                y += f_b.get_height() + 2
 
         # If a director picker is open, draw it instead of buttons
         if self._director_picker is not None:
-            self._draw_director_picker(surface, content, y, body)
+            self._draw_director_picker(surface, content, action_rect.top, f_b)
             return
 
         # Draw Expand and Appoint buttons for eligible ventures
         from gilded.enterprises import TIER_MAX
         from gilded.docket import director_candidates
         actions = self.enterprise_actions()
-        y += 8
+        y = action_rect.top + 4
+        body = f_b
         for act in actions:
             action_dict = act.get("action", {})
             verb = list(action_dict.keys())[0] if action_dict else None
@@ -843,24 +1112,21 @@ class BroadsheetView:
             ent = next((e for e in self.game.enterprises if e.eid == eid), None)
             if ent is None:
                 continue
-            if ent.house != self.house:
-                continue
 
             if verb == "expand_enterprise":
-                if ent.tier >= TIER_MAX:
+                # Skip expand if under construction or at max tier
+                if ent.under_construction > 0 or ent.target_tier >= TIER_MAX:
                     continue
-                if ent.under_construction > 0:
-                    continue
-                btn_text = act.get("label", f"Expand {eid}")
+                btn_text = act.get("label", f"Expand {ent.name}")
                 btn_surf = body.render(btn_text, True, INK)
                 btn_w = btn_surf.get_width() + 16
                 btn_h = body.get_height() + 8
-                btn_rect = pygame.Rect(PAD, y, btn_w, btn_h)
+                btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
                 if y + btn_h > content.bottom:
                     return
-                pygame.draw.rect(surface, (50, 70, 50), btn_rect)
-                pygame.draw.rect(surface, INK, btn_rect, 2)
-                surface.blit(btn_surf, (PAD + 8, y + 4))
+                pygame.draw.rect(surface, BUTTON_BG, btn_rect)
+                pygame.draw.rect(surface, BUTTON_EDGE, btn_rect, 2)
+                surface.blit(btn_surf, (action_rect.left + 8, y + 4))
                 self._enterprise_hits.append((btn_rect, act))
                 y += btn_h + 4
 
@@ -872,12 +1138,12 @@ class BroadsheetView:
                 btn_surf = body.render(btn_text, True, INK)
                 btn_w = btn_surf.get_width() + 16
                 btn_h = body.get_height() + 8
-                btn_rect = pygame.Rect(PAD, y, btn_w, btn_h)
+                btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
                 if y + btn_h > content.bottom:
                     return
                 pygame.draw.rect(surface, (50, 50, 70), btn_rect)
                 pygame.draw.rect(surface, INK, btn_rect, 2)
-                surface.blit(btn_surf, (PAD + 8, y + 4))
+                surface.blit(btn_surf, (action_rect.left + 8, y + 4))
                 self._appoint_hits.append((btn_rect, act))
                 y += btn_h + 4
 
