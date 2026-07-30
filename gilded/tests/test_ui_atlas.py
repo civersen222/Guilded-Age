@@ -12,6 +12,7 @@ from gilded.ui.atlas_view import (
     MINOR_COLOR,
     OCEAN_COLOR,
     FRONT_COLOR,
+    atlas_transform,
     draw_atlas,
     pick_province,
     province_panel_lines,
@@ -32,7 +33,9 @@ def test_palette_shape():
 def test_every_province_traces_a_polygon():
     _init()
     g = GildedGame(seed=42)
-    polys = province_polygons(g.atlas)
+    rect = pygame.Rect(0, 0, 1280, 900)
+    transform = atlas_transform(g.atlas, rect)
+    polys = province_polygons(g.atlas, transform)
     assert set(polys) == set(g.atlas.provinces)
     assert all(len(v) >= 3 for v in polys.values())
 
@@ -40,11 +43,13 @@ def test_every_province_traces_a_polygon():
 def test_centroid_picks_its_own_province():
     _init()
     g = GildedGame(seed=42)
-    polys = province_polygons(g.atlas)
+    rect = pygame.Rect(0, 0, 1280, 900)
+    transform = atlas_transform(g.atlas, rect)
+    polys = province_polygons(g.atlas, transform)
     hits = 0
     for pid, prov in g.atlas.provinces.items():
         c = prov.center
-        if pick_province(g.atlas, polys, (int(c[0] * 8), int(c[1] * 8))) == pid:
+        if pick_province(g.atlas, polys, transform.apply(c)) == pid:
             hits += 1
     # Voronoi regions are near-convex; the great majority contain their centroid.
     assert hits >= int(0.9 * len(g.atlas.provinces))
@@ -53,7 +58,9 @@ def test_centroid_picks_its_own_province():
 def test_pick_off_map_is_none():
     _init()
     g = GildedGame(seed=42)
-    polys = province_polygons(g.atlas)
+    rect = pygame.Rect(0, 0, 1280, 900)
+    transform = atlas_transform(g.atlas, rect)
+    polys = province_polygons(g.atlas, transform)
     assert pick_province(g.atlas, polys, (100000, 100000)) is None
 
 
@@ -61,7 +68,8 @@ def test_draw_is_headless_safe():
     _init()
     g = GildedGame(seed=42)
     surf = pygame.Surface((1280, 900))
-    polys = draw_atlas(surf, g)
+    rect = pygame.Rect(0, 0, 1280, 900)
+    polys = draw_atlas(surf, g, rect)
     assert set(polys) == set(g.atlas.provinces)
 
 

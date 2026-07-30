@@ -587,13 +587,19 @@ def test_policies_tab_draws_and_clicks():
 
 
 def test_atlas_click_selects_province():
+    from gilded.ui.atlas_view import atlas_transform
     g, v = _view()
     v.active_tab = "Atlas"
     surf = pygame.Surface((1280, 900))
     v.draw(surf)
     pid = next(iter(g.atlas.provinces))
     c = g.atlas.provinces[pid].center
-    result = v.handle_click((int(c[0] * 8), int(c[1] * 8)))
+    hud_h = 116
+    TAB_H = 40
+    BOTTOM_H = 40
+    content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
+    transform = atlas_transform(g.atlas, content)
+    result = v.handle_click(transform.apply(c))
     assert result == {"select_province": pid} and v.selected_pid == pid
 
 

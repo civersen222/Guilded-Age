@@ -1116,9 +1116,12 @@ class BroadsheetView:
                     y += small.get_height() + 4
             y += 16
 
-    def _draw_atlas(self, surface) -> None:
-        surface.fill(OCEAN_COLOR)
-        self._atlas_polys = draw_atlas(surface, self.game, self.selected_pid)
+    def _draw_atlas(self, surface, rect: pygame.Rect = None) -> None:
+        if rect is None:
+            hud_h = _hud_height()
+            rect = pygame.Rect(0, TAB_H + hud_h, self._w,
+                               self._h - TAB_H - hud_h - BOTTOM_H)
+        self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid)
         if self.selected_pid is not None:
             self._draw_panel(surface,
                              province_panel_lines(self.game, self.selected_pid))
