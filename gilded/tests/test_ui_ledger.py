@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from unittest.mock import patch
 import pytest
 import pygame
 
@@ -95,10 +96,11 @@ def test_r12_gold_negative():
 # ────────────────────────────────────────────────────────────────────────────
 
 def test_r2_rows_match_flows():
-    g = _game(seed=42, turns=1)
+    g = _game(seed=42, turns=20)
     house = list(g.houses.values()).__iter__().__next__()
-    model = ledger_model(house, 0)
-    flows = house.flows(0)
+    model = ledger_model(house, 19)
+    flows = house.flows(19)
+    assert len(flows) > 0, "Need non-empty flows to test order"
     assert len(model.rows) == len(flows)
     for i, (label, amount) in enumerate(flows):
         assert model.rows[i].label == label
@@ -137,11 +139,18 @@ def test_r5_history_includes_quiet_turns():
         assert 19 - HISTORY_SPAN + 1 <= tl.turn <= 19
 
 def test_r5_history_length_at_first_turn():
-    g = _game(seed=42, turns=1)
+    g = _game(seed=42, turns=20)
     house = list(g.houses.values()).__iter__().__next__()
-    model = ledger_model(house, 0)
-    # Turn 0 is the first resolved turn — history may be empty since there's no prior turn
-    assert len(model.history) >= 0
+    # At turn 1, history is 1 line
+    model1 = ledger_model(house, 1)
+    assert len(model1.history) == 1
+    assert min(tl.turn for tl in model1.history) >= 1
+    # At turn 3, history is 3 lines
+    model3 = ledger_model(house, 3)
+    assert len(model3.history) == 3
+    # At turn 20, history is HISTORY_SPAN (8) lines
+    model20 = ledger_model(house, 19)
+    assert len(model20.history) == HISTORY_SPAN
 
 def test_r5_history_net_per_line():
     """Assert net == income - outlay per history line, with both signs present."""
@@ -166,7 +175,7 @@ def test_r5_history_net_per_line():
 # ────────────────────────────────────────────────────────────────────────────
 
 def test_r6_summary_aggregates():
-    """Summary rows aggregate flows across HISTORY_SPAN turns by label."""
+    """Summary rows aggregate flows across HISTORY_SPAN turns by label, sorted desc by |amount|."""
     g = _game(seed=42, turns=20)
     house = list(g.houses.values()).__iter__().__next__()
     model = ledger_model(house, 19)
@@ -179,6 +188,10 @@ def test_r6_summary_aggregates():
                 if label == s_row.label:
                     total += amount
         assert abs(s_row.amount - total) < 0.01, f"Summary {s_row.label}: {s_row.amount} != {total}"
+    # R6: summary rows sorted by descending absolute amount
+    for i in range(len(model.summary) - 1):
+        assert abs(model.summary[i].amount) >= abs(model.summary[i + 1].amount), \
+            f"Summary not sorted: {model.summary[i].label}|={abs(model.summary[i].amount)} < {model.summary[i + 1].label}|={abs(model.summary[i + 1].amount)}"
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -324,31 +337,40 @@ def test_r10_notices_preserved(monkeypatch):
 # ────────────────────────────────────────────────────────────────────────────
 
 def test_r13_overflow_marker_800x600():
-    """At 800x600 with enough turns, the page overflows and shows +N more."""
+    """At 800x600 with enough turns, the page overflows and shows +8 more."""
     g = _game(seed=42, turns=20)
     s = pygame.display.set_mode((800, 600))
     hud_h = _hud_height()
     content = pygame.Rect(0, TAB_H + hud_h, 800, 600 - TAB_H - hud_h - BOTTOM_H)
-    house = list(g.houses.keys())[0]
-    v = BroadsheetView(g, house)
+    house_name = list(g.houses.keys())[0]
+    v = BroadsheetView(g, house_name)
     s.fill(PAPER_BG)
-    v._draw_ledger(s, content)
 
-    # Check for FADED text near the bottom of content (the overflow marker)
-    buf = pygame.image.tobytes(s, "RGB")
-    pw = 800
-    # Scan the last 20 pixels of content area for FADED color
-    faded_found = False
-    for y in range(max(content.top, content.bottom - 20), content.bottom):
-        for x in range(PAD, min(pw - PAD, PAD + 200)):
-            idx = (y * pw + x) * 3
-            r, g_val, b = buf[idx:idx+3]
-            if (r, g_val, b) == FADED:
-                faded_found = True
-                break
-        if faded_found:
-            break
-    assert faded_found, "Overflow marker (+ N more) in FADED should be drawn at 800x600"
+    # Record every text string rendered via font().render()
+    rendered_texts: list[str] = []
+    orig_font = _font
+
+    class _FontRecorder:
+        def __init__(self, f):
+            self._f = f
+        def render(self, text, aa, color):
+            rendered_texts.append(text)
+            return self._f.render(text, aa, color)
+        def get_height(self):
+            return self._f.get_height()
+        def get_size(self, text):
+            return self._f.get_size(text)
+
+    def recording_font(size: int, bold: bool = False):
+        return _FontRecorder(orig_font(size, bold))
+
+    with patch("gilded.ui.broadsheet._font", recording_font):
+        v._draw_ledger(s, content)
+
+    # The overflow marker should be "+ 8 more"
+    marker = [t for t in rendered_texts if t.startswith("+ ") and t.endswith(" more")]
+    assert len(marker) == 1, f"Expected one overflow marker, got: {marker}"
+    assert marker[0] == "+ 8 more", f"Expected '+ 8 more', got '{marker[0]}'"
 
 
 def test_r13_no_overflow_marker_1280x900():
