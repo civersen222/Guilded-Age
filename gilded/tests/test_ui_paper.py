@@ -22,7 +22,7 @@ from gilded.ui.widgets import (
     MEASURE_CHARS, COLUMN_GAP,
     column_plan, flow_columns, FlowResult,
     columns, font as _font, wrap as _wrap,
-    INK, FADED,
+    INK, FADED, PAPER_BG,
 )
 from gilded.ui.broadsheet import BroadsheetView, PAD, TAB_H, _hud_height, BOTTOM_H
 
@@ -406,51 +406,88 @@ def test_rule11_overflow_equals_unplaced():
 # Rule 12: continuation marker
 # ────────────────────────────────────────────────────────────────────────────
 
-def test_rule12_continuation_marker():
-    """When there is overflow, _draw_paper must render a continuation marker.
+def test_rule12_continuation_marker(monkeypatch):
+    """When there is overflow, _draw_paper must render a continuation marker in FADED.
 
-    Uses a tall game (10 turns) for more content, and a surface short enough
-    that the body area is only 30px, forcing overflow.  Then probes for
-    non-background pixels in the marker region (which would not be there if
-    the `if result.overflow > 0:` block were deleted).
+    Monkeypatch compose to return a stub report with 200 synthetic items so the
+    body overflows.  Call _draw_paper directly on a 1280x900 surface.  Count
+    pixels of EXACTLY FADED (96,88,78) in the content rect.  Production code
+    uses FADED only for the continuation marker, so a zero-overflow page
+    produces exactly 0 such pixels.
     """
-    g = _game(seed=7, turns=10)
+
+    class StubReport:
+        year = 1066
+        gazette = [f"Overflow item {i}" for i in range(200)]
+        ledger = [""]
+        letters = [""]
+
+    monkeypatch.setattr("gilded.papers.compose", lambda *a, **k: StubReport())
+    monkeypatch.setattr("gilded.ui.broadsheet.compose", lambda *a, **k: StubReport())
+
+    s = pygame.display.set_mode((1280, 900))
     hud_h = _hud_height()
-    body_font = _font18()
-    head_font = _font(30, bold=True)
+    content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
+
+    g = _game(seed=7, turns=1)
     house = list(g.houses.keys())[0]
-
-    # Compute where the body area starts
-    head = head_font.render("THE GAZETTE - 1066", True, INK)
-    rule_y = TAB_H + hud_h + 6 + head.get_height() + 4
-    body_top = rule_y + 6
-
-    # Surface height gives body area of 30px (fits ~1 line, forcing overflow)
-    body_h = 30
-    short_h = body_top + body_h + BOTTOM_H
-    s = pygame.display.set_mode((1280, short_h))
-
     v = BroadsheetView(g, house)
     v.active_tab = "Gazette"
-    v.draw(s)
+    s.fill(PAPER_BG)
+    v._draw_paper(s, content)
 
-    # content.bottom = TAB_H + hud_h + (short_h - TAB_H - hud_h - BOTTOM_H) = short_h - BOTTOM_H
-    content_bottom = short_h - BOTTOM_H
+    buf = pygame.image.tobytes(s, "RGB")
+    faded_r, faded_g, faded_b = FADED
+    faded_count = 0
+    pw = 1280
+    for y in range(content.y, content.bottom):
+        for x in range(content.x, content.right):
+            idx = (y * pw + x) * 3
+            if buf[idx] == faded_r and buf[idx + 1] == faded_g and buf[idx + 2] == faded_b:
+                faded_count += 1
+    assert faded_count > 0, (
+        f"Continuation marker should produce FADED pixels when overflow > 0, but found {faded_count}"
+    )
 
-    # The marker is placed at content.bottom - marker_height - 8
-    marker_h = body_font.size("+ 6 more")[1]
-    marker_y = content_bottom - marker_h - 8
 
-    # Probe for non-PAPER_BG pixels in the marker region
-    from gilded.ui.widgets import PAPER_BG
-    non_bg = 0
-    for y in range(marker_y - 2, content_bottom):
-        for x in range(PAD + 5, min(PAD + 150, 1200)):
-            if s.get_at((x, y)) != PAPER_BG:
-                non_bg += 1
-    assert non_bg > 20, (
-        f"No continuation marker found: only {non_bg} non-bg pixels "
-        f"near y={marker_y}-{content_bottom}"
+def test_rule4_no_marker_when_no_overflow(monkeypatch):
+    """R4: a page with a single short item produces zero FADED pixels.
+
+    If the marker were drawn unconditionally (every page, overflow or not),
+    this test would fail because FADED pixels would appear even with no overflow.
+    """
+
+    class StubReport:
+        year = 1066
+        gazette = ["Short item"]
+        ledger = [""]
+        letters = [""]
+
+    monkeypatch.setattr("gilded.papers.compose", lambda *a, **k: StubReport())
+    monkeypatch.setattr("gilded.ui.broadsheet.compose", lambda *a, **k: StubReport())
+
+    s = pygame.display.set_mode((1280, 900))
+    hud_h = _hud_height()
+    content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
+
+    g = _game(seed=7, turns=1)
+    house = list(g.houses.keys())[0]
+    v = BroadsheetView(g, house)
+    v.active_tab = "Gazette"
+    s.fill(PAPER_BG)
+    v._draw_paper(s, content)
+
+    buf = pygame.image.tobytes(s, "RGB")
+    faded_r, faded_g, faded_b = FADED
+    faded_count = 0
+    pw = 1280
+    for y in range(content.y, content.bottom):
+        for x in range(content.x, content.right):
+            idx = (y * pw + x) * 3
+            if buf[idx] == faded_r and buf[idx + 1] == faded_g and buf[idx + 2] == faded_b:
+                faded_count += 1
+    assert faded_count == 0, (
+        f"No marker when overflow == 0, but found {faded_count} FADED pixels"
     )
 
 
@@ -458,30 +495,112 @@ def test_rule12_continuation_marker():
 # Rule 13: horizontal rule
 # ────────────────────────────────────────────────────────────────────────────
 
-def test_rule13_horizontal_rule_draws():
-    """_draw_paper must draw a horizontal rule (pygame.draw.line) under the head.
+def test_rule13_horizontal_rule_draws(monkeypatch):
+    """R5: _draw_paper draws a page-spanning horizontal rule under the head.
 
-    Renders the broadsheet and probes for a dark horizontal line just below
-    the head text.  The rule colour is INK (28, 24, 20).
+    The rule row carries >= 1000 non-background pixels across the full width.
+    Search band is derived from the head font height so the test survives a font change.
     """
-    g = _game(seed=7, turns=1)
+
+    class StubReport:
+        year = 1066
+        gazette = ["Short item"]
+        ledger = [""]
+        letters = [""]
+
+    monkeypatch.setattr("gilded.papers.compose", lambda *a, **k: StubReport())
+    monkeypatch.setattr("gilded.ui.broadsheet.compose", lambda *a, **k: StubReport())
+
     s = pygame.display.set_mode((1280, 900))
+    hud_h = _hud_height()
+    content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
+
+    head_font = _font(30, bold=True)
+    head_h = head_font.size("Ag")[1]
+
+    g = _game(seed=7, turns=1)
     house = list(g.houses.keys())[0]
     v = BroadsheetView(g, house)
     v.active_tab = "Gazette"
-    v.draw(s)
-    head_font = _font(30, bold=True)
-    head_text = head_font.render(f"THE GAZETTE - 1066", True, INK)
-    # _draw_paper: rule_y = content.y + 6 + head_height + 4, where content.y = TAB_H + hud_h
+    s.fill(PAPER_BG)
+    v._draw_paper(s, content)
+
+    # Derive search band from head font height: rule_y = content.y + 6 + head_h + 4
+    # Search a band of 20 pixels around that y
+    expected_rule_y = content.y + 6 + head_h + 4
+    search_start = expected_rule_y - 10
+    search_end = expected_rule_y + 10
+
+    buf = pygame.image.tobytes(s, "RGB")
+    pw = 1280
+    best_y = None
+    best_count = 0
+    for y in range(search_start, search_end):
+        if y < 0 or y >= 900:
+            continue
+        row_ink = 0
+        for x in range(content.x, content.right):
+            idx = (y * pw + x) * 3
+            r, g, b = buf[idx], buf[idx + 1], buf[idx + 2]
+            if (r, g, b) != PAPER_BG:
+                row_ink += 1
+        if row_ink > best_count:
+            best_count = row_ink
+            best_y = y
+
+    assert best_count >= 1000, (
+        f"Horizontal rule row at y={best_y} has only {best_count} non-bg pixels (need >= 1000)"
+    )
+
+
+def test_rule6_horizontal_rule_thickness(monkeypatch):
+    """R6: the horizontal rule is exactly 1 pixel thick.
+
+    The rows immediately above and below the rule row carry zero non-background
+    pixels in the horizontal span of the rule.
+    """
+
+    class StubReport:
+        year = 1066
+        gazette = ["Short item"]
+        ledger = [""]
+        letters = [""]
+
+    monkeypatch.setattr("gilded.papers.compose", lambda *a, **k: StubReport())
+    monkeypatch.setattr("gilded.ui.broadsheet.compose", lambda *a, **k: StubReport())
+
+    s = pygame.display.set_mode((1280, 900))
     hud_h = _hud_height()
-    rule_y = TAB_H + hud_h + 6 + head_text.get_height() + 4
-    # Probe for INK-colored pixels on the rule line
-    ink_pixels = 0
-    for x in range(PAD + 10, min(PAD + 300, 1280 - PAD)):
-        col = s.get_at((x, rule_y))
-        if col == INK:
-            ink_pixels += 1
-    assert ink_pixels > 50, f"Horizontal rule not found: only {ink_pixels} ink pixels at y={rule_y}"
+    content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
+
+    head_font = _font(30, bold=True)
+    head_h = head_font.size("Ag")[1]
+
+    g = _game(seed=7, turns=1)
+    house = list(g.houses.keys())[0]
+    v = BroadsheetView(g, house)
+    v.active_tab = "Gazette"
+    s.fill(PAPER_BG)
+    v._draw_paper(s, content)
+
+    buf = pygame.image.tobytes(s, "RGB")
+    pw = 1280
+    expected_rule_y = content.y + 6 + head_h + 4
+
+    # Count non-bg pixels in the row above and below the rule
+    for offset in (-1, 1):
+        y = expected_rule_y + offset
+        if y < 0 or y >= 900:
+            continue
+        row_ink = 0
+        for x in range(PAD, content.right - PAD):
+            idx = (y * pw + x) * 3
+            r, g, b = buf[idx], buf[idx + 1], buf[idx + 2]
+            if (r, g, b) != PAPER_BG:
+                row_ink += 1
+        assert row_ink == 0, (
+            f"Row y={y} (offset {offset} from rule) has {row_ink} non-bg pixels — rule is too thick"
+        )
 
 
 # ────────────────────────────────────────────────────────────────────────────
