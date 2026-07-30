@@ -31,6 +31,10 @@ from gilded.papers import compose
 from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
+from gilded.ui.widgets import (
+    CARD_BG, CARD_EDGE, FADED, INK, PAPER_BG,
+    font as _font, wrap as _wrap,
+)
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
@@ -47,52 +51,17 @@ def _hud_height() -> int:
 
 PAD = 16
 
-PAPER_BG = (238, 232, 218)
-INK = (28, 24, 20)
-FADED = (96, 88, 78)
 TAB_BG = (54, 48, 42)
 TAB_ACTIVE = (206, 176, 108)
 TAB_TEXT = (232, 226, 210)
 HUD_BG = (44, 40, 34)
 HUD_INK = (232, 226, 210)
-CARD_BG = (248, 244, 234)
-CARD_EDGE = (120, 108, 92)
 BUTTON_BG = (60, 82, 60)
 BUTTON_EDGE = (30, 46, 30)
 BUTTON_TEXT = (238, 240, 232)
 EXEC_BG = (78, 66, 96)
 ENDTURN_BG = (140, 60, 52)
 ATTN_COLOR = (150, 110, 40)
-
-_font_cache: Dict[Tuple[str, int], pygame.font.Font] = {}
-
-
-def _font(size: int, bold: bool = False) -> pygame.font.Font:
-    key = ("serif" if not bold else "serif-bold", size)
-    f = _font_cache.get(key)
-    if f is None:
-        if not pygame.font.get_init():
-            pygame.font.init()
-        f = pygame.font.SysFont("georgia,serif", size, bold=bold)
-        _font_cache[key] = f
-    return f
-
-
-def _wrap(text: str, font: pygame.font.Font, width: int) -> List[str]:
-    words = text.split()
-    if not words:
-        return [""]
-    lines: List[str] = []
-    cur = words[0]
-    for w in words[1:]:
-        trial = cur + " " + w
-        if font.size(trial)[0] <= width:
-            cur = trial
-        else:
-            lines.append(cur)
-            cur = w
-    lines.append(cur)
-    return lines
 
 
 class BroadsheetView:
