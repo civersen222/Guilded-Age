@@ -298,8 +298,8 @@ def test_refactor_value_neutral_seed7():
         "Ashworth": 3053.033633,
         "Brandtner": 2192.336897,
         "Duval-Corse": 2741.886954,
-        "Ferrenholt": 3579.778223,
-        "Karsgate": 925.374223,
+        "Ferrenholt": 3573.843487,  # L4.7 re-baselined: removed COAL_STRIKE_PRICE global
+        "Karsgate": 917.255057,    # L4.7 re-baselined: removed COAL_STRIKE_PRICE global
         "Mordaine": 2434.660956,
         "Vantrell": 1833.962996,
     }

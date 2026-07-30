@@ -1,5 +1,6 @@
 """G13 chassis tests: wiring, determinism, and the turn's fixed order."""
 
+import pytest
 from gilded.chassis import (ATTENTION_PER_TURN, STARTING_ENTERPRISES,
                             GildedGame, TurnEvent)
 from gilded.docket import MAX_PETITIONS, Petition, PetitionOption
@@ -327,3 +328,144 @@ def test_input_cost_deducted_from_consumer_enterprise_dividend():
     expected_diff = abs(ruler_delta - consumer_ent._last_dividend)
     assert abs(expected_diff - input_cost) < 0.01, \
         f"Difference ({expected_diff:.4f}) should equal input_cost ({input_cost:.4f})"
+
+
+# ── L4.7: strike-is-local ──────────────────────────────────────────────
+
+def test_a_strike_where_there_is_no_colliery_pays_no_colliery():
+    """A strike in a province with no colliery does NOT pay every colliery.
+
+    Neutralises market.STRIKE_SUPPLY_REDUCTION so the market channel
+    cannot move dividends.  Without the fix, the map-wide multiplier
+    makes every colliery 5% richer per striking province.
+    """
+    from copy import deepcopy
+    import gilded.market as market
+
+    g = GildedGame(seed=42)
+    # Run enough turns for movements to spawn (seed 42: turn 9)
+    for _ in range(9):
+        g.end_turn()
+
+    # Collect collieries and their last dividends
+    collieries = [e for e in g.enterprises if e.kind == "colliery"]
+    assert len(collieries) >= 1, "need at least one colliery"
+
+    # Find a province with a movement NOT currently striking and no colliery
+    calm_movements = [
+        p for p in g.atlas.provinces.values()
+        if getattr(p, "movement", None) is not None
+        and p.movement.state != "striking"
+    ]
+    assert len(calm_movements) >= 1, "need at least one calm movement province"
+
+    # Pick one that has no colliery
+    target = None
+    for p in calm_movements:
+        has_colliery = any(e.kind == "colliery" and e.province == p.pid
+                           for e in g.enterprises)
+        if not has_colliery:
+            target = p
+            break
+
+    # If all calm movement provinces have collieries, just pick any calm
+    # movement province (the test still works; we just won't distinguish
+    # between "local" and "remote" effects)
+    if target is None:
+        target = calm_movements[0]
+
+    assert target is not None, "no calm movement province found"
+    assert target.movement.state != "striking", "target should not be striking"
+
+    # Deep copy into two branches
+    calm = deepcopy(g)
+    struck = deepcopy(g)
+
+    # Force a strike in the struck branch — find matching province by pid
+    struck_prov = struck.atlas.provinces[target.pid]
+    struck_prov.movement.state = "striking"
+
+    # Count striking provinces in each branch
+    calm_striking = sum(
+        1 for p in calm.atlas.provinces.values()
+        if getattr(p, "movement", None) is not None
+        and p.movement.state == "striking"
+    )
+    struck_striking = sum(
+        1 for p in struck.atlas.provinces.values()
+        if getattr(p, "movement", None) is not None
+        and p.movement.state == "striking"
+    )
+    assert struck_striking == calm_striking + 1, \
+        f"Fixture: expected {calm_striking + 1} striking, got {struck_striking}"
+
+    # End turn in both branches, neutralising market channel
+    market.STRIKE_SUPPLY_REDUCTION = 1.0
+    calm.end_turn()
+    struck.end_turn()
+    market.STRIKE_SUPPLY_REDUCTION = 0.5  # restore
+
+    # Every colliery's _last_dividend must be identical
+    for ce in collieries:
+        calm_ent = next(e for e in calm.enterprises if e.eid == ce.eid)
+        struck_ent = next(e for e in struck.enterprises if e.eid == ce.eid)
+        assert calm_ent._last_dividend == pytest.approx(
+            struck_ent._last_dividend, abs=1e-9), \
+            f"Colliery {ce.name}: calm={calm_ent._last_dividend:.6f}, struck={struck_ent._last_dividend:.6f}"
+
+
+def test_a_colliery_still_loses_output_when_its_own_province_strikes():
+    """Guard: STRIKE_OUTPUT_MULT must still cut output for a local strike."""
+    from copy import deepcopy
+    from gilded.society.labor import STRIKE_OUTPUT_MULT
+    import gilded.market as market
+
+    g = GildedGame(seed=42)
+    # Run enough turns for movements to spawn (seed 42: turn 9)
+    for _ in range(9):
+        g.end_turn()
+
+    # Find a colliery whose province has a movement
+    collieries = [e for e in g.enterprises if e.kind == "colliery"]
+    assert len(collieries) >= 1, "need at least one colliery"
+
+    target_ent = None
+    for ent in collieries:
+        prov = g.atlas.provinces.get(ent.province)
+        if prov and getattr(prov, "movement", None) is not None:
+            if prov.movement.state != "striking":
+                target_ent = ent
+                break
+
+    if target_ent is None:
+        # Fallback: pick first colliery, force its province movement
+        target_ent = collieries[0]
+        prov = g.atlas.provinces.get(target_ent.province)
+        assert prov is not None
+        if getattr(prov, "movement", None) is None:
+            prov.movement = Movement(prov.pid)
+        prov.movement.state = "idle"
+
+    prov = g.atlas.provinces.get(target_ent.province)
+
+    # Deepcopy into two branches
+    calm = deepcopy(g)
+    struck = deepcopy(g)
+
+    # Force strike in the struck branch
+    struck_prov = struck.atlas.provinces.get(target_ent.province)
+    struck_prov.movement.state = "striking"
+
+    # Neutralise market channel
+    market.STRIKE_SUPPLY_REDUCTION = 1.0
+
+    calm.end_turn()
+    struck.end_turn()
+    market.STRIKE_SUPPLY_REDUCTION = 0.5  # restore
+
+    # The struck colliery's dividend must be lower
+    calm_ent = next(e for e in calm.enterprises if e.eid == target_ent.eid)
+    struck_ent = next(e for e in struck.enterprises if e.eid == target_ent.eid)
+    assert struck_ent._last_dividend < calm_ent._last_dividend, \
+        f"Colliery {target_ent.name}: calm={calm_ent._last_dividend:.6f}, " \
+        f"struck={struck_ent._last_dividend:.6f} — should be lower"

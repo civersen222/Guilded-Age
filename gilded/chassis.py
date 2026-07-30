@@ -36,7 +36,7 @@ from gilded.society.shares import initial_ledger, partition_shares, pay_dividend
 
 ATTENTION_PER_TURN = 3
 STARTING_ENTERPRISES = 2          # seeded per house, on its best endowments
-COAL_STRIKE_PRICE = 0.05          # colliery gold x (1 + this per striking province)
+
 CAPACITY_KINDS = ("coal", "steel", "freight")
 ENDOWMENT_ENTERPRISE = {
     "coalfield": "colliery", "iron": "ironworks", "timber": "mill",
@@ -202,10 +202,6 @@ class GildedGame:
             if tick_construction(ent):
                 self._emit([f"{ent.name} completes its works (tier {ent.tier})"],
                            "ledger", ent.house)
-        striking = sum(1 for p in provinces.values()
-                       if getattr(p, "movement", None) is not None
-                       and p.movement.state == "striking")
-        coal_price = 1.0 + COAL_STRIKE_PRICE * striking
         self.market.clear(self)
         self.capacity = {h: {k: 0.0 for k in CAPACITY_KINDS} for h in self.houses}
         for h in sorted(self.houses):
@@ -218,7 +214,7 @@ class GildedGame:
                 kind, amt = capacity_out(ent, province)
                 if kind is not None:
                     self.capacity[h][kind] += amt
-                mod = coal_price if ent.kind == "colliery" else 1.0
+                mod = 1.0
                 mv = getattr(province, "movement", None)
                 if mv is not None and mv.state == "striking":
                     mod *= STRIKE_OUTPUT_MULT
