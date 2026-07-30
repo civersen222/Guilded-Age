@@ -224,12 +224,12 @@ def test_enterprises_lines_mutation_free():
 
 def test_enterprises_tab_puts_ink_on_the_page():
     """Mutation 8: _draw_enterprises actually draws content (not a blank page)."""
-    from gilded.ui.broadsheet import TAB_H, HUD_H, PAPER_BG
+    from gilded.ui.broadsheet import TAB_H, _hud_height, PAPER_BG
     g, v = _enterprises_view(turns=3)
     surf = pygame.Surface((1280, 900))
     v.draw(surf)
     # Check pixels in the content area are not all background
-    content_y = TAB_H + HUD_H
+    content_y = TAB_H + _hud_height()
     found_ink = False
     for x in range(10, 400):
         for y in range(content_y + 10, min(content_y + 100, surf.get_height())):

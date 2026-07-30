@@ -45,16 +45,7 @@ def _hud_height() -> int:
     line_h = fs.get_height() + 3
     return 6 + HUD_LINES * line_h
 
-HUD_H = 0  # backward-compat alias; populated by _ensure_hud_h() on first use
 PAD = 16
-
-
-def _ensure_hud_h() -> int:
-    """Return HUD_H, computing it on first call if still zero."""
-    global HUD_H
-    if HUD_H == 0:
-        HUD_H = _hud_height()
-    return HUD_H
 
 PAPER_BG = (238, 232, 218)
 INK = (28, 24, 20)
@@ -162,7 +153,7 @@ class BroadsheetView:
         self._appoint_hits = []
         self._director_picker_hits = []
         surface.fill(PAPER_BG)
-        hud_h = _ensure_hud_h()
+        hud_h = _hud_height()
         content = pygame.Rect(0, TAB_H + hud_h, self._w,
                               self._h - TAB_H - hud_h - BOTTOM_H)
 
@@ -205,7 +196,7 @@ class BroadsheetView:
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
         y0 = TAB_H
-        pygame.draw.rect(surface, HUD_BG, (0, y0, self._w, _ensure_hud_h()))
+        pygame.draw.rect(surface, HUD_BG, (0, y0, self._w, _hud_height()))
         strong = _font(16, bold=True)
         fs = _font(15)
         line_h = fs.get_height() + 3
@@ -492,7 +483,7 @@ class BroadsheetView:
         font = _font(16)
         w = max(font.size(l)[0] for l in lines) + 2 * PAD
         h = len(lines) * (font.get_height() + 2) + 2 * PAD
-        rect = pygame.Rect(self._w - w - PAD, TAB_H + _ensure_hud_h() + PAD, w, h)
+        rect = pygame.Rect(self._w - w - PAD, TAB_H + _hud_height() + PAD, w, h)
         panel = pygame.Surface(rect.size)
         panel.set_alpha(225)
         panel.fill((18, 16, 14))
