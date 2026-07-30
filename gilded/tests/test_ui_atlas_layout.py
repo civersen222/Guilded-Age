@@ -963,3 +963,148 @@ def _check_rule5_render(seed, w, h):
     label_pids = {pid for pid, _ in labels}
     glyph_pids = {pid for pid, _ in glyphs}
     assert glyph_pids <= label_pids
+
+
+# ── Wave 4c: the Atlas gets a ceiling ────────────────────────────────────────
+
+# ── Rule 1: every label rect lies inside the content rect ────────────────────
+# ── Rule 2: every glyph rect lies inside the content rect ────────────────────
+# ── Rule 3: non-empty label list + content rect has non-zero dimensions ──────
+
+def _check_containment(seed, w, h):
+    """Rules 1-3: label/glyph rects inside content rect, non-empty labels."""
+    g = _make_game(seed)
+    rect = _content_rect(w, h)
+    transform = atlas_transform(g.atlas, rect)
+    labels = atlas_label_rects(g, transform, rect, selected_pid=None)
+    glyphs = atlas_glyph_rects(g, transform, rect, selected_pid=None)
+
+    # Rule 3: content rect has non-zero width and height
+    assert rect.width > 0, f"seed={seed} size={w}x{h}: content rect has zero width"
+    assert rect.height > 0, f"seed={seed} size={w}x{h}: content rect has zero height"
+
+    # Rule 3: labels non-empty (prevents vacuous containment)
+    assert len(labels) > 0, f"seed={seed} size={w}x{h}: no labels returned"
+
+    # Rule 1: every label rect inside content rect
+    for pid, lr in labels:
+        assert rect.left <= lr.left, (
+            f"seed={seed} size={w}x{h}: label {pid} left {lr.left} < content left {rect.left}"
+        )
+        assert lr.right <= rect.right, (
+            f"seed={seed} size={w}x{h}: label {pid} right {lr.right} > content right {rect.right}"
+        )
+        assert rect.top <= lr.top, (
+            f"seed={seed} size={w}x{h}: label {pid} top {lr.top} < content top {rect.top}"
+        )
+        assert lr.bottom <= rect.bottom, (
+            f"seed={seed} size={w}x{h}: label {pid} bottom {lr.bottom} > content bottom {rect.bottom}"
+        )
+
+    # Rule 2: every glyph rect inside content rect
+    for pid, gr in glyphs:
+        assert rect.left <= gr.left, (
+            f"seed={seed} size={w}x{h}: glyph {pid} left {gr.left} < content left {rect.left}"
+        )
+        assert gr.right <= rect.right, (
+            f"seed={seed} size={w}x{h}: glyph {pid} right {gr.right} > content right {rect.right}"
+        )
+        assert rect.top <= gr.top, (
+            f"seed={seed} size={w}x{h}: glyph {pid} top {gr.top} < content top {rect.top}"
+        )
+        assert gr.bottom <= rect.bottom, (
+            f"seed={seed} size={w}x{h}: glyph {pid} bottom {gr.bottom} > content bottom {rect.bottom}"
+        )
+
+
+def test_rule1_label_containment_seed7_1280x900():
+    _check_containment(7, 1280, 900)
+
+
+def test_rule1_label_containment_seed7_1024x768():
+    _check_containment(7, 1024, 768)
+
+
+def test_rule1_label_containment_seed7_900x400():
+    _check_containment(7, 900, 400)
+
+
+def test_rule1_label_containment_seed42_1280x900():
+    _check_containment(42, 1280, 900)
+
+
+def test_rule1_label_containment_seed42_1024x768():
+    _check_containment(42, 1024, 768)
+
+
+def test_rule1_label_containment_seed42_900x400():
+    _check_containment(42, 900, 400)
+
+
+# ── Rule 4: selected province appears first in glyph list if present ─────────
+
+def _check_glyph_selection_first(seed, w, h, pid, prov_name):
+    """Rule 4: if selected pid appears in glyphs, it is first."""
+    g = _make_game(seed)
+    rect = _content_rect(w, h)
+    transform = atlas_transform(g.atlas, rect)
+    glyphs = atlas_glyph_rects(g, transform, rect, selected_pid=pid)
+
+    glyph_pids = [p for p, _ in glyphs]
+    assert pid in glyph_pids, (
+        f"seed={seed} size={w}x{h}: {prov_name} (pid={pid}) not in glyph list when selected"
+    )
+    assert glyph_pids[0] == pid, (
+        f"seed={seed} size={w}x{h}: {prov_name} (pid={pid}) is at position "
+        f"{glyph_pids.index(pid)}, expected position 0"
+    )
+
+
+# Seed 7: pids 23 Brenvess, 24 Ostenstad, 21 Galvess (discriminating at both 1280x900 and 1024x768)
+def test_rule4_glyph_first_seed7_23_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 23, "Brenvess")
+
+
+def test_rule4_glyph_first_seed7_23_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 23, "Brenvess")
+
+
+def test_rule4_glyph_first_seed7_24_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 24, "Ostenstad")
+
+
+def test_rule4_glyph_first_seed7_24_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 24, "Ostenstad")
+
+
+def test_rule4_glyph_first_seed7_21_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 21, "Galvess")
+
+
+def test_rule4_glyph_first_seed7_21_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 21, "Galvess")
+
+
+# Seed 42: pids 44 Ulmmore, 25 Wickfield Cross, 48 Yareshore (discriminating at both 1280x900 and 1024x768)
+def test_rule4_glyph_first_seed42_44_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 44, "Ulmmore")
+
+
+def test_rule4_glyph_first_seed42_44_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 44, "Ulmmore")
+
+
+def test_rule4_glyph_first_seed42_25_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 25, "Wickfield Cross")
+
+
+def test_rule4_glyph_first_seed42_25_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 25, "Wickfield Cross")
+
+
+def test_rule4_glyph_first_seed42_48_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 48, "Yareshore")
+
+
+def test_rule4_glyph_first_seed42_48_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 48, "Yareshore")
