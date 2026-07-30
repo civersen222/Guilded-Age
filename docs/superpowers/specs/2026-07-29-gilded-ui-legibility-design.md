@@ -86,6 +86,11 @@ Both are wrong under any design and ship ahead of the redesign, in their own com
 `_draw_hud`. `_draw_hud` paints its own background for 96px only, so line 5 renders on top
 of the content area with no backing — a half-cut line of text on all ten tabs.
 
+In absolute coordinates line 5's box runs y 130..148 against a band ending at y 136. The
+*measured ink* reaches y 146 rather than 148, because that string has no descender filling
+the last two pixels of the em box. The line box overflows by 12px; the drawn ink by 10px.
+The gate measures ink, since ink is what the player sees.
+
 **Requirement.** No HUD text may be drawn outside the HUD band. The band's height must be
 derived from the content it holds rather than being a constant the content silently
 outgrows. A test must assert the geometric property (every rendered line's bottom edge lies
@@ -106,6 +111,12 @@ HUD reading `1916`.
 **Requirement.** One function owns the year: `chassis.year_of`. `papers.py` uses it and
 `YEAR_ZERO` is deleted. A test must assert agreement across the century at several turns
 including the last, not at turn 1 where the two formulas coincide.
+
+**In scope, measured against a reference implementation:** `gilded/tests/test_papers.py:5`
+imports `YEAR_ZERO` from `gilded.papers`. Deleting the constant without editing that import
+fails the suite at *collection* — `ImportError: cannot import name 'YEAR_ZERO'`, one error,
+zero tests run. The import must be dropped and any assertion depending on it rethreaded
+through `year_of` in the same commit.
 
 ## 5. Wave 1 — `gilded/ui/widgets.py`, the vocabulary that never existed
 
