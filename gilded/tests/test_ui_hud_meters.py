@@ -487,11 +487,28 @@ def test_height_fits(band_width):
 
 # _hud_height() returns the same value regardless of rival presence.
 
-def test_height_same_with_and_without_rival():
-    h_no_rival = _hud_height()
-    h_with_rival = _hud_height()
-    assert h_no_rival == h_with_rival, \
-        f"_hud_height() should be constant: no-rival={h_no_rival}, with-rival={h_with_rival}"
+def test_layout_extent_same_with_and_without_rival():
+    b_rival = _board()
+    b_no_rival = _board(rival_axes=None, rival_name=None)
+    d = _delta()
+    m_rival = hud_model(b_rival, d)
+    m_no_rival = hud_model(b_no_rival, d)
+    band = pygame.Rect(0, 40, 1280, 200)
+    layout_rival = hud_layout(m_rival, band)
+    layout_no_rival = hud_layout(m_no_rival, band)
+    rival_bottom = max(r.bottom for r in layout_rival.values())
+    no_rival_bottom = max(r.bottom for r in layout_no_rival.values())
+    assert rival_bottom == no_rival_bottom, \
+        f"Layout extent differs: rival={rival_bottom}, no_rival={no_rival_bottom}"
+    # Prove the layouts are not trivially identical
+    rival_keys = set(layout_rival.keys())
+    no_rival_keys = set(layout_no_rival.keys())
+    assert any(k.startswith("rival:") for k in rival_keys), \
+        "Rival layout should contain rival:* keys"
+    assert not any(k.startswith("rival:") for k in no_rival_keys), \
+        "No-rival layout should NOT contain rival:* keys"
+    assert rival_keys != no_rival_keys, \
+        "Rival and no-rival layouts should have different keys"
 
 def test_height_is_constant_value():
     h = _hud_height()
