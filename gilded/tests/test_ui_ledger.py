@@ -10,7 +10,7 @@ pygame.init()
 from gilded.houses import House
 from gilded.ui.ledger import (
     money, gold, ledger_model, LedgerRow, TurnLine, LedgerModel,
-    HISTORY_SPAN,
+    HISTORY_SPAN, totals_line, history_cells,
 )
 from gilded.chassis import GildedGame
 from gilded.papers import compose
@@ -65,13 +65,13 @@ def test_r3_money_large_negative():
     assert money(-2500.0) == "-2,500"
 
 def test_r3_money_small_positive():
-    assert money(0.3) == "+0"
+    assert money(0.3) == "+0.3"
 
 def test_r3_money_small_negative():
-    assert money(-0.3) == "-0"
+    assert money(-0.3) == "-0.3"
 
 def test_r3_money_zero():
-    assert money(0.0) == "+0"
+    assert money(0.0) == "0"
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -258,6 +258,26 @@ def test_r6_summary_aggregates():
     for i in range(len(model.summary) - 1):
         assert abs(model.summary[i].amount) >= abs(model.summary[i + 1].amount), \
             f"Summary not sorted: {model.summary[i].label}|={abs(model.summary[i].amount)} < {model.summary[i + 1].label}|={abs(model.summary[i + 1].amount)}"
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# R6: summary sort order (primary descending |amount|, secondary label)
+# ────────────────────────────────────────────────────────────────────────────
+
+def test_summary_sort_by_abs_amount():
+    """Summary rows are sorted by descending |amount|, ties broken by label."""
+    g = _game(seed=123, turns=20)
+    house = list(g.houses.values()).__iter__().__next__()
+    model = ledger_model(house, 19)
+    for i in range(len(model.summary) - 1):
+        a = model.summary[i]
+        b = model.summary[i + 1]
+        if abs(a.amount) == abs(b.amount):
+            assert a.label <= b.label, \
+                f"Summary tie-break wrong: {a.label} > {b.label}"
+        else:
+            assert abs(a.amount) > abs(b.amount), \
+                f"Summary not sorted desc by |amount|: {a.label}|={abs(a.amount)} < {b.label}|={abs(b.amount)}"
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -503,6 +523,52 @@ def test_summary_zero_net_present():
     assert "dividends" in labels, "Zero-net label should be present in summary"
     row = [r for r in model.summary if r.label == "dividends"][0]
     assert row.amount == 0.0, "Zero-net label should have amount 0.0"
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# ITEM 3 (UI7b): totals_line and history_cells sign ownership
+# ────────────────────────────────────────────────────────────────────────────
+
+def test_totals_line_outlay_is_negative():
+    """totals_line must negate outlay so it displays as a debit, not a gain.
+
+    Mutation Z8: changing _signed(-model.outlay) to _signed(model.outlay)
+    would make outlay read as "+1200" instead of "-1200". This test catches it.
+    """
+    model = LedgerModel(
+        turn=1, treasury=1000.0, rows=(),
+        income=500.0, outlay=1200.0, net=-700.0,
+        history=(), summary=(), notices=(),
+    )
+    line = totals_line(model)
+    # Extract the Outlay segment
+    outlay_seg = line.split("Outlay:")[1].split("|")[0].strip()
+    # Outlay must carry a minus sign (it's a spend)
+    assert outlay_seg.startswith("-"), f"Outlay must be negative, got '{outlay_seg}' in: {line}"
+    # Income must be positive (assert sign, not just "negate everything")
+    income_seg = line.split("Income:")[1].split("|")[0].strip()
+    assert not income_seg.startswith("-"), f"Income must be positive, got '{income_seg}' in: {line}"
+    # Net must be negative (income - outlay = 500 - 1200 = -700)
+    net_seg = line.split("Net:")[1].strip()
+    assert net_seg.startswith("-"), f"Net must be negative, got '{net_seg}' in: {line}"
+
+
+def test_history_cells_outlay_is_negative():
+    """history_cells must negate outlay so the History table shows spends as debits.
+
+    Mutation Z5: changing _signed(-line.outlay) to _signed(line.outlay)
+    would make every history row's outlay read as a gain. This test catches it.
+    """
+    line = TurnLine(turn=3, income=300.0, outlay=800.0, net=-500.0)
+    cells = history_cells(line)
+    # Cell 0: turn number
+    assert cells[0] == "3"
+    # Cell 1: income — positive
+    assert not cells[1].startswith("-"), f"Income cell must be positive, got '{cells[1]}'"
+    # Cell 2: outlay — must be negative (the critical check)
+    assert cells[2].startswith("-"), f"Outlay cell must be negative, got '{cells[2]}'"
+    # Cell 3: net — negative (300 - 800 = -500)
+    assert cells[3].startswith("-"), f"Net cell must be negative, got '{cells[3]}'"
 
 
 if __name__ == "__main__":

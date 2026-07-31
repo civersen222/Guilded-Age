@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Tuple
 
+from gilded.ui.figures import signed as _signed
+
 HISTORY_SPAN = 8
 
 
@@ -35,11 +37,8 @@ class LedgerModel:
 
 
 def money(amount: float) -> str:
-    """Format a signed amount as whole gold with comma separators."""
-    sign = "+" if amount >= 0 else "-"
-    magnitude = round(abs(amount))
-    formatted = f"{magnitude:,}"
-    return f"{sign}{formatted}"
+    """Format a signed amount using the shared figure formatter."""
+    return _signed(amount)
 
 
 def gold(amount: float) -> str:
@@ -49,6 +48,24 @@ def gold(amount: float) -> str:
     if magnitude < 0:
         return f"-{-magnitude:,}"
     return formatted
+
+
+def totals_line(model: LedgerModel) -> str:
+    """Return the full totals bar string. Outlay is negated (it's a magnitude)."""
+    income_str = _signed(model.income)
+    outlay_str = _signed(-model.outlay)
+    net_str = _signed(model.net)
+    return f"Income: {income_str}  |  Outlay: {outlay_str}  |  Net: {net_str}"
+
+
+def history_cells(line: TurnLine) -> list:
+    """Return four cells for a history row: turn, income, outlay, net."""
+    return [
+        str(line.turn),
+        _signed(line.income),
+        _signed(-line.outlay),
+        _signed(line.net),
+    ]
 
 
 def ledger_model(house, turn: int, notices: Tuple[str, ...] = ()) -> LedgerModel:

@@ -43,7 +43,9 @@ from gilded.grip import (
 from gilded.ui.ledger import (
     LedgerModel, LedgerRow, TurnLine,
     money, gold, ledger_model, HISTORY_SPAN,
+    totals_line, history_cells,
 )
+from gilded.ui.figures import figure
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
@@ -919,12 +921,12 @@ class BroadsheetView:
         for name in ("capital", "standing", "blood", "world"):
             md = d.axes[name]
             if md.direction:
-                out.append(f"{name.capitalize()} {cue(md)} {abs(md.change):.0f}")
+                out.append(f"{name.capitalize()} {cue(md)} {figure(md.change)}")
         pairs = (("Legitimacy", d.legitimacy), ("Treasury", d.treasury),
                  ("Tide", d.tide_level), ("Unrest", d.unrest_avg))
         for label, md in pairs:
             if md.direction:
-                out.append(f"{label} {cue(md)} {abs(md.change):.0f}")
+                out.append(f"{label} {cue(md)} {figure(md.change)}")
         if d.rank.direction:
             moved = "improved" if d.rank.change < 0 else "slipped"
             out.append(f"Your standing {moved} to rank #{board.rank}")
@@ -1086,7 +1088,7 @@ class BroadsheetView:
 
         # Totals bar
         totals_text = f_body.render(
-            f"Income: {money(model.income)}  |  Outlay: {money(model.outlay)}  |  Net: {money(model.net)}",
+            totals_line(model),
             True, INK,
         )
         surface.blit(totals_text, (PAD, y))
@@ -1156,8 +1158,7 @@ class BroadsheetView:
                       Column("Income", width=1.0, align="right"),
                       Column("Outlay", width=1.0, align="right"),
                       Column("Net", width=1.0, align="right")]
-            h_data = [[str(tl.turn), money(tl.income), money(tl.outlay), money(tl.net)]
-                      for tl in model.history]
+            h_data = [history_cells(tl) for tl in model.history]
             h_tbl = Table(h_cols, h_data, size=12)
             h_tbl_h = h_tbl.height()
             h_tbl_rect = pygame.Rect(PAD, y, content.width - 2 * PAD, h_tbl_h)
