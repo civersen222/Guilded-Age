@@ -483,7 +483,8 @@ def test_r13_no_overflow_marker_1280x900():
 
 def test_r9_overflow_marker_within_content():
     """With an overflowing page (800x600, turns=20), the overflow marker
-    must appear WITHIN the content rect — proving the clip is active."""
+    must appear WITHIN the content rect — confirming the marker is positioned
+    inside the content area, not that clipping is enforced."""
     g = _game(seed=7, turns=20)
     s = pygame.display.set_mode((800, 600))
     hud_h = _hud_height()
