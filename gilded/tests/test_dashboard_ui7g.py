@@ -156,8 +156,8 @@ def test_delta_axes_keys_match_axis_names():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def test_century_pct_clamped_at_turn_zero():
-    """century_pct must be 0.0 at turn 0 (clamp floor exercised)."""
+def test_century_pct_is_zero_at_turn_zero():
+    """century_pct must be 0.0 at turn 0 (mathematical boundary, no floor clamp)."""
     g, h = _game()
     g.turn = 0
     b = scoreboard(g, h)

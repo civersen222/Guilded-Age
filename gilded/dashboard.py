@@ -99,7 +99,7 @@ def scoreboard(game, house_name: str) -> Scoreboard:
     return Scoreboard(
         year=year_of(game.turn),
         turn=game.turn,
-        century_pct=max(0.0, min(1.0, game.turn / TURN_BUDGET)),
+        century_pct=min(1.0, game.turn / TURN_BUDGET),  # no floor: turn starts at 1 and only increments
         era_idx=era_idx,
         era_title=era_title,
         next_era=next_era,
