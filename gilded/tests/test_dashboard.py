@@ -205,6 +205,63 @@ def test_md_preserves_sign_of_change():
     assert md_rise.direction == 1, f"_md(3.0, 5.0).direction must be 1, got {md_rise.direction}"
 
 
+def test_delta_rank_change_direction():
+    """Item 4 (UI7e): delta() must compute rank change in the right direction.
+
+    Rank 1 is best; a climb (prev=5 -> curr=2) produces a negative change.
+    A fall (prev=2 -> curr=5) produces a positive change."""
+    from gilded.dashboard import Scoreboard, delta, MetricDelta
+
+    flat_axes = {"capital": 50.0, "standing": 50.0,
+                 "blood": 50.0, "world": 50.0}
+
+    # Climb: rank 5 -> 2 (improvement)
+    prev_climb = Scoreboard(
+        year=1837, turn=1, century_pct=0.01, era_idx=0,
+        era_title="Age of Reform", next_era="hint",
+        axes=flat_axes, legitimacy=50.0, prestige=0.0,
+        treasury=100.0, tide_level=1.0, tide_phase="reformist",
+        atrocities=0.0, rival_name=None, rival_axes=None,
+        rank=5, unrest_avg=10.0,
+    )
+    curr_climb = Scoreboard(
+        year=1837, turn=2, century_pct=0.02, era_idx=0,
+        era_title="Age of Reform", next_era="hint",
+        axes=flat_axes, legitimacy=50.0, prestige=0.0,
+        treasury=100.0, tide_level=1.0, tide_phase="reformist",
+        atrocities=0.0, rival_name=None, rival_axes=None,
+        rank=2, unrest_avg=10.0,
+    )
+    result_climb = delta(prev_climb, curr_climb)
+    assert result_climb.rank.change < 0, (
+        f"Climb 5->2 should have negative change, got {result_climb.rank.change}")
+    assert result_climb.rank.change == -3.0, (
+        f"Climb 5->2 change must be -3.0, got {result_climb.rank.change}")
+
+    # Fall: rank 2 -> 5 (worsening)
+    prev_fall = Scoreboard(
+        year=1837, turn=1, century_pct=0.01, era_idx=0,
+        era_title="Age of Reform", next_era="hint",
+        axes=flat_axes, legitimacy=50.0, prestige=0.0,
+        treasury=100.0, tide_level=1.0, tide_phase="reformist",
+        atrocities=0.0, rival_name=None, rival_axes=None,
+        rank=2, unrest_avg=10.0,
+    )
+    curr_fall = Scoreboard(
+        year=1837, turn=2, century_pct=0.02, era_idx=0,
+        era_title="Age of Reform", next_era="hint",
+        axes=flat_axes, legitimacy=50.0, prestige=0.0,
+        treasury=100.0, tide_level=1.0, tide_phase="reformist",
+        atrocities=0.0, rival_name=None, rival_axes=None,
+        rank=5, unrest_avg=10.0,
+    )
+    result_fall = delta(prev_fall, curr_fall)
+    assert result_fall.rank.change > 0, (
+        f"Fall 2->5 should have positive change, got {result_fall.rank.change}")
+    assert result_fall.rank.change == 3.0, (
+        f"Fall 2->5 change must be 3.0, got {result_fall.rank.change}")
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])

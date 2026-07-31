@@ -2670,3 +2670,153 @@ def test_pressed_row_appoints_to_that_venture():
         # Close picker for next iteration
         v._director_picker = None
 
+
+# ---------------------------------------------------------------------------
+# UI7e: the briefing's bindings
+# ---------------------------------------------------------------------------
+
+def _flat_md():
+    """Helper: a MetricDelta with no movement."""
+    from gilded.dashboard import MetricDelta
+    return MetricDelta(change=0.0, direction=0)
+
+
+def _delta(**kw):
+    """Build a Delta with everything flat, then apply keyword overrides.
+
+    Raises if the result is not a valid Delta (HOUSE RULE 2).
+    """
+    from gilded.dashboard import Delta, MetricDelta
+    defaults = {
+        "first_session": False,
+        "axes": {"capital": _flat_md(), "standing": _flat_md(),
+                 "blood": _flat_md(), "world": _flat_md()},
+        "legitimacy": _flat_md(),
+        "treasury": _flat_md(),
+        "tide_level": _flat_md(),
+        "unrest_avg": _flat_md(),
+        "rank": _flat_md(),
+    }
+    defaults.update(kw)
+    d = Delta(**defaults)
+    # Verify it built — raise if not
+    assert isinstance(d, Delta)
+    return d
+
+
+def test_briefing_all_four_pairs_present_with_distinct_values():
+    """Item 1 & 2 (UI7e): all four metric-pair labels appear, each carrying
+    its OWN figure — catching both dropped pairs and mis-wired bindings."""
+    from gilded.dashboard import MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    d = _delta(
+        legitimacy=MetricDelta(change=-1.0, direction=-1),
+        treasury=MetricDelta(change=-40.0, direction=-1),
+        tide_level=MetricDelta(change=-0.4, direction=-1),
+        unrest_avg=MetricDelta(change=-7.0, direction=-1),
+    )
+
+    lines = v._delta_lines(d, board)
+
+    # Count: exactly four pair lines (axes flat, rank flat)
+    pair_lines = [l for l in lines
+                  if l.startswith(("Legitimacy", "Treasury", "Tide", "Unrest"))]
+    assert len(pair_lines) == 4, (
+        f"Expected 4 pair lines, got {len(pair_lines)}: {lines}")
+
+    # Locate each by label, assert existence, then assert its own figure
+    leg = [l for l in lines if l.startswith("Legitimacy")]
+    assert len(leg) == 1, f"No Legitimacy line: {lines}"
+    assert "1" in leg[0], f"Legitimacy line should carry '1': '{leg[0]}'"
+
+    tres = [l for l in lines if l.startswith("Treasury")]
+    assert len(tres) == 1, f"No Treasury line: {lines}"
+    assert "40" in tres[0], f"Treasury line should carry '40': '{tres[0]}'"
+
+    tide = [l for l in lines if l.startswith("Tide")]
+    assert len(tide) == 1, f"No Tide line: {lines}"
+    assert "0.4" in tide[0], f"Tide line should carry '0.4': '{tide[0]}'"
+
+    unr = [l for l in lines if l.startswith("Unrest")]
+    assert len(unr) == 1, f"No Unrest line: {lines}"
+    assert "7" in unr[0], f"Unrest line should carry '7': '{unr[0]}'"
+
+
+def test_briefing_first_session_not_empty():
+    """Item 3 (UI7e): the first-session branch must return a non-empty list
+    that names the opening."""
+    from gilded.dashboard import scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    d = _delta(first_session=True)
+    lines = v._delta_lines(d, board)
+
+    assert len(lines) >= 1, (
+        f"First-session must return non-empty list, got {lines}")
+    joined = " ".join(lines)
+    assert "century opens" in joined, (
+        f"First-session text should name the opening: {lines}")
+
+
+def test_briefing_pair_direction_words():
+    """Item 5 (UI7e): metric-pair lines must call cue() — a rising pair
+    reads 'rose', a falling pair reads 'fell'."""
+    from gilded.dashboard import MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    # Rising treasury
+    d_rise = _delta(
+        treasury=MetricDelta(change=40.0, direction=1),
+    )
+    lines_rise = v._delta_lines(d_rise, board)
+    tres_rise = [l for l in lines_rise if l.startswith("Treasury")]
+    assert len(tres_rise) == 1, f"No Treasury line for rise: {lines_rise}"
+    assert "rose" in tres_rise[0], (
+        f"Rising Treasury should say 'rose': '{tres_rise[0]}'")
+
+    # Falling treasury
+    d_fall = _delta(
+        treasury=MetricDelta(change=-40.0, direction=-1),
+    )
+    lines_fall = v._delta_lines(d_fall, board)
+    tres_fall = [l for l in lines_fall if l.startswith("Treasury")]
+    assert len(tres_fall) == 1, f"No Treasury line for fall: {lines_fall}"
+    assert "fell" in tres_fall[0], (
+        f"Falling Treasury should say 'fell': '{tres_fall[0]}'")
+
+
+def test_briefing_rank_sentence_shows_board_rank():
+    """Item 6 (UI7e): the rank sentence must contain the rank the board
+    actually holds — not rank+1 or some other value."""
+    from gilded.dashboard import MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    d = _delta(
+        rank=MetricDelta(change=-2.0, direction=-1),
+    )
+
+    lines = v._delta_lines(d, board)
+    rank_lines = [l for l in lines if "Your standing" in l]
+    assert len(rank_lines) == 1, f"Expected one rank line: {lines}"
+    expected_tail = f"#{board.rank}"
+    assert rank_lines[0].endswith(expected_tail), (
+        f"Rank sentence should end with '{expected_tail}', "
+        f"got '{rank_lines[0]}'")
+
