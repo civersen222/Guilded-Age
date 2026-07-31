@@ -2174,6 +2174,116 @@ def test_briefing_direction_words():
     assert "Standing fell 1" in stand_lines[0], f"Standing -1.0 must read 'fell', got: '{stand_lines[0]}'"
 
 
+def test_briefing_falling_metric_pairs_reported():
+    """Item 1 (UI7d): falling metric pairs must still produce briefing lines.
+
+    Mutation R17: changing the guard to `if md.direction > 0:` drops
+    every fall entirely — Treasury and Tide vanish from the briefing."""
+    from gilded.dashboard import Delta, MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    flat = MetricDelta(change=0.0, direction=0)
+    d = Delta(
+        first_session=False,
+        axes={"capital": flat, "standing": flat, "blood": flat, "world": flat},
+        legitimacy=flat,
+        treasury=MetricDelta(change=-40.0, direction=-1),
+        tide_level=MetricDelta(change=-0.4, direction=-1),
+        unrest_avg=flat,
+        rank=MetricDelta(change=0.0, direction=0),
+    )
+
+    lines = v._delta_lines(d, board)
+    treasury = [l for l in lines if l.startswith("Treasury")]
+    tide = [l for l in lines if l.startswith("Tide")]
+    assert len(treasury) == 1, f"No Treasury line for falling treasury: {lines}"
+    assert len(tide) == 1, f"No Tide line for falling tide: {lines}"
+    assert "fell" in treasury[0], f"Treasury fall must say 'fell': '{treasury[0]}'"
+    assert "fell" in tide[0], f"Tide fall must say 'fell': '{tide[0]}'"
+
+
+def test_briefing_all_four_axes_present():
+    """Item 2 (UI7d): all four judgment axes must appear in the briefing loop.
+
+    Mutation R18: dropping 'world' from the axes loop makes the World axis
+    never appear, while the other three read perfectly."""
+    from gilded.dashboard import Delta, MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    d = Delta(
+        first_session=False,
+        axes={
+            "capital": MetricDelta(change=0.4, direction=1),
+            "standing": MetricDelta(change=-0.3, direction=-1),
+            "blood": MetricDelta(change=0.5, direction=1),
+            "world": MetricDelta(change=-0.2, direction=-1),
+        },
+        legitimacy=MetricDelta(change=0.0, direction=0),
+        treasury=MetricDelta(change=0.0, direction=0),
+        tide_level=MetricDelta(change=0.0, direction=0),
+        unrest_avg=MetricDelta(change=0.0, direction=0),
+        rank=MetricDelta(change=0.0, direction=0),
+    )
+
+    lines = v._delta_lines(d, board)
+    assert len(lines) == 4, f"Expected exactly 4 axis lines, got {len(lines)}: {lines}"
+    capitals = [l for l in lines if l.startswith("Capital")]
+    standings = [l for l in lines if l.startswith("Standing")]
+    bloods = [l for l in lines if l.startswith("Blood")]
+    worlds = [l for l in lines if l.startswith("World")]
+    assert len(capitals) == 1, f"No Capital line: {lines}"
+    assert len(standings) == 1, f"No Standing line: {lines}"
+    assert len(bloods) == 1, f"No Blood line: {lines}"
+    assert len(worlds) == 1, f"No World line: {lines}"
+
+
+def test_briefing_rank_direction_words():
+    """Item 3 (UI7d): rank sentence must say 'improved' for negative change,
+    'slipped' for positive change (rank 1 is best).
+
+    Mutation R19: swapping the two words tells a climbing house it slipped."""
+    from gilded.dashboard import Delta, MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    flat = MetricDelta(change=0.0, direction=0)
+
+    # Negative change = improvement (rank went down, e.g. 5 -> 4)
+    d_up = Delta(
+        first_session=False,
+        axes={"capital": flat, "standing": flat, "blood": flat, "world": flat},
+        legitimacy=flat, treasury=flat, tide_level=flat, unrest_avg=flat,
+        rank=MetricDelta(change=-1.0, direction=-1),
+    )
+    lines_up = v._delta_lines(d_up, board)
+    rank_up = [l for l in lines_up if l.startswith("Your standing")]
+    assert len(rank_up) == 1, f"No rank line for improving rank: {lines_up}"
+    assert "improved" in rank_up[0], f"Rank -1.0 must say 'improved': '{rank_up[0]}'"
+
+    # Positive change = slip (rank went up, e.g. 4 -> 5)
+    d_down = Delta(
+        first_session=False,
+        axes={"capital": flat, "standing": flat, "blood": flat, "world": flat},
+        legitimacy=flat, treasury=flat, tide_level=flat, unrest_avg=flat,
+        rank=MetricDelta(change=1.0, direction=1),
+    )
+    lines_down = v._delta_lines(d_down, board)
+    rank_down = [l for l in lines_down if l.startswith("Your standing")]
+    assert len(rank_down) == 1, f"No rank line for slipping rank: {lines_down}"
+    assert "slipped" in rank_down[0], f"Rank +1.0 must say 'slipped': '{rank_down[0]}'"
+
+
 def test_empty_pool_no_appoint_control():
     """A venture whose pool is empty offers no Appoint control."""
     pygame.init()

@@ -188,6 +188,23 @@ def test_figure_surviving_changes_not_zero():
         assert result != "0", f"figure({val}) = '{result}' must not read as zero"
 
 
+def test_md_preserves_sign_of_change():
+    """Item 4 (UI7d): _md() must preserve the sign of the change value.
+
+    Mutation R20: returning MetricDelta(abs(change), direction) strips the
+    sign from .change while keeping direction intact — every call site that
+    reads the sign off the change is dead."""
+    # Falling: prev=5.0, curr=3.0 => change=-2.0, direction=-1
+    md_fall = _md(5.0, 3.0)
+    assert md_fall.change == -2.0, f"_md(5.0, 3.0).change must be -2.0, got {md_fall.change}"
+    assert md_fall.direction == -1, f"_md(5.0, 3.0).direction must be -1, got {md_fall.direction}"
+
+    # Rising: prev=3.0, curr=5.0 => change=+2.0, direction=+1
+    md_rise = _md(3.0, 5.0)
+    assert md_rise.change == 2.0, f"_md(3.0, 5.0).change must be 2.0, got {md_rise.change}"
+    assert md_rise.direction == 1, f"_md(3.0, 5.0).direction must be 1, got {md_rise.direction}"
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])
