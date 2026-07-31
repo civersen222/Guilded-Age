@@ -143,6 +143,43 @@ def test_suppressed_change_carries_true_size():
     assert abs(md.change - 0.01) < 1e-9
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# ITEM 4 (UI7b): SIGNIFICANCE boundary — exact-arithmetic discipline
+#
+# The probe must use values where the subtraction is EXACT in binary FP.
+# 0.05 - 0.0 == 0.05 exactly.  1.05 - 1.0 == 0.0500...04 (not exact).
+# Therefore we start from 0.0, not 1.0, so the test can distinguish < from <=.
+# ────────────────────────────────────────────────────────────────────────────
+
+def test_significance_boundary_exact_positive():
+    """A change of EXACTLY SIGNIFICANCE (0.05) IS news — direction == 1.
+
+    Uses 0.0 -> 0.05 because 0.05 - 0.0 == 0.05 exactly in binary FP.
+    Hard-coded 0.05, not derived from SIGNIFICANCE, so a test that computes
+    its expectation from the constant it guards CANNOT pass vacuously.
+    """
+    md = _md(0.0, 0.05)
+    assert md.direction == 1, f"Change of exactly 0.05 must be news, got direction {md.direction}"
+
+
+def test_significance_boundary_exact_negative():
+    """A change of EXACTLY -SIGNIFICANCE (-0.05) IS news — direction == -1.
+
+    Uses 0.0 -> -0.05 because -0.05 - 0.0 == -0.05 exactly in binary FP.
+    """
+    md = _md(0.0, -0.05)
+    assert md.direction == -1, f"Change of exactly -0.05 must be news, got direction {md.direction}"
+
+
+def test_largest_non_news_change():
+    """A change just below SIGNIFICANCE (0.04) is NOT news — direction == 0.
+
+    Uses 0.0 -> 0.04 because 0.04 - 0.0 == 0.04 exactly in binary FP.
+    """
+    md = _md(0.0, 0.04)
+    assert md.direction == 0, f"Change of 0.04 must be suppressed, got direction {md.direction}"
+
+
 def test_figure_surviving_changes_not_zero():
     """figure() of each surviving change does not read as zero."""
     from gilded.ui.figures import figure

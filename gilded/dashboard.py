@@ -18,6 +18,11 @@ from gilded.endings import (
     _axis_blood, _axis_capital, _axis_standing, _axis_world)
 from gilded.saga.content.eras import ERAS
 
+# Significance floor: measured at seeds 7,42,1,3,11 for 24 turns.
+# 0.01 still leaves lines that render as zero; 0.5 suppresses 173 real movements.
+# 0.05 is the smallest floor where nothing surviving renders as zero, keeping 771/777 lines.
+SIGNIFICANCE = 0.05
+
 AXIS_NAMES = ("capital", "standing", "blood", "world")
 
 
@@ -131,7 +136,10 @@ class Delta:
 
 def _md(prev: float, curr: float) -> MetricDelta:
     change = curr - prev
-    direction = (change > 0) - (change < 0)
+    if abs(change) < SIGNIFICANCE:
+        direction = 0
+    else:
+        direction = (change > 0) - (change < 0)
     return MetricDelta(change, direction)
 
 

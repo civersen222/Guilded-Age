@@ -412,7 +412,6 @@ def test_a_strike_where_there_is_no_colliery_pays_no_colliery(monkeypatch):
 def test_a_colliery_still_loses_output_when_its_own_province_strikes(monkeypatch):
     """Guard: STRIKE_OUTPUT_MULT must still cut output for a local strike."""
     from copy import deepcopy
-    from gilded.society.labor import STRIKE_OUTPUT_MULT
     import gilded.market as market
 
     g = GildedGame(seed=42)
@@ -453,7 +452,7 @@ def test_a_colliery_still_loses_output_when_its_own_province_strikes(monkeypatch
     calm.end_turn()
     struck.end_turn()
 
-    # The struck colliery's dividend must be lower (STRIKE_OUTPUT_MULT = 0.5)
+    # The struck colliery's dividend must be lower (STRIKE_OUTPUT_MULT)
     calm_ent = next(e for e in calm.enterprises if e.eid == target_ent.eid)
     struck_ent = next(e for e in struck.enterprises if e.eid == target_ent.eid)
     assert struck_ent._last_dividend < calm_ent._last_dividend, \

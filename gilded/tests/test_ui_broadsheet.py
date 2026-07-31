@@ -2029,6 +2029,151 @@ def test_unowned_venture_no_appoint_control():
         )
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# ITEM 5 (UI7b): Council briefing call-site ownership
+# ────────────────────────────────────────────────────────────────────────────
+
+def test_briefing_no_zero_in_sub_unit_lines():
+    """_delta_lines must not render a sub-unit change as zero.
+
+    Mutation Z8: reverting the call site from figure(md.change) to
+    {abs(md.change):.0f} would print "Tide rose 0" for a 0.4 change.
+    This test catches that by reading _delta_lines directly.
+    """
+    from gilded.dashboard import Delta, MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    d = Delta(
+        first_session=False,
+        axes={k: MetricDelta(change=0.0, direction=0) for k in ("capital", "standing", "blood", "world")},
+        legitimacy=MetricDelta(change=0.4, direction=1),
+        treasury=MetricDelta(change=-0.25, direction=-1),
+        tide_level=MetricDelta(change=0.06, direction=1),
+        unrest_avg=MetricDelta(change=0.0, direction=0),
+        rank=MetricDelta(change=0, direction=0),
+    )
+
+    lines = v._delta_lines(d, board)
+    for line in lines:
+        tokens = line.split()
+        if not tokens:
+            continue
+        last = tokens[-1]
+        # Strip leading sign and commas to get the numeric part
+        stripped = last.lstrip("+-").replace(",", "")
+        # "<0.1" is honest — not a zero
+        if last.startswith("<"):
+            continue
+        try:
+            val = float(stripped)
+            assert val != 0.0, f"Line asserts movement but renders zero: '{line}'"
+        except ValueError:
+            pass  # not a numeric token (e.g. "session.")
+
+
+def test_briefing_shows_sub_unit_digit():
+    """A sub-unit change (0.4) must render as '0.4' in the briefing, not '0'.
+
+    If the call site rounds to whole gold, 0.4 becomes '0' — this test fails.
+    """
+    from gilded.dashboard import Delta, MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    d = Delta(
+        first_session=False,
+        axes={k: MetricDelta(change=0.0, direction=0) for k in ("capital", "standing", "blood", "world")},
+        legitimacy=MetricDelta(change=0.0, direction=0),
+        treasury=MetricDelta(change=0.0, direction=0),
+        tide_level=MetricDelta(change=0.4, direction=1),
+        unrest_avg=MetricDelta(change=0.0, direction=0),
+        rank=MetricDelta(change=0, direction=0),
+    )
+
+    lines = v._delta_lines(d, board)
+    tide_lines = [l for l in lines if "Tide" in l]
+    assert tide_lines, "No Tide line in briefing"
+    assert "0.4" in tide_lines[0], f"Tide change of 0.4 must render as '0.4', got: '{tide_lines[0]}'"
+
+
+def test_briefing_axis_line_renders_figure():
+    """Item 3 (UI7c): the axes loop in _delta_lines must use figure(md.change).
+
+    Mutation R15: reverting to {abs(md.change):.0f} would print
+    "Capital rose 0" for a real 0.4 change."""
+    from gilded.dashboard import Delta, MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    flat = MetricDelta(change=0.0, direction=0)
+    d = Delta(
+        first_session=False,
+        axes={
+            "capital": MetricDelta(change=0.4, direction=1),
+            "standing": flat,
+            "blood": flat,
+            "world": flat,
+        },
+        legitimacy=flat,
+        treasury=flat,
+        tide_level=flat,
+        unrest_avg=flat,
+        rank=MetricDelta(change=0, direction=0),
+    )
+
+    lines = v._delta_lines(d, board)
+    cap_lines = [l for l in lines if l.startswith("Capital")]
+    assert cap_lines, "No Capital line in briefing"
+    assert "0.4" in cap_lines[0], f"Capital change of 0.4 must render as '0.4', got: '{cap_lines[0]}'"
+
+
+def test_briefing_direction_words():
+    """Item 4 (UI7c): cue() must say 'rose' for gains and 'fell' for losses.
+
+    Mutation R16: swapping the two words makes every rise read as a fall
+    and vice versa, while every number stays correct."""
+    from gilded.dashboard import Delta, MetricDelta, scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+    board = scoreboard(g, player)
+
+    flat = MetricDelta(change=0.0, direction=0)
+    d = Delta(
+        first_session=False,
+        axes={
+            "capital": MetricDelta(change=2.0, direction=1),
+            "standing": MetricDelta(change=-1.0, direction=-1),
+            "blood": flat,
+            "world": flat,
+        },
+        legitimacy=flat,
+        treasury=flat,
+        tide_level=flat,
+        unrest_avg=flat,
+        rank=MetricDelta(change=0, direction=0),
+    )
+
+    lines = v._delta_lines(d, board)
+    cap_lines = [l for l in lines if l.startswith("Capital")]
+    stand_lines = [l for l in lines if l.startswith("Standing")]
+    assert cap_lines, "No Capital line in briefing"
+    assert stand_lines, "No Standing line in briefing"
+    assert "Capital rose 2" in cap_lines[0], f"Capital +2.0 must read 'rose', got: '{cap_lines[0]}'"
+    assert "Standing fell 1" in stand_lines[0], f"Standing -1.0 must read 'fell', got: '{stand_lines[0]}'"
+
+
 def test_empty_pool_no_appoint_control():
     """A venture whose pool is empty offers no Appoint control."""
     pygame.init()
