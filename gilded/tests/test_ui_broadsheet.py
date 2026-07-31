@@ -2820,3 +2820,30 @@ def test_briefing_rank_sentence_shows_board_rank():
         f"Rank sentence should end with '{expected_tail}', "
         f"got '{rank_lines[0]}'")
 
+
+def test_briefing_quiet_turn_sentence():
+    """UI7f Item 2: when no metric moves, the quiet-turn sentence appears
+    with actual content — not a blank string."""
+    from gilded.dashboard import Scoreboard
+    pygame.init()
+    g = GildedGame(seed=42)
+    player = next(iter(g.houses))
+    v = BroadsheetView(g, player)
+
+    # All metrics flat, not first session -> quiet turn
+    d = _delta()
+    board = Scoreboard(
+        year=1837, turn=2, century_pct=0.08, era_idx=0, era_title="Era",
+        next_era="Next", axes={"capital": 50.0, "standing": 50.0,
+                               "blood": 50.0, "world": 50.0},
+        legitimacy=50.0, prestige=10.0, treasury=100.0,
+        tide_level=5.0, tide_phase="reformist", atrocities=0.0,
+        rival_name=None, rival_axes=None, rank=1, unrest_avg=5.0)
+
+    lines = v._delta_lines(d, board)
+    assert len(lines) == 1, f"Expected one quiet-turn line, got {len(lines)}: {lines}"
+    assert "quiet" in lines[0], (
+        f"Quiet-turn line should contain 'quiet': '{lines[0]}'")
+    assert lines[0].strip(), (
+        f"Quiet-turn line should not be blank: '{lines[0]}'")
+
