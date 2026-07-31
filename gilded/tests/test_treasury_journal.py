@@ -203,9 +203,9 @@ def test_no_treasury_arithmetic_outside_houses():
     for pyfile in glob.glob(str(gilded_dir / "**" / "*.py"), recursive=True):
         if "houses.py" in pyfile:
             continue
-        if "/tests/" in pyfile:
+        if "/tests/" in pyfile.replace("\\", "/"):
             continue
-        with open(pyfile) as f:
+        with open(pyfile, encoding="utf-8") as f:
             for lineno, line in enumerate(f, 1):
                 if pattern.search(line):
                     offenders.append(f"{pyfile}:{lineno}")

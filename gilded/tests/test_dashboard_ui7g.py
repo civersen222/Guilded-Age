@@ -149,3 +149,93 @@ def test_delta_axes_keys_match_axis_names():
     d = delta(b, b)
     assert set(d.axes.keys()) == set(AXIS_NAMES), \
         f"Delta.axes keys should be {set(AXIS_NAMES)}, got {set(d.axes.keys())}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BRANCH COVERAGE — UI7h: own the unexecuted branches
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def test_century_pct_clamped_at_turn_zero():
+    """century_pct must be 0.0 at turn 0 (clamp floor exercised)."""
+    g, h = _game()
+    g.turn = 0
+    b = scoreboard(g, h)
+    assert b.century_pct == 0.0
+
+
+def test_century_pct_clamped_at_end():
+    """century_pct must be 1.0 past the end of the century (clamp ceiling exercised)."""
+    g, h = _game()
+    g.turn = TURN_BUDGET + 1
+    b = scoreboard(g, h)
+    assert b.century_pct == 1.0
+
+
+def test_era_before_the_age():
+    """_era_fields must return 'Before the Age' when age_idx < 0."""
+    g, h = _game()
+    g.director._age_idx = -1
+    b = scoreboard(g, h)
+    assert b.era_title == "Before the Age"
+
+
+def test_era_past_last_era():
+    """_era_fields must return last era title when age_idx >= len(ERAS)."""
+    g, h = _game()
+    g.director.age_idx = len(ERAS) + 5
+    b = scoreboard(g, h)
+    assert b.era_title == ERAS[-1].title
+    assert b.next_era == "the final age"
+
+
+def test_next_era_hint_format():
+    """next_era must contain era title, tide threshold, and turn threshold."""
+    g, h = _game()
+    g.director.age_idx = 0
+    b = scoreboard(g, h)
+    nxt = ERAS[1]
+    assert nxt.title in b.next_era
+    assert f"tide {nxt.tide:.0f}" in b.next_era
+    assert f"turn {nxt.turn}" in b.next_era
+
+
+def test_unrest_avg_zero_for_no_provinces():
+    """unrest_avg must be 0.0 when a house owns no provinces."""
+    g, h = _game()
+    # Remove all provinces owned by this house
+    for prov in list(g.atlas.provinces.values()):
+        if prov.owner == h:
+            prov.owner = None
+    provs = g.provinces_of(h)
+    assert len(provs) == 0
+    b = scoreboard(g, h)
+    assert b.unrest_avg == 0.0
+
+
+def test_legitimacy_default_for_missing_house():
+    """legitimacy must be 0.0 for a house not yet in game.legitimacy."""
+    g, h = _game()
+    g.legitimacy.pop(h, None)
+    b = scoreboard(g, h)
+    assert b.legitimacy == 0.0
+
+
+def test_md_direction_negative():
+    """_md must produce direction=-1 when value falls."""
+    d = _md(5.0, 2.0)
+    assert d.direction == -1, f"direction should be -1 for falling value, got {d.direction}"
+    assert d.change == -3.0
+
+
+def test_md_direction_positive():
+    """_md must produce direction=+1 when value rises."""
+    d = _md(2.0, 5.0)
+    assert d.direction == 1, f"direction should be +1 for rising value, got {d.direction}"
+    assert d.change == 3.0
+
+
+def test_md_direction_zero_below_significance():
+    """_md must produce direction=0 when change is below SIGNIFICANCE."""
+    d = _md(2.0, 2.02)
+    assert d.direction == 0, f"direction should be 0 for insignificant change, got {d.direction}"
