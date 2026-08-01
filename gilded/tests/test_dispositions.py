@@ -613,3 +613,73 @@ def test_r9_all_clamped():
         disp = initial_dispositions(rng)
         for v in disp.values():
             assert -100.0 <= v <= 100.0
+
+
+# ===========================================================================
+# Q1: WHICH WAY A TIE FALLS, WHEN A WITNESS IS PUSHED
+# ===========================================================================
+# At v=0, p_high = 0.5. Roll exactly 0.5: 0.5 < 0.5 is False -> direction = -1
+
+
+def test_q1_tie_at_neutral_goes_low():
+    """At standing 0, a roll exactly equal to p_high (0.5) resolves to LOW side."""
+    c = _char(dispositions={"bold_craven": 0.0})
+    c._rng = _ctrl_rng(0.5)  # Exactly equal to p_high = 0.5
+    witness_drift(c, "bold_craven", 10.0)
+    # 0.5 < 0.5 is False -> direction = -1.0 -> moves negative
+    assert c.dispositions["bold_craven"] == -10.0
+
+
+# ===========================================================================
+# Q2: WHAT A NEGATIVE MAGNITUDE MEANS TO A WITNESS
+# ===========================================================================
+# witness_drift uses abs(magnitude) - sign is discarded; roll decides direction.
+
+
+def test_q2_negative_magnitude_discards_sign():
+    """Negative magnitude is treated as its absolute value; direction comes from the roll."""
+    c_neg = _char(dispositions={"bold_craven": 0.0})
+    c_neg._rng = _ctrl_rng(0.49)  # 0.49 < 0.5 -> direction = +1
+    witness_drift(c_neg, "bold_craven", -10.0)  # negative magnitude
+    assert c_neg.dispositions["bold_craven"] == 10.0
+
+    c_pos = _char(dispositions={"bold_craven": 0.0})
+    c_pos._rng = _ctrl_rng(0.49)  # Same roll
+    witness_drift(c_pos, "bold_craven", 10.0)   # positive magnitude
+    assert c_pos.dispositions["bold_craven"] == c_neg.dispositions["bold_craven"]
+
+
+# ===========================================================================
+# Q3: HOW SMALL A CHILDHOOD INFLUENCE STILL COUNTS
+# ===========================================================================
+# RUB_OFF_RATE = 0.05, floor = 0.01. A gap of 1.0 -> delta = 0.05 (>= 0.01, applied).
+# 0.05 is clearly > 0.01 (floor) and < 1.0 (one whole point).
+
+
+def test_q3_small_influence_below_one_point_applies():
+    """Gap of 1.0 produces delta = 0.05 - above the 0.01 floor, below 1 whole point."""
+    child = _char(dispositions={"bold_craven": 0.0})
+    guardian = _char(name="Marcus", dispositions={"bold_craven": 1.0})
+    guardian_rub_off(child, guardian)
+    # delta = (1.0 - 0.0) * 0.05 = 0.05, which is >= 0.01 floor -> applied
+    assert child.dispositions["bold_craven"] == 0.05
+
+
+# ===========================================================================
+# Q4: THE STRESS LINE ON THE LOW SIDE
+# ===========================================================================
+# LABEL_THRESHOLD = 50. Low-side branch: sign < 0 and v <= -LABEL_THRESHOLD.
+# show_mercy conflicts with cruel_compassionate (sign -1).
+
+
+def test_q4_low_side_exactly_on_threshold_pays_stress():
+    """Character at exactly -50 on low-conflicting side pays stress."""
+    disp = {"cruel_compassionate": -50.0}  # sign=-1 for show_mercy, v=-50
+    assert contradiction_stress(disp, "show_mercy") == 10
+
+
+def test_q4_low_side_one_point_inside_no_stress():
+    """Character at -49 (one point inside threshold on low side) pays nothing."""
+    disp = {"cruel_compassionate": -49.0}  # sign=-1, v=-49 > -50 -> no stress
+    assert contradiction_stress(disp, "show_mercy") == 0
+

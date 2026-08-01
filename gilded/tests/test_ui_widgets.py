@@ -521,3 +521,8 @@ def test_widgets_no_broadsheet_import():
     assert "broadsheet" not in source
     assert "atlas_view" not in source
     assert "gilded.ui.app" not in source
+
+
+def test_broadsheet_uses_widgets_palette():
+    assert broadsheet._font is widgets.font
+    assert broadsheet.INK == widgets.INK
