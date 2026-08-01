@@ -261,9 +261,8 @@ def test_share_price_bounded():
         game.end_turn()
     lo = TAKEOVER_PRICE * 0.25
     hi = TAKEOVER_PRICE * 4.0
-    for e in game.enterprises:
-        p = share_price(e, game)
-        assert lo - 1e-9 <= p <= hi + 1e-9
+    prices = [share_price(e, game) for e in game.enterprises]
+    assert all(lo - 1e-9 <= p <= hi + 1e-9 for p in prices)
 
 def test_share_price_both_sides_of_base():
     """Some ventures price above 2.0, some below, in a normal market."""
@@ -293,3 +292,65 @@ def test_advance_uses_game_not_flat_rate():
     # advance charges the priced rate — buyer should have spent gold
     assert buyer.gold_reserve < gold_before, \
         f"Buyer gold unchanged ({gold_before}): advance should charge the priced rate"
+
+
+def test_sway_base_chance():
+    """sway base chance = 0.60: statecraft 0 agent succeeds on roll 0.59, fails on roll 0.61."""
+    ra, rb, realms = _two_realms(42)
+    agent = ra.characters[10]
+    agent.base_stats["statecraft"] = 0
+    offset = agent.get_effective_stat("statecraft")
+    agent.base_stats["statecraft"] = 0 - offset
+    # roll 0.59 < 0.60 base → must succeed (catches SWAY_BASE→0.5)
+    msgs = sway(agent, rb.ruler, SeqRng([0.59]))
+    assert not any("sees through" in m for m in msgs)
+    # roll 0.61 > 0.60 base → must fail
+    msgs = sway(agent, rb.ruler, SeqRng([0.61]))
+    assert any("sees through" in m for m in msgs)
+
+
+def test_sway_coefficient():
+    """sway coefficient = 0.01 per statecraft: statecraft 20 chance=0.80 succeeds on roll 0.75, fails on 0.81."""
+    ra, rb, realms = _two_realms(42)
+    agent = ra.characters[10]
+    agent.base_stats["statecraft"] = 0
+    offset = agent.get_effective_stat("statecraft")
+    agent.base_stats["statecraft"] = 20 - offset
+    # roll 0.75 < 0.80 (0.60 + 20*0.01) → must succeed
+    # If coeff→0.005: chance=0.60+20*0.005=0.70, roll 0.75>0.70 → fails (caught)
+    # If coeff→0.02: chance=0.60+20*0.02=1.00→capped 0.95, roll 0.75<0.95 → succeeds (not caught here)
+    msgs = sway(agent, rb.ruler, SeqRng([0.75]))
+    assert not any("sees through" in m for m in msgs)
+    # roll 0.81 > 0.80 → must fail
+    # If coeff→0.02: chance=1.00→capped 0.95, roll 0.81<0.95 → succeeds (caught)
+    msgs = sway(agent, rb.ruler, SeqRng([0.81]))
+    assert any("sees through" in m for m in msgs)
+
+
+def test_sway_cap():
+    """sway cap = 0.95: statecraft 40 chance=0.95 succeeds on roll 0.94."""
+    ra, rb, realms = _two_realms(42)
+    agent = ra.characters[10]
+    agent.base_stats["statecraft"] = 0
+    offset = agent.get_effective_stat("statecraft")
+    agent.base_stats["statecraft"] = 40 - offset
+    # roll 0.94 < 0.95 cap → must succeed (catches CAP→0.90)
+    msgs = sway(agent, rb.ruler, SeqRng([0.94]))
+    assert not any("sees through" in m for m in msgs)
+    # roll 0.96 > 0.95 cap → must fail
+    msgs = sway(agent, rb.ruler, SeqRng([0.96]))
+    assert any("sees through" in m for m in msgs)
+
+
+def test_sway_penalty():
+    """failed sway costs exactly 5 opinion."""
+    ra, rb, realms = _two_realms(42)
+    agent = ra.characters[10]
+    agent.base_stats["statecraft"] = 0
+    offset = agent.get_effective_stat("statecraft")
+    agent.base_stats["statecraft"] = 0 - offset
+    target = rb.ruler
+    before = target._society.opinions.get((target.id, agent.id), 0)
+    sway(agent, target, SeqRng([0.70]))
+    after = target._society.opinions.get((target.id, agent.id), 0)
+    assert after - before == -5

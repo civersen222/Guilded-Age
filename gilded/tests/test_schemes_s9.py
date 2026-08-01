@@ -11,7 +11,6 @@ from gilded.chassis import GildedGame
 from gilded.society.characters import Secret, SocietyState
 from gilded.society.realm import create_house_realm
 from gilded.society.schemes import (
-    SCHEME_THRESHOLD,
     SchemeManager,
     blackmail,
     compromise,
@@ -191,41 +190,110 @@ def test_compromise_secret_potency_is_20():
 
 
 # ----------------------------------------------------------------------- R7
-def test_sway_higher_statecraft_succeeds_more():
-    """sway succeeds MORE OFTEN for a higher-statecraft agent.
+def test_sway_base_chance_is_0_60():
+    """T1: sway's base chance is EXACTLY 0.60.
 
-    Pin with a roll between the low-statecraft chance and the high-statecraft
-    chance so that one succeeds and the other fails.
+    An agent with EFFECTIVE statecraft 0 succeeds on roll 0.59, fails on 0.61.
+    Both rolls are typed as literals — no derivation from SWAY_BASE.
     """
     ra, rb, realms = _two_realms(42)
     target = rb.ruler
+    agent = ra.characters[10]
 
-    # Create two agents with very different statecraft
-    low_agent = ra.characters[10]
-    high_agent = ra.ruler  # rulers tend to have higher stats
+    # Fix effective statecraft to 0
+    agent.base_stats["statecraft"] = 0
+    offset = agent.get_effective_stat("statecraft")
+    agent.base_stats["statecraft"] = 0 - offset
+    assert agent.get_effective_stat("statecraft") == 0
 
-    # Boost high_agent statecraft significantly
-    high_agent.base_stats["statecraft"] = 80
-    low_statecraft = low_agent.get_effective_stat("statecraft")
-    high_statecraft = high_agent.get_effective_stat("statecraft")
+    # Succeeds on roll < 0.60
+    msgs = sway(agent, target, SeqRng([0.59]))
+    assert any("wins ground" in m for m in msgs), \
+        f"Should succeed with roll 0.59 vs chance 0.60: {msgs}"
 
-    # SWAY_BASE = 0.6, chance = min(0.95, 0.6 + statecraft * 0.01)
-    low_chance = min(0.95, 0.6 + low_statecraft * 0.01)
-    high_chance = min(0.95, 0.6 + high_statecraft * 0.01)
+    # Fails on roll >= 0.60
+    msgs = sway(agent, target, SeqRng([0.61]))
+    assert any("sees through" in m for m in msgs), \
+        f"Should fail with roll 0.61 vs chance 0.60: {msgs}"
 
-    # Pick a roll between the two chances
-    mid_roll = (low_chance + high_chance) / 2
 
-    # Low statecraft agent should fail (roll > low_chance)
-    # High statecraft agent should succeed (roll < high_chance)
-    low_result = sway(low_agent, target, SeqRng([mid_roll]))
-    high_result = sway(high_agent, target, SeqRng([mid_roll]))
+def test_sway_statecraft_coefficient_is_0_01():
+    """T2: Each point of statecraft adds EXACTLY 0.01 of chance.
 
-    # At least one should differentiate
-    assert any("sees through" in m for m in low_result), \
-        f"Low statecraft should fail with roll {mid_roll:.3f} vs chance {low_chance:.3f}"
-    assert any("wins ground" in m for m in high_result), \
-        f"High statecraft should succeed with roll {mid_roll:.3f} vs chance {high_chance:.3f}"
+    Agent with EFFECTIVE statecraft 20 has chance 0.80.
+    Succeeds on 0.79, fails on 0.81.
+    """
+    ra, rb, realms = _two_realms(42)
+    target = rb.ruler
+    agent = ra.characters[10]
+
+    # Fix effective statecraft to 20
+    agent.base_stats["statecraft"] = 0
+    offset = agent.get_effective_stat("statecraft")
+    agent.base_stats["statecraft"] = 20 - offset
+    assert agent.get_effective_stat("statecraft") == 20
+
+    # chance = min(0.95, 0.6 + 20*0.01) = 0.80
+    msgs = sway(agent, target, SeqRng([0.79]))
+    assert any("wins ground" in m for m in msgs), \
+        f"Should succeed with roll 0.79 vs chance 0.80: {msgs}"
+
+    msgs = sway(agent, target, SeqRng([0.81]))
+    assert any("sees through" in m for m in msgs), \
+        f"Should fail with roll 0.81 vs chance 0.80: {msgs}"
+
+
+def test_sway_cap_is_0_95():
+    """T3: The chance is capped at EXACTLY 0.95.
+
+    Agent with EFFECTIVE statecraft 40 would compute to 1.00 uncapped.
+    Succeeds on 0.94, fails on 0.96.
+    """
+    ra, rb, realms = _two_realms(42)
+    target = rb.ruler
+    agent = ra.characters[10]
+
+    # Fix effective statecraft to 40
+    agent.base_stats["statecraft"] = 0
+    offset = agent.get_effective_stat("statecraft")
+    agent.base_stats["statecraft"] = 40 - offset
+    assert agent.get_effective_stat("statecraft") == 40
+
+    # chance = min(0.95, 0.6 + 40*0.01) = min(0.95, 1.00) = 0.95
+    msgs = sway(agent, target, SeqRng([0.94]))
+    assert any("wins ground" in m for m in msgs), \
+        f"Should succeed with roll 0.94 vs capped chance 0.95: {msgs}"
+
+    msgs = sway(agent, target, SeqRng([0.96]))
+    assert any("sees through" in m for m in msgs), \
+        f"Should fail with roll 0.96 vs capped chance 0.95: {msgs}"
+
+
+def test_sway_failure_costs_5_opinion():
+    """T4: A FAILED sway costs the agent EXACTLY 5 opinion.
+
+    Read opinion before and after a failing sway, assert the difference is -5.
+    """
+    ra, rb, realms = _two_realms(42)
+    target = rb.ruler
+    agent = ra.characters[10]
+
+    # Fix effective statecraft to 0 (chance = 0.60)
+    agent.base_stats["statecraft"] = 0
+    offset = agent.get_effective_stat("statecraft")
+    agent.base_stats["statecraft"] = 0 - offset
+    assert agent.get_effective_stat("statecraft") == 0
+
+    # Read opinion before (defaults to 0 if not set)
+    opinion_before = target._society.opinions.get((target.id, agent.id), 0)
+
+    # Roll 0.70 > 0.60 chance, so sway fails
+    msgs = sway(agent, target, SeqRng([0.70]))
+    assert any("sees through" in m for m in msgs)
+
+    opinion_after = target._society.opinions.get((target.id, agent.id), 0)
+    assert opinion_after - opinion_before == -5, \
+        f"Failed sway should cost exactly 5 opinion: was {opinion_before}, now {opinion_after}"
 
 
 # ----------------------------------------------------------------------- R8
