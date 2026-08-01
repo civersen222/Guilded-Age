@@ -324,3 +324,174 @@ def test_relations_self_returns_zero():
     mood = intel._mood(g, h, h)
     assert "little away" in mood, \
         f"Self-relation mood should be neutral: {mood}"
+
+
+# --------------------------------------------------------------------------- #
+# E4 — .get(target, 0) default is reachable at both sites
+# --------------------------------------------------------------------------- #
+
+def test_diplomatic_visibility_default_reachable():
+    """When viewer has no relations entry for target, .get(target, 0) fires.
+    The default 0 matters: changing it to 1 would flip the != 0 check."""
+    g = GildedGame(seed=10)
+    houses = sorted(g.houses)
+    viewer, target = houses[0], houses[1]
+    # Remove target from viewer's relations so .get(target, 0) fires
+    del g.houses[viewer].relations[target]
+    # Ensure no marriage tie
+    assert not intel._has_marriage_tie(g, viewer, target)
+    # With default 0, != 0 is False
+    assert not intel._diplomatic_visibility(g, viewer, target)
+
+
+def test_mood_default_reachable():
+    """When viewer has no relations entry for target, .get(target, 0) fires.
+    The default 0 yields neutral mood."""
+    g = GildedGame(seed=10)
+    houses = sorted(g.houses)
+    viewer, target = houses[0], houses[1]
+    # Remove target from viewer's relations so .get(target, 0) fires
+    del g.houses[viewer].relations[target]
+    # With default 0, mood is neutral
+    mood = intel._mood(g, viewer, target)
+    assert "little away" in mood
+
+
+# --------------------------------------------------------------------------- #
+# E6 — Population term in _strength is owned
+# --------------------------------------------------------------------------- #
+
+def test_strength_population_term():
+    """Population contributes to strength. Two houses with equal treasury
+    but different population: the one with more population is stronger.
+    Mutant: line 29-30  pop // REGIMENT_POP_COST +  ->  +  (delete pop term)"""
+    g = GildedGame(seed=10)
+    houses = sorted(g.houses)
+    h1, h2 = houses[0], houses[1]
+    # Equalize treasuries
+    g.houses[h1].treasury = 1000.0
+    g.houses[h2].treasury = 1000.0
+    # Set different populations
+    for p in g.provinces_of(h1):
+        p.population = 1000
+    for p in g.provinces_of(h2):
+        p.population = 5000
+    s1 = _strength(g, h1)
+    s2 = _strength(g, h2)
+    assert s2 > s1, f"Higher population should yield higher strength: s1={s1}, s2={s2}"
+
+
+# --------------------------------------------------------------------------- #
+# E7 — Tier ceiling is 3 (behaviour, not source text)
+# --------------------------------------------------------------------------- #
+
+def test_tier_ceiling_at_3():
+    """A viewer with 4 sources is still tier 3.
+    Mutant: line 95  min(3, ...) -> min(4, ...)"""
+    g = GildedGame(seed=10)
+    houses = sorted(g.houses)
+    viewer, target = houses[0], houses[1]
+    # Force all 4 sources via patching
+    import unittest.mock
+    with unittest.mock.patch.object(intel, '_shares_border', return_value=True), \
+         unittest.mock.patch.object(intel, '_diplomatic_visibility', return_value=True), \
+         unittest.mock.patch.object(intel, '_depth_visibility', return_value=True):
+        g.informants.add((viewer, target))
+        r = intel.report(g, viewer, target)
+    assert r.tier == 3, f"Tier must cap at 3 even with 4 sources: got {r.tier}"
+    assert len(r.breakdown) == 4, f"Should list all 4 sources: {r.breakdown}"
+
+
+# --------------------------------------------------------------------------- #
+# E8 — _shares_border is owned
+# --------------------------------------------------------------------------- #
+
+def test_shares_border_distinguishes_pairs():
+    """One pair shares a border, another does not.
+    Mutant: line 36  p.neighbors & owned  ->  p.neighbors & {p.pid}
+    (target compared against itself — every House borders every other)."""
+    g = GildedGame(seed=10)
+    houses = sorted(g.houses)
+    a, b, c = houses[0], houses[1], houses[2]
+    # Clear all province ownership
+    provinces = g.atlas.provinces
+    for p in provinces.values():
+        p.owner = None
+    # Set up a border between a and b only
+    pid_list = sorted(provinces)
+    if len(pid_list) >= 2:
+        p1, p2 = provinces[pid_list[0]], provinces[pid_list[1]]
+        p1.owner = a
+        p2.owner = b
+        p1.neighbors = {p2.pid}
+        p2.neighbors = {p1.pid}
+    # a and b share a border
+    assert intel._shares_border(g, a, b), "a and b should share a border"
+    # a and c do NOT share a border
+    assert not intel._shares_border(g, a, c), \
+        "a and c should NOT share a border (c owns no provinces)"
+
+
+# --------------------------------------------------------------------------- #
+# E9 — Intrigue comparison is strict >
+# --------------------------------------------------------------------------- #
+
+def test_depth_intrigue_strict():
+    """Equal court intrigue does NOT grant depth visibility.
+    Mutant: line 72  > -> >=  (equal intrigue grants depth)"""
+    g = GildedGame(seed=10)
+    houses = sorted(g.houses)
+    viewer, target = houses[0], houses[1]
+    # Ensure realms exist
+    vrealm = g.realms.get(viewer)
+    trealm = g.realms.get(target)
+    if vrealm is None or trealm is None:
+        return
+    # Clear secrets so depth depends only on intrigue
+    trealm.ruler.secrets = []
+    # Set both courts to empty (intrigue = 0.0 for both)
+    for pos in vrealm.court.positions:
+        vrealm.court.positions[pos] = None
+    for pos in trealm.court.positions:
+        trealm.court.positions[pos] = None
+    # Equal intrigue (both 0.0) -> no depth
+    assert not intel._depth_visibility(g, viewer, target), \
+        "Equal intrigue should NOT grant depth"
+
+
+# --------------------------------------------------------------------------- #
+# E10 — _mood direction is owned
+# --------------------------------------------------------------------------- #
+
+def test_mood_direction():
+    """Warm relations -> 'warm', cold relations -> 'cold'.
+    Mutant: line 77-79  swap warm/cold branches."""
+    g = GildedGame(seed=10)
+    houses = sorted(g.houses)
+    viewer, target = houses[0], houses[1]
+    # Positive relation -> warm
+    g.houses[viewer].relations[target] = 10
+    warm_mood = intel._mood(g, viewer, target)
+    assert "warm" in warm_mood, f"Positive relations should be warm: {warm_mood}"
+    # Negative relation -> cold
+    g.houses[viewer].relations[target] = -10
+    cold_mood = intel._mood(g, viewer, target)
+    assert "cold" in cold_mood, f"Negative relations should be cold: {cold_mood}"
+
+
+# --------------------------------------------------------------------------- #
+# E11 — Hostile relations are a source
+# --------------------------------------------------------------------------- #
+
+def test_hostile_relations_grant_visibility():
+    """A hostile (negative) relation counts as diplomatic visibility.
+    Mutant: line 52  != 0 -> > 0  (only positive relations grant visibility)."""
+    g = GildedGame(seed=10)
+    houses = sorted(g.houses)
+    viewer, target = houses[0], houses[1]
+    # Ensure no marriage tie
+    assert not intel._has_marriage_tie(g, viewer, target)
+    # Set hostile relation
+    g.houses[viewer].relations[target] = -50
+    assert intel._diplomatic_visibility(g, viewer, target), \
+        "Hostile relations should grant diplomatic visibility"
