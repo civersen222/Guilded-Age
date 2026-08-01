@@ -87,6 +87,15 @@ def test_r1_just_inside_dead_zone():
     assert label_for("bold_craven", 49) is None
 
 
+def test_r2_extreme_just_below():
+    """79 is just below extreme threshold — normal label."""
+    assert label_for("bold_craven", 79) == "Craven"
+
+def test_r2_extreme_just_above():
+    """81 is just above extreme threshold — extreme label."""
+    assert label_for("bold_craven", 81) == "Spineless"
+
+
 # ===========================================================================
 # R2: WHERE THE LABEL UPGRADES TO ITS EXTREME FORM
 # ===========================================================================
@@ -167,6 +176,32 @@ def test_r3_bias_formula_at_midpoint():
     assert c2.dispositions["bold_craven"] < 50.0
 
 
+def test_r3_bias_coefficient_pinned():
+    """p_high = 0.5 + 0.3*(v/100) — test at v=33.333 gives p_high = 0.6 exactly."""
+    c = _char(dispositions={"bold_craven": 33.333333})
+    c._rng = _ctrl_rng(0.59)
+    witness_drift(c, "bold_craven", 10.0)
+    assert c.dispositions["bold_craven"] > 33.333333
+
+    c2 = _char(dispositions={"bold_craven": 33.333333})
+    c2._rng = _ctrl_rng(0.61)
+    witness_drift(c2, "bold_craven", 10.0)
+    assert c2.dispositions["bold_craven"] < 33.333333
+
+
+def test_r3_bias_formula_at_quarter():
+    """At standing +25, p_high = 0.5 + 0.3*0.25 = 0.575 — roll 0.57 gives +1, roll 0.58 gives -1."""
+    c = _char(dispositions={"bold_craven": 25.0})
+    c._rng = _ctrl_rng(0.57)
+    witness_drift(c, "bold_craven", 10.0)
+    assert c.dispositions["bold_craven"] > 25.0
+
+    c2 = _char(dispositions={"bold_craven": 25.0})
+    c2._rng = _ctrl_rng(0.58)
+    witness_drift(c2, "bold_craven", 10.0)
+    assert c2.dispositions["bold_craven"] < 25.0
+
+
 # ===========================================================================
 # R4: WHAT A GUARDIAN DOES TO A CHILD
 # ===========================================================================
@@ -179,6 +214,15 @@ def test_r4_temperament_rubs_off():
     msgs = guardian_rub_off(child, guardian)
     # delta = (100 - 0) * 0.05 = 5.0
     assert child.dispositions["bold_craven"] == 5.0
+
+
+def test_r4_rub_off_rate_pinned():
+    """RUB_OFF_RATE = 0.05 — verify exact rate with a 50-unit gap."""
+    child = _char(dispositions={"bold_craven": 0.0})
+    guardian = _char(name="Marcus", dispositions={"bold_craven": 50.0})
+    guardian_rub_off(child, guardian)
+    # delta = (50 - 0) * 0.05 = 2.5
+    assert child.dispositions["bold_craven"] == 2.5
 
 
 def test_r4_bloodline_does_not_rub_off():
@@ -221,11 +265,40 @@ def test_r5_bloodline_blends_parents():
     # Midpoint of robust_sickly = 70.0
     samples = [inherit_dispositions(parent_a, parent_b, rng) for _ in range(200)]
     mean = sum(s["robust_sickly"] for s in samples) / 200
-    assert 60.0 < mean < 80.0  # near midpoint (70), not near zero
+    assert 65.0 < mean < 75.0  # near midpoint (70), within sigma 12
 
     # Temperament is near zero even with parents at zero (no blending)
     t_mean = sum(s["bold_craven"] for s in samples) / 200
     assert abs(t_mean) < 10.0  # near zero
+
+
+def test_r5_bloodline_sigma_pinned():
+    """Bloodline inheritance sigma=12 — sample std near 12."""
+    rng = random.Random(42)
+    parent_a = {"robust_sickly": 80.0}
+    parent_b = {"robust_sickly": 60.0}
+    # Midpoint = 70.0, sigma = 12
+    samples = [inherit_dispositions(parent_a, parent_b, rng) for _ in range(1000)]
+    vals = [s["robust_sickly"] for s in samples]
+    mean = sum(vals) / 1000
+    import math
+    var = sum((v - mean)**2 for v in vals) / 1000
+    std = math.sqrt(var)
+    assert 10.5 < std < 13.5  # sigma 12, within ~12%
+
+
+def test_r5_temperament_sigma_pinned():
+    """Temperament inheritance sigma=10 — sample std near 10."""
+    rng = random.Random(42)
+    parent_a = {"bold_craven": 0.0}
+    parent_b = {"bold_craven": 0.0}
+    samples = [inherit_dispositions(parent_a, parent_b, rng) for _ in range(1000)]
+    vals = [s["bold_craven"] for s in samples]
+    mean = sum(vals) / 1000
+    import math
+    var = sum((v - mean)**2 for v in vals) / 1000
+    std = math.sqrt(var)
+    assert 8.5 < std < 11.5  # sigma 10, within ~15%
 
 
 def test_r5_temperament_ignores_extreme_parents():
@@ -262,6 +335,20 @@ def test_r5_values_clamped():
         disp = inherit_dispositions(parent_a, parent_b, rng)
         for v in disp.values():
             assert -100.0 <= v <= 100.0
+
+
+def test_r5_conviction_sigma_pinned():
+    """Conviction inheritance sigma=10 — sample std near 10."""
+    rng = random.Random(42)
+    parent_a = {"militarist_pacifist": 0.0}  # conviction spectrum
+    parent_b = {"militarist_pacifist": 0.0}
+    samples = [inherit_dispositions(parent_a, parent_b, rng) for _ in range(1000)]
+    vals = [s["militarist_pacifist"] for s in samples]
+    mean = sum(vals) / 1000
+    import math
+    var = sum((v - mean)**2 for v in vals) / 1000
+    std = math.sqrt(var)
+    assert 8.5 < std < 11.5  # sigma 10, within ~15%
 
 
 # ===========================================================================
@@ -307,6 +394,17 @@ def test_r6_multiple_conflicts_add():
         "forgiving_vengeful": 70.0,     # conflicts with show_mercy (sign +1, v >= 50)
     }
     assert contradiction_stress(disp, "show_mercy") == 60 // 5 + 70 // 5
+
+
+def test_r6_divisor_is_five():
+    """Stress divisor is exactly 5 — value 100 gives 20 stress."""
+    disp = {"cruel_compassionate": 100.0}
+    assert contradiction_stress(disp, "execute") == 20
+
+def test_r6_divisor_is_five_negative():
+    """Stress divisor is exactly 5 — value -100 gives 20 stress."""
+    disp = {"cruel_compassionate": -100.0}
+    assert contradiction_stress(disp, "show_mercy") == 20
 
 
 # ===========================================================================
@@ -364,6 +462,17 @@ def test_r7_scar_clamped_at_ceiling():
     expose_persona(c, 100.0)
     # scar = 90 + 100*0.3 = 120, clamped to 100
     assert c.persona["honest_deceitful"] == 100.0
+
+
+def test_r7_scar_rate_pinned():
+    """EXPOSE_SCAR = 0.3 — verify with potency=50, starting from zero."""
+    c = _char(
+        dispositions={"honest_deceitful": 0.0},
+        persona={"honest_deceitful": 0.0},
+    )
+    expose_persona(c, 50.0)
+    # scar = 0 + 50*0.3 = 15.0
+    assert c.persona["honest_deceitful"] == 15.0
 
 
 # ===========================================================================
@@ -488,3 +597,19 @@ def test_r9_most_in_dead_zone():
     # Count characters where bold_craven is in dead zone
     in_dead = sum(1 for s in samples if abs(s["bold_craven"]) < 50)
     assert in_dead > 100  # majority in dead zone
+
+
+def test_r9_count_is_thirty():
+    """initial_dispositions returns exactly 30 spectrums."""
+    rng = random.Random(42)
+    disp = initial_dispositions(rng)
+    assert len(disp) == 30
+
+
+def test_r9_all_clamped():
+    """All initial values stay within -100..+100."""
+    rng = random.Random(42)
+    for _ in range(1000):
+        disp = initial_dispositions(rng)
+        for v in disp.values():
+            assert -100.0 <= v <= 100.0
