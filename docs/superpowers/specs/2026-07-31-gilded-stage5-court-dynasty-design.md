@@ -34,7 +34,11 @@ their occupants. Nothing on it can be clicked. Meanwhile, underneath it:
   from the ruler's. It has a threshold, `DISLOYAL_LOYALTY = 40.0`, that fires an
   event when first crossed. **None of this number is ever shown.**
 - A global opinion matrix (`characters.py:28`, `modify_opinion` at `:333`)
-  records a reason string for every change.
+  records the numeric change for every opinion move — **but not the reason.**
+  ⚠ **Corrected 2026-07-31, see §9.1.** `modify_opinion` composes the reason into
+  a return string and mutates only `society.opinions[(a,b)]`. All **20** call
+  sites discard the return value. The reason exists for one expression's lifetime
+  and is then gone, so there is no per-character history to read.
 - Succession grievances (`relationships.py:52-73`) dock passed-over kin −15..−30
   opinion and drift them vengeful/ambitious.
 - `disloyal_shareholders()` (`realm.py:162-191`) lists exactly those realm
@@ -103,7 +107,7 @@ fifteen turns.
 | # | What | Substrate that already exists |
 |---|------|-------------------------------|
 | L1 | **Loyalty made visible** — a 0-100 meter per posted character, banded against `DISLOYAL_LOYALTY = 40` | `realm.tick_loyalty` |
-| L2 | **Why it moved** — the reason strings already recorded on every opinion change, shown as a short per-character history | `modify_opinion(.., reason)` |
+| L2 | **Why it moved** — a short per-character history of opinion changes and their reasons | ⚠ **no substrate — must be built first, see §9.1 and Wave 5A0.** `modify_opinion(.., reason)` throws the reason away |
 | L3 | **The family** — living kin, ages, parentage, who is in line | `Character.parent_ids/children_ids`, `Dynasty` |
 | L4 | **The succession preview** — who inherits if the ruler died this turn, and who would be aggrieved | `house_ai.py:46-53` selection order |
 | L5 | **Disloyal shareholders named** — the Stage-4 Grip shortfall attributed to the specific kin causing it | `realm.disloyal_shareholders` |
@@ -133,7 +137,12 @@ Following the shape that has worked three times (`dashboard.py`, `intel.py`,
 `grip.py`): a **pure read-model module**, no simulation, no `game.rng`,
 frozen dataclasses, and the UI reads only from it.
 
-**New:** `gilded/court.py`
+**New:** `gilded/peerage.py`
+
+⚠ **Renamed from `gilded/court.py` on 2026-07-31, see §9.2.** `gilded/society/court.py`
+already exists and holds `Court` and `CourtPosition` — the simulation object this
+read-model reports *on*. Two files named `court.py`, one importing the other, is a
+guaranteed misread for anyone (or anything) working from a bare filename.
 
 ```
 CourtSeat      position, holder_name, holder_id, stat, bonus, loyalty, band, vacant
@@ -177,7 +186,8 @@ Unchanged from the UI-legibility spec §9, and non-negotiable:
 
 | Wave | Content | Gate |
 |------|---------|------|
-| **5A** | `gilded/court.py` read-model + tests, no consumer | suite green; withheld sweep on `court.py` |
+| **5A0** | **The opinion ledger** — `modify_opinion` appends `(turn, other_id, delta, reason)` to a bounded per-character log instead of discarding it. Sim layer, no read-model, no UI. | suite green; a test proves a reason survives the call that made it |
+| **5A** | `gilded/peerage.py` read-model + tests, no consumer | suite green; withheld sweep on `peerage.py` |
 | **5B** | Court tab: seats, loyalty meters, kin list, succession preview | render tests read the surface, not the model |
 | **5C** | A1 appoint/dismiss wired to `court.appoint/dismiss` | the lever changes the sim, and the change is visible |
 | **5D** | A2 heir designation + succession prefers the designated heir + `_trig_heir_radicalization` reachable | a test proves the chain can now fire |
@@ -185,6 +195,12 @@ Unchanged from the UI-legibility spec §9, and non-negotiable:
 
 5A is built with **no consumer on purpose**, exactly as `widgets.py` was in the
 UI-legibility Wave 1, so it is not shaped around one screen's accident.
+
+5A0 comes **before** 5A rather than after, even though it is the less interesting
+wave, because `Kin.grievances[]` cannot be reported from a substrate that does not
+exist. Ordering it second would mean shipping `Kin` without the field and changing
+the dataclass — and every test that constructs one — a wave later. Build the shape
+once.
 
 ---
 
@@ -224,4 +240,76 @@ The player currently watches Grip on the House slip for reasons the simulation
 knows precisely and never states. After Stage 5 he can look at the man who is
 going to betray him, see the number, see the sentence explaining how it got
 there, and decide whether to buy him off with a seat. That is the difference
-between a system and a story, and the machinery for it is already written.
+between a system and a story, and the machinery for it is already written —
+with one exception, the sentence itself, which §9.1 found is thrown away.
+
+---
+
+## 9. Corrections — measured against the tree on 2026-07-31
+
+This spec was drafted from a reading of `gilded/society/`. Before any of it could
+be briefed, every substrate claim it makes was re-checked against the code rather
+than against the notes. Three were wrong. They are corrected in place above and
+recorded here, because a spec that quietly repairs itself teaches nothing about
+how much of it to trust.
+
+### 9.1 The opinion reasons are not recorded — they are discarded
+
+**Claimed** (§1, §3.1 L2, §4): every opinion change records a reason string, so a
+per-character grievance history can simply be read out.
+
+**Measured:** `modify_opinion` (`society/characters.py:333-338`) mutates
+`society.opinions[(a,b)]` with the delta and *returns* a formatted sentence
+containing the reason. Every one of its **20** call sites — 10 in `docket.py`, 4
+in `house_ai.py`, 2 in `marriages.py`, 2 in `chains_pack1.py`, plus
+`relationships.py` — discards the return value. Nothing is stored. The reason
+lives for the duration of one expression.
+
+**Why it slipped through:** the function's signature takes a `reason` parameter,
+and a parameter named `reason` reads as a thing being recorded. It is being
+*formatted*. This is the same shape as the audit's central class and as F23 —
+a name that describes an intent no code discharges — and it is the second time
+in two days that "the substrate already exists" turned out to mean "the substrate
+already has the vocabulary".
+
+**Consequence:** `Kin.grievances[]` has nothing to read. Rather than drop the
+field or let an implementer invent one, Wave **5A0** now builds the ledger first.
+Cutting L2 instead was the alternative and is worse: the grievance sentence is
+the single thing §8 says this stage is for.
+
+### 9.2 `gilded/court.py` collides with `gilded/society/court.py`
+
+**Claimed** (§4): the new read-model is `gilded/court.py`.
+
+**Measured:** `gilded/society/court.py` already exists and defines `Court` and
+`CourtPosition` — the simulation object the read-model would report on and import
+from. Two files with the same basename, one importing the other, addressed by
+bare filename in briefs and gates. Renamed to `gilded/peerage.py`.
+
+### 9.3 Path and line citations
+
+The draft cites `realm.py`, `characters.py`, `house_ai.py` and `court.py` as
+though they sat at `gilded/`. They are all under `gilded/society/`; the read-model
+layer at `gilded/*.py` is a separate tier (`grip.py` imports *from*
+`gilded.society.realm`). Succession is `society/house_ai.py:43-60`, not `46-53`.
+The rule it implements is unchanged and as described: oldest living adult kin,
+`is_heir` never consulted.
+
+### 9.4 What re-checking did *not* overturn
+
+Stated so the corrections above are not read as a verdict on the whole draft:
+`DISLOYAL_LOYALTY = 40.0` and `LOYALTY_START = 50.0` (`society/realm.py:158`,
+`:119`) are as described; `tick_loyalty` and `disloyal_shareholders` exist and
+behave as claimed; `grip.BANDS` is weakest-first at `grip.py:19`;
+`Court.appoint(position, character, turn) -> bool` and
+`Court.dismiss(position) -> Optional[Character]` exist with no UI caller;
+`Character.is_heir` is assigned `False` at `characters.py:143` and **assigned
+nowhere else in the repository**, so §1.2's claim that `_trig_heir_radicalization`
+(`chains_pack1.py:50`) can never fire is exact.
+
+### 9.5 Status is unchanged
+
+These corrections make the spec accurate. They do not make it approved. The gate
+in the header stands: §7's four questions are taste, taste is the one thing the
+measurement loop cannot settle, and no Stage 5 wave — **including 5A0 and 5A,
+which no open question touches** — is briefed until the user has read this.
