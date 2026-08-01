@@ -279,14 +279,17 @@ def test_share_price_both_sides_of_base():
 def test_advance_uses_game_not_flat_rate():
     """advance() requires a game argument and charges the priced rate."""
     game = GildedGame(seed=42)
-    for _ in range(3):
+    for _ in range(4):
         game.end_turn()
     target_house = sorted(game.houses)[0]
     buyer_house = sorted(game.houses)[1]
     buyer = game.realms[buyer_house].ruler
     buyer.gold_reserve = 1000.0
+    gold_before = buyer.gold_reserve
     tk = Takeover(buyer, buyer_house, target_house)
     target_ents = [e for e in game.enterprises if e.house == target_house]
-    if target_ents:
-        tk.advance(game.realms, target_ents, SeqRng([]), game)
-        # should not raise
+    assert len(target_ents) >= 1, f"Expected at least one enterprise for {target_house}"
+    tk.advance(game.realms, target_ents, SeqRng([]), game)
+    # advance charges the priced rate — buyer should have spent gold
+    assert buyer.gold_reserve < gold_before, \
+        f"Buyer gold unchanged ({gold_before}): advance should charge the priced rate"
