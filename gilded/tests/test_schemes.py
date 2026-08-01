@@ -9,12 +9,9 @@ from gilded.society.characters import Secret, SocietyState
 from gilded.society.ideology import IdeologicalTide
 from gilded.society.realm import create_house_realm
 from gilded.society.schemes import (
-    BLACKMAIL_SHARE_PCT,
     Conspiracy,
-    SCHEME_THRESHOLD,
     SchemeManager,
     Takeover,
-    TAKEOVER_PRICE,
     share_price,
     blackmail,
     compromise,
@@ -77,7 +74,7 @@ def test_assassination_success_marks_succession():
     ra, rb, realms = _two_realms(92)
     mgr = SchemeManager()
     s = mgr.start_scheme(ra.characters[10], rb.ruler, "assassination", "Karsgate")
-    s.progress = SCHEME_THRESHOLD - 1
+    s.progress = 99
     msgs = mgr.advance_all(realms, {}, SeqRng([0.99, 0.0]))
     assert not rb.ruler.is_alive
     assert ("ruler_dead", "Karsgate") in mgr.pending_successions
@@ -90,7 +87,7 @@ def test_coup_success_seats_the_agent():
     old_ruler = rb.ruler
     agent = next(ch for ch in rb.court.positions.values() if ch is not None)
     s = mgr.start_scheme(agent, old_ruler, "coup", "Karsgate")
-    s.progress = SCHEME_THRESHOLD - 1
+    s.progress = 99
     mgr.advance_all(realms, {}, SeqRng([0.99, 0.0]))
     assert rb.ruler is agent and rb.court.ruler is agent
     assert agent not in rb.court.positions.values()
@@ -135,8 +132,8 @@ def test_blackmail_extorts_shares():
     ent = Enterprise(eid=1, kind="bank", name="K Bank", house="Karsgate", province=0)
     ent.ledger = {victim.id: 40.0}
     msgs = blackmail(agent, secret, victim, rb, [ent], SeqRng([0.99]))
-    assert ent.ledger[agent.id] == BLACKMAIL_SHARE_PCT
-    assert ent.ledger[victim.id] == 40.0 - BLACKMAIL_SHARE_PCT
+    assert ent.ledger[agent.id] == 10.0
+    assert ent.ledger[victim.id] == 30.0
     assert any("turns the screw" in m for m in msgs)
     bluff = blackmail(agent, secret, victim, rb, [ent], SeqRng([0.0]))
     assert any("calls the bluff" in m for m in bluff)
@@ -259,8 +256,8 @@ def test_share_price_bounded():
     game = GildedGame(seed=42)
     for _ in range(3):
         game.end_turn()
-    lo = TAKEOVER_PRICE * 0.25
-    hi = TAKEOVER_PRICE * 4.0
+    lo = 0.5
+    hi = 8.0
     prices = [share_price(e, game) for e in game.enterprises]
     assert all(lo - 1e-9 <= p <= hi + 1e-9 for p in prices)
 
@@ -270,8 +267,8 @@ def test_share_price_both_sides_of_base():
     for _ in range(3):
         game.end_turn()
     prices = [share_price(e, game) for e in game.enterprises]
-    above = [p for p in prices if p > TAKEOVER_PRICE + 1e-9]
-    below = [p for p in prices if p < TAKEOVER_PRICE - 1e-9]
+    above = [p for p in prices if p > 2.0 + 1e-9]
+    below = [p for p in prices if p < 2.0 - 1e-9]
     assert above, "no venture prices above the base rate"
     assert below, "no venture prices below the base rate"
 

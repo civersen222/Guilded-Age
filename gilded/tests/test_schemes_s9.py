@@ -133,6 +133,41 @@ def test_assassination_stops_age_progress():
 
 
 # ----------------------------------------------------------------------- R5
+# ----------------------------------------------------------------------- C1
+def test_blackmail_extorts_10_percent():
+    """C1: A blackmailer extorts exactly 10% of every enterprise stake the victim holds.
+
+    B1: share_price scales the base price by market value over the reference.
+    The percentage is 10.0 — write the number the game is supposed to produce.
+    Construct a victim holding more than 10% in multiple enterprises so the
+    rule is legible (transfer_shares uses min(pct, held)).
+    """
+    from gilded.enterprises import Enterprise
+    ra, rb, realms = _two_realms(42)
+    agent = ra.ruler
+    victim = rb.ruler
+    secret = Secret("compromise", victim.id, f"{victim.name} was compromised", 20)
+    secret.holders.add(agent.id)
+
+    # Two enterprises where the victim holds more than 10%
+    ent1 = Enterprise(eid=1, kind="bank", name="K Bank", house="Karsgate", province=0)
+    ent1.ledger = {victim.id: 40.0}
+    ent2 = Enterprise(eid=2, kind="farm", name="K Farm", house="Karsgate", province=0)
+    ent2.ledger = {victim.id: 60.0}
+
+    msgs = blackmail(agent, secret, victim, rb, [ent1, ent2], SeqRng([0.99]))
+
+    # Blackmailer received exactly 10% from each stake
+    assert ent1.ledger.get(agent.id, 0.0) == 10.0, \
+        f"Agent should hold 10.0 in ent1, got {ent1.ledger.get(agent.id, 0.0)}"
+    assert ent1.ledger.get(victim.id, 0.0) == 30.0, \
+        f"Victim should hold 30.0 in ent1, got {ent1.ledger.get(victim.id, 0.0)}"
+    assert ent2.ledger.get(agent.id, 0.0) == 10.0, \
+        f"Agent should hold 10.0 in ent2, got {ent2.ledger.get(agent.id, 0.0)}"
+    assert ent2.ledger.get(victim.id, 0.0) == 50.0, \
+        f"Victim should hold 50.0 in ent2, got {ent2.ledger.get(victim.id, 0.0)}"
+
+
 def test_blackmail_refuses_agent_without_secret():
     """blackmail REFUSES when the agent does not hold the secret."""
     ra, rb, realms = _two_realms(42)
@@ -395,10 +430,13 @@ def test_share_price_for_worthless_enterprise():
 
 # ----------------------------------------------------------------------- R13 (B5)
 def test_takeover_max_shares_per_turn():
-    """B5: A takeover buys at most TAKEOVER_TRANCHE (15.0) percent per enterprise per seller per turn.
+    """C2: A takeover buys at most 15.0 percent per enterprise per seller per turn.
 
-    Run a takeover with a buyer rich enough that gold is not the constraint,
-    and assert the shares transferred per enterprise does not exceed 15.0.
+    The bound is read inside Takeover.advance — drive the caller, not the
+    transfer.  A seller must hold MORE than 15 so the bound binds, not the
+    holding.  The buyer must be rich enough that gold is not the constraint.
+    Assert the disloyal seller is in the list before advancing, and check the
+    ledger afterwards.
     """
     g = GildedGame(seed=42)
     for _ in range(5):
@@ -426,20 +464,56 @@ def test_takeover_max_shares_per_turn():
     assert target_realm is not None
 
     buyer = buyer_realm.ruler
-    buyer.gold_reserve = 10000  # rich enough
+    buyer.gold_reserve = 10000  # rich enough that gold never binds
 
+    from gilded.society.realm import disloyal_shareholders
     from gilded.society.schemes import Takeover
+
+    target_ents = [e for e in g.enterprises if e.house == target_house]
+    sellers = disloyal_shareholders(target_realm, g.enterprises)
+    assert len(sellers) > 0, "Need at least one disloyal shareholder"
+
+    # Construct: give the first seller a 50% stake in a target enterprise
+    # so the bound (15.0) binds, not the holding
+    seller = sellers[0]
+    ent = target_ents[0]
+    ent.ledger[seller.id] = 50.0
+    # Remove the stake from whoever else held it to keep ledger at 100
+    other_holders = {k: v for k, v in ent.ledger.items() if k != seller.id}
+    total_other = sum(other_holders.values())
+    if total_other > 0:
+        # Scale others down to sum to 50
+        scale = 50.0 / total_other
+        for k in other_holders:
+            ent.ledger[k] = other_holders[k] * scale
+    else:
+        ent.ledger[buyer.id] = 50.0
+
+    # Assert seller is disloyal before advancing
+    assert seller in disloyal_shareholders(target_realm, g.enterprises)
+
+    before_shares = buyer.base_stats.get("shares", {})
+    buyer_before = ent.ledger.get(buyer.id, 0.0)
+
     to = Takeover(buyer, buyer_house, target_house)
     msgs = to.advance(g.realms, g.enterprises, g.rng, g)
-    # The scheme may or may not complete — but it ran
+
+    buyer_after = ent.ledger.get(buyer.id, 0.0)
+    transferred = buyer_after - buyer_before
+    # At most 15.0 percent transferred per enterprise per seller
+    assert transferred <= 15.0 + 1e-9, \
+        f"Transfer {transferred:.2f} exceeds 15.0 bound"
 
 
 # ----------------------------------------------------------------------- R14
 def test_sway_cap_upper_bound():
-    """B3: The sway cap cannot exceed 0.95 — pin the upper direction.
+    """C3: The sway success chance is capped at 0.95 — pin the upper direction.
 
-    Even with enormous statecraft (100), the chance stays at 0.95.
-    A roll of 0.96 should fail.
+    The gate is rng.random() < chance (strictly less-than).  A roll exactly
+    equal to a raised ceiling would fail both (strict < fails on equality),
+    so the test must pick a roll STRICTLY BETWEEN the true cap (0.95) and the
+    candidate it is ruling out.  Roll 0.951: succeeds under a cap of 0.951+,
+    fails under the true cap of 0.95.
     """
     ra, rb, realms = _two_realms(42)
     target = rb.ruler
@@ -452,9 +526,10 @@ def test_sway_cap_upper_bound():
     assert agent.get_effective_stat("statecraft") == 100
 
     # chance = min(0.95, 0.6 + 100*0.01) = min(0.95, 1.60) = 0.95
-    msgs = sway(agent, target, SeqRng([0.96]))
+    # Roll 0.951 is strictly > 0.95 but < any plausible raised ceiling
+    msgs = sway(agent, target, SeqRng([0.951]))
     assert any("sees through" in m for m in msgs), \
-        f"Should fail with roll 0.96 vs capped chance 0.95: {msgs}"
+        f"Should fail with roll 0.951 vs capped chance 0.95: {msgs}"
 
 
 # ----------------------------------------------------------------------- R15
