@@ -27,7 +27,7 @@ def test_informant_raises_tier_and_lists_source():
     base = report(g, a, b).tier
     g.informants.add((a, b))
     r = report(g, a, b)
-    assert r.tier >= base
+    assert r.tier > base
     assert "informant in place" in r.breakdown
 
 
@@ -46,8 +46,8 @@ def test_tier0_hides_intent():
     g = GildedGame(seed=8)
     a, b = _two_houses(g)
     r = report(g, a, b)
-    if r.tier == 0:
-        assert "unknown" in r.apparent_intent.lower()
+    assert r.tier == 0
+    assert "unknown" in r.apparent_intent.lower()
 
 
 def test_threat_rank_orders_player_targeter_first():

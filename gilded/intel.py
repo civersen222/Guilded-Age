@@ -41,7 +41,7 @@ def _shares_border(game, viewer: str, target: str) -> bool:
 def _has_marriage_tie(game, viewer: str, target: str) -> bool:
     for tie in getattr(game.marriages, "marriages", []):
         # tie is the bare 4-tuple (char_a, house_a, char_b, house_b)
-         if len(tie) >= 4 and {tie[1], tie[3]} == {viewer, target}:
+        if len(tie) >= 4 and {tie[1], tie[3]} == {viewer, target}:
             return True
     return False
 
