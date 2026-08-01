@@ -287,6 +287,11 @@ def test_r6_threshold_exact():
     disp = {"cruel_compassionate": 50.0}
     assert contradiction_stress(disp, "execute") == 10
 
+def test_r6_just_below_threshold_no_stress():
+    """Character at +49 is below threshold — no stress."""
+    disp = {"cruel_compassionate": 49.0}
+    assert contradiction_stress(disp, "execute") == 0
+
 
 def test_r6_rounding_floors_remainder():
     """Distance 53 gives 53/5 = 10.6, returned as int 10."""
@@ -450,28 +455,28 @@ def test_r9_bloodline_tighter_than_temperament():
 
 def test_r9_bloodline_spread_pinned():
     """Bloodline sigma=20 — sample std near 20.
-    200 samples gives ~10% precision on std estimate."""
+    1000 samples gives ~3% precision on std estimate."""
     rng = random.Random(42)
-    samples = [initial_dispositions(rng) for _ in range(200)]
+    samples = [initial_dispositions(rng) for _ in range(1000)]
     bl_vals = [s["robust_sickly"] for s in samples]
-    mean = sum(bl_vals) / 200
-    var = sum((v - mean)**2 for v in bl_vals) / 200
+    mean = sum(bl_vals) / 1000
+    var = sum((v - mean)**2 for v in bl_vals) / 1000
     import math
     std = math.sqrt(var)
-    assert 15.0 < std < 25.0  # sigma 20, within 25%
+    assert 18.0 < std < 22.0  # sigma 20, within 10%
 
 
 def test_r9_temperament_spread_pinned():
     """Temperament sigma=30 — sample std near 30.
-    200 samples gives ~10% precision on std estimate."""
+    1000 samples gives ~3% precision on std estimate."""
     rng = random.Random(42)
-    samples = [initial_dispositions(rng) for _ in range(200)]
+    samples = [initial_dispositions(rng) for _ in range(1000)]
     t_vals = [s["bold_craven"] for s in samples]
-    mean = sum(t_vals) / 200
-    var = sum((v - mean)**2 for v in t_vals) / 200
+    mean = sum(t_vals) / 1000
+    var = sum((v - mean)**2 for v in t_vals) / 1000
     import math
     std = math.sqrt(var)
-    assert 25.0 < std < 35.0  # sigma 30, within 20%
+    assert 28.0 < std < 32.0  # sigma 30, within ~7%
 
 
 def test_r9_most_in_dead_zone():
