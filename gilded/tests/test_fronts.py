@@ -2,6 +2,7 @@
 
 import random
 
+import pytest
 from gilded.chassis import GildedGame
 from gilded.fronts import (Front, War, WarGoal, allocate, appoint, declare_war,
                            raise_regiments, resolve_front, supply, tick_wars)
@@ -256,6 +257,108 @@ def test_r2_temperament_bar_exactly_on_threshold():
     resolve_front(g, war, front)
     # Bold >= 33.0 should widen lo: window is (0.8 - 0.05, 1.2) = (0.75, 1.2)
     assert g.rng.windows[0] == (0.75, 1.2)
+
+
+def test_r2_craven_on_threshold():
+    """bold_craven = -33.0 exactly on the bar widens hi by TEMPERAMENT_SHIFT."""
+    g = _game()
+    g.rng = MidpointRng()
+    war = _war(g)
+    front = war.fronts[0]
+    commander = g.realms[war.aggressor].ruler
+    # bold_craven = -33.0: bold <= -33.0 branch -> hi += 0.05
+    commander.dispositions["bold_craven"] = -33.0
+    commander.dispositions["patient_impulsive"] = 0.0
+    allocate(war, front, war.aggressor, 3)
+    appoint(war, front, war.aggressor, commander)
+    resolve_front(g, war, front)
+    # Window: (0.8, 1.2 + 0.05) = (0.8, 1.25)
+    assert g.rng.windows[0] == (0.8, 1.25)
+
+
+def test_r2_craven_one_point_inside():
+    """bold_craven = -32.9 is inside the bar — no colouring."""
+    g = _game()
+    g.rng = MidpointRng()
+    war = _war(g)
+    front = war.fronts[0]
+    commander = g.realms[war.aggressor].ruler
+    # bold_craven = -32.9: |bold| < 33.0 -> no branch triggered
+    commander.dispositions["bold_craven"] = -32.9
+    commander.dispositions["patient_impulsive"] = 0.0
+    allocate(war, front, war.aggressor, 3)
+    appoint(war, front, war.aggressor, commander)
+    resolve_front(g, war, front)
+    # Window should be uncoloured: (0.8, 1.2)
+    assert g.rng.windows[0] == (0.8, 1.2)
+
+
+def test_r2_impulsive_on_threshold():
+    """patient_impulsive = 33.0 exactly on the bar widens both ends."""
+    g = _game()
+    g.rng = MidpointRng()
+    war = _war(g)
+    front = war.fronts[0]
+    commander = g.realms[war.aggressor].ruler
+    # patient_impulsive = 33.0: temper >= 33.0 -> lo -= 0.05, hi += 0.05
+    commander.dispositions["bold_craven"] = 0.0
+    commander.dispositions["patient_impulsive"] = 33.0
+    allocate(war, front, war.aggressor, 3)
+    appoint(war, front, war.aggressor, commander)
+    resolve_front(g, war, front)
+    # Window: (0.8 - 0.05, 1.2 + 0.05) = (0.75, 1.25)
+    assert g.rng.windows[0] == (0.75, 1.25)
+
+
+def test_r2_impulsive_one_point_inside():
+    """patient_impulsive = 32.9 is inside the bar — no colouring."""
+    g = _game()
+    g.rng = MidpointRng()
+    war = _war(g)
+    front = war.fronts[0]
+    commander = g.realms[war.aggressor].ruler
+    # patient_impulsive = 32.9: temper < 33.0 -> no branch triggered
+    commander.dispositions["bold_craven"] = 0.0
+    commander.dispositions["patient_impulsive"] = 32.9
+    allocate(war, front, war.aggressor, 3)
+    appoint(war, front, war.aggressor, commander)
+    resolve_front(g, war, front)
+    # Window should be uncoloured: (0.8, 1.2)
+    assert g.rng.windows[0] == (0.8, 1.2)
+
+
+def test_r2_patient_on_threshold():
+    """patient_impulsive = -33.0 exactly on the bar narrows both ends."""
+    g = _game()
+    g.rng = MidpointRng()
+    war = _war(g)
+    front = war.fronts[0]
+    commander = g.realms[war.aggressor].ruler
+    # patient_impulsive = -33.0: temper <= -33.0 -> lo += 0.05, hi -= 0.05
+    commander.dispositions["bold_craven"] = 0.0
+    commander.dispositions["patient_impulsive"] = -33.0
+    allocate(war, front, war.aggressor, 3)
+    appoint(war, front, war.aggressor, commander)
+    resolve_front(g, war, front)
+    # Window: (0.8 + 0.05, 1.2 - 0.05) — 0.8+0.05 is not exactly 0.85 in binary float
+    assert g.rng.windows[0] == pytest.approx((0.85, 1.15))
+
+
+def test_r2_patient_one_point_inside():
+    """patient_impulsive = -32.9 is inside the bar — no colouring."""
+    g = _game()
+    g.rng = MidpointRng()
+    war = _war(g)
+    front = war.fronts[0]
+    commander = g.realms[war.aggressor].ruler
+    # patient_impulsive = -32.9: |temper| < 33.0 -> no branch triggered
+    commander.dispositions["bold_craven"] = 0.0
+    commander.dispositions["patient_impulsive"] = -32.9
+    allocate(war, front, war.aggressor, 3)
+    appoint(war, front, war.aggressor, commander)
+    resolve_front(g, war, front)
+    # Window should be uncoloured: (0.8, 1.2)
+    assert g.rng.windows[0] == (0.8, 1.2)
 
 
 def test_r2_temperament_bar_one_point_inside():

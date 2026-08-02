@@ -23,9 +23,8 @@ WAR_SCORE_WIN = 100.0
 DICE_LO = 0.8                  # base battle-luck window
 DICE_HI = 1.2
 TEMPERAMENT_BAR = 33.0         # |disposition| that colors a commander's dice
-TEMPERAMENT_SHIFT = 0.05       # dice window shift per temperament rule
+TEMPERAMENT_SHIFT = 0.05
 COMMAND_DIV = 30.0             # cmd multiplier = 1 + command/this
-CLASH_RULES = 9                # R1–R9: nine rules of the clash
 ADVANCE_EDGE = 1.1             # power ratio needed to push the line
 LINE_STEP = 0.25
 ENTRENCH_DEFENSE = 0.2         # defender power bonus per entrenchment level
