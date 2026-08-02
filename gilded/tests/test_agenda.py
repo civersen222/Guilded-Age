@@ -371,8 +371,7 @@ def test_r6_richest_rival_never_self():
     h = "Mordaine"
     result = _richest_rival(g, h)
     assert result != h
-    if result is not None:
-        assert result == "Duval-Corse"
+    assert result == "Duval-Corse"
 
 
 # --- R7: _best_relations excludes Houses at war with -----------------------

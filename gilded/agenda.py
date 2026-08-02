@@ -15,9 +15,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
+from gilded.fronts import REGIMENT_POP_COST
 from gilded.intel import _has_marriage_tie
-
-_REGIMENT_POP_COST = 5  # thousands of workforce per regiment (from fronts)
 
 COMMIT_TURNS = 10          # a goal is held this long before re-evaluation
 
@@ -62,7 +61,7 @@ def _stat(realm, name: str) -> float:
 
 def _strength(game, house_name: str) -> float:
     pop = sum(p.population for p in game.provinces_of(house_name))
-    return pop // _REGIMENT_POP_COST + game.houses[house_name].treasury
+    return pop // REGIMENT_POP_COST + game.houses[house_name].treasury
 
 
 def _bordering(game, house_name: str) -> List[str]:
