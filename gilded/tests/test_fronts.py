@@ -593,6 +593,46 @@ def test_r8_defender_advances_same_step():
     assert front.line == -0.25
 
 
+def test_r7_attacker_edge_at_bar_holds():
+    """Attacker power exactly 1.1x defender (11v10) → line holds, both dig in.
+
+    At ADVANCE_EDGE = 1.1, 11.0 > 10.0 * 1.1 is False (11.0 > 11.0 is False).
+    This pins the bar from below — any threshold <= 1.1 would let this advance."""
+    g = _game()
+    g.rng = MidpointRng()
+    war = _war(g)
+    front = war.fronts[0]
+    front.attacker_regiments = 11
+    front.defender_regiments = 10
+    front.entrenchment_a = 0
+    front.entrenchment_d = 0
+    front.line = 0.0
+    resolve_front(g, war, front)
+    assert front.line == 0.0
+    assert front.entrenchment_a == 1
+    assert front.entrenchment_d == 1
+
+
+def test_r7_defender_edge_at_bar_holds():
+    """Defender power exactly 1.1x attacker (10v11) → line holds, both dig in.
+
+    At ADVANCE_EDGE = 1.1, 11.0 > 10.0 * 1.1 is False (11.0 > 11.0 is False).
+    This pins the bar from below for the defender side."""
+    g = _game()
+    g.rng = MidpointRng()
+    war = _war(g)
+    front = war.fronts[0]
+    front.attacker_regiments = 10
+    front.defender_regiments = 11
+    front.entrenchment_a = 0
+    front.entrenchment_d = 0
+    front.line = 0.0
+    resolve_front(g, war, front)
+    assert front.line == 0.0
+    assert front.entrenchment_a == 1
+    assert front.entrenchment_d == 1
+
+
 # --- R9: empty theatre does nothing ----------------------------------------
 
 def test_r9_empty_theatre():
