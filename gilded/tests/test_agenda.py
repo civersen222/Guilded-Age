@@ -290,6 +290,42 @@ def test_r5_marriageable_at_16():
         assert False, "No non-ruler character found"
 
 
+def test_r5_marriageable_excludes_dead():
+    """_marriageable returns False when all non-ruler kin are dead.
+
+    Kills the mutation that drops `c.is_alive` from the comprehension."""
+    g = _fixture_game()
+    realm = g.realms["Ferrenholt"]
+    ruler = realm.ruler
+    changed = {}
+    for cid, c in realm.dynasty.all_characters.items():
+        if c.id != ruler.id:
+            changed[cid] = (c.is_alive, c.age)
+            c.is_alive = False
+            c.age = 20
+    # All non-ruler kin dead and over 16 → not marriageable
+    assert _marriageable(realm, ruler) is False
+    for cid, (alive, age) in changed.items():
+        realm.dynasty.all_characters[cid].is_alive = alive
+        realm.dynasty.all_characters[cid].age = age
+
+
+def test_r5_marriageable_threshold_is_16():
+    """Age 16 is marriageable; kills the mutation `c.age >= 17`."""
+    g = _fixture_game()
+    realm = g.realms["Ferrenholt"]
+    ruler = realm.ruler
+    changed = {}
+    for cid, c in realm.dynasty.all_characters.items():
+        if c.id != ruler.id and c.is_alive:
+            changed[cid] = c.age
+            c.age = 16
+    # All living kin exactly 16 → marriageable under >= 16, not under >= 17
+    assert _marriageable(realm, ruler) is True
+    for cid, age in changed.items():
+        realm.dynasty.all_characters[cid].age = age
+
+
 def test_r5_marriageable_not_at_17():
     """A living relative aged 17 IS marriageable (threshold is 16, not 18).
 
@@ -324,22 +360,36 @@ def test_r6_richest_rival_is_most_enterprises():
 
 
 def test_r6_richest_rival_never_self():
-    """_richest_rival never names our own House."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    assert _richest_rival(g, h) != h
+    """_richest_rival never names our own House, even when we hold the most enterprises.
+
+    Uses seed 5, turn 15, Mordaine — Mordaine holds 4 enterprises vs 3 for
+    Duval-Corse, so counting self would return Mordaine.
+    Kills the mutation that drops the `e.house != house_name` self-exclusion."""
+    g = GildedGame(seed=5)
+    while g.turn < 15:
+        g.end_turn()
+    h = "Mordaine"
+    result = _richest_rival(g, h)
+    assert result != h
+    if result is not None:
+        assert result == "Duval-Corse"
 
 
 # --- R7: _best_relations excludes Houses at war with -----------------------
 
 def test_r7_best_relations_excludes_at_war():
-    """_best_relations never picks a House we are at war with."""
+    """_best_relations never picks a House we are at war with.
+
+    Kills the mutation that drops the war filter from the suitor list.
+    Declares war on Brandtner (best relations) — correct code returns Ashworth."""
     g = _fixture_game()
     h = "Ferrenholt"
+    # Ferrenholt's relations: Brandtner 28, Ashworth 26, ...
+    # Brandtner is the best — but if we're at war with them, it must be excluded
+    g.houses[h].at_war_with.add("Brandtner")
     best = _best_relations(g, h)
+    assert best == "Ashworth"
     assert best not in g.houses[h].at_war_with
-    # At turn 13 Ferrenholt is not at war, so best == Brandtner
-    assert best == "Brandtner"
 
 
 # --- R8: _strongest_rival names the strongest -----------------------------
