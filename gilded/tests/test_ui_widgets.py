@@ -295,6 +295,9 @@ def test_table_empty_data():
     rect = pygame.Rect(0, 0, 200, 100)
     lay = tbl.layout(rect)
     tbl.draw(_surf(200, 100), rect)
+    # Empty table still lays out its columns — header rects present, no row rects
+    assert len(lay.header_rects) == 2
+    assert len(lay.row_rects) == 0
 
 
 # ── Meter ────────────────────────────────────────────────────────────────────
@@ -422,6 +425,9 @@ def test_meter_lo_eq_hi():
     m = widgets.Meter("Same", 5, 5, 5)
     f = m.fraction()
     lay = m.layout(pygame.Rect(0, 0, 200, 40))
+    # When lo == hi the fraction returns 1.0 (full), not NaN or an exception
+    assert 0.0 <= f <= 1.0
+    assert f == 1.0
 
 
 # ── Chip ─────────────────────────────────────────────────────────────────────
