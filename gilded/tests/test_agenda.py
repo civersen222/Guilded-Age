@@ -13,7 +13,8 @@ from gilded.agenda import (Goal, FAMILIES, ensure_agenda, select_goal,
                            goal_domain, goal_initiative,
                            _weakest_neighbor, _richest_rival, _best_relations,
                            _strongest_rival, _stat, _strength, _bordering,
-                           _marriageable, _target_for)
+                           _marriageable, _target_for, _score_family,
+                           _worst_province, _why, _found_spot)
 
 
 def _ai_house(g):
@@ -449,3 +450,247 @@ def test_r9_target_for_consolidation():
     g = _fixture_game()
     h = "Ferrenholt"
     assert _target_for(g, h, "Consolidation") is None
+
+
+# =============================================================================
+# WAVE 13 — eleven scoring and tiebreak rules (R1-R11)
+# =============================================================================
+
+# --- R1 & R2: FAMILIES order and tiebreak toward earlier family ---------------
+
+def test_r12_families_tiebreak_conquest_wins_over_dominion():
+    """When Conquest and Dominion score equally, Conquest wins because it
+    appears first in FAMILIES.  Closes R1 (order) and R2 (positive index).
+
+    Builds a tie at 23.0 for Ferrenholt by tuning dispositions, then asserts
+    both the tie and the winner."""
+    g = _fixture_game()
+    h = "Ferrenholt"
+    realm = g.realms[h]
+    ruler = realm.ruler
+
+    # Build the tie: Conquest = Dominion = 23.0, all others far below
+    ruler.dispositions["ambitious_content"] = 0.0
+    ruler.dispositions["bold_craven"] = -500.0
+    ruler.dispositions["labor_capital"] = -500.0
+    ruler.dispositions["patient_impulsive"] = -500.0
+    ruler.dispositions["honest_deceitful"] = 500.0
+    ruler.dispositions["militarist_pacifist"] = 3.0
+
+    conquest_score = _score_family(g, h, "Conquest", ruler, realm)
+    dominion_score = _score_family(g, h, "Dominion", ruler, realm)
+    assert conquest_score == dominion_score, \
+        f"Expected tie at 23.0, got Conquest={conquest_score}, Dominion={dominion_score}"
+
+    goal = select_goal(g, h)
+    assert goal is not None
+    assert goal.family == "Conquest", \
+        f"Expected Conquest to win the tie (R1/R2), got {goal.family}"
+
+
+# --- R3: Conquest petition domain is "war" -----------------------------------
+
+def test_r3_conquest_domain_is_war():
+    """Conquest family's petition domain is the literal string 'war'."""
+    g = _fixture_game()
+    h = "Ferrenholt"
+    goal = select_goal(g, h)
+    # Force a Conquest goal by tuning dispositions
+    g.realms[h].ruler.dispositions["militarist_pacifist"] = 500.0
+    g.realms[h].ruler.dispositions["ambitious_content"] = -500.0
+    g.realms[h].ruler.dispositions["bold_craven"] = -500.0
+    g.realms[h].ruler.dispositions["labor_capital"] = -500.0
+    g.realms[h].ruler.dispositions["patient_impulsive"] = -500.0
+    g.realms[h].ruler.dispositions["honest_deceitful"] = 500.0
+    goal = select_goal(g, h)
+    assert goal is not None
+    assert goal.family == "Conquest"
+    assert goal_domain(goal) == "war"
+
+
+# --- R4: Consolidation petition domain is "labor" ----------------------------
+
+def test_r4_consolidation_domain_is_labor():
+    """Consolidation family's petition domain is the literal string 'labor'."""
+    g = _fixture_game()
+    h = "Ferrenholt"
+    # Make Consolidation win: sink all other families
+    ruler = g.realms[h].ruler
+    ruler.dispositions["ambitious_content"] = -500.0
+    ruler.dispositions["bold_craven"] = -500.0
+    ruler.dispositions["militarist_pacifist"] = -500.0
+    ruler.dispositions["labor_capital"] = -500.0
+    ruler.dispositions["patient_impulsive"] = -500.0
+    ruler.dispositions["honest_deceitful"] = 500.0
+    # Strip land so Consolidation = 0.0 (paranoid_trusting always 0 + unrest 0.0)
+    owned = [p for p in g.atlas.provinces.values() if p.owner == h]
+    for p in owned:
+        p.owner = None
+    goal = select_goal(g, h)
+    assert goal is not None
+    assert goal.family == "Consolidation"
+    assert goal_domain(goal) == "labor"
+
+
+# --- R5: Dominion backed by industry, not intrigue ---------------------------
+
+def test_r5_dominion_backed_by_industry():
+    """Dominion family uses the court's INDUSTRY stat, not intrigue.
+
+    Uses Brandtner at the base fixture where industry=11, intrigue=13,
+    and _found_spot returns None (no +10). With ambitious_content=0,
+    Dominion should score 11.0 (industry), not 13.0 (intrigue).
+    """
+    g = _fixture_game()
+    h = "Brandtner"
+    realm = g.realms[h]
+    ruler = realm.ruler
+
+    # Assert premise: industry != intrigue at Brandtner
+    industry = _stat(realm, "industry")
+    intrigue = _stat(realm, "intrigue")
+    assert industry != intrigue, "Fixture premise broken: industry == intrigue"
+    assert industry == 11
+    assert intrigue == 13
+
+    # Assert premise: no found spot (no +10 bonus)
+    assert _found_spot(g, h) is None
+
+    ruler.dispositions["ambitious_content"] = 0.0
+    score = _score_family(g, h, "Dominion", ruler, realm)
+    assert score == 11.0, f"Dominion should score industry (11.0), got {score}"
+
+
+# --- R6: Buyout penalty when no rival exists ---------------------------------
+
+def test_r6_buyout_no_rival_is_penalty():
+    """Having NO rival to buy into is a PENALTY of -40.0, not a bonus.
+
+    Straddles both branches: scores Buyout with a rival present, then removes
+    all rivals and asserts the gap is exactly -50.0 (10 - (-40))."""
+    g = _fixture_game()
+    h = "Ferrenholt"
+    realm = g.realms[h]
+    ruler = realm.ruler
+
+    ruler.dispositions["labor_capital"] = 0.0
+    ruler.dispositions["ambitious_content"] = -500.0
+    ruler.dispositions["bold_craven"] = -500.0
+    ruler.dispositions["militarist_pacifist"] = -500.0
+    ruler.dispositions["patient_impulsive"] = -500.0
+    ruler.dispositions["honest_deceitful"] = 500.0
+
+    # With rival present: score = intrigue + labor_capital + 10
+    rival = _richest_rival(g, h)
+    assert rival is not None
+    score_with_rival = _score_family(g, h, "Buyout", ruler, realm)
+
+    # Remove all rivals' enterprises
+    kept = list(g.enterprises)
+    g.enterprises[:] = [e for e in kept if e.house == h]
+    assert _richest_rival(g, h) is None
+
+    # Without rival: score = intrigue + labor_capital - 40
+    score_without_rival = _score_family(g, h, "Buyout", ruler, realm)
+
+    # Restore enterprises
+    g.enterprises[:] = kept
+
+    # The gap must be -50.0 (10 - (-40))
+    assert score_without_rival - score_with_rival == -50.0, \
+        f"Expected gap -50.0, got {score_without_rival - score_with_rival}"
+
+
+# --- R7: Dynasty reads the PATIENT end of patient_impulsive ------------------
+
+def test_r7_dynasty_reads_patient_end():
+    """Dynasty family adds patient_impulsive positively — patient rulers
+    chase marriages.  Setting patient_impulsive=80 with marriageable=True
+    gives 90.0 (80 + 10).  The broken rule (negated) would give -70.0."""
+    g = _fixture_game()
+    h = "Ferrenholt"
+    realm = g.realms[h]
+    ruler = realm.ruler
+
+    ruler.dispositions["patient_impulsive"] = 80.0
+    assert _marriageable(realm, ruler) is True
+    score = _score_family(g, h, "Dynasty", ruler, realm)
+    assert score == 90.0, f"Dynasty should be 90.0 (patient + marriageable), got {score}"
+
+
+# --- R8: Landless house reads worst unrest as 0.0, not 100.0 -----------------
+
+def test_r8_landless_consolidation_score_is_zero():
+    """A House with no provinces scores Consolidation at 0.0 (not 100.0).
+
+    SUSPECTED DEFECT: _score_family reads disposition key 'paranoid_trusting'
+    but characters only have 'trusting_paranoid'. The disposition is always 0.0
+    so Consolidation = pure unrest. This test asserts the actual behaviour
+    (0.0 for landless), not the intended one.
+    """
+    g = _fixture_game()
+    h = "Ferrenholt"
+    realm = g.realms[h]
+    ruler = realm.ruler
+
+    # Strip all land
+    owned = [p for p in g.atlas.provinces.values() if p.owner == h]
+    for p in owned:
+        p.owner = None
+    assert _worst_province(g, h) is None
+
+    score = _score_family(g, h, "Consolidation", ruler, realm)
+    assert score == 0.0, f"Landless Consolidation should be 0.0, got {score}"
+
+
+# --- R9: Why-line names its target when there is one -------------------------
+
+def test_r9_why_names_target():
+    """Every why-line includes the target house name when a target exists,
+    and uses anonymous phrasing when there is none."""
+    why_with = _why("Conquest", "Vantrell")
+    why_without = _why("Conquest", None)
+
+    assert "Vantrell" in why_with, \
+        f"Conquest why-line should name target: '{why_with}'"
+    assert "Vantrell" not in why_without, \
+        f"Anonymous why-line should not name a target: '{why_without}'"
+
+
+# --- R10: Conquest why-line describes conquest, not domination ---------------
+
+def test_r10_conquest_why_describes_conquest():
+    """Conquest's why-line says 'break ... by force', not Dominion's
+    'industrialize its own lands'."""
+    why_c = _why("Conquest", "Vantrell")
+    why_d = _why("Dominion", "Vantrell")
+
+    assert "break" in why_c and "force" in why_c, \
+        f"Conquest why should describe conquest: '{why_c}'"
+    assert why_c != why_d, \
+        f"Conquest and Dominion why-lines must differ: '{why_c}' vs '{why_d}'"
+    assert "industrialize" not in why_c, \
+        f"Conquest why should not describe industrialisation: '{why_c}'"
+
+
+# --- R11: Dead ruler selects no goal at all ----------------------------------
+
+def test_r11_dead_ruler_selects_no_goal():
+    """select_goal returns None when the ruler is dead, but returns a Goal
+    while the ruler lives."""
+    g = _fixture_game()
+    h = "Ferrenholt"
+    ruler = g.realms[h].ruler
+
+    # Alive: should return a Goal
+    goal = select_goal(g, h)
+    assert goal is not None, "Living ruler should select a goal"
+    assert isinstance(goal, Goal)
+
+    # Dead: should return None
+    ruler.is_alive = False
+    goal_dead = select_goal(g, h)
+    assert goal_dead is None, "Dead ruler should select no goal"
+
+    # Restore
+    ruler.is_alive = True
