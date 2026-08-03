@@ -1,8 +1,8 @@
 """G18 AI tests: the AI ruler plays the same levers as the player."""
 
 import pytest
-from gilded.ai import (_executor_for, _found_spot, _pick_initiative, _strength,
-                       _weaker_neighbor, ai_peace_check, ai_turn)
+from gilded.ai import (_executor_for, _found_spot, _pick_initiative, _policy_targets,
+                       set_policy, _strength, _weaker_neighbor, ai_peace_check, ai_turn)
 from gilded.chassis import ATTENTION_PER_TURN, GildedGame
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
 from gilded.docket import DOMAIN_SEAT, Petition, PetitionOption
@@ -99,7 +99,6 @@ def test_escalated_petitions_jump_the_queue():
 # --- directives --------------------------------------------------------------
 
 def test_directives_drift_toward_conviction():
-    from gilded.ai import POLICY_STEP
     g = _game()
     h = _first(g)
     ruler = g.realms[h].ruler
@@ -109,8 +108,7 @@ def test_directives_drift_toward_conviction():
     g.directives[h].set_stance("war", 0)
     ai_turn(g, h)
     new_stance = g.directives[h].stances["war"]
-    assert new_stance > 0, "stance should drift toward conviction"
-    assert new_stance <= POLICY_STEP, "stance should not exceed POLICY_STEP in one turn"
+    assert new_stance == 15, "stance should drift exactly 15 toward conviction"
 
 
 # --- initiatives -------------------------------------------------------------
@@ -1033,3 +1031,91 @@ def test_s18_the_adulthood_bar_is_sixteen():
     idx_16 = karsgate.characters.index(buyer2)
     assert idx_15 == 3, f"At age 15, expected index 3, got {idx_15}"
     assert idx_16 == 2, f"At age 16, expected index 2, got {idx_16}"
+
+
+# =============================================================================
+# WAVE 19 — the policy-dial decision: where the dials point, and when they stop
+# =============================================================================
+
+from gilded.agenda import Goal
+
+
+def _flat(g):
+    """Flatten the board so all five dial targets are zero, then assert it."""
+    h = sorted(g.houses)[0]
+    ruler = g.realms[h].ruler
+    for axis in DIRECTIVE_CONVICTION.values():
+        ruler.dispositions[axis] = 0.0
+    g.houses[h].treasury = 1000.0
+    for p in g.provinces_of(h):
+        p.unrest = 0.0
+    g.legitimacy[h] = 100.0
+    g.wars = []
+    g.agendas.pop(h, None)
+    t = _policy_targets(g, h)
+    assert all(v == 0 for v in t.values()), t
+    return h
+
+
+def test_s19_a_consolidating_house_turns_traditionalist_by_twenty():
+    """B18-conscap + B18-conscapmag: Consolidation nudges capital by exactly -20.
+    The exact value -20 kills both the sign (would be +20) and the magnitude
+    (would be -21). Labor must be -30, proving the ease branch did not fire."""
+    g = _game()
+    h = _flat(g)
+    g.agendas[h] = Goal(family="Consolidation", target=None, opened_turn=0,
+                        commit_turns=999, why="fixture")
+    t = _policy_targets(g, h)
+    assert t["capital"] == -20, f"capital should be -20, got {t['capital']}"
+    assert t["labor"] == -30, f"labor should be -30, got {t['labor']}"
+
+
+def test_s19_a_dynastic_house_turns_toward_diplomacy_by_forty():
+    """B18-dyndip + B18-dyndipmag: Dynasty nudges diplomacy by exactly +40.
+    The exact value 40 kills both the sign (would be -40) and the magnitude
+    (would be 41). Labor must be 0, proving the board stayed flat."""
+    g = _game()
+    h = _flat(g)
+    g.agendas[h] = Goal(family="Dynasty", target=None, opened_turn=0,
+                        commit_turns=999, why="fixture")
+    t = _policy_targets(g, h)
+    assert t["diplomacy"] == 40, f"diplomacy should be 40, got {t['diplomacy']}"
+    assert t["labor"] == 0, f"labor should be 0, got {t['labor']}"
+
+
+def test_s19_the_legitimacy_floor_is_thirty():
+    """B16-legitbar: the legitimacy threshold is exactly 30, bracketed from both sides.
+    Legitimacy 31: no nudge (0, 0). Legitimacy 29: ease squeeze (-40, -30).
+    Only the pair pins the number — the 31 side stops the bar drifting up,
+    the 29 side stops it drifting down."""
+    g = _game()
+    h = _flat(g)
+    # Side 1: legitimacy 31 — above the floor, no nudge
+    g.legitimacy[h] = 31.0
+    t1 = _policy_targets(g, h)
+    # Side 2: legitimacy 29 — below the floor, ease squeeze
+    g.legitimacy[h] = 29.0
+    t2 = _policy_targets(g, h)
+    assert (t1["labor"], t1["capital"]) == (0, 0), \
+        f"At legitimacy 31, expected (0, 0), got ({t1['labor']}, {t1['capital']})"
+    assert (t2["labor"], t2["capital"]) == (-40, -30), \
+        f"At legitimacy 29, expected (-40, -30), got ({t2['labor']}, {t2['capital']})"
+
+
+def test_s19_a_dial_exactly_at_the_dead_band_is_left_alone():
+    """B20-band: a dial with gap exactly 5 is not touched; gap 6 is stepped.
+    Stance -5 with target 0 (gap 5): left alone at -5.
+    Stance -6 with target 0 (gap 6): stepped toward target to 0.
+    The pair pins the dead-band boundary at exactly 5."""
+    g = _game()
+    h = _flat(g)
+    # Side 1: gap exactly 5 — left alone
+    g.directives[h].set_stance("capital", -5)
+    set_policy(g, h)
+    s1 = g.directives[h].stances["capital"]
+    # Side 2: gap 6 — stepped
+    g.directives[h].set_stance("capital", -6)
+    set_policy(g, h)
+    s2 = g.directives[h].stances["capital"]
+    assert s1 == -5, f"At gap 5, expected -5, got {s1}"
+    assert s2 == 0, f"At gap 6, expected 0, got {s2}"
