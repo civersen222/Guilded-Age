@@ -15,6 +15,8 @@ from gilded.agenda import (Goal, FAMILIES, ensure_agenda, select_goal,
                            _strongest_rival, _stat, _strength, _bordering,
                            _marriageable, _target_for, _score_family,
                            _worst_province, _why, _found_spot)
+from gilded.enterprises import ENTERPRISE_TYPES, TIER_MAX
+from gilded.society.schemes import Takeover
 
 
 def _ai_house(g):
@@ -694,3 +696,229 @@ def test_r11_dead_ruler_selects_no_goal():
 
     # Restore
     ruler.is_alive = True
+
+
+# =============================================================================
+# WAVE 15 — the seven boundary rules of goal_initiative
+# =============================================================================
+
+def _rival(g, house="Ferrenholt"):
+    """First rival house by sorted name (Ashworth at seed 5, turn 13)."""
+    return sorted(n for n in g.houses if n != house)[0]
+
+
+def test_s15_truce_expiring_this_turn_does_not_block_war():
+    """A27-truce: truces[target] == game.turn (not turn-5) blocks nothing.
+
+    The rule is `truces.get(target, 0) <= game.turn`.  A truce expiring
+    EXACTLY on the current turn satisfies `<=` and therefore does NOT block
+    declaring war.  The mutant `< game.turn` keeps the truce alive one turn
+    too long and returns None instead of declare_war.
+
+    This is a SECOND, DISTINCT rule from test_r4_truce_at_turn_not_blocking,
+    which pins _weakest_neighbor's copy of the truce check.  This test pins
+    goal_initiative's copy for the Conquest family.
+    """
+    g = _fixture_game()
+    h = g.houses["Ferrenholt"]
+    t = _rival(g)
+
+    h.at_war_with.clear()
+    h.truces[t] = g.turn  # EXACTLY on the bar — expires this turn
+
+    assert h.truces[t] == g.turn, "premise: truce expires this turn"
+    assert not h.at_war_with, "premise: not at war with anyone"
+
+    goal = Goal("Conquest", t, 0, 10, "war")
+    result = goal_initiative(g, "Ferrenholt", goal)
+
+    assert result is not None, "truce expiring this turn must NOT block war"
+    assert result[0] == "declare_war"
+    assert result[1]["target_house"] == t
+
+
+def test_s15_exact_price_is_not_affordable():
+    """A28-afford: treasury == found_cost (not above) means the house cannot pay.
+
+    The rule is `treasury > ENTERPRISE_TYPES[kind][3]` (strict >).  Holding
+    EXACTLY the cost fails the check and returns None.  The mutant `>=` would
+    found the enterprise and empty the treasury to zero.
+
+    The expand ladder runs first, so all owned enterprises are set to
+    under_construction to skip expansion and reach the found branch.
+    """
+    g = _fixture_game()
+    h = g.houses["Ferrenholt"]
+
+    # Empty the expand ladder so we reach the found branch
+    for e in g.enterprises:
+        if e.house == "Ferrenholt":
+            e.under_construction = 1
+
+    # Assert premise: no expandable enterprise remains
+    expandable = [e for e in g.enterprises
+                  if e.house == "Ferrenholt"
+                  and e.tier < TIER_MAX
+                  and e.under_construction == 0]
+    assert len(expandable) == 0, "premise: no expandable enterprises"
+
+    spot = _found_spot(g, "Ferrenholt")
+    assert spot is not None, "premise: found spot exists"
+    kind, pid = spot
+
+    h.treasury = ENTERPRISE_TYPES[kind][3]  # EXACTLY the cost
+
+    assert h.treasury == ENTERPRISE_TYPES[kind][3], "premise: treasury == cost"
+
+    goal = Goal("Dominion", None, 0, 10, "expansion")
+    result = goal_initiative(g, "Ferrenholt", goal)
+
+    assert result is None, "exact cost is NOT affordable (rule is >, not >=)"
+
+
+def test_s15_completed_takeover_does_not_block_a_new_one():
+    """A29-dupe: a COMPLETED takeover must not block a fresh one.
+
+    The rule filters `not t.complete` — only LIVE takeovers block.
+    The mutant drops this clause and lets one finished buyout bar the target
+    forever.
+
+    The fixture asserts BOTH halves: at least one complete takeover
+    Ferrenholt->Ashworth exists, and NONE is live.  A test that only checks
+    'a complete one exists' could pass for the wrong reason if a live one
+    also sits in the list.
+    """
+    g = _fixture_game()
+    t = _rival(g)
+
+    done = Takeover(g.realms["Ferrenholt"].ruler, "Ferrenholt", t)
+    done.complete = True
+    g.takeovers.append(done)
+
+    # Assert premise: among Ferrenholt->Ashworth takeovers, >=1 complete, 0 live
+    relevant = [to for to in g.takeovers
+                if to.target_house == t and to.buyer_house == "Ferrenholt"]
+    assert any(to.complete for to in relevant), "premise: at least one complete"
+    assert not any(not to.complete for to in relevant), "premise: none live"
+
+    goal = Goal("Buyout", t, 0, 10, "capital")
+    result = goal_initiative(g, "Ferrenholt", goal)
+
+    assert result is not None
+    assert result[0] == "start_takeover"
+    assert result[1]["target_house"] == t
+
+
+def test_s15_share_nibble_is_five_percent():
+    """A29-pct: the buy_shares nibble is exactly 5.0%, not 10.0%.
+
+    Reaching buy_shares needs start_takeover blocked by a LIVE takeover.
+    The fixture asserts the target realm has eligible sellers and enterprises.
+    """
+    g = _fixture_game()
+    t = _rival(g)
+
+    # Block start_takeover with a live takeover
+    live = Takeover(g.realms["Ferrenholt"].ruler, "Ferrenholt", t)
+    live.complete = False
+    g.takeovers.append(live)
+
+    # Assert premise: target realm has at least one alive non-ruler adult
+    trealm = g.realms.get(t)
+    assert trealm is not None, "premise: target realm exists"
+    sellers = [c for c in trealm.characters
+               if c.is_alive and c.age >= 16 and c.id != trealm.ruler.id]
+    assert len(sellers) >= 1, f"premise: target has {len(sellers)} eligible sellers"
+
+    # Assert premise: target owns at least one enterprise
+    target_ents = [e for e in g.enterprises if e.house == t]
+    assert len(target_ents) >= 1, "premise: target owns enterprises"
+
+    goal = Goal("Buyout", t, 0, 10, "capital")
+    result = goal_initiative(g, "Ferrenholt", goal)
+
+    assert result is not None
+    assert result[0] == "buy_shares"
+    assert result[1]["pct"] == 5.0, "pct must be 5.0, not 10.0"
+
+
+def test_s15_court_with_no_intrigue_opens_no_scheme():
+    """A30-nostat: _stat(realm, 'intrigue') > 0 (not >= 0).
+
+    A court with ZERO intrigue cannot open a scheme.  The mutant `>= 0`
+    opens one from an empty court.
+
+    The fixture clears base_stats, traits, AND focus for all characters,
+    then asserts the RESULT (_stat == 0) rather than just the inputs.
+    """
+    g = _fixture_game()
+    t = _rival(g)
+    realm = g.realms["Ferrenholt"]
+
+    for c in realm.characters:
+        c.base_stats["intrigue"] = 0
+        c.traits = []
+        if c.focus and c.focus.attribute == "intrigue":
+            c.focus.set(None)
+
+    # Assert the RESULT, not the inputs
+    assert _stat(realm, "intrigue") == 0, "premise: intrigue stat is zero"
+
+    goal = Goal("Intrigue", t, 0, 10, "press")
+    result = goal_initiative(g, "Ferrenholt", goal)
+
+    assert result is None, "zero intrigue must NOT open a scheme"
+
+
+def test_s15_scheming_ruler_opens_no_second_scheme():
+    """A30-double: a ruler already running a scheme must not open a second.
+
+    The rule checks `not game.scheme_mgr.scheming(realm.ruler)`.
+    The mutant drops this clause and lets the ruler double-scheme.
+
+    The fixture asserts all three live conditions: scheming is true,
+    intrigue > 0, and the target ruler is alive — without all three,
+    the fixture proves nothing about THIS clause.
+    """
+    g = _fixture_game()
+    t = _rival(g)
+    realm = g.realms["Ferrenholt"]
+    trealm = g.realms.get(t)
+
+    g.scheme_mgr.start_scheme(realm.ruler, trealm.ruler, "assassination", t)
+
+    # Assert all three premises this clause guards against
+    assert g.scheme_mgr.scheming(realm.ruler), "premise: ruler is scheming"
+    assert _stat(realm, "intrigue") > 0, "premise: intrigue > 0"
+    assert trealm.ruler.is_alive, "premise: target ruler is alive"
+
+    goal = Goal("Intrigue", t, 0, 10, "press")
+    result = goal_initiative(g, "Ferrenholt", goal)
+
+    assert result is None, "scheming ruler must NOT open a second scheme"
+
+
+def test_s15_calm_province_is_not_toured():
+    """A31-calm: worst.unrest > 0 (not >= 0).
+
+    A province with ZERO unrest is not toured.  The mutant `>= 0` tours
+    a calm province.
+
+    The fixture asserts _worst_province returns a province (not None)
+    whose unrest is exactly 0.0.  A None here would make the test pass
+    for the wrong reason.
+    """
+    g = _fixture_game()
+
+    for p in g.atlas.provinces.values():
+        if p.owner == "Ferrenholt":
+            p.unrest = 0.0
+
+    worst = _worst_province(g, "Ferrenholt")
+    assert worst is not None, "premise: worst province exists"
+    assert worst.unrest == 0.0, "premise: worst province has zero unrest"
+
+    goal = Goal("Consolidation", None, 0, 10, "labor")
+    result = goal_initiative(g, "Ferrenholt", goal)
+
+    assert result is None, "zero unrest must NOT trigger tour_province"
