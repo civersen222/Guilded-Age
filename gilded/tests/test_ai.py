@@ -1,7 +1,7 @@
 """G18 AI tests: the AI ruler plays the same levers as the player."""
 
 import pytest
-from gilded.ai import (_executor_for, _pick_initiative, _strength,
+from gilded.ai import (_executor_for, _found_spot, _pick_initiative, _strength,
                        _weaker_neighbor, ai_peace_check, ai_turn)
 from gilded.chassis import ATTENTION_PER_TURN, GildedGame
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
@@ -705,4 +705,208 @@ def test_s16_war_conviction_bar_is_fifty_and_strict():
     assert result is not None
     assert result[0] == "declare_war"
     assert result[1].get("target_house") == "Ashworth"
+
+
+# =============================================================================
+# WAVE 17 — the eight rules of the build decision
+# =============================================================================
+
+HOUSE = "Brandtner"
+
+
+def _only_endowments(g, mapping):
+    """Wipe every endowment HOUSE owns and lay down exactly these."""
+    for p in g.provinces_of(HOUSE):
+        p.endowments = {}
+    for pid, endows in mapping.items():
+        g.atlas.provinces[pid].endowments = dict(endows)
+
+
+def _works(g):
+    """The House's two works, in eid order."""
+    return sorted((e for e in g.enterprises if e.house == HOUSE),
+                  key=lambda e: e.eid)
+
+
+def test_s17_a_province_is_not_offered_a_works_it_already_carries():
+    """B6-taken: a province already carrying a works is not offered another of the same kind.
+    Province 45 has Brandtner's mill (taken). 45 is also the richer spot (timber:3 vs farmland:1),
+    so the mutant that empties `taken` picks ('mill', 45) instead of ('estate', 22)."""
+    g = _game()
+    realm = g.realms[HOUSE]
+    _only_endowments(g, {45: {"timber": 3}, 22: {"farmland": 1}})
+    mill = [e for e in g.enterprises if e.house == HOUSE and e.kind == "mill"][0]
+    assert mill.province == 45
+    assert mill.kind == "mill"
+    result = _found_spot(g, HOUSE)
+    assert result == ("estate", 22)
+
+
+def test_s17_the_richest_endowment_is_developed_first():
+    """B6-rich: the richest endowment is developed first (sort by -richness).
+    Iron:3 (richness 3) at pid 24 vs farmland:1 (richness 1) at pid 22.
+    The mutant that flips -rich to rich picks the poorer spot."""
+    g = _game()
+    _only_endowments(g, {22: {"farmland": 1}, 24: {"iron": 3}})
+    result = _found_spot(g, HOUSE)
+    assert result == ("ironworks", 24)
+
+
+def test_s17_a_richness_tie_goes_to_the_lower_province_id():
+    """B6-first: with equal richness the lower pid wins (options[0] after sort).
+    farmland:2 at pid 22, iron:2 at pid 46 — same richness, pid 22 < 46.
+    The mutant that reads options[-1] picks the higher pid."""
+    g = _game()
+    _only_endowments(g, {22: {"farmland": 2}, 46: {"iron": 2}})
+    result = _found_spot(g, HOUSE)
+    assert result == ("estate", 22)
+
+
+def test_s17_a_works_under_construction_is_not_expanded_again():
+    """B10-constr: a works already under construction is excluded from expansion.
+    Lower eid has under_construction=1, higher has 0. Gold 600.
+    The mutant that drops the filter picks the lower eid (already building)."""
+    g = _game()
+    realm = g.realms[HOUSE]
+    a, b = _works(g)
+    assert a.eid < b.eid
+    a.under_construction = 1
+    b.under_construction = 0
+    a.director_id = realm.ruler.id
+    b.director_id = realm.ruler.id
+    g.houses[HOUSE].treasury = 600
+    g.agendas[HOUSE] = None
+    g.houses[HOUSE].at_war_with.clear()
+    for n in g.realms:
+        g.houses[HOUSE].truces[n] = 0
+    ruler = realm.ruler
+    ruler.dispositions["ambitious_content"] = 80.0
+    ruler.dispositions["militarist_pacifist"] = 0.0
+    result = _pick_initiative(g, HOUSE, realm)
+    assert result is not None
+    assert result[0] == "expand_enterprise"
+    assert result[1]["eid"] == b.eid
+
+
+def test_s17_the_smallest_works_is_expanded_first():
+    """B10-sort: the smallest (lowest tier) works is expanded first.
+    Lower eid at tier 2, higher eid at tier 1. Gold 600 covers both (300 for tier->2, 500 for tier->3).
+    The mutant that sorts by -tier picks the bigger works instead."""
+    g = _game()
+    realm = g.realms[HOUSE]
+    a, b = _works(g)
+    assert a.eid < b.eid
+    a.tier = 2
+    b.tier = 1
+    a.under_construction = 0
+    b.under_construction = 0
+    a.director_id = realm.ruler.id
+    b.director_id = realm.ruler.id
+    g.houses[HOUSE].treasury = 600
+    g.agendas[HOUSE] = None
+    g.houses[HOUSE].at_war_with.clear()
+    for n in g.realms:
+        g.houses[HOUSE].truces[n] = 0
+    ruler = realm.ruler
+    ruler.dispositions["ambitious_content"] = 80.0
+    ruler.dispositions["militarist_pacifist"] = 0.0
+    result = _pick_initiative(g, HOUSE, realm)
+    assert result is not None
+    assert result[0] == "expand_enterprise"
+    assert result[1]["eid"] == b.eid
+
+
+def test_s17_expanding_needs_more_gold_than_the_price():
+    """B10-afford: expanding needs treasury > price (strict), not >=.
+    One works at tier 2 (expand to tier 3 costs 500). Other parked at tier 5 (cap).
+    Gold 500 → correct None (not strictly greater), broken expands.
+    Gold 501 → correct expands. Both sides bracket the threshold."""
+    g = _game()
+    realm = g.realms[HOUSE]
+    a, b = _works(g)
+    assert a.eid < b.eid
+    a.tier = 2
+    b.tier = 5
+    a.under_construction = 0
+    b.under_construction = 0
+    a.director_id = realm.ruler.id
+    b.director_id = realm.ruler.id
+    _only_endowments(g, {})
+    g.agendas[HOUSE] = None
+    g.houses[HOUSE].at_war_with.clear()
+    for n in g.realms:
+        g.houses[HOUSE].truces[n] = 0
+    ruler = realm.ruler
+    ruler.dispositions["ambitious_content"] = 80.0
+    ruler.dispositions["militarist_pacifist"] = 0.0
+    # Gold exactly 500 — the expand price for tier 2→3
+    g.houses[HOUSE].treasury = 500
+    result = _pick_initiative(g, HOUSE, realm)
+    assert result is None
+    # Gold 501 — strictly more than 500
+    g.houses[HOUSE].treasury = 501
+    result = _pick_initiative(g, HOUSE, realm)
+    assert result is not None
+    assert result[0] == "expand_enterprise"
+    assert result[1]["eid"] == a.eid
+
+
+def test_s17_founding_needs_more_gold_than_the_price():
+    """B11-afford: founding needs treasury > price (strict), not >=.
+    Both works at tier 5 (cap, can't expand). One endowment for an ironworks (price 600).
+    Gold 600 → correct None, broken founds. Gold 601 → correct founds."""
+    g = _game()
+    realm = g.realms[HOUSE]
+    a, b = _works(g)
+    a.tier = 5
+    b.tier = 5
+    a.under_construction = 0
+    b.under_construction = 0
+    a.director_id = realm.ruler.id
+    b.director_id = realm.ruler.id
+    _only_endowments(g, {24: {"iron": 3}})
+    g.agendas[HOUSE] = None
+    g.houses[HOUSE].at_war_with.clear()
+    for n in g.realms:
+        g.houses[HOUSE].truces[n] = 0
+    ruler = realm.ruler
+    ruler.dispositions["ambitious_content"] = 80.0
+    ruler.dispositions["militarist_pacifist"] = 0.0
+    # Gold exactly 600 — the ironworks founding price
+    g.houses[HOUSE].treasury = 600
+    result = _pick_initiative(g, HOUSE, realm)
+    assert result is None
+    # Gold 601 — strictly more than 600
+    g.houses[HOUSE].treasury = 601
+    result = _pick_initiative(g, HOUSE, realm)
+    assert result is not None
+    assert result[0] == "found_enterprise"
+    assert result[1]["kind"] == "ironworks"
+    assert result[1]["province_pid"] == 24
+
+
+def test_s17_the_founding_price_is_the_fourth_column_not_the_third():
+    """B11-price: the founding price is column [3], not column [2].
+    Ironworks: column[2]=40.0 (founding endowment), column[3]=600.0 (price).
+    Gold 599 — one short of 600, but past 40. Correct: None. Broken ([3]→[2]): founds."""
+    g = _game()
+    realm = g.realms[HOUSE]
+    a, b = _works(g)
+    a.tier = 5
+    b.tier = 5
+    a.under_construction = 0
+    b.under_construction = 0
+    a.director_id = realm.ruler.id
+    b.director_id = realm.ruler.id
+    _only_endowments(g, {24: {"iron": 3}})
+    g.agendas[HOUSE] = None
+    g.houses[HOUSE].at_war_with.clear()
+    for n in g.realms:
+        g.houses[HOUSE].truces[n] = 0
+    ruler = realm.ruler
+    ruler.dispositions["ambitious_content"] = 80.0
+    ruler.dispositions["militarist_pacifist"] = 0.0
+    g.houses[HOUSE].treasury = 599
+    result = _pick_initiative(g, HOUSE, realm)
+    assert result is None
 
