@@ -246,8 +246,8 @@ def test_rival_routes_sell_shares():
         if init and isinstance(init, tuple) and len(init) == 2:
             verbs.add(init[0])
         g.end_turn()
-    assert any(v in verbs for v in ("sell_shares", "buy_shares", "appoint_director")), \
-        f"Rival should route capital verbs. Got: {verbs}"
+    assert "sell_shares" in verbs, \
+        f"Rival should route sell_shares. Got: {verbs}"
 
 
 def test_rival_attention_cost():
@@ -910,3 +910,126 @@ def test_s17_the_founding_price_is_the_fourth_column_not_the_third():
     result = _pick_initiative(g, HOUSE, realm)
     assert result is None
 
+
+# =============================================================================
+# WAVE 18 — the seven rules of the sell-shares decision
+# =============================================================================
+
+HOUSE_S18 = "Vantrell"
+
+
+def _broke(g):
+    """Board every S18 fixture starts from: Vantrell out of money, first in realms, not owning enterprises[0]."""
+    assert list(g.realms)[0] == HOUSE_S18
+    assert g.enterprises[0].house != HOUSE_S18
+    g.houses[HOUSE_S18].treasury = 0.1
+    return g.realms[HOUSE_S18]
+
+
+def _sale(g, realm):
+    """Ask _pick_initiative and insist it is the sell-shares decision."""
+    got = _pick_initiative(g, HOUSE_S18, realm)
+    assert got is not None and got[0] == "sell_shares", got
+    return got[1]
+
+
+def test_s18_the_works_sold_is_one_the_house_owns():
+    """B7-own: the works sold belongs to the house selling.
+    Mutation `== -> !=` would pick the first enterprise NOT owned by Vantrell (Ashworth's)."""
+    g = _game()
+    realm = _broke(g)
+    data = _sale(g, realm)
+    ent = [e for e in g.enterprises if e.eid == data["eid"]][0]
+    assert ent.house == HOUSE_S18
+
+
+def test_s18_the_buyer_is_never_our_own_court():
+    """B7-selfbuyer: the buyer is never from the seller's own court.
+    Mutation disabling `continue` would pick a character from Vantrell's own realm."""
+    g = _game()
+    realm = _broke(g)
+    data = _sale(g, realm)
+    for c in g.realms[HOUSE_S18].characters:
+        assert c.id != data["buyer_id"], "Buyer must not be from our own court"
+
+
+def test_s18_the_rival_ruler_is_not_offered_the_shares():
+    """B7-ruler: the buyer is not the rival realm's ruler.
+    Mutation dropping `c.id != rival_realm.ruler.id` would sell to the ruler (index 0)."""
+    g = _game()
+    realm = _broke(g)
+    data = _sale(g, realm)
+    buyer_realm = None
+    for rn, rr in g.realms.items():
+        for c in rr.characters:
+            if c.id == data["buyer_id"]:
+                buyer_realm = rr
+                break
+    assert buyer_realm is not None
+    assert data["buyer_id"] != buyer_realm.ruler.id, "Buyer must not be the rival ruler"
+
+
+def test_s18_a_distress_sale_is_five_percent():
+    """B7-pct: a distress sale is exactly 5.0%.
+    Mutation `5.0 -> 10.0` would double the stake."""
+    g = _game()
+    realm = _broke(g)
+    data = _sale(g, realm)
+    assert data["pct"] == 5.0
+
+
+def test_s18_a_child_is_not_a_willing_buyer():
+    """B7-age: an infant (age 0) is not a willing buyer.
+    Mutation dropping `c.age >= 16` would pick the age-0 child at Karsgate index 2.
+    Board: kill Karsgate index 1 (spouse, alive, adult) so search walks to index 2 (child) then 3.
+    Correct picks index 3; mutant picks index 2 (the child)."""
+    g = _game()
+    realm = _broke(g)
+    karsgate = g.realms["Karsgate"]
+    assert karsgate.characters[1].is_alive
+    assert karsgate.characters[1].age >= 16
+    assert karsgate.characters[1].id != karsgate.ruler.id
+    assert karsgate.characters[2].is_alive
+    assert karsgate.characters[2].age < 16
+    karsgate.characters[1].is_alive = False
+    data = _sale(g, realm)
+    buyer = [c for c in karsgate.characters if c.id == data["buyer_id"]][0]
+    buyer_idx = karsgate.characters.index(buyer)
+    assert buyer_idx == 3, f"Expected buyer at index 3, got index {buyer_idx}"
+
+
+def test_s18_a_dead_courtier_is_not_a_willing_buyer():
+    """B7-dead: a corpse is not a willing buyer.
+    Mutation dropping `c.is_alive` would pick the dead spouse at Karsgate index 1.
+    Same board as B7-age. Correct picks index 3; mutant picks index 1 (the corpse)."""
+    g = _game()
+    realm = _broke(g)
+    karsgate = g.realms["Karsgate"]
+    karsgate.characters[1].is_alive = False
+    data = _sale(g, realm)
+    buyer = [c for c in karsgate.characters if c.id == data["buyer_id"]][0]
+    buyer_idx = karsgate.characters.index(buyer)
+    assert buyer_idx == 3, f"Expected buyer at index 3, got index {buyer_idx}"
+
+
+def test_s18_the_adulthood_bar_is_sixteen():
+    """B7-agebar: the adulthood bar is exactly 16, bracketed from both sides.
+    Age 15: correct code walks past to index 3. Age 16: correct code stops on index 2.
+    Pair (3, 2). Mutant (>= 15) answers (2, 2) — the 15 half carries the discrimination.
+    The 16 half alone is answered identically by the deletion mutant; the pair pins the number."""
+    g = _game()
+    realm = _broke(g)
+    karsgate = g.realms["Karsgate"]
+    karsgate.characters[1].is_alive = False
+    # Side 1: age 15 — correct code walks past to index 3
+    karsgate.characters[2].age = 15
+    data1 = _sale(g, realm)
+    buyer1 = [c for c in karsgate.characters if c.id == data1["buyer_id"]][0]
+    idx_15 = karsgate.characters.index(buyer1)
+    # Side 2: age 16 — correct code stops on index 2
+    karsgate.characters[2].age = 16
+    data2 = _sale(g, realm)
+    buyer2 = [c for c in karsgate.characters if c.id == data2["buyer_id"]][0]
+    idx_16 = karsgate.characters.index(buyer2)
+    assert idx_15 == 3, f"At age 15, expected index 3, got {idx_15}"
+    assert idx_16 == 2, f"At age 16, expected index 2, got {idx_16}"
