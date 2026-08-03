@@ -1,8 +1,8 @@
 """G18 AI tests: the AI ruler plays the same levers as the player."""
 
 import pytest
-from gilded.ai import (_executor_for, _weaker_neighbor, ai_peace_check,
-                       ai_turn)
+from gilded.ai import (_executor_for, _pick_initiative, _strength,
+                       _weaker_neighbor, ai_peace_check, ai_turn)
 from gilded.chassis import ATTENTION_PER_TURN, GildedGame
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
 from gilded.docket import DOMAIN_SEAT, Petition, PetitionOption
@@ -528,4 +528,181 @@ def test_director_salary_comes_from_ruler_not_largest_holder():
     assert ent.ledger.get(appointee.id, 0.0) == pytest.approx(
         DIRECTOR_SALARY_PCT, abs=1e-9), \
         f"Appointee should hold {DIRECTOR_SALARY_PCT}, got {ent.ledger.get(appointee.id, 0.0)}"
+
+
+# =============================================================================
+# WAVE 16 — the eight boundary rules of the war-target decision
+# =============================================================================
+
+def _shape(g, house, pop, treasury):
+    """Set pop on the first province (sorted by pid), clear the rest."""
+    provs = sorted(g.provinces_of(house), key=lambda p: p.pid)
+    for i, p in enumerate(provs):
+        p.population = pop if i == 0 else 0
+    g.houses[house].treasury = float(treasury)
+
+
+def test_s16_strength_counts_the_treasury():
+    """B4-treasury: strength = pop//5 + treasury.
+    With treasury dropped, Ashworth (pop 10, gold 50) reads strength 2 instead of 52,
+    making it weaker than Brandtner (pop 100, gold 0 = strength 20).
+    Correct code: no neighbor is weaker (Ashworth 52 > 0.7*20=14, but Brandtner 20 < 0.7*200=140 for D,K).
+    Actually: Brandtner strength=20, bar=14. Ashworth=52>14, D=200>14, K=200>14 → None."""
+    g = _game()
+    _shape(g, "Brandtner", 100, 0)
+    _shape(g, "Ashworth", 10, 50)
+    _shape(g, "Duval-Corse", 1000, 0)
+    _shape(g, "Karsgate", 1000, 0)
+    assert g.houses["Brandtner"].treasury == 0.0
+    assert g.houses["Ashworth"].treasury == 50.0
+    assert not g.houses["Brandtner"].at_war_with
+    assert _weaker_neighbor(g, "Brandtner") is None
+
+
+def test_s16_strength_converts_population_at_five():
+    """B4-cost: pop//REGIMENT_POP_COST where REGIMENT_POP_COST=5.
+    5//5=1 vs 4//5=0 → Ashworth strength 0 < 0.7*1 → qualifies.
+    Mutant //6: 5//6=0, 4//6=0 → both zero, no weaker neighbor → None."""
+    g = _game()
+    _shape(g, "Brandtner", 5, 0)
+    _shape(g, "Ashworth", 4, 0)
+    _shape(g, "Duval-Corse", 1000, 0)
+    _shape(g, "Karsgate", 1000, 0)
+    assert g.houses["Brandtner"].treasury == 0.0
+    assert g.houses["Ashworth"].treasury == 0.0
+    p = sorted(g.provinces_of("Brandtner"), key=lambda p: p.pid)[0]
+    assert p.population == 5
+    p = sorted(g.provinces_of("Ashworth"), key=lambda p: p.pid)[0]
+    assert p.population == 4
+    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+
+
+def test_s16_two_qualifying_rivals_the_first_alphabetically_is_marched_on():
+    """B5-order: neighbors are sorted forward.
+    Ashworth and Karsgate both have strength 0 (qualify).
+    'Ashworth' < 'Karsgate' → forward sort returns Ashworth first.
+    Reverse sort would return Karsgate."""
+    g = _game()
+    _shape(g, "Brandtner", 1000, 0)
+    _shape(g, "Ashworth", 0, 0)
+    _shape(g, "Karsgate", 0, 0)
+    _shape(g, "Duval-Corse", 0, 1000)
+    assert g.houses["Ashworth"].treasury == 0.0
+    assert g.houses["Karsgate"].treasury == 0.0
+    assert g.houses["Duval-Corse"].treasury == 1000.0
+    assert "Ashworth" < "Karsgate"
+    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+
+
+def test_s16_a_house_already_at_war_is_not_a_fresh_target():
+    """B5-war: a House already in at_war_with is skipped.
+    Ashworth is weak (0 gold, 0 pop) AND already at war → must be skipped.
+    Duval-Corse and Karsgate hold 1000 gold each → too strong.
+    Without the skip, Ashworth would be returned."""
+    g = _game()
+    _shape(g, "Brandtner", 1000, 0)
+    _shape(g, "Ashworth", 0, 0)
+    _shape(g, "Duval-Corse", 0, 1000)
+    _shape(g, "Karsgate", 0, 1000)
+    g.houses["Brandtner"].at_war_with.add("Ashworth")
+    assert "Ashworth" in g.houses["Brandtner"].at_war_with
+    assert g.houses["Ashworth"].treasury == 0.0
+    assert _weaker_neighbor(g, "Brandtner") is None
+
+
+def test_s16_a_truce_expiring_this_turn_no_longer_shields():
+    """B5-truce: the guard is truces[other] > game.turn (strict greater-than).
+    A truce expiring THIS turn (== game.turn) does NOT shield — the turn has arrived.
+    A truce expiring NEXT turn (== game.turn + 1) still shields.
+    Two assertions bracket the bar: 139/140 for B5-bar, here g.turn vs g.turn+1.
+    The g.turn case kills > → >=; the g.turn+1 case kills the check being removed."""
+    g = _game()
+    _shape(g, "Brandtner", 1000, 0)
+    _shape(g, "Ashworth", 0, 0)
+    _shape(g, "Duval-Corse", 0, 1000)
+    _shape(g, "Karsgate", 0, 1000)
+    # Truce expiring THIS turn → no longer shields, Ashworth is a valid target
+    g.houses["Brandtner"].truces["Ashworth"] = g.turn
+    assert g.houses["Brandtner"].truces.get("Ashworth", 0) == g.turn
+    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    # Truce expiring NEXT turn → still shields
+    g.houses["Brandtner"].truces["Ashworth"] = g.turn + 1
+    assert g.houses["Brandtner"].truces.get("Ashworth", 0) == g.turn + 1
+    assert _weaker_neighbor(g, "Brandtner") is None
+
+
+def test_s16_the_weaker_rival_is_the_target_not_the_stronger():
+    """B5-dir: the AI targets the WEAKER neighbor (<), not the stronger (>).
+    Ashworth strength=0 (weak), Duval-Corse strength=1000 (strong).
+    Correct: returns Ashworth. Mutant > returns Duval-Corse."""
+    g = _game()
+    _shape(g, "Brandtner", 1000, 0)
+    _shape(g, "Ashworth", 0, 0)
+    _shape(g, "Duval-Corse", 0, 1000)
+    _shape(g, "Karsgate", 0, 1000)
+    assert g.houses["Ashworth"].treasury == 0.0
+    assert g.houses["Duval-Corse"].treasury == 1000.0
+    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+
+
+def test_s16_weaker_means_seven_tenths_not_merely_poorer():
+    """B5-bar: WEAKER = 0.7, pinned with literal numbers 139 and 140.
+    Brandtner strength = 200, bar = 0.7 * 200 = 140.
+    Ashworth at 139: 139 < 140 → qualifies. Mutant 0.5: bar=100, 139>100 → None (killed by 139 case).
+    Ashworth at 140: 140 is NOT < 140 → None. Mutant 1.0: bar=200, 140<200 → Ashworth (killed by 140 case).
+    Also kills < → <= since 140 == 140. Using literals, not WEAKER, so the constant can move."""
+    g = _game()
+    _shape(g, "Brandtner", 1000, 0)
+    _shape(g, "Duval-Corse", 0, 1000)
+    _shape(g, "Karsgate", 0, 1000)
+    # Ashworth at 139 — one below the bar (0.7 * 200 = 140)
+    _shape(g, "Ashworth", 0, 139)
+    assert g.houses["Ashworth"].treasury == 139.0
+    assert g.houses["Brandtner"].treasury == 0.0
+    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    # Ashworth at 140 — exactly on the bar (140 is NOT < 140)
+    _shape(g, "Ashworth", 0, 140)
+    assert g.houses["Ashworth"].treasury == 140.0
+    assert _weaker_neighbor(g, "Brandtner") is None
+
+
+def test_s16_war_conviction_bar_is_fifty_and_strict():
+    """B12-bar: WAR_CONVICTION = 50.0, pinned with literal values 25.0 and 50.1.
+    militarist_pacifist = 25.0: below the bar → no war. Mutant 0.0: 25.0 > 0.0 → war (killed).
+    militarist_pacifist = 50.1: above the bar → war declared. Mutant 60.0: 50.1 < 60.0 → no war (killed).
+    50.0 itself does NOT declare (strict >), 50.1 does. Using literals, not WAR_CONVICTION."""
+    g = _game()
+    _shape(g, "Brandtner", 0, 500)
+    _shape(g, "Ashworth", 0, 0)
+    _shape(g, "Duval-Corse", 0, 1000)
+    _shape(g, "Karsgate", 0, 1000)
+    realm = g.realms["Brandtner"]
+    ruler = realm.ruler
+    ruler.dispositions["ambitious_content"] = 0.0
+
+    # Seat directors on all enterprises with empty director_id
+    for ent in g.enterprises:
+        if ent.house == "Brandtner" and ent.director_id == "":
+            for c in realm.characters:
+                if c.is_alive and c.age >= 16 and c.id != ruler.id:
+                    ent.director_id = c.id
+                    break
+
+    assert g.houses["Brandtner"].treasury == 500.0
+    assert not g.houses["Brandtner"].at_war_with
+    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+
+    # Below the bar: 25.0 < 50.0 → no war
+    ruler.dispositions["militarist_pacifist"] = 25.0
+    assert ruler.dispositions["militarist_pacifist"] == 25.0
+    result = _pick_initiative(g, "Brandtner", realm)
+    assert result is None
+
+    # Above the bar: 50.1 > 50.0 → war declared
+    ruler.dispositions["militarist_pacifist"] = 50.1
+    assert ruler.dispositions["militarist_pacifist"] == 50.1
+    result = _pick_initiative(g, "Brandtner", realm)
+    assert result is not None
+    assert result[0] == "declare_war"
+    assert result[1].get("target_house") == "Ashworth"
 
