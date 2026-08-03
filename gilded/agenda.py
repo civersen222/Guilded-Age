@@ -294,20 +294,6 @@ def goal_initiative(game, house_name: str, goal: Goal
                                     "target_house": target}
         return None
     if fam == "Consolidation":
-        # Sell shares to raise gold when treasury is low
-        if house.treasury < 100:
-            for ent in game.enterprises:
-                if ent.house == house_name:
-                    for rival_name in game.realms:
-                        if rival_name == house_name:
-                            continue
-                        rival_realm = game.realms.get(rival_name)
-                        if rival_realm is None:
-                            continue
-                        for buyer in rival_realm.characters:
-                            if buyer.is_alive and buyer.age >= 16:
-                                return "sell_shares", {"eid": ent.eid, "buyer_id": buyer.id, "pct": 5.0}
-                    break
         worst = _worst_province(game, house_name)
         if worst is not None and worst.unrest > 0:
             return "tour_province", {"province_pid": worst.pid}
