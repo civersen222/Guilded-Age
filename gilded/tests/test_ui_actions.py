@@ -164,27 +164,71 @@ def test_every_drawn_key_is_registered():
     assert not unhandled, f"drawn but unhandled: {unhandled}"
 
 
-# ── CHECK 1b — OFFERED ⊆ ACTIONS (xfail) ─────────────────────────────────────
+# ── CHECK 1b — OFFERED ⊆ ACTIONS (split) ─────────────────────────────────────
+
+
+def test_exactly_five_offered_verbs_are_unregistered():
+    """Pins the CURRENT state by value, and passes today.
+
+    This is the half that can be scored. When Wave I4 registers the
+    five, this test goes RED and names what changed -- which is the
+    report the xfail below is structurally unable to make."""
+    state = _rich_state()
+    unregistered = _offered_keys(state.view) - set(act.ACTIONS)
+    assert unregistered == {
+        "buy_shares", "sell_shares", "found_enterprise",
+        "defend_buyout", "attack_takeover",
+    }, f"the unregistered set moved: {sorted(unregistered)}"
 
 
 @pytest.mark.xfail(strict=True, reason=(
-    "Five verbs the game OFFERS have no registry entry: buy_shares, "
-    "sell_shares, found_enterprise, defend_buyout, attack_takeover. "
-    "Wave I4 wires them; until then this is the honest measurement."))
+    "Five verbs the game OFFERS have no registry entry. Wave I4 wires "
+    "them; when it does, this XPASSES and the test above goes red -- "
+    "two independent alarms, which is the point of the split."))
 def test_every_offered_key_is_registered():
     """Every verb the game offers via enterprise_actions() is in ACTIONS."""
     state = _rich_state()
     unregistered = _offered_keys(state.view) - set(act.ACTIONS)
-
-    assert unregistered == {
-        "buy_shares", "sell_shares", "found_enterprise",
-        "defend_buyout", "attack_takeover",
-    }, f"expected exactly the five unregistered verbs, got {sorted(unregistered)}"
-
     assert not unregistered, f"offered but unregistered: {sorted(unregistered)}"
 
 
-# ── CHECK 1c — OFFERED ⊆ DRAWN (xfail) ───────────────────────────────────────
+# ── CHECK 1c — OFFERED ⊆ DRAWN (split) ───────────────────────────────────────
+
+
+def _enterprise_drawn_verbs(view):
+    """Verbs the Enterprises tab actually draws, from its hit structures.
+
+    Unwraps the {"label","action","eid"} envelope exactly as
+    handle_click does -- `.get("action", payload)`, with the fallback,
+    so a bare action dict still works."""
+    drawn = set()
+    for _rect, payload in list(view._enterprise_hits) + list(view._appoint_hits):
+        if isinstance(payload, dict):
+            for k in payload.get("action", payload):
+                if k != "char_id":
+                    drawn.add(k)
+    return drawn
+
+
+def test_exactly_two_enterprise_verbs_are_drawn():
+    """Pins the CURRENT state by value, and passes today.
+
+    When Wave I4 draws the five missing verbs, this test goes RED and
+    names what changed."""
+    state = _rich_state()
+    view = state.view
+    view.active_tab = "Enterprises"
+    view.draw(pygame.Surface((800, 600)))
+
+    drawn = _enterprise_drawn_verbs(view)
+    assert drawn == {"appoint_director", "expand_enterprise"}, (
+        f"the Enterprises tab's drawn verbs moved: {sorted(drawn)}")
+
+    undrawn = _offered_keys(view) - drawn
+    assert undrawn == {
+        "buy_shares", "sell_shares", "found_enterprise",
+        "defend_buyout", "attack_takeover",
+    }, f"the undrawn set moved: {sorted(undrawn)}"
 
 
 @pytest.mark.xfail(strict=True, reason=(
@@ -199,22 +243,8 @@ def test_every_offered_key_is_drawn():
     view.active_tab = "Enterprises"
     view.draw(pygame.Surface((800, 600)))
 
-    drawn = set()
-    for _rect, payload in list(view._enterprise_hits) + list(view._appoint_hits):
-        if isinstance(payload, dict):
-            for k in payload.get("action", payload):
-                if k != "char_id":
-                    drawn.add(k)
-
-    assert drawn == {"appoint_director", "expand_enterprise"}, (
-        f"the Enterprises tab's drawn verbs moved: {sorted(drawn)}")
-
+    drawn = _enterprise_drawn_verbs(view)
     undrawn = _offered_keys(view) - drawn
-    assert undrawn == {
-        "buy_shares", "sell_shares", "found_enterprise",
-        "defend_buyout", "attack_takeover",
-    }, f"expected exactly the five undrawn verbs, got {sorted(undrawn)}"
-
     assert not undrawn, f"offered but never drawn: {sorted(undrawn)}"
 
 
