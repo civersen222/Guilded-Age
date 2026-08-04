@@ -470,6 +470,294 @@ def test_attack_takeover_names_rival():
     assert len(action["label"]) > 0, "label should name the rival"
 
 
+# ── I4c2 — the page-level Hostile Takeover button ────────────────────────
+#
+# Fixture states, all measured on _enterprises_view(seed=42) before these
+# tests were written:
+#   turns=0  top threat Mordaine, 0.0% for sale -> the button is REFUSED
+#   turns=4  top threat Mordaine, 5.0% for sale, attention 3 -> LIVE
+#   after one click: takeovers 0->1, attention 3->2, one event line, and the
+#   label turns from "5.0% for sale" into "holding 0.0% of 50% needed".
+
+def _takeover_descriptor(v):
+    """The page's Hostile Takeover descriptor, or None if it offers none."""
+    return next((a for a in v.enterprise_actions()
+                 if "attack_takeover" in a["action"]), None)
+
+
+def _drawn_takeover_region(v, surface=None):
+    """The Region the Enterprises tab draws for the takeover button."""
+    v.draw(surface if surface is not None else pygame.Surface((1280, 900)))
+    return next((r for r in v.regions._regions
+                 if (r.action or {}).get("attack_takeover") is not None
+                 or (r.hint or "").startswith("Hostile Takeover")), None)
+
+
+def test_takeover_button_quotes_what_is_for_sale_and_what_is_needed():
+    """The label carries both numbers the decision turns on, not just a verb.
+
+    A button reading 'Hostile Takeover' alone tells the player nothing about
+    whether it is worth an attention. It must quote the share genuinely for
+    sale and the share required to win, both computed from the live game.
+    """
+    from gilded.ui.actions import _takeover_reach
+    from gilded.society.schemes import TAKEOVER_THRESHOLD
+    g, v = _enterprises_view(seed=42, turns=4)
+    a = _takeover_descriptor(v)
+    assert a is not None, "the Enterprises page must offer a takeover"
+    target = a["action"]["attack_takeover"]
+    reach = _takeover_reach(g, target)
+    assert reach > 0, (
+        "fixture premise broken: seed 42 turn 4 is supposed to have a "
+        f"disloyal seller in {target}, but reach is {reach}")
+    assert target in a["label"], f"label must name the rival: {a['label']!r}"
+    assert f"{reach:.1f}%" in a["label"], (
+        f"label must quote the {reach:.1f}% genuinely for sale: {a['label']!r}")
+    assert f"{TAKEOVER_THRESHOLD:.0f}%" in a["label"], (
+        f"label must quote the {TAKEOVER_THRESHOLD:.0f}% needed to win: "
+        f"{a['label']!r}")
+
+
+def test_takeover_button_stays_visible_and_says_why_when_nobody_will_sell():
+    """A refusal is shown, never hidden. I3d's contract, on this button."""
+    g, v = _enterprises_view(seed=42, turns=0)
+    a = _takeover_descriptor(v)
+    assert a is not None, (
+        "the button must still be offered when it cannot be used -- a "
+        "vanishing control teaches the player nothing")
+    target = a["action"]["attack_takeover"]
+    ok, why = ACTIONS["attack_takeover"].eligible(g, v.house, a["action"])
+    assert not ok, (
+        f"fixture premise broken: {target} was supposed to have no disloyal "
+        "shareholder at turn 0")
+    assert target in why, f"the reason must name the House: {why!r}"
+    assert "sell" in why.lower(), (
+        f"the reason must say what is missing -- a seller: {why!r}")
+
+
+def test_the_refused_takeover_button_is_drawn_disabled_with_its_reason():
+    g, v = _enterprises_view(seed=42, turns=0)
+    region = _drawn_takeover_region(v)
+    assert region is not None, "the takeover button must be drawn"
+    assert region.state is RegionState.DISABLED, (
+        f"a takeover nobody will sell into must draw DISABLED, not "
+        f"{region.state}")
+    assert region.reason, "a DISABLED takeover button must carry its reason"
+
+
+def test_the_live_takeover_button_is_drawn_enabled_and_carries_its_action():
+    g, v = _enterprises_view(seed=42, turns=4)
+    region = _drawn_takeover_region(v)
+    assert region is not None, "the takeover button must be drawn"
+    assert region.state is RegionState.ENABLED, (
+        f"a takeover with a willing seller must draw ENABLED, not "
+        f"{region.state}")
+    assert region.action.get("attack_takeover") in g.houses, (
+        f"the drawn region must carry a real House to attack: {region.action}")
+
+
+def test_clicking_the_takeover_button_starts_a_campaign():
+    """The click must produce a running campaign against the named House."""
+    g, v = _enterprises_view(seed=42, turns=4)
+    a = _takeover_descriptor(v)
+    target = a["action"]["attack_takeover"]
+    assert not g.takeovers, "fixture premise broken: a campaign already runs"
+    ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
+    mine = [t for t in g.takeovers if t.buyer_house == v.house]
+    assert len(mine) == 1, (
+        f"one click must start exactly one campaign, got {len(mine)}")
+    assert mine[0].target_house == target, (
+        f"the campaign must attack the House the button named, {target}, "
+        f"not {mine[0].target_house}")
+    assert not mine[0].complete, "a campaign just begun cannot be complete"
+
+
+def test_the_takeover_click_spends_exactly_one_attention():
+    g, v = _enterprises_view(seed=42, turns=4)
+    a = _takeover_descriptor(v)
+    before = g.attention[v.house]
+    assert before == 3, f"fixture premise broken: attention is {before}, not 3"
+    ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
+    assert g.attention[v.house] == before - 1, (
+        f"the click must cost one attention: {before} -> "
+        f"{g.attention[v.house]}")
+    assert ACTIONS["attack_takeover"].attention_cost == 1, (
+        "the registry must declare the cost the dispatch actually charges")
+
+
+def test_the_takeover_click_tells_the_player_what_happened():
+    """Nothing is ever unexplained: the click writes a line the player sees."""
+    from gilded.chassis import TurnEvent
+    g, v = _enterprises_view(seed=42, turns=4)
+    a = _takeover_descriptor(v)
+    target = a["action"]["attack_takeover"]
+    before = len(g.events)
+    lines = ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
+    assert lines and all(ln.strip() for ln in lines), (
+        f"the dispatch must return prose, got {lines!r}")
+    assert len(g.events) > before, (
+        "the click must post its own outcome to the event feed")
+    posted = g.events[before:]
+    assert all(isinstance(e, TurnEvent) for e in posted)
+    assert any(target in e.text for e in posted), (
+        f"the posted lines must name the House attacked: "
+        f"{[e.text for e in posted]}")
+    assert all(e.house == v.house for e in posted), (
+        "the lines belong to the player's own feed")
+
+
+def test_a_running_campaign_turns_the_label_into_a_progress_report():
+    """Once it is under way, 'for sale' is the wrong number to show.
+
+    What the player needs then is how far along the campaign is, on the same
+    scale as the threshold, so the two can be read against each other.
+    """
+    from gilded.society.schemes import TAKEOVER_THRESHOLD
+    from gilded.society.shares import house_stake
+    g, v = _enterprises_view(seed=42, turns=4)
+    a = _takeover_descriptor(v)
+    target = a["action"]["attack_takeover"]
+    assert "for sale" in a["label"], (
+        f"fixture premise broken: label is not the offer form: {a['label']!r}")
+    ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
+    running = next(t for t in g.takeovers
+                   if t.buyer_house == v.house and not t.complete)
+    after = _takeover_descriptor(v)
+    assert after is not None, (
+        "the button must stay on the page while the campaign runs")
+    assert "for sale" not in after["label"], (
+        f"a running campaign must stop advertising what is for sale: "
+        f"{after['label']!r}")
+    held = house_stake([e for e in g.enterprises if e.house == target],
+                       running.buyer.id)
+    assert f"{held:.1f}%" in after["label"], (
+        f"the label must quote the {held:.1f}% actually held: "
+        f"{after['label']!r}")
+    assert f"{TAKEOVER_THRESHOLD:.0f}%" in after["label"], (
+        f"the label must still quote the target: {after['label']!r}")
+    assert target in after["label"], f"and the House: {after['label']!r}"
+
+
+def test_a_second_campaign_against_the_same_house_is_refused():
+    g, v = _enterprises_view(seed=42, turns=4)
+    a = _takeover_descriptor(v)
+    target = a["action"]["attack_takeover"]
+    ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
+    ok, why = ACTIONS["attack_takeover"].eligible(g, v.house, a["action"])
+    assert not ok, "a campaign already running must block a second one"
+    assert target in why, f"the refusal must name the House: {why!r}"
+    region = _drawn_takeover_region(v)
+    assert region is not None and region.state is RegionState.DISABLED, (
+        "the blocked button must still be drawn, DISABLED")
+    assert region.reason == why, (
+        f"the drawn reason must be the eligibility reason, not a second "
+        f"wording: {region.reason!r} vs {why!r}")
+
+
+def test_the_reach_is_an_average_so_it_shares_the_thresholds_scale():
+    """5% for sale against 50% needed is only meaningful on one scale.
+
+    `house_stake` scores a campaign as a percentage averaged across the
+    target's enterprises, and TAKEOVER_THRESHOLD is read against that. If the
+    reach were the raw sum it would read 10.0 where the campaign can only ever
+    reach 5.0, and the button would promise twice what it can deliver.
+
+    The expected value here is computed from the ledger, NOT by calling
+    `_takeover_reach` — a test that asks the function what it should return
+    cannot detect the function returning the wrong thing.
+    """
+    from gilded.ui.actions import _takeover_reach
+    from gilded.society.realm import disloyal_shareholders
+    g, v = _enterprises_view(seed=42, turns=4)
+    target = _takeover_descriptor(v)["action"]["attack_takeover"]
+    ents = [e for e in g.enterprises if e.house == target]
+    assert len(ents) > 1, (
+        f"fixture premise broken: {target} owns {len(ents)} enterprise(s); a "
+        "sum and an average are indistinguishable unless it owns more than one")
+    sellers = disloyal_shareholders(g.realms[target], g.enterprises)
+    assert sellers, f"fixture premise broken: nobody in {target} will sell"
+    raw = sum(sum(e.ledger.get(s.id, 0.0) for e in ents) for s in sellers)
+    reach = _takeover_reach(g, target)
+    assert reach == pytest.approx(raw / len(ents)), (
+        f"reach must average {raw} across {len(ents)} enterprises, got {reach}")
+    assert reach < raw, (
+        f"an average across {len(ents)} enterprises must be below the sum "
+        f"{raw}; {reach} looks like the sum itself")
+    assert 0.0 < reach <= 100.0, f"reach must be a percentage, got {reach}"
+
+
+def test_the_label_quotes_the_targets_holdings_not_the_players_own():
+    """Measured: at seed 45 turn 4 the top threat has 5.0% for sale while the
+    player's own House has 0.0%. Seed 42 cannot tell the two apart — both are
+    5.0 — so a label wired to the wrong House would read as correct there."""
+    from gilded.ui.actions import _takeover_reach
+    g, v = _enterprises_view(seed=45, turns=4)
+    a = _takeover_descriptor(v)
+    target = a["action"]["attack_takeover"]
+    theirs = _takeover_reach(g, target)
+    mine = _takeover_reach(g, v.house)
+    assert theirs != mine, (
+        f"fixture premise broken: both Houses read {theirs}, so this test "
+        "cannot tell which one the label quotes")
+    assert f"{theirs:.1f}% for sale" in a["label"], (
+        f"the label must quote the target's {theirs:.1f}%: {a['label']!r}")
+    assert f"{mine:.1f}% for sale" not in a["label"], (
+        f"the label is quoting the player's own {mine:.1f}%: {a['label']!r}")
+
+
+def test_a_finished_campaign_does_not_block_the_next_one():
+    """`complete` is a state the game really reaches: seed 42's first campaign
+    finishes on its 32nd turn with the target still ranked as a threat
+    (measured). The fixture sets the flag directly rather than paying 32 turns.
+    """
+    g, v = _enterprises_view(seed=42, turns=4)
+    a = _takeover_descriptor(v)
+    ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
+    campaign = next(t for t in g.takeovers if t.buyer_house == v.house)
+    assert not campaign.complete, "fixture premise broken: it finished at once"
+    ok, _ = ACTIONS["attack_takeover"].eligible(g, v.house, a["action"])
+    assert not ok, "fixture premise broken: a running campaign must block"
+    campaign.complete = True
+    ok, why = ACTIONS["attack_takeover"].eligible(g, v.house, a["action"])
+    assert ok, (
+        f"a campaign that has already finished must not block a new one: "
+        f"{why!r}")
+
+
+def test_a_rivals_campaign_does_not_block_the_players_own():
+    """Measured: at seed 61 turn 12 House Mordaine is already buying into
+    Ashworth, which is also the player's top threat, and 5.0% of Ashworth is
+    still for sale. Two Houses may court the same disloyal kin at once."""
+    g, v = _enterprises_view(seed=61, turns=12)
+    a = _takeover_descriptor(v)
+    assert a is not None, "fixture premise broken: no takeover is offered"
+    target = a["action"]["attack_takeover"]
+    rivals = [t for t in g.takeovers if t.buyer_house != v.house
+              and t.target_house == target and not t.complete]
+    assert rivals, (
+        f"fixture premise broken: no rival is buying into {target}, so this "
+        "test cannot tell whose campaign the refusal is reading")
+    assert not [t for t in g.takeovers if t.buyer_house == v.house
+                and t.target_house == target and not t.complete], (
+        "fixture premise broken: the player already has a campaign running")
+    ok, why = ACTIONS["attack_takeover"].eligible(g, v.house, a["action"])
+    assert ok, (
+        f"House {rivals[0].buyer_house}'s campaign against {target} must not "
+        f"refuse the player's own: {why!r}")
+
+
+def test_a_takeover_is_refused_when_the_turn_has_no_attention_left():
+    g, v = _enterprises_view(seed=42, turns=4)
+    a = _takeover_descriptor(v)
+    ok, _ = ACTIONS["attack_takeover"].eligible(g, v.house, a["action"])
+    assert ok, "fixture premise broken: the takeover was not live to begin with"
+    g.attention[v.house] = 0
+    ok, why = ACTIONS["attack_takeover"].eligible(g, v.house, a["action"])
+    assert not ok, "a spent turn must refuse the takeover"
+    assert "attention" in why.lower(), (
+        f"the reason must say the turn is spent: {why!r}")
+
+
 def test_descriptors_use_valid_verbs():
     """All action descriptors use verbs the game recognizes."""
     from gilded.docket import INITIATIVES
