@@ -679,6 +679,57 @@ the unreachable verbs, and **removes the `xfail`**.
 > structural: after I4b a player can buy a named percentage from a named person
 > and see the gold move.
 
+> **Fourth corrigendum, 2026-08-03.** The third corrigendum said the five split
+> three-and-two. It splits **one-and-four**, and I found that only by doing for
+> `found_enterprise` what I had done for the other two and should have done for
+> all five at once: read the initiative's signature and compare it
+> argument-by-argument against the payload the broadsheet actually emits.
+>
+> Here is that comparison for every offered verb, done exhaustively this time.
+>
+> | emitted payload | initiative signature | verdict |
+> |---|---|---|
+> | `{"expand_enterprise": eid}` | `_init_expand_enterprise(ctx, eid)` | already wired |
+> | `{"appoint_director": eid}` + `char_id` | — | already wired |
+> | `{"attack_takeover": house}` | `_init_start_takeover(ctx, target_house)` | **complete as emitted** |
+> | `{"defend_buyout": (eid, outside_id)}` | `_init_buy_shares(ctx, eid, seller_id, pct)` | missing `pct`, but it is in scope at the emit site |
+> | `{"buy_shares": eid}` | `_init_buy_shares(ctx, eid, seller_id, pct)` | missing counterparty and size |
+> | `{"sell_shares": eid}` | `_init_sell_shares(ctx, eid, buyer_id, pct)` | missing counterparty and size |
+> | `{"found_enterprise": True}` | `_init_found_enterprise(ctx, kind, province_pid)` | missing both, and the payload value is `True`, not an id |
+>
+> **`found_enterprise` is the one the third corrigendum got wrong.** I called it
+> complete because it is "page-level" and carries no `eid`. But `docket.py:625`
+> wants a `kind` and a `province_pid`, and its first statement is
+> `ENTERPRISE_TYPES[kind][3]` — an unguarded subscript. Wired as emitted it does
+> not misbehave, it raises `KeyError: None`. The AI reaches the same initiative
+> correctly at `agenda.py:262` with `{"kind": kind, "province_pid": pid}`, which
+> is the shape the UI has to learn to produce.
+>
+> **`defend_buyout` is very nearly complete.** The emit site at
+> `broadsheet.py:1570-1581` already computes `outside_pct` and puts a derived
+> `price` in the dict — it simply never puts `outside_pct` itself there. One
+> line at the emit site closes it. No new control.
+>
+> So the honest revision:
+>
+> - **I4a — one verb wired, one payload completed, both drawn.**
+>   `attack_takeover` maps to `start_takeover` unchanged. `defend_buyout` maps to
+>   `buy_shares` once the emit site carries `pct`. Both get a control on the
+>   Enterprises tab. This is the small wave and it should stay small.
+> - **I4b — the counterparty-and-size chooser**, for `buy_shares` and
+>   `sell_shares`. A person and a percentage.
+> - **I4c — the charter chooser**, for `found_enterprise`. A kind and a
+>   province. This is a *different* control from I4b's — different domain,
+>   different data source (`ENTERPRISE_TYPES` and the atlas, not a shareholder
+>   ledger), and a province picker has an obvious home on the atlas that a
+>   shareholder list does not. Do not try to build one modal that serves both.
+>
+> The pattern in my own three corrigenda is worth naming, because it has now
+> cost four revisions of the same paragraph: **each time, I verified one or two
+> cases carefully and generalised to the rest.** The five verbs looked like a
+> category. They are five unrelated wiring problems that happen to share a tab.
+> Enumerate, then check each row.
+
 ### The five dead buttons first
 
 The set was computed mechanically as *emitted minus handled*, not read off the
