@@ -16,7 +16,7 @@ import random
 
 from gilded.chassis import GildedGame
 from gilded.market import PRODUCES
-from gilded.society.shares import priced_transfer
+from gilded.society.shares import priced_transfer, stake_cost
 
 SEED = 7
 
@@ -164,3 +164,62 @@ def test_all_or_nothing_no_clamp():
     buyer.gold_reserve = quote * 0.5  # can only afford half
     paid = priced_transfer(ent, seller, buyer, 50.0, g.market, g)
     assert paid == 0.0, "partial affordability must still return 0.0"
+
+
+# --- stake_cost tests -------------------------------------------------------
+
+def test_stake_cost_returns_float():
+    """stake_cost returns a numeric float."""
+    g, ent, _, _ = _setup()
+    cost = stake_cost(ent, 10.0, g)
+    assert isinstance(cost, float)
+
+
+def test_stake_cost_matches_market_value_formula():
+    """stake_cost equals market.value(ent, game) * pct / 100.0"""
+    g, ent, _, _ = _setup()
+    expected = g.market.value(ent, g) * 10.0 / 100.0
+    assert abs(stake_cost(ent, 10.0, g) - expected) < 1e-6
+
+
+def test_stake_cost_zero_pct_returns_zero():
+    """Zero percent stake costs zero."""
+    g, ent, _, _ = _setup()
+    assert stake_cost(ent, 0.0, g) == 0.0
+
+
+def test_stake_cost_full_hundred_equals_market_value():
+    """100% stake costs exactly the market value."""
+    g, ent, _, _ = _setup()
+    expected = g.market.value(ent, g)
+    assert abs(stake_cost(ent, 100.0, g) - expected) < 1e-6
+
+
+def test_stake_cost_linear_scaling():
+    """Price scales linearly: cost(20) == 2 * cost(10)."""
+    g, ent, _, _ = _setup()
+    c10 = stake_cost(ent, 10.0, g)
+    c20 = stake_cost(ent, 20.0, g)
+    assert abs(c20 - 2 * c10) < 1e-6
+
+
+def test_stake_cost_negative_pct_returns_negative():
+    """Negative percentage produces a negative cost (symmetric formula)."""
+    g, ent, _, _ = _setup()
+    pos = stake_cost(ent, 10.0, g)
+    neg = stake_cost(ent, -10.0, g)
+    assert abs(neg - (-pos)) < 1e-6
+
+
+def test_stake_cost_positive_for_valid_enterprise():
+    """A completed enterprise with positive market value yields positive cost."""
+    g, ent, _, _ = _setup()
+    assert stake_cost(ent, 10.0, g) > 0
+
+
+def test_stake_cost_no_rng_consumption():
+    """stake_cost must not consume game.rng."""
+    g, ent, _, _ = _setup()
+    rng_state = random.getstate()
+    stake_cost(ent, 10.0, g)
+    assert random.getstate() == rng_state, "stake_cost must not touch RNG"
