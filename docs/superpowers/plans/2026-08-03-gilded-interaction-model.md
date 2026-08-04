@@ -583,6 +583,25 @@ def test_the_open_director_picker_shadows_the_cards_beneath_it():
 Everything before this was scaffolding. This wave wires the five dead buttons and
 the unreachable verbs, and **removes the `xfail`**.
 
+> **Corrigendum, 2026-08-03, after Wave I2c.** They are not dead buttons. They
+> are never drawn. `_draw_enterprises` discards `found_enterprise` and
+> `attack_takeover` at `if eid is None: continue`, and has no `elif` arm for
+> `buy_shares`, `sell_shares` or `defend_buyout`. Seed 42 offers ten labelled
+> actions and renders four.
+>
+> **This wave therefore has to DRAW them, not only wire them** — five controls
+> that have never existed on screen, each needing a place in the Enterprises
+> layout, an ENABLED/DISABLED state, and a reason when unavailable. That is
+> materially more work than wiring five handlers, and it is the wave's real
+> content. Budget for it, and split I4 if the layout work grows.
+>
+> It also means the two `defend_buyout`/`attack_takeover` decisions below are
+> now three-way, not two-way: **wire it**, **delete the generator arm**, or —
+> the new option — **draw it DISABLED with a reason saying the mechanic does
+> not exist yet**, which is honest and is what the spec's bar actually asks
+> for. Prefer deleting over drawing a permanent apology; a control that can
+> never become enabled is a worse lie than no control.
+
 ### The five dead buttons first
 
 The set was computed mechanically as *emitted minus handled*, not read off the

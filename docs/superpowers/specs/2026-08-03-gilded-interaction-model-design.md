@@ -52,6 +52,34 @@ two event types — `KEYDOWN` (`:173`) and `MOUSEBUTTONDOWN` (`:180`). There is 
 `MOUSEMOTION` handling anywhere in `gilded/ui/`. No hover, no tooltip, no cursor
 feedback, no mechanism by which a control can explain why it is unavailable.
 
+> **Corrigendum, 2026-08-03, after Wave I2c.** This section called these five
+> "dead buttons" and said the player clicks them into silence. **That is wrong,
+> and the truth is worse.** They are never drawn. `_draw_enterprises` filters
+> the offers twice before rendering: `if eid is None: continue` discards
+> `found_enterprise` and `attack_takeover` outright, and the `if verb ==
+> "expand_enterprise" / elif verb == "appoint_director"` chain has no arm for
+> `buy_shares`, `sell_shares` or `defend_buyout`, so they fall out silently. A
+> live game at seed 42 offers ten actions with finished player-facing labels —
+> "Buy Shares in Ferdale Ironworks", "Hostile Takeover of Vantrell" — and draws
+> exactly four of them.
+>
+> So the defect is not a button that lies. It is an offer the game computes,
+> labels, prices, and throws away without ever showing it. The player is not
+> misled; they are *never told the option exists*. Read against this document's
+> own bar — "nothing is ever unexplained" — that is a worse failure than a dead
+> button, because a dead button at least admits the verb is supposed to exist.
+>
+> This was found by Wave I2c's coverage check, which walks the drawn hit
+> structures and, once its unwrapping was corrected, collected eleven real keys
+> and **none of these five**. The table's `broadsheet.py:15xx` line numbers are
+> the *emit* sites in `enterprise_actions()` and remain correct; what was wrong
+> was the claim that emitting put them on screen. I asserted a rendering path I
+> had not measured, and the measurement had been available the whole time.
+>
+> Consequences: Wave I4 must **draw** these controls, not merely wire them —
+> and §4.2 check 1 must quantify over what the game OFFERS, not only over what
+> it draws, or it can never see them. Both changes are recorded in the plan.
+
 **The game ships dead buttons.** `gilded/ui/broadsheet.py:enterprise_actions()`
 emits **five** action kinds that nothing can execute. The set was computed
 mechanically as *emitted minus handled* rather than read off the screen:
