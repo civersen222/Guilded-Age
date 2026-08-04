@@ -13,11 +13,12 @@ from gilded.society.labor import dividend_multiplier
 
 
 def priced_transfer(ent, seller, buyer, pct, market, game, dry_run=False) -> float:
-    """Sell a share tranche at the market's valuation.
+    """Sell a share tranche at the market price: market.value(ent, game) * pct / 100.
 
     Returns the gold actually paid (0.0 for every no-op path).
     """
-    price = market.value(ent, game) * pct / 100.0
+    val = market.value(ent, game)
+    price = val * pct / 100.0
     if dry_run:
         return price
     if price <= 0:
@@ -25,7 +26,7 @@ def priced_transfer(ent, seller, buyer, pct, market, game, dry_run=False) -> flo
     if buyer.gold_reserve < price:
         return 0.0
     moved = transfer_shares(ent, seller.id, buyer.id, pct)
-    cost = market.value(ent, game) * moved / 100.0
+    cost = val * moved / 100.0
     buyer.gold_reserve -= cost
     seller.gold_reserve += cost
     if moved > 0:

@@ -47,6 +47,10 @@ class House:
         self.treasury += amount
         self.journal.append((turn, label, amount))
 
+    def can_afford(self, amount: float) -> bool:
+        """Check whether the treasury covers *amount* without spending."""
+        return amount >= 0 and amount <= self.treasury
+
     def debit(self, turn: int, label: str, amount: float) -> None:
         if amount < 0:
             raise ValueError("amount must be non-negative")
