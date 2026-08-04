@@ -352,3 +352,239 @@ def test_sway_penalty():
     sway(agent, target, SeqRng([0.70]))
     after = target._society.opinions.get((target.id, agent.id), 0)
     assert after - before == -5
+
+
+# ---------------------------------------------------------------- I4c1 (FIND-4)
+# A takeover campaign is House business and spends the House treasury.
+#
+# Before this wave, Takeover.advance funded itself from self.buyer.gold_reserve
+# -- one person's purse. The buyer is whoever _executor_for picks for the
+# "capital" domain, and that person is chosen by STAT, never by wealth: measured
+# 0.00 gold in 20/20 seeds, and at turn 21 only 3-7 of 61-84 living kin per
+# house hold any gold at all. Ten campaigns started through the real initiative
+# path moved 0.0% of shares over 20 turns each while the House treasury held
+# 419 to 17,443 gold. Every OTHER spending verb -- charter, expansion, railway,
+# buyoff, allowance, compensation -- checks and debits house.treasury.
+#
+# Fixture: seed 47 at turn 2 is the smallest tree that discriminates. Ashworth's
+# capital executor is Ashoka Ashworth holding exactly 0.0 gold, the treasury
+# holds 2381.98, and House Vantrell has exactly one disloyal shareholder
+# (Alexios Vantrell, 20.0% of Yarehaven Ironworks).
+
+I4C1_BUYER_HOUSE = "Ashworth"
+I4C1_TARGET_HOUSE = "Vantrell"
+
+
+def _i4c1_fixture():
+    """seed 47, turn 2 -> (game, capital executor of Ashworth).
+
+    Asserts its own premises, so a test built on it can never pass or fail for
+    a reason that lives in the fixture rather than in the code under test.
+    """
+    from gilded.ai import _executor_for
+    from gilded.docket import INITIATIVES
+    from gilded.society.realm import disloyal_shareholders
+
+    game = GildedGame(seed=47)
+    for _ in range(2):
+        game.end_turn()
+    realm = game.realms[I4C1_BUYER_HOUSE]
+    executor = _executor_for(game, realm, INITIATIVES["start_takeover"][0])
+    assert executor.gold_reserve == 0.0, (
+        f"premise: the capital executor {executor.name} must hold no gold of "
+        f"their own, else a treasury test could pass on purse money "
+        f"(holds {executor.gold_reserve})")
+    assert game.houses[I4C1_BUYER_HOUSE].treasury > 100.0, (
+        f"premise: the buying House must be able to afford shares "
+        f"(treasury {game.houses[I4C1_BUYER_HOUSE].treasury})")
+    sellers = disloyal_shareholders(game.realms[I4C1_TARGET_HOUSE],
+                                    game.enterprises)
+    assert len(sellers) == 1, (
+        f"premise: the target must have exactly one disloyal shareholder for "
+        f"the arithmetic below to be single-sourced (has {len(sellers)})")
+    return game, executor
+
+
+def _i4c1_target_ents(game):
+    return [e for e in game.enterprises if e.house == I4C1_TARGET_HOUSE]
+
+
+def test_the_takeover_campaign_spends_the_house_treasury():
+    """FIND-4: the House pays, and the executor's own purse is not touched."""
+    from gilded.society.shares import house_stake
+
+    game, executor = _i4c1_fixture()
+    house = game.houses[I4C1_BUYER_HOUSE]
+    treasury_before = house.treasury
+    ents = _i4c1_target_ents(game)
+
+    Takeover(executor, I4C1_BUYER_HOUSE,
+             I4C1_TARGET_HOUSE).advance(game.realms, game.enterprises,
+                                        game.rng, game)
+
+    assert house_stake(ents, executor.id) > 0.0, (
+        "one turn of quiet buying moved no shares at all")
+    assert house.treasury < treasury_before, (
+        f"the House treasury did not pay for the shares "
+        f"({treasury_before} -> {house.treasury})")
+    assert executor.gold_reserve == 0.0, (
+        f"the executor's own purse was charged ({executor.gold_reserve}); "
+        f"a takeover is House business")
+
+
+def test_a_rich_person_cannot_fund_a_takeover_from_an_empty_treasury():
+    """The mirror of the rule: personal wealth is not House money.
+
+    Without this, an implementation that reads EITHER purse or treasury would
+    satisfy every other test in this block.
+    """
+    from gilded.society.shares import house_stake
+
+    game, executor = _i4c1_fixture()
+    executor.gold_reserve = 10000.0
+    game.houses[I4C1_BUYER_HOUSE].treasury = 0.0
+    ents = _i4c1_target_ents(game)
+
+    msgs = Takeover(executor, I4C1_BUYER_HOUSE,
+                    I4C1_TARGET_HOUSE).advance(game.realms, game.enterprises,
+                                               game.rng, game)
+
+    assert house_stake(ents, executor.id) == 0.0, (
+        "a broke House bought shares out of a courtier's private fortune")
+    assert executor.gold_reserve == 10000.0, (
+        f"the private fortune was spent ({executor.gold_reserve})")
+    assert msgs == [], f"a campaign that bought nothing still spoke: {msgs}"
+
+
+def test_the_seller_is_paid_exactly_what_the_treasury_lost():
+    """Gold conserves across the sale: the disloyal holder pockets the lot."""
+    from gilded.society.realm import disloyal_shareholders
+
+    game, executor = _i4c1_fixture()
+    house = game.houses[I4C1_BUYER_HOUSE]
+    seller = disloyal_shareholders(game.realms[I4C1_TARGET_HOUSE],
+                                   game.enterprises)[0]
+    treasury_before = house.treasury
+    seller_before = seller.gold_reserve
+
+    Takeover(executor, I4C1_BUYER_HOUSE,
+             I4C1_TARGET_HOUSE).advance(game.realms, game.enterprises,
+                                        game.rng, game)
+
+    spent = treasury_before - house.treasury
+    gained = seller.gold_reserve - seller_before
+    assert spent > 0.0, "the treasury spent nothing"
+    assert abs(spent - gained) < 1e-9, (
+        f"the House spent {spent} but the seller received {gained}")
+
+
+def test_the_house_pays_the_market_rate_for_the_shares_it_gets():
+    """Conservation is not enough: the RATE has to be the priced one.
+
+    A campaign that pays half of share_price still conserves gold between the
+    treasury and the seller and still moves shares, so every other test in this
+    block passes while the House quietly buys a rival at a discount.
+    """
+    from gilded.society.schemes import share_price
+
+    game, executor = _i4c1_fixture()
+    house = game.houses[I4C1_BUYER_HOUSE]
+    ents = _i4c1_target_ents(game)
+    held_before = {e.eid: e.ledger.get(executor.id, 0.0) for e in ents}
+    treasury_before = house.treasury
+
+    Takeover(executor, I4C1_BUYER_HOUSE,
+             I4C1_TARGET_HOUSE).advance(game.realms, game.enterprises,
+                                        game.rng, game)
+
+    expected = sum((e.ledger.get(executor.id, 0.0) - held_before[e.eid])
+                   * share_price(e, game) for e in ents)
+    assert expected > 0.0, "no shares changed hands"
+    spent = treasury_before - house.treasury
+    assert abs(spent - expected) < 1e-9, (
+        f"the House paid {spent} for shares priced at {expected}")
+
+
+def test_the_share_purchase_is_journalled_as_a_treasury_debit():
+    """The spend goes through House.debit, so the ledger screen can show it.
+
+    An implementation that assigns house.treasury directly would pass every
+    test above and leave the player's own accounts silently wrong.
+    """
+    game, executor = _i4c1_fixture()
+    house = game.houses[I4C1_BUYER_HOUSE]
+    before = len(house.journal)
+    treasury_before = house.treasury
+
+    Takeover(executor, I4C1_BUYER_HOUSE,
+             I4C1_TARGET_HOUSE).advance(game.realms, game.enterprises,
+                                        game.rng, game)
+
+    added = house.journal[before:]
+    assert len(added) == 1, f"expected one journal entry, got {added}"
+    turn, label, amount = added[0]
+    assert label == "share purchase", f"journalled under {label!r}"
+    assert amount < 0.0, f"a purchase was journalled as a credit ({amount})"
+    assert abs(amount + (treasury_before - house.treasury)) < 1e-9, (
+        f"the journal says {amount} but the treasury moved "
+        f"{house.treasury - treasury_before}")
+
+
+def test_a_thin_treasury_does_not_crash_the_campaign():
+    """House.debit RAISES on an overdraft, and floating point overdraws.
+
+    treasury=0.09 is a measured case: the tranche the House can afford costs
+    0.09000000000000001 when multiplied back out, one ulp over the balance.
+    The campaign must still buy what it can and leave the treasury at or above
+    zero, not take the whole game down with a ValueError mid-turn.
+    """
+    from gilded.society.shares import house_stake
+
+    game, executor = _i4c1_fixture()
+    house = game.houses[I4C1_BUYER_HOUSE]
+    house.treasury = 0.09
+    ents = _i4c1_target_ents(game)
+
+    Takeover(executor, I4C1_BUYER_HOUSE,
+             I4C1_TARGET_HOUSE).advance(game.realms, game.enterprises,
+                                        game.rng, game)
+
+    assert house_stake(ents, executor.id) > 0.0, (
+        "0.09 gold bought no shares at all")
+    assert house.treasury >= 0.0, (
+        f"the House ended the purchase overdrawn ({house.treasury})")
+
+
+def test_a_started_campaign_actually_moves_shares():
+    """The whole wired path: initiative -> chassis -> advance.
+
+    This is the FIND-4 regression. On the code this wave replaces, this exact
+    fixture held 0.0% after both turns, forever, and the player's only feedback
+    was the one line of prose the initiative printed on the turn they clicked.
+    """
+    from gilded.docket import initiative
+    from gilded.society.shares import house_stake
+
+    def mine():
+        return [t for t in game.takeovers
+                if t.buyer_house == I4C1_BUYER_HOUSE
+                and t.target_house == I4C1_TARGET_HOUSE]
+
+    game, executor = _i4c1_fixture()
+    assert mine() == [], (
+        "premise: no Ashworth campaign against Vantrell may already be running, "
+        "or the click under test is not the one being measured")
+    initiative(game, I4C1_BUYER_HOUSE, "start_takeover", executor,
+               target_house=I4C1_TARGET_HOUSE)
+    assert len(mine()) == 1, (
+        f"the click registered {len(mine())} campaigns of its own")
+
+    game.end_turn()
+    game.end_turn()
+
+    ents = _i4c1_target_ents(game)
+    assert house_stake(ents, executor.id) > 0.0, (
+        "two turns of a running campaign bought nothing the player can see")
+    assert executor.gold_reserve == 0.0, (
+        f"the campaign charged the executor personally "
+        f"({executor.gold_reserve})")
