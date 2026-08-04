@@ -282,6 +282,16 @@ def _close_director_picker_dispatch(game, house, view, action):
     return []
 
 
+def _close_found_picker_eligible(game, house, action):
+    return True, ""
+
+
+def _close_found_picker_dispatch(game, house, view, action):
+    view._found_picker = None
+    view._found_picker_hits.clear()
+    return []
+
+
 def _takeover_reach(game, target_house):
     """How much of `target_house` is genuinely for sale.
 
@@ -333,6 +343,77 @@ def _attack_takeover_dispatch(game, house, view, action):
     for line in lines:
         game.events.append(TurnEvent(line, "ledger", house))
     return lines
+
+
+# ── found enterprise ─────────────────────────────────────────────────────────
+
+def _get_available_charters(game, house):
+    """Return list of (kind, province_pid, province_name, cost) for charters available to house."""
+    from gilded.enterprises import ENTERPRISE_TYPES
+    from gilded.ai import ENDOWMENT_KIND
+    existing = {(e.kind, e.province) for e in game.enterprises}
+    owned_pids = {p.pid for p in game.provinces_of(house)}
+    charters = []
+    for kind, etype in ENTERPRISE_TYPES.items():
+        endow_needed = etype[0]  # needs-endowment
+        cost = etype[3]          # found_cost
+        for pid in owned_pids:
+            if (kind, pid) in existing:
+                continue
+            prov = game.atlas.provinces.get(pid)
+            if prov is None:
+                continue
+            if endow_needed is None:
+                # bank needs no endowment — available in every owned province
+                charters.append((kind, pid, prov.name, cost))
+            elif endow_needed in prov.endowments:
+                charters.append((kind, pid, prov.name, cost))
+    charters.sort(key=lambda c: (c[3], c[2], c[0]))  # sort by cost, then name, then kind
+    return charters
+
+
+def _found_enterprise_eligible(game, house, action):
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    charters = _get_available_charters(game, house)
+    if not charters:
+        return False, "There are no charters available."
+    house_obj = game.houses.get(house)
+    if house_obj is None:
+        return False, "House not found."
+    cheapest = min(c[3] for c in charters)
+    if house_obj.treasury < cheapest:
+        return False, f"The House cannot afford the cheapest charter ({int(cheapest)} gold)."
+    return True, ""
+
+
+def _found_enterprise_dispatch(game, house, view, action):
+    """Dispatch for the Found Enterprise button or a charter row click.
+
+    If the action carries a (kind, pid) tuple, actually found the enterprise.
+    If it carries just True, open the chooser.
+    """
+    val = action["found_enterprise"]
+    if isinstance(val, tuple):
+        # Row click — actually found the enterprise
+        kind, pid = val
+        from gilded.docket import INITIATIVES, initiative
+        from gilded.ai import _executor_for
+        from gilded.chassis import TurnEvent
+        realm = game.realms[house]
+        executor = _executor_for(game, realm, INITIATIVES["found_enterprise"][0])
+        game.attention[house] -= 1
+        lines = initiative(game, house, "found_enterprise", executor,
+                           kind=kind, province_pid=pid)
+        for line in lines:
+            game.events.append(TurnEvent(line, "ledger", house))
+        view._found_picker = None
+        view._found_picker_hits.clear()
+        return lines
+    else:
+        # Button click — open the chooser
+        view._found_picker = True
+        return []
 
 
 # ── view-local keys (click already mutated the view) ─────────────────────────
@@ -389,6 +470,11 @@ ACTIONS: dict[str, PlayerAction] = {
         attention_cost=1, gold_cost=0,
         eligible=_attack_takeover_eligible, dispatch=_attack_takeover_dispatch,
     ),
+    "found_enterprise": PlayerAction(
+        key="found_enterprise", label="Found Enterprise", domain="capital",
+        attention_cost=1, gold_cost=0,
+        eligible=_found_enterprise_eligible, dispatch=_found_enterprise_dispatch,
+    ),
     # view verbs
     "toggle_narrate": PlayerAction(
         key="toggle_narrate", label="Toggle Narration", domain="view",
@@ -399,6 +485,11 @@ ACTIONS: dict[str, PlayerAction] = {
         key="close_director_picker", label="Close Director Picker", domain="view",
         attention_cost=0, gold_cost=0,
         eligible=_close_director_picker_eligible, dispatch=_close_director_picker_dispatch,
+    ),
+    "close_found_picker": PlayerAction(
+        key="close_found_picker", label="Close Found Picker", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_close_found_picker_eligible, dispatch=_close_found_picker_dispatch,
     ),
     # view-local keys
     "tab": PlayerAction(

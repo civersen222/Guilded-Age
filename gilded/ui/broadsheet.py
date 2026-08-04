@@ -793,6 +793,8 @@ class BroadsheetView:
         # director picker state: None or eid whose picker is open
         self._director_picker: Optional[int] = None
         self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        self._found_picker: Optional[str] = None
+        self._found_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         self.hover_pos: Tuple[int, int] | None = None
         self.regions = RegionSet()
         self.hovered: Optional[Region] = None
@@ -1852,6 +1854,11 @@ class BroadsheetView:
             self._draw_director_picker(surface, content, action_rect.top, f_b)
             return
 
+        # If the found picker is open, draw it instead of buttons
+        if self._found_picker is not None:
+            self._draw_found_picker(surface, content, action_rect.top, f_b)
+            return
+
         # Draw Expand and Appoint buttons for eligible ventures
         from gilded.enterprises import TIER_MAX
         from gilded.docket import director_candidates
@@ -1870,6 +1877,18 @@ class BroadsheetView:
                     y = self._action_button(
                         surface, content, action_rect, y, act, body, "house",
                         "Hostile Takeover", None if ok else why, None,
+                        BUTTON_BG, BUTTON_EDGE)
+                    if y is None:
+                        return
+                elif verb == "found_enterprise":
+                    from gilded.ui.actions import ACTIONS, _get_available_charters
+                    ok, why = ACTIONS["found_enterprise"].eligible(
+                        self.game, self.house, action_dict)
+                    charters = _get_available_charters(self.game, self.house)
+                    label = f"Found Enterprise ({len(charters)} charters)"
+                    y = self._action_button(
+                        surface, content, action_rect, y, act, body, "house",
+                        label, None if ok else why, None,
                         BUTTON_BG, BUTTON_EDGE)
                     if y is None:
                         return
@@ -1960,6 +1979,48 @@ class BroadsheetView:
             self.regions.add(Region(rect=ln_rect, action={"appoint_director": eid, "char_id": c.id}, hint=f"Appoint {c.name} to direct {ent.name}.", group="picker"))
             y += ln_h + 2
 
+    def _draw_found_picker(self, surface, content: pygame.Rect, y, body) -> None:
+        """Draw the charter chooser for founding an enterprise."""
+        from gilded.ui.actions import _get_available_charters
+        charters = _get_available_charters(self.game, self.house)
+
+        # Back button
+        back_text = "Back"
+        back_surf = body.render(back_text, True, INK)
+        back_w = back_surf.get_width() + 16
+        back_h = body.get_height() + 8
+        back_rect = pygame.Rect(PAD, y, back_w, back_h)
+        pygame.draw.rect(surface, (70, 70, 50), back_rect)
+        pygame.draw.rect(surface, INK, back_rect, 2)
+        surface.blit(back_surf, (PAD + 8, y + 4))
+        self._found_picker_hits.append((back_rect, {"close_found_picker": True}))
+        self.regions.add(Region(rect=back_rect, action={"close_found_picker": True}, hint="Return to the ventures without founding.", group="picker"))
+        y += back_h + 4
+
+        # Header
+        header = body.render(f"Available Charters ({len(charters)})", True, INK)
+        surface.blit(header, (PAD, y))
+        y += body.get_height() + 6
+
+        # Charter rows — all of them, no cap
+        for kind, pid, pname, cost in charters:
+            if y > content.bottom - 20:
+                return
+            from gilded.enterprises import ENTERPRISE_TYPES
+            etype = ENTERPRISE_TYPES[kind]
+            output = etype[1]  # capacity-output
+            label = f"{pname} {kind} — {cost:.0f} gold"
+            txt_surf = body.render(label, True, INK)
+            txt_w = txt_surf.get_width() + 16
+            txt_h = body.get_height() + 8
+            txt_rect = pygame.Rect(PAD, y, txt_w, txt_h)
+            pygame.draw.rect(surface, BUTTON_BG, txt_rect)
+            pygame.draw.rect(surface, BUTTON_EDGE, txt_rect, 1)
+            surface.blit(txt_surf, (PAD + 8, y + 4))
+            self._found_picker_hits.append((txt_rect, {"found_enterprise": (kind, pid)}))
+            self.regions.add(Region(rect=txt_rect, action={"found_enterprise": (kind, pid)}, hint=f"Found a {kind} in {pname} for {cost:.0f} gold.", group="picker"))
+            y += txt_h + 2
+
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
         house = g.houses[name]
@@ -2022,6 +2083,9 @@ class BroadsheetView:
             if "close_director_picker" in action:
                 self._director_picker = None
                 self._director_picker_hits.clear()
+            if "close_found_picker" in action:
+                self._found_picker = None
+                self._found_picker_hits.clear()
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):
@@ -2038,6 +2102,13 @@ class BroadsheetView:
                         if "close_director_picker" in action:
                             self._director_picker = None
                             self._director_picker_hits.clear()
+                        return action
+            if self._found_picker is not None:
+                for rect, action in self._found_picker_hits:
+                    if rect.collidepoint(pos):
+                        if "close_found_picker" in action:
+                            self._found_picker = None
+                            self._found_picker_hits.clear()
                         return action
             for rect, act in self._enterprise_hits:
                 if rect.collidepoint(pos):

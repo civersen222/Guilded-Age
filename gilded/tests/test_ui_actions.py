@@ -167,23 +167,22 @@ def test_every_drawn_key_is_registered():
 # ── CHECK 1b — OFFERED ⊆ ACTIONS (split) ─────────────────────────────────────
 
 
-def test_exactly_four_offered_verbs_are_unregistered():
+def test_exactly_two_offered_verbs_are_unregistered():
     """Pins the CURRENT state by value, and passes today.
 
-    This is the half that can be scored. I4b registered defend_buyout, taking
-    this from five to four. When a later wave registers the rest, this test
-    goes RED and names what changed -- which is the report the xfail below is
-    structurally unable to make."""
+    This is the half that can be scored. I4b registered defend_buyout, I4d
+    registered found_enterprise, taking this from five to two. When a later
+    wave registers the rest, this test goes RED and names what changed."""
     state = _rich_state()
     unregistered = _offered_keys(state.view) - set(act.ACTIONS)
     assert unregistered == {
-        "buy_shares", "sell_shares", "found_enterprise",
+        "buy_shares", "sell_shares",
     }, f"the unregistered set moved: {sorted(unregistered)}"
 
 
 @pytest.mark.xfail(strict=True, reason=(
-    "Five verbs the game OFFERS have no registry entry. Wave I4 wires "
-    "them; when it does, this XPASSES and the test above goes red -- "
+    "Two verbs the game OFFERS have no registry entry (buy_shares, sell_shares). "
+    "When they are registered, this XPASSES and the test above goes red -- "
     "two independent alarms, which is the point of the split."))
 def test_every_offered_key_is_registered():
     """Every verb the game offers via enterprise_actions() is in ACTIONS."""
@@ -233,12 +232,12 @@ def test_exactly_three_enterprise_verbs_are_drawn():
 
     drawn = _enterprise_drawn_verbs(view)
     assert drawn == {"appoint_director", "expand_enterprise", "defend_buyout",
-                     "attack_takeover"}, (
+                     "attack_takeover", "found_enterprise"}, (
         f"the Enterprises tab's drawn verbs moved: {sorted(drawn)}")
 
     undrawn = _offered_keys(view) - drawn
     assert undrawn == {
-        "buy_shares", "sell_shares", "found_enterprise",
+        "buy_shares", "sell_shares",
     }, f"the undrawn set moved: {sorted(undrawn)}"
 
 
@@ -355,6 +354,15 @@ def _build_action_for_key(key, game, house, view=None):
         if outsiders:
             return {"defend_buyout": (owned[0].eid, outsiders[0])}
         return None
+    elif key == "found_enterprise":
+        from gilded.ui.actions import _get_available_charters
+        charters = _get_available_charters(game, house)
+        if charters:
+            kind, pid, pname, cost = charters[0]
+            return {"found_enterprise": (kind, pid)}
+        return None
+    elif key == "close_found_picker":
+        return {"close_found_picker": True}
     elif key == "tab":
         return {"tab": TABS[0]}
     elif key == "select_province":
