@@ -46,7 +46,7 @@ from gilded.ui.ledger import (
     totals_line, history_cells,
 )
 from gilded.ui.figures import figure
-from gilded.ui.widgets import Region, RegionSet, RegionState
+from gilded.ui.widgets import INK, Region, RegionSet, RegionState
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
@@ -777,6 +777,8 @@ class BroadsheetView:
         self.hover_pos: Tuple[int, int] | None = None
         self.regions = RegionSet()
         self.hovered: Optional[Region] = None
+        self.tooltip_text: str | None = None
+        self.tooltip_rect: pygame.Rect | None = None
         self._w = 0
         self._h = 0
 
@@ -841,6 +843,60 @@ class BroadsheetView:
         self._draw_tab_bar(surface)
         self._draw_hud(surface)
         self._draw_bottom_bar(surface)
+
+        # ── I3e: re-resolve hover and draw tooltip ──────────────────────────
+        self.tooltip_text = None
+        self.tooltip_rect = None
+        if self.hover_pos is not None:
+            self.hovered = self.regions.at(self.hover_pos)
+        if self.hovered is not None:
+            r = self.hovered
+            if r.state is RegionState.DISABLED:
+                text = r.reason
+            else:
+                text = r.hint
+            if text:
+                pygame.draw.rect(surface, INK, r.rect, 2)
+                font = _font(15)
+                words = text.split()
+                lines = []
+                current_line = ""
+                max_w = 300
+                for word in words:
+                    test = (current_line + " " + word).strip()
+                    if font.size(test)[0] <= max_w:
+                        current_line = test
+                    else:
+                        if current_line:
+                            lines.append(current_line)
+                        current_line = word
+                if current_line:
+                    lines.append(current_line)
+                line_h = font.get_linesize()
+                pad = 4
+                panel_w = max_w + 2 * pad
+                panel_h = len(lines) * line_h + 2 * pad
+                x = self.hover_pos[0] + 12
+                y = self.hover_pos[1] + 12
+                screen = surface.get_rect()
+                if x + panel_w > screen.right:
+                    x = self.hover_pos[0] - panel_w - 12
+                if y + panel_h > screen.bottom:
+                    y = self.hover_pos[1] - panel_h - 12
+                if x < 0:
+                    x = 4
+                if y < 0:
+                    y = 4
+                rect = pygame.Rect(x, y, panel_w, panel_h)
+                pygame.draw.rect(surface, INK, rect)
+                pygame.draw.rect(surface, CARD_EDGE, rect, 1)
+                cy = rect.top + pad
+                for line in lines:
+                    surf_t = font.render(line, True, PAPER_BG)
+                    surface.blit(surf_t, (rect.left + pad, cy))
+                    cy += line_h
+                self.tooltip_text = text
+                self.tooltip_rect = rect
 
     def _draw_tab_bar(self, surface) -> None:
         pygame.draw.rect(surface, TAB_BG, (0, 0, self._w, TAB_H))

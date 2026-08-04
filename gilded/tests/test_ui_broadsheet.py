@@ -18,7 +18,7 @@ from gilded.intel import threat_rank
 from gilded.society.schemes import share_price
 from gilded.enterprises import TIER_MAX
 from gilded.ui.actions import ACTIONS
-from gilded.ui.widgets import Region, RegionState
+from gilded.ui.widgets import INK, Region, RegionState
 
 
 # Measured at 53cb9af with _view() on a 1280x900 surface. Every tab
@@ -3417,3 +3417,215 @@ def test_the_suppressed_control_is_not_offered_by_the_legacy_list():
         f"eid {target2.eid} has a greyed Appoint but is still listed as "
         f"offered in _appoint_hits: {appointable}")
 
+# â”€â”€ I3e â€” the screen answers the mouse â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+def _px(surface):
+    """The surface's pixels as bytes, for exact comparison. draw() is
+    deterministic (two draws of the same state are byte-identical), which
+    is what makes comparing frames a sound test rather than a flaky one."""
+    return pygame.image.tobytes(surface, "RGB")
+
+
+def test_hovering_a_control_changes_the_pixels():
+    """The premise is the interesting half: two draws with no hover must be
+    IDENTICAL. If they are not, draw() is non-deterministic and the second
+    assertion would be measuring noise rather than the tooltip."""
+    g, v = _view()
+    a, b = pygame.Surface((1280, 900)), pygame.Surface((1280, 900))
+    v.draw(a)
+    v.draw(b)
+    assert _px(a) == _px(b), (
+        "premise: two draws of the same state must be byte-identical, or "
+        "the comparison below measures noise")
+
+    target = _region_with(v, "end_turn")
+    v.handle_hover(target.rect.center)
+    c = pygame.Surface((1280, 900))
+    v.draw(c)
+    assert _px(c) != _px(a), (
+        "hovering a control changed nothing on screen: the mouse moved over "
+        "a button and the broadsheet did not acknowledge it")
+
+
+def test_the_tooltip_says_the_hint_for_an_offered_control():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    target = _region_with(v, "end_turn")
+    assert target.state is not RegionState.DISABLED, (
+        "premise: end_turn must be offered, or this measures the wrong path")
+    assert target.hint, "premise: the region must carry a hint to show"
+    v.handle_hover(target.rect.center)
+    v.draw(surf)
+    assert v.tooltip_text == target.hint, (
+        f"expected the hint {target.hint!r}, got {v.tooltip_text!r}")
+
+
+def test_the_tooltip_says_the_reason_for_a_refused_control():
+    """The payoff of Wave I3d. A refused control's explanation is its
+    reason; its hint is empty, so a tooltip that reads `hint` shows the
+    player an empty box over the one control they most need explained."""
+    g, v, target, region = _suppressed("under_construction")
+    assert region.state is RegionState.DISABLED, "premise: it must be refused"
+    assert region.reason, "premise: a refused control must carry a reason"
+    v.handle_hover(region.rect.center)
+    v.draw(pygame.Surface((1280, 900)))
+    assert v.tooltip_text == region.reason, (
+        f"expected the refusal reason {region.reason!r}, got "
+        f"{v.tooltip_text!r}")
+    assert "building" in v.tooltip_text, (
+        f"the tooltip must say why it refuses: {v.tooltip_text!r}")
+
+
+def test_the_hovered_control_is_outlined():
+    """Pixels change AT the control itself, not merely wherever the tooltip
+    panel happened to land.
+
+    The tooltip overlaps part of the control's own border -- for end_turn it
+    covers 67 of the 380 border points -- so a sample of the whole border is
+    satisfied by the tooltip alone and the outline could be missing
+    entirely. Every sample point inside `tooltip_rect` is therefore excluded.
+    Measured: the tightest of the 143 controls still leaves 274 free border
+    points, so this is never a starved sample."""
+    def changed_border(view, region, before, after):
+        r = region.rect
+        pts = [(x, y) for x in range(r.left, r.right)
+               for y in (r.top, r.bottom - 1)]
+        pts += [(x, y) for y in range(r.top, r.bottom)
+                for x in (r.left, r.right - 1)]
+        tip = view.tooltip_rect
+        free = [p for p in pts if tip is None or not tip.collidepoint(p)]
+        assert len(free) >= 100, (
+            f"premise: only {len(free)} border points of {r} fall outside "
+            f"the tooltip {tip}; this sample cannot tell an outline from a "
+            f"tooltip")
+        return [p for p in free if before.get_at(p) != after.get_at(p)]
+
+    # An offered control.
+    g, v = _view()
+    a = pygame.Surface((1280, 900))
+    v.draw(a)
+    offered = _region_with(v, "end_turn")
+    v.handle_hover(offered.rect.center)
+    b = pygame.Surface((1280, 900))
+    v.draw(b)
+    assert changed_border(v, offered, a, b), (
+        f"the offered control at {offered.rect} is pixel-identical outside "
+        f"the tooltip before and after hovering: nothing marks which control "
+        f"the mouse is on")
+
+    # A refused control answers too. It just answers "no".
+    _g2, v2, _target, refused = _suppressed("under_construction")
+    c = pygame.Surface((1280, 900))
+    v2.draw(c)
+    v2.handle_hover(refused.rect.center)
+    d = pygame.Surface((1280, 900))
+    v2.draw(d)
+    assert changed_border(v2, refused, c, d), (
+        f"the REFUSED control at {refused.rect} is not marked when the mouse "
+        f"is over it. A greyed control still acknowledges the cursor -- it "
+        f"answers 'no', but it answers.")
+
+
+def test_nothing_hovered_draws_no_tooltip():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    assert v.tooltip_text is None, (
+        f"a tooltip appeared before the mouse ever moved: {v.tooltip_text!r}")
+    assert v.tooltip_rect is None
+    empty = None
+    for x in range(100, 1200, 40):
+        for y in range(100, 800, 40):
+            if v.regions.at((x, y)) is None:
+                empty = (x, y)
+                break
+        if empty:
+            break
+    assert empty is not None, "premise: some point of the page must be bare"
+    v.handle_hover(empty)
+    v.draw(surf)
+    assert v.tooltip_text is None, (
+        f"hovering bare paper at {empty} produced a tooltip: "
+        f"{v.tooltip_text!r}")
+    assert v.tooltip_rect is None
+
+
+def test_the_tooltip_follows_a_tab_switch():
+    """self.hovered is rebuilt every frame by draw(), so it must be
+    RE-RESOLVED at draw time. A tooltip driven by the hovered region left
+    over from the previous frame describes a control that is no longer on
+    the screen."""
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.active_tab = "Enterprises"
+    v.draw(surf)
+    live = [r.rect.center for r in v.regions._regions]
+    v.active_tab = "Briefing"
+    v.draw(surf)
+    orphan = next((p for p in live if v.regions.at(p) is None), None)
+    assert orphan is not None, (
+        "premise: some point must be a control on Enterprises and bare on "
+        "Briefing, or this test cannot tell stale from fresh")
+
+    v.active_tab = "Enterprises"
+    v.draw(surf)
+    v.handle_hover(orphan)
+    v.draw(surf)
+    assert v.tooltip_text is not None, (
+        f"premise: {orphan} must show a tooltip on Enterprises")
+
+    v.active_tab = "Briefing"
+    v.draw(surf)
+    assert v.hovered is None, (
+        f"after switching tabs the view still thinks the mouse is over "
+        f"{v.hovered.action if v.hovered else None} -- that control is not "
+        f"on this tab")
+    assert v.tooltip_text is None, (
+        f"a tooltip from the previous tab survived the switch: "
+        f"{v.tooltip_text!r}")
+
+
+def test_every_control_on_every_tab_explains_itself():
+    """143 controls, ten tabs, and each one says something when pointed at,
+    inside a panel that is on the screen and has actually been painted.
+
+    The pixel check is what stops a tooltip that is computed and never
+    blitted: tooltip_text would be right, tooltip_rect would be right, and
+    the player would see nothing."""
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    screen = surf.get_rect()
+    checked = 0
+    for tab in TABS:
+        v.active_tab = tab
+        v.hover_pos, v.hovered = None, None
+        v.draw(surf)
+        baseline = len(v.regions._regions)
+        for region in list(v.regions._regions):
+            v.handle_hover(region.rect.center)
+            v.draw(surf)
+            assert len(v.regions._regions) == baseline, (
+                f"{tab}: hovering {region.action} moved the region count "
+                f"from {baseline} to {len(v.regions._regions)} -- the "
+                f"tooltip or the outline was registered as a Region, which "
+                f"makes the tooltip itself clickable")
+            assert v.tooltip_text, (
+                f"{tab}: the control carrying {region.action} explains "
+                f"nothing when pointed at")
+            assert v.tooltip_rect is not None, (
+                f"{tab}: {region.action} produced text but no panel")
+            assert screen.contains(v.tooltip_rect), (
+                f"{tab}: the tooltip for {region.action} is drawn partly "
+                f"off-screen at {v.tooltip_rect} (screen is {screen})")
+            fill = surf.get_at((v.tooltip_rect.left + 4,
+                                v.tooltip_rect.top + 4))[:3]
+            assert fill == INK, (
+                f"{tab}: the tooltip panel for {region.action} was never "
+                f"painted -- the pixel inside {v.tooltip_rect} is {fill}, "
+                f"expected the INK fill {INK}")
+            checked += 1
+    assert checked == 143, (
+        f"expected to point at 143 controls across the ten tabs, pointed at "
+        f"{checked}. The census moved; EXPECTED_REGIONS should have caught "
+        f"this first.")
