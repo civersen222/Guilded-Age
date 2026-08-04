@@ -19,11 +19,9 @@ from typing import Optional
 
 import pygame
 
-from gilded.ai import _executor_for
 from gilded.chassis import GildedGame
-from gilded.dashboard import scoreboard
-from gilded.docket import rule as docket_rule
 from gilded.saga.narrator import select_narrator
+from gilded.ui.actions import ACTIONS
 from gilded.ui.broadsheet import BroadsheetView
 
 WINDOW_TITLE = "The Gilded Machine"
@@ -60,95 +58,16 @@ def new_app_state(seed: int, player_house: Optional[str] = None,
                     narrator)
 
 
-def _executor_by_id(state: AppState, char_id: Optional[str], domain: str):
-    realm = state.game.realms[state.house]
-    if char_id is not None:
-        for c in realm.characters:
-            if c.is_alive and c.id == char_id:
-                return c
-    return _executor_for(state.game, realm, domain)
-
-
 def _apply_action(state: AppState, action: dict) -> None:
     """Turn one view action into a move on the game (the UI stays a client)."""
-    g, h = state.game, state.house
-    if action.get("toggle_narrate"):
-        state.view.narrate_on = not state.view.narrate_on
-        return
-    if action.get("end_turn"):
-        if g.game_over is None:
-            pre = scoreboard(g, h)            # the board the council closed on
-            g.end_turn()
-            state.view.prev_board = pre       # non-invasive snapshot for the feed
-            state.view.active_tab = "Briefing"
-        return
-    target = action.get("place_informant")
-    if target is not None:
-        if g.attention.get(h, 0) <= 0 or target not in g.houses or target == h:
+    for key in action:
+        act = ACTIONS.get(key)
+        if act is None:
+            continue
+        ok, _reason = act.eligible(state.game, state.house, action)
+        if not ok:
             return
-        from gilded.docket import initiative
-        executor = _executor_by_id(state, None, "diplomacy")
-        g.attention[h] -= 1
-        initiative(g, h, "establish_informant", executor, target_house=target)
-        return
-    stance = action.get("set_stance")
-    if stance is not None:
-        key, value = stance
-        g.directives[h].set_stance(key, value)
-        return
-    if "rule" in action:
-        pid, option_key, exec_id = action["rule"]
-        if g.attention.get(h, 0) <= 0:
-            return
-        petition = next((p for p in g.docket_by_house.get(h, [])
-                         if p.pid == pid), None)
-        if petition is None:
-            return
-        executor = _executor_by_id(state, exec_id, petition.domain)
-        g.attention[h] -= 1
-        docket_rule(g, petition, option_key, executor)
-        g.docket_by_house[h].remove(petition)
-    eid = action.get("expand_enterprise")
-    if eid is not None:
-        venture = next((e for e in g.enterprises if e.eid == eid and e.house == h), None)
-        if venture is None:
-            return
-        if g.attention.get(h, 0) <= 0:
-            return
-        from gilded.docket import INITIATIVES, initiative
-        domain = INITIATIVES["expand_enterprise"][0]
-        executor = _executor_by_id(state, None, domain)
-        g.attention[h] -= 1
-        lines = initiative(g, h, "expand_enterprise", executor, eid=eid)
-        from gilded.chassis import TurnEvent
-        for line in lines:
-            g.events.append(TurnEvent(line, "ledger", h))
-        return
-    if action.get("close_director_picker"):
-        state.view._director_picker = None
-        state.view._director_picker_hits.clear()
-        return
-    # appoint_director branch — only fires when char_id is present and truthy
-    if "appoint_director" in action:
-        eid = action["appoint_director"]
-        char_id = action.get("char_id")
-        if not char_id:
-            return
-        venture = next((e for e in g.enterprises if e.eid == eid and e.house == h), None)
-        if venture is None:
-            return
-        if g.attention.get(h, 0) <= 0:
-            return
-        from gilded.docket import INITIATIVES, initiative
-        domain = INITIATIVES["appoint_director"][0]
-        executor = _executor_by_id(state, None, domain)
-        g.attention[h] -= 1
-        lines = initiative(g, h, "appoint_director", executor, eid=eid, char_id=char_id)
-        from gilded.chassis import TurnEvent
-        for line in lines:
-            g.events.append(TurnEvent(line, "ledger", h))
-        state.view._director_picker = None
-        state.view._director_picker_hits.clear()
+        act.dispatch(state.game, state.house, state.view, action)
         return
 
 
