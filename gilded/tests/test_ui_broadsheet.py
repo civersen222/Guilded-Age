@@ -1736,9 +1736,9 @@ def test_defend_buyout_prices_the_actual_stake():
                          for c in r.characters}
                 buyer = _executor_for(g, g.realms[ent.house],
                                       INITIATIVES["buy_shares"][0])
-                expected_price = priced_transfer(
-                    ent, by_id[outside_id], buyer, ent.ledger[outside_id],
-                    g.market, g, dry_run=True)
+                from gilded.society.shares import stake_cost
+                expected_price = stake_cost(
+                    ent, ent.ledger[outside_id], g)
                 # Find the buyout action for this venture
                 buyout_actions = [
                     a for a in actions

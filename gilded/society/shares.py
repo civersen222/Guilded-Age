@@ -13,9 +13,13 @@ from gilded.society.labor import dividend_multiplier
 
 
 def stake_cost(ent, pct, game) -> float:
-    """Cost to buy `pct` percent of an enterprise at current market value."""
-    val = game.market.value(ent, game)
-    return val * pct / 100.0
+    """Cost to buy `pct` percent of an enterprise at capital price.
+
+    Uses the same formula as share_price so that the Enterprises page quote,
+    the button guard, and the treasury debit are all one number.
+    """
+    from gilded.society.schemes import share_price
+    return share_price(ent, game) * pct
 
 
 def priced_transfer(ent, seller, buyer, pct, market, game, dry_run=False) -> float:

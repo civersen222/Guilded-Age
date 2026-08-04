@@ -175,10 +175,11 @@ def test_stake_cost_returns_float():
     assert isinstance(cost, float)
 
 
-def test_stake_cost_matches_market_value_formula():
-    """stake_cost equals market.value(ent, game) * pct / 100.0"""
+def test_stake_cost_matches_share_price_formula():
+    """stake_cost equals share_price(ent, game) * pct"""
+    from gilded.society.schemes import share_price
     g, ent, _, _ = _setup()
-    expected = g.market.value(ent, g) * 10.0 / 100.0
+    expected = share_price(ent, g) * 10.0
     assert abs(stake_cost(ent, 10.0, g) - expected) < 1e-6
 
 
@@ -188,10 +189,11 @@ def test_stake_cost_zero_pct_returns_zero():
     assert stake_cost(ent, 0.0, g) == 0.0
 
 
-def test_stake_cost_full_hundred_equals_market_value():
-    """100% stake costs exactly the market value."""
+def test_stake_cost_full_hundred_equals_share_price_times_100():
+    """100% stake costs share_price * 100."""
+    from gilded.society.schemes import share_price
     g, ent, _, _ = _setup()
-    expected = g.market.value(ent, g)
+    expected = share_price(ent, g) * 100.0
     assert abs(stake_cost(ent, 100.0, g) - expected) < 1e-6
 
 

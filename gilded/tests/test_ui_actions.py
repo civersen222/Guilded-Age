@@ -631,13 +631,11 @@ def _buyout_offer(view):
 
 def _engine_price(view, ent, outside_id, pct):
     """What the engine will actually charge to move *pct* of *ent* from the
-    outside holder to the player's ruler."""
-    from gilded.society.shares import priced_transfer
-    game = view.game
-    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
-    ruler = game.realms[view.house].ruler
-    return priced_transfer(ent, by_id[outside_id], ruler, pct,
-                           game.market, game, dry_run=True)
+    outside holder to the player's ruler.
+    
+    The engine uses share_price (via stake_cost), not market.value."""
+    from gilded.society.shares import stake_cost
+    return stake_cost(ent, pct, view.game)
 
 
 def _fund_house(state, amount):

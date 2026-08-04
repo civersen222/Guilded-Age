@@ -822,7 +822,8 @@ def test_p1_quote_equals_treasury_drop():
 
     g = GildedGame(seed=42)
     while g.turn < 5:
-        g.advance()
+        g.end_turn()
+        g.open_turn()
     h = next(x for x in sorted(g.houses) if g.ents_of(x))
     ent = next(e for e in g.ents_of(h) if e.house == h)
     # Find a rival stakeholder
@@ -938,10 +939,18 @@ def test_p6_quote_not_priced_off_market_value():
     sp_after = share_price(ent, g)
     # Restore
     g.market.prices = g.market._prices_backup
-    # share_price should be clamped — it should not change by 100x
-    # At minimum, the two quotes should be equal or very close (within the clamp band)
-    assert abs(quote_after - quote_before) < quote_before * 0.01, \
-        f"quote moved from {quote_before} to {quote_after} when market.value changed 100x"
+    # share_price is clamped to [TAKEOVER_PRICE * BAND_LO, TAKEOVER_PRICE * BAND_HI]
+    # i.e. [0.5, 8.0] per 1%.  A 100x market swing cannot push it outside that band.
+    from gilded.society.schemes import TAKEOVER_PRICE, BAND_LO, BAND_HI
+    lo = TAKEOVER_PRICE * BAND_LO  # 0.5
+    hi = TAKEOVER_PRICE * BAND_HI  # 8.0
+    assert lo <= sp_before <= hi, f"sp_before={sp_before} outside clamp band [{lo},{hi}]"
+    assert lo <= sp_after <= hi, f"sp_after={sp_after} outside clamp band [{lo},{hi}]"
+    # quote = sp * pct, so it's also bounded by the clamp band * pct
+    assert lo * 10.0 <= quote_before <= hi * 10.0, \
+        f"quote_before={quote_before} outside expected range [{lo*10},{hi*10}]"
+    assert lo * 10.0 <= quote_after <= hi * 10.0, \
+        f"quote_after={quote_after} outside expected range [{lo*10},{hi*10}]"
 
 
 def test_p7_no_phantom_trade():
@@ -973,7 +982,8 @@ def test_p8_fumble_reports_and_charges_actual_size():
 
     g = GildedGame(seed=45)
     while g.turn < 10:
-        g.advance()
+        g.end_turn()
+        g.open_turn()
     h = next(x for x in sorted(g.houses) if g.ents_of(x))
     ent = next(e for e in g.ents_of(h) if e.house == h)
     rival_id = None
