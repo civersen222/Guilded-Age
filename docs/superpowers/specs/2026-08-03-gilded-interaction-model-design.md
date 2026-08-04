@@ -69,11 +69,33 @@ the four above produces no action, no error and no feedback.
 
 **The root cause is that there is no shared registry.**
 `broadsheet.py:1811 handle_click` is a hand-written cascade of per-tab `if`
-blocks, each consulting its own ad-hoc hit list — `_tab_rects`, `_exec_hits`,
-`_option_hits`, `_dial_hits`, `_informant_hits`, `_director_picker_hits`,
-`_atlas_polys`. Seven conventions invented separately. The emitter and the
-handler share no contract, so the four dead buttons are the arithmetic
-difference between two lists that nothing compares.
+blocks, each consulting its own ad-hoc hit structure. **There are eleven**,
+populated at eleven different places and cleared at two:
+
+| Structure | Populated | Shape |
+|---|---|---|
+| `_tab_rects` | `:840,843` | `dict[str, Rect]` |
+| `_narrate_rect` | `:899` | bare `Rect` |
+| `_end_turn_rect` | `:904` | bare `Rect` |
+| `_option_hits` | `:1006` | `list[(Rect, tuple)]` |
+| `_exec_hits` | `:1017` | `list[(Rect, pid)]` |
+| `_dial_hits` | `:1322` | `list[(Rect, key)]` |
+| `_atlas_polys` | `:1364` | polygons, hit via `pick_province` |
+| `_informant_hits` | `:1457,1470` | `list[(Rect, dict)]` |
+| `_enterprise_hits` | `:1713` | `list[(Rect, dict)]` |
+| `_appoint_hits` | `:1730` | `list[(Rect, dict)]` |
+| `_director_picker_hits` | `:1753,1778` | `list[(Rect, dict)]` |
+
+Five different shapes across eleven structures, each convention invented
+separately. The emitter and the handler share no contract, so the four dead
+buttons are the arithmetic difference between two lists that nothing compares.
+
+**Corrigendum.** An earlier revision of this document said *seven*. It was
+counting the names visible in the `handle_click` cascade and missed the two bare
+rects and two of the Enterprises lists. The number was recounted mechanically
+over the file rather than read off the screen. Recorded rather than quietly
+edited, because this document's authority rests on §9 and a spec that silently
+repairs its own measurements is not evidence.
 
 **Twelve of fifteen initiative verbs are unreachable from the UI.**
 `gilded/docket.py:837-853` declares `INITIATIVES` with fifteen entries. Exactly
@@ -104,9 +126,13 @@ The player receives no warning that the count began.
 `modify_opinion` mutates the opinion matrix and *returns* a formatted sentence
 containing the reason; **36 non-test call sites discard the return value.**
 `dashboard.py:MetricDelta` is `(change: float, direction: int)` — no cause field
-exists. `society/ideology.py:85-97 tick_legitimacy` applies four distinct forces
-(happiness recovery or unhappiness drain, atrocity drain, tide drain) and
-returns one float, which `chassis.py:349` stores as a bare number.
+exists. `society/ideology.py:85-97 tick_legitimacy` applies three concurrent
+forces — contentment (a recovery **or** a drain; the arms are an `if/else` and
+cannot both fire), atrocity drain, tide drain — and then **silently clamps** to
+`0.0 .. LEGITIMACY_MAX` at `:97`. All of it returns as one float, which
+`chassis.py:349` stores as a bare number. The clamp is the worst of the four: a
+meter that stops falling with no explanation reads to the player as the game
+lying.
 
 **The attention economy is flat.** `chassis.py:37 ATTENTION_PER_TURN = 3`, reset
 each turn at `:162`, never scaled anywhere. `TURN_BUDGET = 70` (`:45`). The
@@ -167,8 +193,16 @@ that can be hovered is by construction a thing that can be clicked.
 3. `state == DISABLED` with an empty `reason` is a **test failure**, not a
    default. This is the entire silent-refusal class of defect.
 4. A click on a DISABLED region surfaces its `reason`. It never does nothing.
-5. The seven ad-hoc hit lists in `broadsheet.py` migrate to the registry. They
-   may be migrated one tab at a time; a partially migrated tree must still pass.
+5. The eleven ad-hoc hit structures in `broadsheet.py` migrate to the registry.
+   They may be migrated one tab at a time; a partially migrated tree must still
+   pass.
+6. **Three emitted keys are view-local**, not game actions: `tab`,
+   `select_province`, `open_director_picker`. `handle_click` mutates the view
+   and returns them; `_apply_action` receives them and does nothing. They are
+   not dead buttons — the click already worked. They are nonetheless *emitted
+   keys*, so §4's registry must carry them with `domain == "view"` rather than
+   exempt them. An exemption clause is how the four real dead buttons survived;
+   the registry gets no escape hatch.
 
 ### 2.3 Why a registry rather than adding hover per tab
 
@@ -217,7 +251,7 @@ makes an incomplete explanation a failing test rather than a rounding shrug.
 
 | Site | Today | Required |
 |---|---|---|
-| `society/ideology.py:85-97 tick_legitimacy` | four forces → one float | four named `Cause`s |
+| `society/ideology.py:85-97 tick_legitimacy` | three concurrent forces + a silent clamp → one float | three named `Cause`s, plus a clamp cause when `:97` bites — without it the causes sum to more than the delta and §3.2 fails, correctly |
 | `dashboard.py MetricDelta` | `change`, `direction` | + `causes` |
 | `society/characters.py:333-338 modify_opinion` | reason returned, discarded at 36 call sites | reason appended to a bounded per-character ledger |
 | `chassis.py:89,357-362 brewing_turns` | never rendered | a visible countdown naming both preconditions |
@@ -374,7 +408,7 @@ non-negotiable:
 |---|---|---|
 | **I1** | `RegionSet`/`Region` in `widgets.py` + `MOUSEMOTION` in `app.py`. **No consumer.** | suite green; withheld sweep on the new types |
 | **I2** | `gilded/ui/actions.py` + `ACTIONS` covering the 3 currently-wired verbs only; `app._apply_action` dispatches through it | behaviour byte-identical; §4.2 check 2 passes, check 1 lands `xfail(strict=True)` naming the four missing keys |
-| **I3** | Migrate `broadsheet.handle_click`'s seven hit lists to the registry, tab by tab | every existing click still works; hover states appear |
+| **I3** | Migrate `broadsheet.handle_click`'s eleven hit structures to the registry, tab by tab | every existing click still works; hover states appear |
 | **I4** | Wire the four dead buttons + the remaining unreachable verbs into `ACTIONS` | §4.2 check 1 passes **and its `xfail` marker is removed**; each verb demonstrably changes the sim |
 | **I5** | `gilded/provenance.py` + the four §3.3 sites | the sum check holds at a discriminating fixture |
 | **I6** | §5 type/space/colour law + the lint test | no literal RGB outside `widgets.py` |
@@ -414,7 +448,11 @@ trust without re-deriving all of it.
 
 `app.py:170-183` event types; `app.py:75-152` handler key set;
 `broadsheet.py:1550-1574` the four emitted-but-unhandled actions;
-`broadsheet.py:1811-1851` the seven ad-hoc hit lists;
+`broadsheet.py:1811-1866` the eleven ad-hoc hit structures and their eleven
+populate sites, enumerated mechanically over the file (an earlier revision said
+seven — see the corrigendum in §1.2);
+the three view-local emitted keys `tab`, `select_province`,
+`open_director_picker`;
 `docket.py:837-853` fifteen `INITIATIVES` entries;
 `docket.py:22-24` the six names imported from `gilded.fronts`;
 `fronts.py:52-53,142,145-147,247-248` commander fields and their only writer;
