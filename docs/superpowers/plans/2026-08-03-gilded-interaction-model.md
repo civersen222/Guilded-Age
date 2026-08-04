@@ -626,6 +626,59 @@ the unreachable verbs, and **removes the `xfail`**.
 > plan's original `>= 12` floor was never satisfiable. Floors stated without
 > measurement are guesses; this one cost two waves.
 
+> **Third corrigendum, 2026-08-03, from a read-only sweep of `docket.INITIATIVES`.**
+> The two "open questions" above are both closed, and one of them is closed the
+> opposite way to what the second corrigendum guessed. Every one of the five is
+> wireable; none is deleted.
+>
+> **`attack_takeover` is `start_takeover` under another name.** `INITIATIVES`
+> holds `"start_takeover": ("capital", _init_start_takeover)`
+> (`docket.py:848`), whose signature is `_init_start_takeover(ctx,
+> target_house=None, **kw)`. The broadsheet emits `{"attack_takeover":
+> target_house}` — the same single argument, already the right type. The AI
+> reaches the same verb by its real name at `agenda.py:269`. So this is a
+> one-line registry mapping, not a missing mechanic and not a button to delete.
+> The second corrigendum left this open; it should not have. I had searched
+> only for the emitted spelling.
+>
+> **`defend_buyout` is a labelled preset of `buy_shares`, not a mechanic.**
+> Nothing named `defend_buyout` exists outside the one emit site, and there is
+> no buyout-defence code under any other name. But read the label the game
+> composes: *"Buy out Vantrell's stake in Ferdale Ironworks"*. That is a share
+> purchase from a named counterparty — `_init_buy_shares(ctx, eid, seller_id,
+> pct)` with `seller_id = outside_id` and `pct = outside_pct`, both of which
+> `enterprise_actions()` already has in hand at `broadsheet.py:1571-1581`,
+> along with the computed `price`. So it wires to an existing initiative with
+> its arguments pre-filled. The second corrigendum reached "wire it" by the
+> wrong route — reachability of the *offer* — and was right by accident.
+>
+> **The real I4 difficulty is neither of those. It is that `buy_shares` and
+> `sell_shares` are underspecified by the UI.** The initiatives need three
+> arguments — `eid`, a counterparty id, and a percentage — and the emitted
+> payload carries one: `{"buy_shares": eid}`. There is no counterparty picker
+> and no size control anywhere in the interface. `defend_buyout` escapes this
+> because its counterparty and size are implied by the offer; the two generic
+> verbs do not.
+>
+> So I4 splits cleanly along a line the plan did not anticipate:
+>
+> - **Three verbs are wire-and-draw.** `found_enterprise`, `attack_takeover`
+>   and `defend_buyout` each have every argument they need at the emit site.
+>   They need a registry entry and a place on the Enterprises tab.
+> - **Two verbs need a new control.** `buy_shares` and `sell_shares` need the
+>   player to choose a counterparty and an amount. The director picker
+>   (`_director_picker` / `_draw_director_picker`) is the existing precedent
+>   for a modal chooser opened from a venture row, and the stance dial is the
+>   existing precedent for a magnitude control. Reuse both rather than
+>   inventing a third idiom.
+>
+> **Split I4 accordingly: I4a draws and wires the three complete verbs; I4b
+> builds the counterparty-and-size control and wires the two that need it.**
+> I4b is the larger and is the first wave in this arc that adds an interaction
+> idiom rather than migrating one. Its acceptance is behavioural, not
+> structural: after I4b a player can buy a named percentage from a named person
+> and see the gold move.
+
 ### The five dead buttons first
 
 The set was computed mechanically as *emitted minus handled*, not read off the
