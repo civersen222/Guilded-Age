@@ -804,6 +804,7 @@ class BroadsheetView:
         self.tooltip_rect: pygame.Rect | None = None
         self._w = 0
         self._h = 0
+
     # --- executor candidates -------------------------------------------------
 
     def _candidates(self, pid: int) -> List[Optional[object]]:
