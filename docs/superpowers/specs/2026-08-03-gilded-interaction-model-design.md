@@ -53,19 +53,40 @@ two event types — `KEYDOWN` (`:173`) and `MOUSEBUTTONDOWN` (`:180`). There is 
 feedback, no mechanism by which a control can explain why it is unavailable.
 
 **The game ships dead buttons.** `gilded/ui/broadsheet.py:enterprise_actions()`
-emits four action kinds that nothing can execute:
+emits **five** action kinds that nothing can execute. The set was computed
+mechanically as *emitted minus handled* rather than read off the screen:
 
-| Emitted at | Action key | Handler in `app.py` |
-|---|---|---|
-| `broadsheet.py:1561` | `buy_shares` | none |
-| `broadsheet.py:1562` | `sell_shares` | none |
-| `broadsheet.py:1564` | `found_enterprise` | none |
-| `broadsheet.py:1574` | `defend_buyout` | none |
+| Emitted at | Action key | Handler in `app.py` | Verb in `INITIATIVES`? |
+|---|---|---|---|
+| `broadsheet.py:1561` | `buy_shares` | none | yes |
+| `broadsheet.py:1562` | `sell_shares` | none | yes |
+| `broadsheet.py:1564` | `found_enterprise` | none | yes |
+| `broadsheet.py:1574` | `defend_buyout` | none | no |
+| `broadsheet.py:1588` | `attack_takeover` | none | **no — nothing by that name exists anywhere** |
+
+**`attack_takeover` is the worst thing in this document.** It is emitted by the
+Powers tab, handled by nothing, and corresponds to no verb in `INITIATIVES` —
+the nearest real verb is `start_takeover`. It is not a button that stopped
+working; it is a button that never could have worked, under a name the
+simulation has never heard of.
+
+It is nonetheless defended by **five tests** in `test_ui_broadsheet.py`
+(`:439`, `:456`, `:463`, `:497`, `:1437`) asserting that it is offered, that it
+names a rival, that it differs by seed, and that it targets the top threat. Every
+one of them asserts the *emitter produced the dict*. Not one asserts that
+anything can consume it.
+
+This is the exact hollow shape this project has a standing rule about, found in
+the wild at its purest: five green tests, a feature that has never once
+executed, and a suite that would report no change if the whole path were
+deleted. It is also the strongest possible argument for §4.2 check 1 — a single
+coverage assertion catches all five of these at once, where five separate
+feature tests caught none of them.
 
 `app.py:_apply_action` (`:75-152`) handles eight keys and only eight:
 `toggle_narrate`, `end_turn`, `place_informant`, `set_stance`, `rule`,
 `expand_enterprise`, `close_director_picker`, `appoint_director`. Clicking any of
-the four above produces no action, no error and no feedback.
+the five above produces no action, no error and no feedback.
 
 **The root cause is that there is no shared registry.**
 `broadsheet.py:1811 handle_click` is a hand-written cascade of per-tab `if`
@@ -87,7 +108,7 @@ populated at eleven different places and cleared at two:
 | `_director_picker_hits` | `:1753,1778` | `list[(Rect, dict)]` |
 
 Five different shapes across eleven structures, each convention invented
-separately. The emitter and the handler share no contract, so the four dead
+separately. The emitter and the handler share no contract, so the five dead
 buttons are the arithmetic difference between two lists that nothing compares.
 
 **Corrigendum.** An earlier revision of this document said *seven*. It was
@@ -309,13 +330,13 @@ At a fixture game:
    arranged at any fixture is not "hard to test" — it is unreachable in play,
    and §6 rule 4 applies: delete it, do not manufacture the input.
 
-Check 1 **fails today, four times** (§1.2). That is a requirement of the
+Check 1 **fails today, five times** (§1.2). That is a requirement of the
 verification law in §6 — a new check that cannot fail at base measures nothing —
 and it is satisfied here without contrivance.
 
 **How a known-failing check lives in a green suite.** In I2 the registry covers
-only the three wired verbs, so check 1 still fails by four. It is committed in
-I2 marked `xfail(strict=True)` with the four missing keys named in the reason
+only the already-wired verbs, so check 1 still fails by five. It is committed in
+I2 marked `xfail(strict=True)` with the five missing keys named in the reason
 string. `strict` is what makes this honest: if I4's wiring lands and the check
 starts passing, a `strict` xfail turns the suite **red** until the marker is
 removed, so the marker cannot be forgotten and quietly go on excusing a defect
@@ -407,9 +428,9 @@ non-negotiable:
 | Wave | Content | Gate |
 |---|---|---|
 | **I1** | `RegionSet`/`Region` in `widgets.py` + `MOUSEMOTION` in `app.py`. **No consumer.** | suite green; withheld sweep on the new types |
-| **I2** | `gilded/ui/actions.py` + `ACTIONS` covering the 3 currently-wired verbs only; `app._apply_action` dispatches through it | behaviour byte-identical; §4.2 check 2 passes, check 1 lands `xfail(strict=True)` naming the four missing keys |
+| **I2** | `gilded/ui/actions.py` + `ACTIONS` covering the already-wired verbs only; `app._apply_action` dispatches through it | behaviour byte-identical; §4.2 check 2 passes, check 1 lands `xfail(strict=True)` naming the five missing keys |
 | **I3** | Migrate `broadsheet.handle_click`'s eleven hit structures to the registry, tab by tab | every existing click still works; hover states appear |
-| **I4** | Wire the four dead buttons + the remaining unreachable verbs into `ACTIONS` | §4.2 check 1 passes **and its `xfail` marker is removed**; each verb demonstrably changes the sim |
+| **I4** | Wire the five dead buttons + the remaining unreachable verbs into `ACTIONS` | §4.2 check 1 passes **and its `xfail` marker is removed**; each verb demonstrably changes the sim |
 | **I5** | `gilded/provenance.py` + the four §3.3 sites | the sum check holds at a discriminating fixture |
 | **I6** | §5 type/space/colour law + the lint test | no literal RGB outside `widgets.py` |
 

@@ -393,14 +393,15 @@ def test_every_registered_action_dispatches_without_raising():
         assert all(isinstance(line, str) for line in out)
 ```
 
-Check 1 **fails today by four** — `buy_shares`, `sell_shares`,
-`found_enterprise`, `defend_buyout` (spec §1.2). In this wave it is committed as:
+Check 1 **fails today by five** — `buy_shares`, `sell_shares`,
+`found_enterprise`, `defend_buyout`, `attack_takeover` (spec §1.2). In this wave it is committed as:
 
 ```python
 @pytest.mark.xfail(
     strict=True,
-    reason="I4 wires buy_shares, sell_shares, found_enterprise, defend_buyout; "
-           "until then broadsheet emits four keys no registry entry covers",
+    reason="I4 wires buy_shares, sell_shares, found_enterprise, "
+           "defend_buyout and attack_takeover; until then broadsheet emits "
+           "five keys no registry entry covers",
 )
 def test_every_emitted_action_key_is_in_the_registry():
     ...
@@ -457,7 +458,7 @@ def _apply_action(state: AppState, action: dict) -> None:
 4. `_apply_action` contains **no** per-verb `if` branches — dispatch is a lookup.
 5. Each verb's logic exists **once**; the old bodies are moved, not copied.
 6. §4.2 check 2 passes for every registered key.
-7. §4.2 check 1 is present, `xfail(strict=True)`, naming the four missing keys.
+7. §4.2 check 1 is present, `xfail(strict=True)`, naming the five missing keys.
 8. **Every pre-existing test in `test_ui_app.py` passes unmodified.**
 9. Suite ≥ 1270 passed, 1 xfailed.
 
@@ -579,15 +580,33 @@ def test_the_open_director_picker_shadows_the_cards_beneath_it():
 - Modify: `gilded/ui/actions.py`, `gilded/ui/broadsheet.py`
 - Test: `gilded/tests/test_ui_actions.py`
 
-Everything before this was scaffolding. This wave wires the four dead buttons and
-the twelve unreachable verbs, and **removes the `xfail`**.
+Everything before this was scaffolding. This wave wires the five dead buttons and
+the unreachable verbs, and **removes the `xfail`**.
 
-### The four dead buttons first
+### The five dead buttons first
 
-`buy_shares` (`broadsheet.py:1561`), `sell_shares` (`:1562`),
-`found_enterprise` (`:1564`), `defend_buyout` (`:1574`). Their simulation
-implementations already exist in `docket.INITIATIVES` — this is wiring, not new
+The set was computed mechanically as *emitted minus handled*, not read off the
+screen — which is how the fifth was found after an earlier revision of the spec
+said four.
+
+`buy_shares` (`:1561`), `sell_shares` (`:1562`) and `found_enterprise` (`:1564`)
+have implementations in `docket.INITIATIVES`. Those three are wiring, not new
 mechanics.
+
+**`defend_buyout` (`:1574`) and `attack_takeover` (`:1588`) do not.** Neither
+name is in `INITIATIVES`. `attack_takeover` appears nowhere in `gilded/` outside
+that one emit site and **five tests** in `test_ui_broadsheet.py` (`:439`, `:456`,
+`:463`, `:497`, `:1437`) which assert only that the dict is produced. The nearest
+real verb is `start_takeover`.
+
+For those two the wave must answer a question first, and **answer it in the
+commit message**: is the key a misspelling of a real verb, in which case map it
+and say so — or is it a button for a mechanic that was never built, in which case
+**delete the button and its five tests**.
+
+Do not invent an `attack_takeover` implementation to turn a check green. That is
+manufacturing the input, and the standing rule is that an unreachable path is
+deleted, not covered.
 
 ### Then the remaining unreachable verbs
 
@@ -620,7 +639,7 @@ buttons ship dead in the first place, with tests asserting
 
 ### Steps
 
-- [ ] **1.** Add the four dead-button entries to `ACTIONS`, each with a real
+- [ ] **1.** Add the dead-button entries to `ACTIONS`, each with a real
       `eligible` (gold, attention, ownership) returning a player-readable refusal.
 - [ ] **2.** Run check 1. It now passes — and because the xfail is `strict`, the
       suite goes **red**. That is the marker doing its job.
