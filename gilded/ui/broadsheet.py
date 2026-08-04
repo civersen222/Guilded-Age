@@ -1700,6 +1700,31 @@ class BroadsheetView:
             })
         return actions
 
+    def _action_button(self, surface, content, action_rect, y, act, body, group, default_label, reason=None, hit_list=None, fill=None, edge=None):
+        """Draw a single action button.  Returns next `y`, or `None` if content would overflow."""
+        if fill is None:
+            fill = BUTTON_BG
+        if edge is None:
+            edge = BUTTON_EDGE
+        btn_text = act.get("label", default_label)
+        text_color = FADED if reason else INK
+        btn_surf = body.render(btn_text, True, text_color)
+        btn_w = btn_surf.get_width() + 16
+        btn_h = body.get_height() + 8
+        btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
+        if y + btn_h > content.bottom:
+            return None
+        pygame.draw.rect(surface, fill, btn_rect)
+        pygame.draw.rect(surface, edge, btn_rect, 2)
+        surface.blit(btn_surf, (action_rect.left + 8, y + 4))
+        if reason:
+            self.regions.add(Region(rect=btn_rect, action=act.get("action", act), state=RegionState.DISABLED, reason=reason, group=group))
+        else:
+            if hit_list is not None:
+                hit_list.append((btn_rect, act))
+            self.regions.add(Region(rect=btn_rect, action=act.get("action", act), hint=act.get("label", ""), group=group))
+        return y + btn_h + 4
+
     def _draw_enterprises(self, surface, content) -> None:
         """Draw the Enterprises tab: model → layout → draw."""
         g, name = self.game, self.house
@@ -1812,68 +1837,26 @@ class BroadsheetView:
 
             if verb == "expand_enterprise":
                 # Skip expand if under construction or at max tier
+                reason = None
                 if ent.under_construction > 0 or ent.target_tier >= TIER_MAX:
                     if ent.under_construction > 0:
                         reason = f"{ent.name} is still building; it cannot expand until the work is finished."
                     else:
                         reason = f"{ent.name} is already at its greatest extent."
-                    btn_text = act.get("label", f"Expand {ent.name}")
-                    btn_surf = body.render(btn_text, True, FADED)
-                    btn_w = btn_surf.get_width() + 16
-                    btn_h = body.get_height() + 8
-                    btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
-                    if y + btn_h > content.bottom:
-                        return
-                    pygame.draw.rect(surface, BUTTON_BG, btn_rect)
-                    pygame.draw.rect(surface, BUTTON_EDGE, btn_rect, 2)
-                    surface.blit(btn_surf, (action_rect.left + 8, y + 4))
-                    self.regions.add(Region(rect=btn_rect, action=act.get("action", act), state=RegionState.DISABLED, reason=reason, group=f"venture:{eid}"))
-                    y += btn_h + 4
-                    continue
-                btn_text = act.get("label", f"Expand {ent.name}")
-                btn_surf = body.render(btn_text, True, INK)
-                btn_w = btn_surf.get_width() + 16
-                btn_h = body.get_height() + 8
-                btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
-                if y + btn_h > content.bottom:
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Expand {ent.name}", reason, self._enterprise_hits, BUTTON_BG, BUTTON_EDGE)
+                if y is None:
                     return
-                pygame.draw.rect(surface, BUTTON_BG, btn_rect)
-                pygame.draw.rect(surface, BUTTON_EDGE, btn_rect, 2)
-                surface.blit(btn_surf, (action_rect.left + 8, y + 4))
-                self._enterprise_hits.append((btn_rect, act))
-                self.regions.add(Region(rect=btn_rect, action=act.get("action", act), hint=act.get("label", ""), group=f"venture:{eid}"))
-                y += btn_h + 4
 
             elif verb == "appoint_director":
                 pool = director_candidates(self.game, self.house, eid)
+                reason = None
                 if not pool:
                     reason = f"No one in the house pool is fit to direct {ent.name}."
-                    btn_text = act.get("label", f"Appoint Director for {ent.name}")
-                    btn_surf = body.render(btn_text, True, FADED)
-                    btn_w = btn_surf.get_width() + 16
-                    btn_h = body.get_height() + 8
-                    btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
-                    if y + btn_h > content.bottom:
-                        return
-                    pygame.draw.rect(surface, BUTTON_BG, btn_rect)
-                    pygame.draw.rect(surface, BUTTON_EDGE, btn_rect, 2)
-                    surface.blit(btn_surf, (action_rect.left + 8, y + 4))
-                    self.regions.add(Region(rect=btn_rect, action=act.get("action", act), state=RegionState.DISABLED, reason=reason, group=f"venture:{eid}"))
-                    y += btn_h + 4
-                    continue
-                btn_text = act.get("label", f"Appoint Director for {ent.name}")
-                btn_surf = body.render(btn_text, True, INK)
-                btn_w = btn_surf.get_width() + 16
-                btn_h = body.get_height() + 8
-                btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
-                if y + btn_h > content.bottom:
+                fill = (50, 50, 70) if not reason else BUTTON_BG
+                edge = INK if not reason else BUTTON_EDGE
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Appoint Director for {ent.name}", reason, self._appoint_hits, fill, edge)
+                if y is None:
                     return
-                pygame.draw.rect(surface, (50, 50, 70), btn_rect)
-                pygame.draw.rect(surface, INK, btn_rect, 2)
-                surface.blit(btn_surf, (action_rect.left + 8, y + 4))
-                self._appoint_hits.append((btn_rect, act))
-                self.regions.add(Region(rect=btn_rect, action=act.get("action", act), hint=act.get("label", ""), group=f"venture:{eid}"))
-                y += btn_h + 4
 
     def _draw_director_picker(self, surface, content, y, body) -> None:
         """Draw the director candidate picker for the open venture."""
