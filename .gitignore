@@ -32,3 +32,6 @@ crash_log.txt
 commit_msg*.txt
 .claude/
 .cynco*/
+
+# Test artefacts
+gilded_quicksave.pkl
