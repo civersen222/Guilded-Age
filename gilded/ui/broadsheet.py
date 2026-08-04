@@ -46,6 +46,7 @@ from gilded.ui.ledger import (
     totals_line, history_cells,
 )
 from gilded.ui.figures import figure
+from gilded.ui.widgets import Region, RegionSet, RegionState
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
@@ -774,6 +775,8 @@ class BroadsheetView:
         self._director_picker: Optional[int] = None
         self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         self.hover_pos: Tuple[int, int] | None = None
+        self.regions = RegionSet()
+        self.hovered: Optional[Region] = None
         self._w = 0
         self._h = 0
 
@@ -795,11 +798,13 @@ class BroadsheetView:
 
     def handle_hover(self, pos: Tuple[int, int]) -> None:
         self.hover_pos = pos
+        self.hovered = self.regions.at(pos)
 
     # --- drawing -------------------------------------------------------------
 
     def draw(self, surface) -> None:
         self._w, self._h = surface.get_size()
+        self.regions.clear()
         self._option_hits = []
         self._exec_hits = []
         self._dial_hits = []
@@ -842,9 +847,29 @@ class BroadsheetView:
         tabw = self._w // len(TABS)
         font = _font(18, bold=True)
         self._tab_rects = {}
+        TAB_HINTS = {
+            "Briefing": "Your command post — see what changed and act on it.",
+            "Gazette": "Read the world's news in full prose.",
+            "Ledger": "Track your money, income, and spending.",
+            "Letters": "Private correspondence from your network.",
+            "Docket": "Standing rules and appointments before the council.",
+            "Policies": "Set your house's five standing directives.",
+            "Enterprises": "Manage your ventures and their directors.",
+            "Atlas": "Survey the realm's map and your territory.",
+            "Powers": "See the other houses, their axes, and their moves.",
+            "House": "Your court, your people, and your standing.",
+        }
         for i, name in enumerate(TABS):
             rect = pygame.Rect(i * tabw, 0, tabw, TAB_H)
             self._tab_rects[name] = rect
+            self.regions.add(Region(
+                rect=rect,
+                action={"tab": name},
+                state=(RegionState.ACTIVE if name == self.active_tab
+                       else RegionState.ENABLED),
+                hint=TAB_HINTS[name],
+                group="tabs",
+            ))
             if name == self.active_tab:
                 pygame.draw.rect(surface, TAB_ACTIVE, rect)
             label = font.render(name, True,
@@ -901,11 +926,19 @@ class BroadsheetView:
         nrect = pygame.Rect(self._w - 170 - nlabel.get_width() - 36,
                             y + 10, nlabel.get_width() + 20, BOTTOM_H - 20)
         self._narrate_rect = nrect
+        self.regions.add(Region(rect=nrect,
+                                action={"toggle_narrate": True},
+                                hint="Turn the narrator's prose on or off.",
+                                group="chrome"))
         pygame.draw.rect(surface, EXEC_BG, nrect)
         surface.blit(nlabel, (nrect.centerx - nlabel.get_width() / 2,
                               nrect.centery - nlabel.get_height() / 2))
         rect = pygame.Rect(self._w - 170, y + 10, 154, BOTTOM_H - 20)
         self._end_turn_rect = rect
+        self.regions.add(Region(rect=rect,
+                                action={"end_turn": True},
+                                hint="Close the session and let the world move.",
+                                group="chrome"))
         pygame.draw.rect(surface, ENDTURN_BG, rect)
         et = font.render("End Turn", True, BUTTON_TEXT)
         surface.blit(et, (rect.centerx - et.get_width() / 2,
@@ -1813,6 +1846,12 @@ class BroadsheetView:
     # --- clicking ------------------------------------------------------------
 
     def handle_click(self, pos: Tuple[int, int]) -> Optional[dict]:
+        region = self.regions.at(pos)
+        if region is not None:
+            action = region.action
+            if "tab" in action:
+                self.active_tab = action["tab"]
+            return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):
                 self.active_tab = name

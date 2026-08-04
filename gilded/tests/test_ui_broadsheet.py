@@ -6,6 +6,7 @@ import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
+import pytest
 
 from gilded.chassis import GildedGame
 from gilded.docket import director_candidates
@@ -16,6 +17,7 @@ from gilded.agenda import ensure_agenda
 from gilded.intel import threat_rank
 from gilded.society.schemes import share_price
 from gilded.enterprises import TIER_MAX
+from gilded.ui.actions import ACTIONS
 
 
 def _view():
@@ -2392,6 +2394,135 @@ def test_completed_appointment_closes_list():
     assert v._director_picker is None, (
         "Picker should be closed after a completed appointment"
     )
+
+
+# ── WAVE I3a — Registry migration tests ─────────────────────────────────
+
+# CHECK 1 — THE CLICK IS UNCHANGED, INCLUDING ITS SIDE EFFECT.
+@pytest.mark.parametrize("tab_name", TABS)
+def test_tab_click_returns_action_and_switches_tab(tab_name):
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    centre = v.regions.at((v._tab_rects[tab_name].centerx, 0))
+    # Find the region for this tab
+    for region in v.regions._regions:
+        if region.rect == v._tab_rects[tab_name]:
+            centre = region.rect.center
+            break
+    assert v.handle_click(centre) == {"tab": tab_name}
+    assert v.active_tab == tab_name
+
+
+def test_end_turn_click_returns_action():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    for region in v.regions._regions:
+        if region.action == {"end_turn": True}:
+            assert v.handle_click(region.rect.center) == {"end_turn": True}
+            return
+    # Fallback: use the legacy rect
+    assert v.handle_click(v._end_turn_rect.center) == {"end_turn": True}
+
+
+def test_narrate_click_returns_action():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    for region in v.regions._regions:
+        if region.action == {"toggle_narrate": True}:
+            assert v.handle_click(region.rect.center) == {"toggle_narrate": True}
+            return
+    assert v.handle_click(v._narrate_rect.center) == {"toggle_narrate": True}
+
+
+# CHECK 2 — THE REGISTRY IS REBUILT, NOT ACCUMULATED.
+def test_registry_is_rebuilt_not_accumulated():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    n = len(v.regions)
+    v.draw(surf)
+    assert len(v.regions) == n
+    assert n == len(TABS) + 2
+
+
+# CHECK 3 — THE MIGRATION IS REAL, NOT DECORATIVE.
+def test_tab_click_works_without_legacy_tab_rects():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    rect = v._tab_rects["Atlas"]
+    v._tab_rects = {}
+    assert v.handle_click(rect.center) == {"tab": "Atlas"}
+    assert v.active_tab == "Atlas"
+
+
+def test_end_turn_click_works_without_legacy_rect():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    rect = v._end_turn_rect
+    v._end_turn_rect = None
+    assert v.handle_click(rect.center) == {"end_turn": True}
+
+
+def test_narrate_click_works_without_legacy_rect():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    rect = v._narrate_rect
+    v._narrate_rect = None
+    assert v.handle_click(rect.center) == {"toggle_narrate": True}
+
+
+# CHECK 4 — HOVER RESOLVES A REGION.
+def test_hover_resolves_region():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    end_turn_centre = None
+    for region in v.regions._regions:
+        if region.action == {"end_turn": True}:
+            end_turn_centre = region.rect.center
+            break
+    assert end_turn_centre is not None
+    v.handle_hover(end_turn_centre)
+    assert v.hovered is not None
+    assert v.hovered.action == {"end_turn": True}
+    assert v.hover_pos == end_turn_centre
+
+    # Hover over empty paper — find a point where no region exists
+    empty_point = None
+    for x in range(100, 1200, 100):
+        for y in range(100, 800, 100):
+            p = (x, y)
+            if v.regions.at(p) is None:
+                empty_point = p
+                break
+        if empty_point:
+            break
+    assert empty_point is not None
+    assert v.regions.at(empty_point) is None
+    v.handle_hover(empty_point)
+    assert v.hovered is None
+
+
+# CHECK 5 — EVERY REGISTERED REGION CARRIES A HINT AND A KNOWN ACTION.
+def test_every_registered_region_carries_hint_and_known_action():
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    for region in v.regions._regions:
+        assert region.hint, region.action
+        assert set(region.action) & set(ACTIONS), region.action
+
+
+# CHECK 6 — CLICKING BEFORE THE FIRST DRAW DOES NOT CRASH.
+def test_click_before_first_draw_does_not_crash():
+    g, v = _view()
+    assert v.handle_click((10, 10)) is None
 
 
 def test_pressed_row_returns_that_char_id():

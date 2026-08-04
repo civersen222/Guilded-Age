@@ -96,3 +96,9 @@ def test_clear():
     rs.clear()
     assert len(rs) == 0
     assert rs.at((0, 0)) is None
+
+
+# 9. CHECK 0 — RegionState has FOUR DISTINCT members
+def test_the_four_region_states_are_four_distinct_states():
+    assert len(set(RegionState)) == 4
+    assert RegionState.ACTIVE is not RegionState.ENABLED
