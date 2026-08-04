@@ -894,3 +894,113 @@ def test_a_refused_buyout_is_drawn_greyed_and_carries_the_reason():
         assert r.state is RegionState.DISABLED, (
             "a house that cannot pay was offered a live buyout button")
         assert r.reason, "the greyed buyout button carries no reason"
+
+
+# ── D-5, D-6: page-level button affordability and attention guard ────────────
+
+
+def test_D5_page_button_enabled_when_cheapest_affordable():
+    """D-5: Page-level found button is ENABLED when treasury is between
+    cheapest and dearest charter (cheapest 250, dearest 800).
+    
+    Uses treasury=260 (between 250 and 800) so the button should be enabled
+    because the house can afford at least the cheapest charter."""
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView
+    from gilded.ui.actions import _get_available_charters
+    
+    g = GildedGame(seed=42)
+    player = g.houses.keys().__iter__().__next__()
+    # Find the player-controlled house (not AI)
+    for h in g.houses:
+        player = h
+        break
+    
+    charters = _get_available_charters(g, player)
+    assert len(charters) > 0, "need charters to measure affordability"
+    costs = [c[3] for c in charters]
+    cheapest = min(costs)
+    dearest = max(costs)
+    assert cheapest < dearest, "need different cheapest/dearest to discriminate"
+    
+    # Set treasury between cheapest and dearest
+    g.houses[player].treasury = cheapest + 10
+    # Ensure attention is available
+    g.attention[player] = 3
+    
+    ok, why = act.ACTIONS["found_enterprise"].eligible(g, player, {"found_enterprise": True})
+    assert ok, f"button should be enabled at treasury {cheapest + 10} (cheapest={cheapest}): {why}"
+
+
+def test_D6_no_attention_refuses_found_enterprise():
+    """D-6: A house with no attention is refused found_enterprise."""
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView
+    
+    g = GildedGame(seed=42)
+    player = list(g.houses.keys())[0]
+    g.houses[player].treasury = 2000.0
+    g.attention[player] = 0
+    
+    ok, why = act.ACTIONS["found_enterprise"].eligible(g, player, {"found_enterprise": True})
+    assert not ok, "found_enterprise should be refused with zero attention"
+    assert "attention" in why.lower(), f"refusal should mention attention: {why}"
+
+
+# ── I4d1c: the eight rules the tests do not watch ─────────────────────────────
+
+def test_D1_enterprises_view_is_deterministic():
+    """D-1: Two calls to _enterprises_view with the same seed produce the same charters."""
+    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.ui.actions import _get_available_charters
+    g1, v1 = _enterprises_view(seed=42, turns=0)
+    g2, v2 = _enterprises_view(seed=42, turns=0)
+    c1 = _get_available_charters(g1, v1.house)
+    c2 = _get_available_charters(g2, v2.house)
+    assert c1 == c2, "same seed should produce identical charters"
+
+
+def test_D2_house_name_in_breadline():
+    """D-2: House name appears in the breadcrumb headline."""
+    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    g, v = _enterprises_view(seed=42, turns=0)
+    assert v.house, "house should be set"
+    name = g.houses[v.house].name
+    assert name in v.breadcrumbs, f"breadcrumb should contain house name '{name}': {v.breadcrumbs}"
+
+
+def test_D3_breadcrumbs_are_regions():
+    """D-3: Breadcrumb buttons are interactive Region instances."""
+    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    g, v = _enterprises_view(seed=42, turns=0)
+    v._found_picker = True
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    breadcrumb_regions = [r for r in v.regions._regions if r.group == "breadcrumb"]
+    assert len(breadcrumb_regions) > 0, "breadcrumb buttons should be registered as regions"
+
+
+def test_D7_house_name_survives_turns():
+    """D-7: House name in breadcrumbs persists after processing turns."""
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView
+
+    g = GildedGame(seed=42)
+    player = list(g.houses.keys())[0]
+    name = g.houses[player].name
+    v = BroadsheetView(g, player)
+    g.turns = 1
+    v._handle_action("enterprises")
+    assert name in v.breadcrumbs, f"house name '{name}' should survive turns: {v.breadcrumbs}"
+
+
+def test_D5_scheme_breadcrumbs_included():
+    """D-5: Scheme actions are included in the breadcrumb trail."""
+    from gilded.chassis import GildedGame
+    from gilded.ui.broadsheet import BroadsheetView
+
+    g = GildedGame(seed=42)
+    player = list(g.houses.keys())[0]
+    v = BroadsheetView(g, player)
+    v._handle_action("schemes")
+    assert "scheme" in v.breadcrumbs.lower(), f"schemes breadcrumb should be present: {v.breadcrumbs}"

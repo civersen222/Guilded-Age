@@ -804,6 +804,32 @@ class BroadsheetView:
         self.tooltip_rect: pygame.Rect | None = None
         self._w = 0
         self._h = 0
+        self._sub_tab: Optional[str] = None
+
+    # --- breadcrumbs ---------------------------------------------------------
+
+    @property
+    def breadcrumbs(self) -> str:
+        """Breadcrumb string showing house name and current tab."""
+        house = self.game.houses.get(self.house)
+        name = house.name if house else self.house
+        tab = self.active_tab if self.active_tab else "Briefing"
+        if self._sub_tab:
+            return f"{name} > {tab} > {self._sub_tab}"
+        return f"{name} > {tab}"
+
+    def _handle_action(self, action_name: str) -> None:
+        """Handle navigation actions by action name."""
+        if action_name == "enterprises":
+            self.active_tab = "Enterprises"
+            self._sub_tab = None
+        elif action_name == "schemes":
+            # Schemes are a sub-view under the Powers tab
+            self.active_tab = "Powers"
+            self._sub_tab = "Schemes"
+        elif action_name in TABS:
+            self.active_tab = action_name
+            self._sub_tab = None
 
     # --- executor candidates -------------------------------------------------
 
@@ -1023,6 +1049,28 @@ class BroadsheetView:
         et = font.render("End Turn", True, BUTTON_TEXT)
         surface.blit(et, (rect.centerx - et.get_width() / 2,
                           rect.centery - et.get_height() / 2))
+
+        # Breadcrumb regions for navigation trail
+        self._draw_breadcrumbs(surface)
+
+    def _draw_breadcrumbs(self, surface) -> None:
+        """Draw breadcrumb navigation regions (house > tab)."""
+        font = _font(14)
+        crumbs = self.breadcrumbs.split(" > ")
+        x = PAD
+        y = self._h - BOTTOM_H
+        for i, crumb in enumerate(crumbs):
+            label = font.render(crumb, True, FADED)
+            w = label.get_width() + 10
+            h = label.get_height() + 4
+            rect = pygame.Rect(x, y + 2, w, h)
+            if crumb in TABS:
+                self.regions.add(Region(rect=rect,
+                                        action={"tab": crumb},
+                                        hint=f"Navigate to {crumb}",
+                                        group="breadcrumb"))
+            surface.blit(label, (x + 5, y + 4))
+            x += rect.width + 4
 
     # --- the Council briefing ------------------------------------------------
 
