@@ -450,6 +450,8 @@ module is `gilded/society/ideology.py`.
 
 ### 9.3 Suite floor
 
-Stated as 1261 at `28f57e7` on the strength of the Wave 19 delivery. The
-withheld Wave 19 gate was still running when this document was written; if it
-reports otherwise, this line is wrong and the gate is right.
+**Confirmed 1261 passed at `28f57e7`.** Stated provisionally when this document
+was written, because the withheld Wave 19 gate was still running. That gate has
+since reported — 115/115 checks, 91/91 mutations killed, 0 broken anchors,
+exit 0 — and `pytest gilded/tests` at this commit returns 1261 passed. Any wave
+in §7 that lands fewer than 1261 has deleted a test, and must say which and why.
