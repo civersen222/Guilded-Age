@@ -3000,3 +3000,153 @@ def test_briefing_quiet_turn_sentence():
     assert lines[0].strip(), (
         f"Quiet-turn line should not be blank: '{lines[0]}'")
 
+
+# I3b-I — the five migrations are real, not decorative.
+
+def _drawn(tab):
+    """A freshly drawn view with `tab` open. Each test needs its own,
+    because clicking mutates the view."""
+    g, v = _view()
+    v.active_tab = tab
+    v.draw(pygame.Surface((1280, 900)))
+    return g, v
+
+
+def _region_with(v, key):
+    """The first region whose action carries `key`."""
+    matches = [r for r in v.regions._regions if key in r.action]
+    assert matches, f"no region carries {key!r}"
+    return matches[0]
+
+
+def test_every_tab_draws_its_measured_number_of_regions():
+    """The census. Exact values, per tab, measured at 53cb9af.
+
+    If a tab's count moves, something was added, removed, or registered
+    twice. The right response is to find out which and update the number
+    here -- never to relax the comparison."""
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    assert set(EXPECTED_REGIONS) == set(TABS), (
+        "the census must name every tab and no others")
+    actual = {}
+    for tab in TABS:
+        v.active_tab = tab
+        v.draw(surf)
+        actual[tab] = len(v.regions)
+    assert actual == EXPECTED_REGIONS, f"region census moved: {actual}"
+
+
+def test_every_tab_has_exactly_one_active_region():
+    """The open tab's own tab region is ACTIVE; nothing else is.
+
+    Asserted for all ten tabs, by equality. 'At least one' would pass
+    for a view that marked every tab active, which is the failure this
+    is here to catch."""
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    for tab in TABS:
+        v.active_tab = tab
+        v.draw(surf)
+        active = [r for r in v.regions._regions
+                  if r.state is RegionState.ACTIVE]
+        assert len(active) == 1, (
+            f"{tab}: expected exactly 1 ACTIVE region, got {len(active)}")
+        assert active[0].action == {"tab": tab}, (
+            f"{tab}: the ACTIVE region should be that tab's own tab "
+            f"region, got {active[0].action}")
+
+
+def test_rule_click_works_without_legacy_option_hits():
+    """Docket petitions route through the registry, not _option_hits."""
+    g, v = _drawn("Docket")
+    before = v.handle_click(_region_with(v, "rule").rect.center)
+    assert before is not None and "rule" in before, before
+
+    g, v = _drawn("Docket")
+    region = _region_with(v, "rule")
+    assert v._option_hits, "premise: the legacy structure is populated"
+    v._option_hits = []
+    after = v.handle_click(region.rect.center)
+    assert after == before, (
+        f"emptying _option_hits changed the answer: {before} -> {after}")
+
+
+def test_cycle_exec_click_works_without_legacy_exec_hits():
+    """The executor chip advances through the registry, not _exec_hits."""
+    g, v = _drawn("Docket")
+    region = _region_with(v, "cycle_exec")
+    pid = region.action["cycle_exec"]
+    before_idx = v._exec_idx.get(pid, 0)
+    assert v._exec_hits, "premise: the legacy structure is populated"
+    v._exec_hits = []
+    v.handle_click(region.rect.center)
+    assert v._exec_idx.get(pid) == before_idx + 1, (
+        f"the executor index did not advance: {before_idx} -> "
+        f"{v._exec_idx.get(pid)}")
+
+
+def test_set_stance_click_works_without_legacy_dial_hits():
+    """The policy dial reads its value from the region's own rect.
+
+    Three points across one dial -- left edge, centre, right edge --
+    must give -100, 0 and +100 both with and without _dial_hits. One
+    point would pass for a dial that returned a constant."""
+    g, v = _drawn("Policies")
+    region = _region_with(v, "set_stance")
+    key = region.action["set_stance"][0]
+    points = {
+        -100: (region.rect.left, region.rect.centery),
+        0: (region.rect.centerx, region.rect.centery),
+        100: (region.rect.right - 1, region.rect.centery),
+    }
+    for expected, point in points.items():
+        g, v = _drawn("Policies")
+        assert v.handle_click(point) == {"set_stance": (key, expected)}
+
+        g, v = _drawn("Policies")
+        assert v._dial_hits, "premise: the legacy structure is populated"
+        v._dial_hits = []
+        assert v.handle_click(point) == {"set_stance": (key, expected)}, (
+            f"with _dial_hits emptied, {point} no longer reads {expected}")
+
+
+def test_place_informant_click_works_without_legacy_informant_hits():
+    """The Powers tab routes informants through the registry."""
+    g, v = _drawn("Powers")
+    region = _region_with(v, "place_informant")
+    before = v.handle_click(region.rect.center)
+    assert before is not None and "place_informant" in before, before
+
+    g, v = _drawn("Powers")
+    region = _region_with(v, "place_informant")
+    assert v._informant_hits, "premise: the legacy structure is populated"
+    v._informant_hits = []
+    after = v.handle_click(region.rect.center)
+    assert after == before, (
+        f"emptying _informant_hits changed the answer: {before} -> {after}")
+
+
+def test_atlas_region_resolves_a_real_province_at_click_time():
+    """One region covers the map; the pid is resolved from the polygons.
+
+    The action dict carries None, so a test that only checked the
+    region's action would be satisfied by a map that could never name a
+    province. What must be asserted is that the CLICK produces a real
+    pid, and the same one pick_province produces."""
+    from gilded.ui.atlas_view import pick_province
+    g, v = _drawn("Atlas")
+    region = _region_with(v, "select_province")
+    assert region.action == {"select_province": None}, (
+        f"the atlas region resolves its pid at click time; its action "
+        f"should carry None: {region.action}")
+
+    point = region.rect.center
+    expected = pick_province(g.atlas, v._atlas_polys, point)
+    assert expected is not None, (
+        "premise: the centre of the map panel is inside some province")
+
+    result = v.handle_click(point)
+    assert result == {"select_province": expected}, result
+    assert v.selected_pid == expected
+
