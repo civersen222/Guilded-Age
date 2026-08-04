@@ -1769,6 +1769,7 @@ class BroadsheetView:
                 pygame.draw.rect(surface, BUTTON_EDGE, btn_rect, 2)
                 surface.blit(btn_surf, (action_rect.left + 8, y + 4))
                 self._enterprise_hits.append((btn_rect, act))
+                self.regions.add(Region(rect=btn_rect, action=act.get("action", act), hint=act.get("label", ""), group=f"venture:{eid}"))
                 y += btn_h + 4
 
             elif verb == "appoint_director":
@@ -1786,6 +1787,7 @@ class BroadsheetView:
                 pygame.draw.rect(surface, INK, btn_rect, 2)
                 surface.blit(btn_surf, (action_rect.left + 8, y + 4))
                 self._appoint_hits.append((btn_rect, act))
+                self.regions.add(Region(rect=btn_rect, action=act.get("action", act), hint=act.get("label", ""), group=f"venture:{eid}"))
                 y += btn_h + 4
 
     def _draw_director_picker(self, surface, content, y, body) -> None:
@@ -1809,6 +1811,7 @@ class BroadsheetView:
         pygame.draw.rect(surface, INK, back_rect, 2)
         surface.blit(back_surf, (PAD + 8, y + 4))
         self._director_picker_hits.append((back_rect, {"close_director_picker": True}))
+        self.regions.add(Region(rect=back_rect, action={"close_director_picker": True}, hint="Return to the ventures without appointing anyone.", group="picker"))
         y += back_h + 4
 
         # Header showing venture name and pool count
@@ -1836,6 +1839,7 @@ class BroadsheetView:
             self._director_picker_hits.append((ln_rect, {
                 "appoint_director": eid, "char_id": c.id
             }))
+            self.regions.add(Region(rect=ln_rect, action={"appoint_director": eid, "char_id": c.id}, hint=f"Appoint {c.name} to direct {ent.name}.", group="picker"))
             y += ln_h + 2
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
@@ -1889,6 +1893,15 @@ class BroadsheetView:
                     self.selected_pid = pid
                     return {"select_province": pid}
                 return None
+            if "appoint_director" in action:
+                if "char_id" not in action:
+                    eid = action["appoint_director"]
+                    self._director_picker = eid
+                    self._director_picker_hits.clear()
+                    return {"open_director_picker": eid}
+            if "close_director_picker" in action:
+                self._director_picker = None
+                self._director_picker_hits.clear()
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):

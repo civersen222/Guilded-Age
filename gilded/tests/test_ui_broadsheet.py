@@ -33,7 +33,7 @@ EXPECTED_REGIONS = {
     "Letters": 12,        # tab x10, end_turn, narrate
     "Docket": 15,         # cycle_exec x1, rule x2, tab x10, end_turn, narrate
     "Policies": 17,       # set_stance x5, tab x10, end_turn, narrate
-    "Enterprises": 12,    # tab x10, end_turn, narrate
+    "Enterprises": 16,    # venture x4, tab x10, end_turn, narrate
     "Atlas": 13,          # select_province x1, tab x10, end_turn, narrate
     "Powers": 19,         # place_informant x7, tab x10, end_turn, narrate
     "House": 12,          # tab x10, end_turn, narrate
@@ -3149,4 +3149,100 @@ def test_atlas_region_resolves_a_real_province_at_click_time():
     result = v.handle_click(point)
     assert result == {"select_province": expected}, result
     assert v.selected_pid == expected
+
+
+# ── I3c — the last three structures are in the registry ──────────────────
+
+def test_expand_click_works_without_legacy_enterprise_hits():
+    """Expand resolves through the registry, not through _enterprise_hits."""
+    g, v = _drawn("Enterprises")
+    assert v._enterprise_hits, "premise: the legacy list must be populated"
+    region = _region_with(v, "expand_enterprise")
+    eid = region.action["expand_enterprise"]
+    v._enterprise_hits = []
+    assert v.handle_click(region.rect.center) == {"expand_enterprise": eid}
+
+
+def test_appoint_click_works_without_legacy_appoint_hits():
+    """Appoint opens the picker through the registry, and sets view state."""
+    g, v = _drawn("Enterprises")
+    assert v._appoint_hits, "premise: the legacy list must be populated"
+    region = _region_with(v, "appoint_director")
+    eid = region.action["appoint_director"]
+    assert "char_id" not in region.action, (
+        "the venture-level Appoint region must not carry a char_id; "
+        "that is what distinguishes it from a picker candidate")
+    v._appoint_hits = []
+    assert v.handle_click(region.rect.center) == {"open_director_picker": eid}
+    assert v._director_picker == eid, (
+        "returning the action is only half of it -- the picker must open")
+
+
+def test_picker_candidate_click_works_without_legacy_picker_hits():
+    """A candidate row resolves through the registry and names its char."""
+    g, v = _drawn("Enterprises")
+    appoint = _region_with(v, "appoint_director")
+    eid = appoint.action["appoint_director"]
+    v.handle_click(appoint.rect.center)
+    v.draw(pygame.Surface((1280, 900)))
+    assert v._director_picker_hits, "premise: the picker must have drawn rows"
+    rows = [r for r in v.regions._regions if "char_id" in r.action]
+    assert rows, "the picker drew no candidate regions"
+    region = rows[0]
+    cid = region.action["char_id"]
+    v._director_picker_hits = []
+    assert v.handle_click(region.rect.center) == {
+        "appoint_director": eid, "char_id": cid}
+
+
+def test_picker_back_click_works_without_legacy_picker_hits():
+    """Back resolves through the registry and closes the picker."""
+    g, v = _drawn("Enterprises")
+    appoint = _region_with(v, "appoint_director")
+    v.handle_click(appoint.rect.center)
+    v.draw(pygame.Surface((1280, 900)))
+    assert v._director_picker_hits, "premise: the picker must have drawn rows"
+    region = _region_with(v, "close_director_picker")
+    v._director_picker_hits = []
+    assert v.handle_click(region.rect.center) == {"close_director_picker": True}
+    assert v._director_picker is None, (
+        "returning the action is only half of it -- the picker must close")
+
+
+def test_opening_the_picker_retires_the_venture_regions():
+    """The picker replaces the ventures; it does not cover them.
+
+    This is the assertion that makes a z-order mechanism unnecessary. If it
+    ever fails, two regions have begun competing for the same point and
+    RegionSet.at()'s reverse scan is deciding a question nobody designed."""
+    g, v = _drawn("Enterprises")
+    venture = [r for r in v.regions._regions if r.group.startswith("venture:")]
+    assert len(venture) == 4, (
+        f"premise: the closed picker draws 4 venture regions (2 Expand, "
+        f"2 Appoint), got {len(venture)}. An exact count, not a floor: it is "
+        f"what pins WHICH regions carry the venture: group, and Wave I3d's "
+        f"_enterprise_drawn_verbs reads exactly that group.")
+    appoint = _region_with(v, "appoint_director")
+    v.handle_click(appoint.rect.center)
+    v.draw(pygame.Surface((1280, 900)))
+    assert v._director_picker is not None, "premise: the picker must be open"
+    still = [r for r in v.regions._regions if r.group.startswith("venture:")]
+    assert still == [], (
+        f"opening the picker left {len(still)} venture regions drawn; "
+        "they must be retired, not buried")
+    assert [r for r in v.regions._regions if r.group == "picker"], (
+        "the picker drew no regions of its own")
+
+
+def test_enterprises_picker_open_census():
+    """The open picker's exact region count, measured at 20c2720.
+
+    EXPECTED_REGIONS covers the closed state only; the picker is a second
+    layout of the same tab and needs its own number."""
+    g, v = _drawn("Enterprises")
+    appoint = _region_with(v, "appoint_director")
+    v.handle_click(appoint.rect.center)
+    v.draw(pygame.Surface((1280, 900)))
+    assert len(v.regions) == 21, (
+        f"picker-open census moved: {len(v.regions)} regions, expected 21")
 
