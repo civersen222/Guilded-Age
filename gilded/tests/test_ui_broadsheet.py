@@ -18,6 +18,26 @@ from gilded.intel import threat_rank
 from gilded.society.schemes import share_price
 from gilded.enterprises import TIER_MAX
 from gilded.ui.actions import ACTIONS
+from gilded.ui.widgets import RegionState
+
+
+# Measured at 53cb9af with _view() on a 1280x900 surface. Every tab
+# draws ten tab regions, one end_turn and one narrate; the remainder is
+# that tab's own interaction. These are exact values, not floors: a
+# floor is satisfied by a double registration, which is the specific
+# bug a census exists to catch.
+EXPECTED_REGIONS = {
+    "Briefing": 15,       # cycle_exec x1, rule x2, tab x10, end_turn, narrate
+    "Gazette": 12,        # tab x10, end_turn, narrate
+    "Ledger": 12,         # tab x10, end_turn, narrate
+    "Letters": 12,        # tab x10, end_turn, narrate
+    "Docket": 15,         # cycle_exec x1, rule x2, tab x10, end_turn, narrate
+    "Policies": 17,       # set_stance x5, tab x10, end_turn, narrate
+    "Enterprises": 12,    # tab x10, end_turn, narrate
+    "Atlas": 13,          # select_province x1, tab x10, end_turn, narrate
+    "Powers": 19,         # place_informant x7, tab x10, end_turn, narrate
+    "House": 12,          # tab x10, end_turn, narrate
+}
 
 
 def _view():
@@ -2444,8 +2464,10 @@ def test_registry_is_rebuilt_not_accumulated():
     v.draw(surf)
     n = len(v.regions)
     v.draw(surf)
-    assert len(v.regions) == n
-    assert n >= len(TABS) + 2  # tabs + end_turn + narrate, plus interaction regions
+    assert len(v.regions) == n, "a second draw changed the region count"
+    assert n == EXPECTED_REGIONS[v.active_tab], (
+        f"{v.active_tab}: {n} regions, census says "
+        f"{EXPECTED_REGIONS[v.active_tab]}")
 
 
 # CHECK 3 — THE MIGRATION IS REAL, NOT DECORATIVE.
