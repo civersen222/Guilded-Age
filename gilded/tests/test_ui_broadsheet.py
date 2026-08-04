@@ -18,7 +18,7 @@ from gilded.intel import threat_rank
 from gilded.society.schemes import share_price
 from gilded.enterprises import TIER_MAX
 from gilded.ui.actions import ACTIONS
-from gilded.ui.widgets import RegionState
+from gilded.ui.widgets import Region, RegionState
 
 
 # Measured at 53cb9af with _view() on a 1280x900 surface. Every tab
@@ -3245,4 +3245,175 @@ def test_enterprises_picker_open_census():
     v.draw(pygame.Surface((1280, 900)))
     assert len(v.regions) == 21, (
         f"picker-open census moved: {len(v.regions)} regions, expected 21")
+
+
+# ── I3d — a refused control is visible and says why ──────────────────────
+
+def _suppressed(kind):
+    """A drawn Enterprises view whose first owned venture has `kind`
+    suppressed, plus that venture. The premise -- that the button WAS
+    offered before the suppression -- is asserted here, because absence
+    proves nothing unless presence came first."""
+    g, v = _drawn("Enterprises")
+    player = v.house
+    owned = [e for e in g.enterprises if e.house == player]
+    assert owned, "premise: the player must own a venture"
+    target = owned[0]
+    key = "appoint_director" if kind == "no_pool" else "expand_enterprise"
+    before = [r for r in v.regions._regions
+              if key in r.action and r.action[key] == target.eid]
+    assert len(before) == 1, (
+        f"premise: {key} must be offered for eid {target.eid} before "
+        f"suppression, got {len(before)} regions")
+    assert before[0].state is RegionState.ENABLED, (
+        "premise: it must start ENABLED, or DISABLED afterwards proves nothing")
+    if kind == "under_construction":
+        target.under_construction = 2
+    elif kind == "tier_max":
+        target.tier = TIER_MAX
+        target.target_tier = TIER_MAX
+    elif kind == "no_pool":
+        g.realms[player].characters.clear()
+    else:
+        raise AssertionError(f"unknown kind {kind!r}")
+    v.draw(pygame.Surface((1280, 900)))
+    after = [r for r in v.regions._regions
+             if key in r.action and r.action[key] == target.eid]
+    assert len(after) == 1, (
+        f"the suppressed {key} control vanished instead of being greyed: "
+        f"{len(after)} regions carry it")
+    return g, v, target, after[0]
+
+
+def test_a_disabled_region_is_never_actionable():
+    """The general rule, asserted on every tab against an injected region.
+
+    A DISABLED region is INJECTED rather than found, because at this fixture
+    nothing is suppressed -- a loop over the real regions would find none,
+    run zero assertions and pass on any tree at all, including one with no
+    refusal in handle_click. Injection is what lets this test fail.
+
+    The injection is safe: handle_click does not redraw, so the region is
+    still in the registry when the click is resolved.
+
+    RegionSet.at() deliberately still RETURNS disabled regions -- hover
+    needs them, and Wave I3e will read them. handle_click is what must
+    refuse. If this fails, a greyed control acts when pressed."""
+    g, v = _view()
+    surf = pygame.Surface((1280, 900))
+    for tab in TABS:
+        v.active_tab = tab
+        v.draw(surf)
+        spot = pygame.Rect(4, 4, 12, 12)
+        v.regions.add(Region(rect=spot,
+                             action={"end_turn": True},
+                             state=RegionState.DISABLED,
+                             reason="an injected refusal"))
+        assert v.regions.at(spot.center) is not None, (
+            "premise: at() must still RETURN the disabled region -- hover "
+            "depends on it, so the refusal cannot live in at()")
+        assert v.handle_click(spot.center) is None, (
+            f"{tab}: a DISABLED region returned an action when clicked")
+    # The refusal must run BEFORE the branches that mutate view state.
+    # Returning None is not enough on its own: a refusal placed after the
+    # "tab" branch ALSO returns None, having already moved the player. Only
+    # a DISABLED region carrying a side-effecting action can tell the two
+    # apart, so inject one.
+    v.active_tab = "Briefing"
+    v.draw(surf)
+    elsewhere = pygame.Rect(4, 40, 12, 12)
+    v.regions.add(Region(rect=elsewhere,
+                         action={"tab": "Ledger"},
+                         state=RegionState.DISABLED,
+                         reason="an injected refusal that would move the player"))
+    assert v.handle_click(elsewhere.center) is None, (
+        "a DISABLED region carrying a tab switch returned an action")
+    assert v.active_tab == "Briefing", (
+        f"the refusal ran too late: a DISABLED region changed the active tab "
+        f"to {v.active_tab!r} and only then refused. The DISABLED check must "
+        f"be the FIRST thing handle_click does after resolving the region.")
+
+    # Any real DISABLED regions obey the same rule.
+    for tab in TABS:
+        v.active_tab = tab
+        v.draw(surf)
+        for region in list(v.regions._regions):
+            if region.state is RegionState.DISABLED:
+                assert v.handle_click(region.rect.center) is None, (
+                    f"{tab}: DISABLED region carrying {region.action} acted")
+
+
+def test_under_construction_greys_expand_and_says_so():
+    g, v, target, region = _suppressed("under_construction")
+    assert region.state is RegionState.DISABLED
+    assert target.name in region.reason, (
+        f"the reason must name the venture: {region.reason!r}")
+    assert "building" in region.reason, (
+        f"the reason must say it is under construction: {region.reason!r}")
+    assert v.handle_click(region.rect.center) is None, (
+        "a greyed Expand must not expand")
+
+
+def test_tier_max_greys_expand_and_says_so():
+    g, v, target, region = _suppressed("tier_max")
+    assert region.state is RegionState.DISABLED
+    assert target.name in region.reason, (
+        f"the reason must name the venture: {region.reason!r}")
+    assert "extent" in region.reason, (
+        f"the reason must say it is already at its greatest extent: "
+        f"{region.reason!r}")
+    assert v.handle_click(region.rect.center) is None, (
+        "a greyed Expand must not expand")
+
+
+def test_empty_pool_greys_appoint_and_says_so():
+    g, v, target, region = _suppressed("no_pool")
+    assert region.state is RegionState.DISABLED
+    assert target.name in region.reason, (
+        f"the reason must name the venture: {region.reason!r}")
+    assert "fit to direct" in region.reason, (
+        f"the reason must say no one is fit to direct it: {region.reason!r}")
+    assert v.handle_click(region.rect.center) is None, (
+        "a greyed Appoint must not open the picker")
+    assert v._director_picker is None, (
+        "a greyed Appoint must not open the picker as a side effect either")
+
+
+def test_the_two_expand_refusals_do_not_share_a_sentence():
+    """The Expand guard is a compound `or`. One sentence for both situations
+    would be the silence restated more politely."""
+    _g1, _v1, _t1, uc = _suppressed("under_construction")
+    _g2, _v2, _t2, tm = _suppressed("tier_max")
+    assert uc.reason != tm.reason, (
+        f"both Expand refusals gave the same reason: {uc.reason!r}. "
+        "The compound guard covers two different situations and the player "
+        "is entitled to know which one they are in.")
+
+
+def test_a_refused_control_keeps_its_real_action():
+    """The state refuses the control; the action is not blanked or swapped.
+
+    Wave I3e's tooltip and every later provenance feature read this action
+    to explain the control, so a DISABLED region with a hollowed-out action
+    is a dead end."""
+    _g, _v, target, region = _suppressed("under_construction")
+    assert region.action == {"expand_enterprise": target.eid}, (
+        f"expected the real action, got {region.action!r}")
+
+
+def test_the_suppressed_control_is_not_offered_by_the_legacy_list():
+    """`_enterprise_hits` and `_appoint_hits` mean OFFERED. Several tests in
+    this suite read them with exactly that meaning, and a refused control is
+    not offered. Both lists are checked: they are separate append sites and
+    a fix applied to one does not reach the other."""
+    _g, v, target, _region = _suppressed("under_construction")
+    offered = [act["eid"] for _rect, act in v._enterprise_hits]
+    assert target.eid not in offered, (
+        f"eid {target.eid} is greyed but still listed as offered in "
+        f"_enterprise_hits: {offered}")
+    _g2, v2, target2, _region2 = _suppressed("no_pool")
+    appointable = [act["eid"] for _rect, act in v2._appoint_hits]
+    assert target2.eid not in appointable, (
+        f"eid {target2.eid} has a greyed Appoint but is still listed as "
+        f"offered in _appoint_hits: {appointable}")
 

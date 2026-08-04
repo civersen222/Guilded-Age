@@ -1757,6 +1757,22 @@ class BroadsheetView:
             if verb == "expand_enterprise":
                 # Skip expand if under construction or at max tier
                 if ent.under_construction > 0 or ent.target_tier >= TIER_MAX:
+                    if ent.under_construction > 0:
+                        reason = f"{ent.name} is still building; it cannot expand until the work is finished."
+                    else:
+                        reason = f"{ent.name} is already at its greatest extent."
+                    btn_text = act.get("label", f"Expand {ent.name}")
+                    btn_surf = body.render(btn_text, True, FADED)
+                    btn_w = btn_surf.get_width() + 16
+                    btn_h = body.get_height() + 8
+                    btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
+                    if y + btn_h > content.bottom:
+                        return
+                    pygame.draw.rect(surface, BUTTON_BG, btn_rect)
+                    pygame.draw.rect(surface, BUTTON_EDGE, btn_rect, 2)
+                    surface.blit(btn_surf, (action_rect.left + 8, y + 4))
+                    self.regions.add(Region(rect=btn_rect, action=act.get("action", act), state=RegionState.DISABLED, reason=reason, group=f"venture:{eid}"))
+                    y += btn_h + 4
                     continue
                 btn_text = act.get("label", f"Expand {ent.name}")
                 btn_surf = body.render(btn_text, True, INK)
@@ -1775,6 +1791,19 @@ class BroadsheetView:
             elif verb == "appoint_director":
                 pool = director_candidates(self.game, self.house, eid)
                 if not pool:
+                    reason = f"No one in the house pool is fit to direct {ent.name}."
+                    btn_text = act.get("label", f"Appoint Director for {ent.name}")
+                    btn_surf = body.render(btn_text, True, FADED)
+                    btn_w = btn_surf.get_width() + 16
+                    btn_h = body.get_height() + 8
+                    btn_rect = pygame.Rect(action_rect.left, y, btn_w, btn_h)
+                    if y + btn_h > content.bottom:
+                        return
+                    pygame.draw.rect(surface, BUTTON_BG, btn_rect)
+                    pygame.draw.rect(surface, BUTTON_EDGE, btn_rect, 2)
+                    surface.blit(btn_surf, (action_rect.left + 8, y + 4))
+                    self.regions.add(Region(rect=btn_rect, action=act.get("action", act), state=RegionState.DISABLED, reason=reason, group=f"venture:{eid}"))
+                    y += btn_h + 4
                     continue
                 btn_text = act.get("label", f"Appoint Director for {ent.name}")
                 btn_surf = body.render(btn_text, True, INK)
@@ -1873,6 +1902,8 @@ class BroadsheetView:
     def handle_click(self, pos: Tuple[int, int]) -> Optional[dict]:
         region = self.regions.at(pos)
         if region is not None:
+            if region.state is RegionState.DISABLED:
+                return None
             action = region.action
             if "tab" in action:
                 self.active_tab = action["tab"]
