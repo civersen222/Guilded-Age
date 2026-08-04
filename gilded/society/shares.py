@@ -12,6 +12,12 @@ from gilded.society.characters import modify_opinion
 from gilded.society.labor import dividend_multiplier
 
 
+def stake_cost(ent, pct, game) -> float:
+    """Cost to buy `pct` percent of an enterprise at current market value."""
+    val = game.market.value(ent, game)
+    return val * pct / 100.0
+
+
 def priced_transfer(ent, seller, buyer, pct, market, game, dry_run=False) -> float:
     """Sell a share tranche at the market price: market.value(ent, game) * pct / 100.
 

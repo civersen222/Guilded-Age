@@ -154,8 +154,8 @@ def test_every_drawn_key_is_registered():
     drawn = _collect_emitted_keys(state.view)
 
     assert drawn == {
-        "appoint_director", "close_director_picker", "end_turn",
-        "expand_enterprise", "open_director_picker",
+        "appoint_director", "close_director_picker", "defend_buyout",
+        "end_turn", "expand_enterprise", "open_director_picker",
         "place_informant", "rule", "select_province", "set_stance",
         "tab", "toggle_narrate",
     }, f"the drawn set moved: {sorted(drawn)}"
@@ -641,15 +641,12 @@ def _engine_price(view, ent, outside_id, pct):
 
 
 def _fund_house(state, amount):
-    """Put *amount* in every purse in the player's house.
-
-    The buyout is routed through the domain SEAT HOLDER, not the ruler, and the
-    engine checks that person's purse. On the seed-99 fixture the seat holder
-    holds nothing while the ruler holds 140 gold -- so a test that funded only
-    the ruler would be testing the refusal path while believing it tested the
-    trade. Funding everyone makes the arrangement true whoever the engine picks,
-    without the test having to reach in and name the executor.
+    """Put *amount* in the house treasury and every character's purse.
+    
+    The buyout now reads from the house treasury (not an individual purse).
+    Funding both keeps the helper honest whichever path the engine takes.
     """
+    state.game.houses[state.view.house].treasury = amount
     for c in state.game.realms[state.view.house].characters:
         c.gold_reserve = amount
 
@@ -664,65 +661,45 @@ def _buy_executor(state):
 
 
 def test_the_buyout_reads_the_purse_the_engine_will_spend_from():
-    """FIND-3. A rich ruler does not make the trade affordable.
+    """FIND-3. The buyout reads the house treasury, not individual purses.
 
-    `initiative()` routes a purchase through the domain SEAT HOLDER, and
-    `_exec_share_trade` checks THAT person's gold -- not the ruler's. On the
-    seed-99 fixture the ruler holds 140 gold and the seat holder holds none,
-    so a button that read the ruler's purse would light up, spend the
-    attention, and buy nothing: a live control that silently does nothing,
-    which is the exact failure this arc exists to remove.
-
-    Both directions are asserted. Only refusing when the ruler is poor would
-    pass for a check that reads either purse; only accepting when the executor
-    is rich would pass for a check that reads neither. Together they name one
-    purse and no other.
+    Both directions are asserted. Only refusing when the treasury is empty
+    would pass for a check that reads either purse; only accepting when the
+    treasury is funded would pass for a check that reads neither. Together
+    they name one purse and no other.
     """
     state = _rich_state()
     view, game = state.view, state.game
     offer, _ent, _outside_id = _buyout_offer(view)
-    executor = _buy_executor(state)
-    ruler = game.realms[view.house].ruler
-    assert executor.id != ruler.id, (
-        "fixture premise moved: the executor IS the ruler, so this test "
-        "cannot tell the two purses apart")
 
-    # Rich ruler, empty executor -> must refuse, and must say whose purse.
-    _fund_house(state, 0.0)
-    ruler.gold_reserve = 10_000.0
+    # Empty treasury -> must refuse
+    game.houses[view.house].treasury = 0.0
     ok, why = act.ACTIONS["defend_buyout"].eligible(game, view.house,
                                                     offer["action"])
     assert not ok, (
-        f"the buyout was offered because the ruler is rich, but "
-        f"{executor.name}, who must actually pay, holds nothing")
-    assert executor.name in why, (
-        f"the refusal does not name the person who cannot pay: {why!r}")
+        "the buyout was offered despite an empty treasury")
+    assert why, "the refusal gave no reason"
 
-    # Empty ruler, rich executor -> must allow.
-    _fund_house(state, 0.0)
-    executor.gold_reserve = 10_000.0
+    # Funded treasury -> must allow
+    game.houses[view.house].treasury = 10_000.0
     ok2, why2 = act.ACTIONS["defend_buyout"].eligible(game, view.house,
                                                       offer["action"])
     assert ok2, (
-        f"the buyout was refused while {executor.name}, who pays for it, "
-        f"holds 10,000 gold: {why2}")
+        f"the buyout was refused while treasury holds 10,000 gold: {why2}")
 
-    # And the dispatch must spend the SAME purse the check read. If the check
-    # reads the executor and the dispatch routes through the ruler, the button
-    # lights up on a purse it will never touch and the trade dies inside the
-    # engine -- the same silent nothing, one layer down.
+    # And the dispatch must spend the SAME purse the check read.
     ent = next(e for e in game.enterprises
                if e.eid == offer["action"]["defend_buyout"][0])
     outside_id = offer["action"]["defend_buyout"][1]
     before = ent.ledger.get(outside_id, 0.0)
+    before_treasury = game.houses[view.house].treasury
     act.ACTIONS["defend_buyout"].dispatch(game, view.house, view,
                                           offer["action"])
     assert ent.ledger.get(outside_id, 0.0) < before, (
-        f"the buyout was allowed on {executor.name}'s 10,000 gold and then "
-        f"moved nothing; the dispatch is spending a different purse")
-    assert executor.gold_reserve < 10_000.0, (
-        f"the shares moved but {executor.name}, whose purse the button "
-        f"checked, still holds all 10,000 gold")
+        "the buyout was allowed on 10,000 treasury and then moved nothing; "
+        "the dispatch is spending a different purse")
+    assert game.houses[view.house].treasury < before_treasury, (
+        "the shares moved but treasury was not debited")
 
 
 def test_the_buyout_quote_is_the_price_the_engine_charges():
@@ -812,8 +789,7 @@ def test_buying_out_the_stake_moves_the_shares_and_the_gold():
     house_ids = {c.id for c in game.realms[view.house].characters}
     before_holder = ent.ledger.get(outside_id, 0.0)
     before_house = sum(v for k, v in ent.ledger.items() if k in house_ids)
-    before_gold = sum(c.gold_reserve
-                      for c in game.realms[view.house].characters)
+    before_treasury = game.houses[view.house].treasury
     assert before_holder > 0, "fixture premise moved: nothing to buy out"
 
     ok, why = act.ACTIONS["defend_buyout"].eligible(game, view.house,
@@ -831,9 +807,8 @@ def test_buying_out_the_stake_moves_the_shares_and_the_gold():
     gained = sum(v for k, v in ent.ledger.items() if k in house_ids) - before_house
     assert gained == pytest.approx(moved, rel=1e-9), (
         f"{moved:.4f}% left the holder but {gained:.4f}% reached the house")
-    after_gold = sum(c.gold_reserve
-                     for c in game.realms[view.house].characters)
-    assert after_gold < before_gold, "the shares moved but were free"
+    after_treasury = game.houses[view.house].treasury
+    assert after_treasury < before_treasury, "the shares moved but were free"
 
 
 def test_the_buyout_costs_one_attention():

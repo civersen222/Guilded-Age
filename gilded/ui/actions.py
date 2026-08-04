@@ -222,7 +222,7 @@ def _defend_buyout_eligible(game, house, action):
     ent = next((e for e in game.enterprises if e.eid == eid), None)
     if ent is None:
         return False, "The enterprise no longer exists."
-    from gilded.society.shares import priced_transfer
+    from gilded.society.shares import stake_cost
     by_id = {c.id: c for r in game.realms.values() for c in r.characters}
     seller = by_id.get(outside_id)
     if seller is None:
@@ -230,14 +230,12 @@ def _defend_buyout_eligible(game, house, action):
     pct = ent.ledger.get(outside_id, 0.0)
     if pct <= 0:
         return False, f"{seller.name} has no stake in {ent.name}."
-    from gilded.ai import _executor_for
-    realm = game.realms[house]
-    from gilded.docket import INITIATIVES, _fmt_gold
-    domain = INITIATIVES["buy_shares"][0]
-    executor = _executor_for(game, realm, domain)
-    quote = priced_transfer(ent, seller, executor, pct, game.market, game, dry_run=True)
-    if executor.gold_reserve < quote:
-        return False, f"{executor.name} cannot afford the buyout ({_fmt_gold(quote)} gold needed)."
+    from gilded.houses import House
+    house_obj: House = game.houses[house]
+    from gilded.docket import _fmt_gold
+    quote = stake_cost(ent, pct, game)
+    if house_obj.treasury < quote:
+        return False, f"House {house} cannot afford the buyout ({_fmt_gold(quote)} gold needed, {_fmt_gold(house_obj.treasury)} in treasury)"
     return True, ""
 
 

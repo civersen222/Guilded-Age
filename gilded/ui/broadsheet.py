@@ -32,19 +32,11 @@ from gilded.market import COMMODITIES
 
 def _buyout_price(ent, owner_id, game):
     """Price to buy out a rival's stake in an enterprise."""
-    from gilded.society.shares import priced_transfer
-    from gilded.ai import _executor_for
-    from gilded.docket import INITIATIVES
-    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
-    seller = by_id.get(owner_id)
-    if seller is None:
-        return 0
+    from gilded.society.shares import stake_cost
     pct = ent.ledger.get(owner_id, 0.0)
     if pct <= 0:
         return 0
-    realm = game.realms[ent.house]
-    executor = _executor_for(game, realm, INITIATIVES["buy_shares"][0])
-    return priced_transfer(ent, seller, executor, pct, game.market, game, dry_run=True)
+    return stake_cost(ent, pct, game)
 
 
 from gilded.papers import compose
