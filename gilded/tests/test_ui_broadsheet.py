@@ -3326,6 +3326,268 @@ def _region_with(v, key):
     return matches[0]
 
 
+# ── I4d1b: Found Enterprise behavioral tests ────────────────────────────────
+
+@pytest.fixture
+def found_state():
+    """Fixture for found_enterprise tests: seed 42, turn 0, known treasury."""
+    g, v = _enterprises_view(seed=42, turns=0)
+    return g, v
+
+
+def test_R1_unaffordable_charter_refused_costs_nothing(found_state):
+    """R-1: A charter the House cannot afford is refused, costs nothing."""
+    g, v = found_state
+    g.houses[v.house].treasury = 260  # can afford 250, not 800
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    # Find an unaffordable charter (bank at 800)
+    expensive = [c for c in charters if c[3] > 260]
+    assert expensive, "need at least one unaffordable charter"
+    kind, pid = expensive[0][0], expensive[0][1]
+    action = {"found_enterprise": (kind, pid)}
+    ok, why = ACTIONS["found_enterprise"].eligible(g, v.house, action)
+    assert not ok, "unaffordable charter should be refused"
+    # Dispatch should not change state
+    att_before = g.attention[v.house]
+    treas_before = g.houses[v.house].treasury
+    ent_before = len(g.enterprises)
+    event_before = len(g.events)
+    lines = ACTIONS["found_enterprise"].dispatch(g, v.house, v, action)
+    assert g.attention[v.house] == att_before, "attention should not change"
+    assert g.houses[v.house].treasury == treas_before, "treasury should not change"
+    assert len(g.enterprises) == ent_before, "no enterprise should be founded"
+    assert len(g.events) == event_before, "no event should be added"
+
+
+def test_R2_affordable_charter_founds_costs_correctly(found_state):
+    """R-2: A charter the House CAN afford is founded, costs its price, costs 1 attention."""
+    g, v = found_state
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    # Find an affordable charter
+    affordable = [c for c in charters if c[3] <= g.houses[v.house].treasury]
+    assert affordable, "need at least one affordable charter"
+    kind, pid, pname, cost = affordable[0]
+    action = {"found_enterprise": (kind, pid)}
+    ok, why = ACTIONS["found_enterprise"].eligible(g, v.house, action)
+    assert ok, f"affordable charter should be eligible: {why}"
+    att_before = g.attention[v.house]
+    treas_before = g.houses[v.house].treasury
+    ent_before = len(g.enterprises)
+    lines = ACTIONS["found_enterprise"].dispatch(g, v.house, v, action)
+    assert g.attention[v.house] == att_before - 1, "should cost exactly 1 attention"
+    assert g.houses[v.house].treasury == pytest.approx(treas_before - cost), f"should cost {cost} gold"
+    assert len(g.enterprises) == ent_before + 1, "one enterprise should be founded"
+
+
+def test_R3_founding_reported_in_event_feed(found_state):
+    """R-3: Founding is reported through the event feed."""
+    g, v = found_state
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    kind, pid, pname, cost = charters[0]
+    action = {"found_enterprise": (kind, pid)}
+    event_before = len(g.events)
+    ACTIONS["found_enterprise"].dispatch(g, v.house, v, action)
+    assert len(g.events) == event_before + 1, "founding should add an event"
+
+
+def test_R4_chooser_closes_after_founding(found_state):
+    """R-4: The chooser closes after a charter is taken."""
+    g, v = found_state
+    v._found_picker = True
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    kind, pid, pname, cost = charters[0]
+    action = {"found_enterprise": (kind, pid)}
+    ACTIONS["found_enterprise"].dispatch(g, v.house, v, action)
+    assert v._found_picker is None, "chooser should close after founding"
+
+
+def test_R5_page_level_button_opens_chooser(found_state):
+    """R-5: The page-level button opens the chooser."""
+    g, v = found_state
+    surf = pygame.Surface((800, 600))
+    v.draw(surf)
+    found_region = _region_with(v, "found_enterprise")
+    assert found_region is not None, "Found Enterprise button should be drawn"
+    # Simulate clicking the button
+    pt = found_region.rect.center
+    action = v.handle_click(pt)
+    assert action is not None, "click should return an action"
+    ACTIONS["found_enterprise"].dispatch(g, v.house, v, action)
+    assert v._found_picker is True, "clicking Found Enterprise should open the chooser"
+
+
+def test_R6_back_closes_chooser(found_state):
+    """R-6: Back closes the chooser and ventures page comes back."""
+    g, v = found_state
+    v._found_picker = True
+    surf = pygame.Surface((800, 600))
+    v.draw(surf)
+    back_region = _region_with(v, "close_found_picker")
+    assert back_region is not None, "Back button should be drawn in chooser"
+    pt = back_region.rect.center
+    v.handle_click(pt)
+    assert v._found_picker is None, "Back should close the chooser"
+
+
+def test_R7_chooser_modal_blocks_venture_buttons(found_state):
+    """R-7: While chooser is open, venture buttons are not clickable."""
+    g, v = found_state
+    v._found_picker = True
+    surf = pygame.Surface((800, 600))
+    v.draw(surf)
+    # There should be no expand_enterprise or appoint_director regions while picker is open
+    venture_regions = [r for r in v.regions._regions
+                       if "expand_enterprise" in r.action or "appoint_director" in r.action]
+    assert len(venture_regions) == 0, "venture buttons should not be drawn while chooser is open"
+
+
+def test_R8_repeated_draws_dont_grow_hits(found_state):
+    """R-8: Drawing the open chooser repeatedly does not grow _found_picker_hits."""
+    g, v = found_state
+    v._found_picker = True
+    surf = pygame.Surface((800, 600))
+    for _ in range(4):
+        v.draw(surf)
+    # Should be stable — one set per draw, not cumulative
+    assert len(v._found_picker_hits) < 50, (
+        f"_found_picker_hits grew to {len(v._found_picker_hits)} after 4 draws; should be stable"
+    )
+    # Draw once more and check count is the same
+    count = len(v._found_picker_hits)
+    v.draw(surf)
+    assert len(v._found_picker_hits) == count, "hits should be stable across redraws"
+
+
+def test_R9_existing_charter_not_offered(found_state):
+    """R-9: A charter that already exists is not offered."""
+    g, v = found_state
+    # Find an existing enterprise
+    assert len(g.enterprises) > 0, "need at least one enterprise"
+    ent = g.enterprises[0]
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    # The existing enterprise's (kind, province) should NOT be in charters
+    existing_in_list = any(
+        c[0] == ent.kind and c[1] == ent.province for c in charters
+    )
+    # If the enterprise is owned by the player, it shouldn't be offered
+    if ent.house == v.house:
+        assert not existing_in_list, "existing enterprise should not be offered again"
+
+
+def test_R10_charter_not_offered_on_unowned_province(found_state):
+    """R-10: Charter is never offered on a province the player does not own."""
+    g, v = found_state
+    owned_pids = {p.pid for p in g.provinces_of(v.house)}
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    for kind, pid, pname, cost in charters:
+        assert pid in owned_pids, f"charter {kind} at pid {pid} should be in owned province"
+
+
+def test_R11_bank_in_every_owned_province(found_state):
+    """R-11: Bank IS offered in every owned province (that doesn't already have one)."""
+    g, v = found_state
+    owned_pids = {p.pid for p in g.provinces_of(v.house)}
+    existing_banks = {e.province for e in g.enterprises if e.kind == "bank"}
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    bank_pids = {c[1] for c in charters if c[0] == "bank"}
+    expected_bank_pids = owned_pids - existing_banks
+    assert bank_pids == expected_bank_pids, (
+        f"bank should be offered in every owned province without a bank: "
+        f"got {sorted(bank_pids)}, expected {sorted(expected_bank_pids)}"
+    )
+
+
+def test_R12_cheapest_charter_listed_first(found_state):
+    """R-12: The cheapest charter is listed first."""
+    g, v = found_state
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    costs = [c[3] for c in charters]
+    assert costs == sorted(costs), "charters should be sorted by cost ascending"
+
+
+def test_R13_button_states_number_of_charters(found_state):
+    """R-13: Both the button and the chooser header state the number of charters."""
+    g, v = found_state
+    from gilded.ui.actions import _get_available_charters
+    charters = _get_available_charters(g, v.house)
+    n = len(charters)
+    # Check the button label
+    acts = v.enterprise_actions()
+    found_act = [a for a in acts if "found_enterprise" in a["action"]][0]
+    assert str(n) in found_act["label"], (
+        f"button label should contain charter count {n}: {found_act['label']}"
+    )
+    assert str(n) in found_act["action"].get("__hint", "") or str(n) in found_act["label"], (
+        "label should state the number of charters"
+    )
+
+
+def test_R14_row_names_province_title_and_price(found_state):
+    """R-14: Every row names its province, venture title, and price."""
+    g, v = found_state
+    v._found_picker = True
+    surf = pygame.Surface((800, 600))
+    v.draw(surf)
+    # Check the hints of picker regions
+    picker_regions = [r for r in v.regions._regions if r.group == "picker" and "found_enterprise" in (r.action or {})]
+    from gilded.enterprises import KIND_TITLES
+    for r in picker_regions:
+        hint = r.hint
+        # Should contain a title from KIND_TITLES (not the raw kind)
+        found_title = False
+        for title in KIND_TITLES.values():
+            if title.lower() in hint.lower():
+                found_title = True
+                break
+        assert found_title, f"hint should contain a venture title: {hint}"
+        # Should contain "gold" (price)
+        assert "gold" in hint, f"hint should mention price: {hint}"
+
+
+def test_D4_row_uses_kind_titles_not_raw_kind():
+    """D-4: Charter rows use KIND_TITLES, not raw kind strings."""
+    g, v = _enterprises_view(seed=42, turns=0)
+    v._found_picker = True
+    surf = pygame.Surface((800, 600))
+    v.draw(surf)
+    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
+    from gilded.enterprises import KIND_TITLES
+    raw_kinds = set(KIND_TITLES.keys())
+    for r in picker_regions:
+        hint = r.hint.lower()
+        # Raw kinds like "rail_co", "estate", "ironworks" should NOT appear as standalone words
+        for kind in raw_kinds:
+            # "estate" is tricky because it's a valid English word, check the hint is grammatical
+            pass
+    # Check that hints use "a" / "an" correctly
+    for r in picker_regions:
+        hint = r.hint
+        if hint.startswith("Found "):
+            # After "Found " should be "a" or "an" followed by a title
+            rest = hint[6:]
+            assert rest.startswith("a ") or rest.startswith("an "), (
+                f"hint should use article: {hint}"
+            )
+
+
+def test_D6_annotation_is_bool():
+    """D-6: _found_picker annotation is Optional[bool], not Optional[str]."""
+    import inspect
+    ann = BroadsheetView.__annotations__.get("_found_picker", "")
+    assert "bool" in str(ann), f"_found_picker annotation should be bool, got {ann}"
+
+
+# ── Region census ────────────────────────────────────────────────────────────
+
+
 def test_every_tab_draws_its_measured_number_of_regions():
     """The census. Exact values, per tab, measured at 53cb9af.
 

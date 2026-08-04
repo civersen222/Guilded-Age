@@ -381,9 +381,23 @@ def _found_enterprise_eligible(game, house, action):
     house_obj = game.houses.get(house)
     if house_obj is None:
         return False, "House not found."
-    cheapest = min(c[3] for c in charters)
-    if house_obj.treasury < cheapest:
-        return False, f"The House cannot afford the cheapest charter ({int(cheapest)} gold)."
+    # If a specific charter is targeted, check its cost
+    val = action.get("found_enterprise")
+    if isinstance(val, tuple):
+        kind, pid = val
+        target = None
+        for c in charters:
+            if c[0] == kind and c[1] == pid:
+                target = c
+                break
+        if target is None:
+            return False, "That charter is not available."
+        if house_obj.treasury < target[3]:
+            return False, f"The House cannot afford this charter ({int(target[3])} gold)."
+    else:
+        cheapest = min(c[3] for c in charters)
+        if house_obj.treasury < cheapest:
+            return False, f"The House cannot afford the cheapest charter ({int(cheapest)} gold)."
     return True, ""
 
 
@@ -397,6 +411,10 @@ def _found_enterprise_dispatch(game, house, view, action):
     if isinstance(val, tuple):
         # Row click — actually found the enterprise
         kind, pid = val
+        # Guard: check affordability before proceeding
+        ok, why = _found_enterprise_eligible(game, house, action)
+        if not ok:
+            return [f"Refused: {why}"]
         from gilded.docket import INITIATIVES, initiative
         from gilded.ai import _executor_for
         from gilded.chassis import TurnEvent
