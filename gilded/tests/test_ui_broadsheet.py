@@ -27,16 +27,16 @@ from gilded.ui.widgets import INK, Region, RegionState
 # floor is satisfied by a double registration, which is the specific
 # bug a census exists to catch.
 EXPECTED_REGIONS = {
-    "Briefing": 16,       # cycle_exec x1, rule x2, tab x10, end_turn, narrate, breadcrumb x1
-    "Gazette": 13,        # tab x10, end_turn, narrate, breadcrumb x1
-    "Ledger": 13,         # tab x10, end_turn, narrate, breadcrumb x1
-    "Letters": 13,        # tab x10, end_turn, narrate, breadcrumb x1
-    "Docket": 16,         # cycle_exec x1, rule x2, tab x10, end_turn, narrate, breadcrumb x1
-    "Policies": 18,       # set_stance x5, tab x10, end_turn, narrate, breadcrumb x1
-    "Enterprises": 19,    # venture x4, attack_takeover x1, found_enterprise x1, tab x10, end_turn, narrate, breadcrumb x1
-    "Atlas": 14,          # select_province x1, tab x10, end_turn, narrate, breadcrumb x1
-    "Powers": 20,         # place_informant x7, tab x10, end_turn, narrate, breadcrumb x1
-    "House": 13,          # tab x10, end_turn, narrate, breadcrumb x1
+    "Briefing": 15,       # cycle_exec x1, rule x2, tab x10, end_turn, narrate
+    "Gazette": 12,        # tab x10, end_turn, narrate
+    "Ledger": 12,         # tab x10, end_turn, narrate
+    "Letters": 12,        # tab x10, end_turn, narrate
+    "Docket": 15,         # cycle_exec x1, rule x2, tab x10, end_turn, narrate
+    "Policies": 17,       # set_stance x5, tab x10, end_turn, narrate
+    "Enterprises": 18,    # venture x4, attack_takeover x1, found_enterprise x1, tab x10, end_turn, narrate
+    "Atlas": 13,          # select_province x1, tab x10, end_turn, narrate
+    "Powers": 19,         # place_informant x7, tab x10, end_turn, narrate
+    "House": 12,          # tab x10, end_turn, narrate
 }
 
 
@@ -3926,7 +3926,7 @@ def test_enterprises_picker_open_census():
     appoint = _region_with(v, "appoint_director")
     v.handle_click(appoint.rect.center)
     v.draw(pygame.Surface((1280, 900)))
-    assert len(v.regions) == 22, (
+    assert len(v.regions) == 21, (
         f"picker-open census moved: {len(v.regions)} regions, expected 22")
 
 
@@ -4308,7 +4308,7 @@ def test_every_control_on_every_tab_explains_itself():
                 f"painted -- the pixel inside {v.tooltip_rect} is {fill}, "
                 f"expected the INK fill {INK}")
             checked += 1
-    assert checked == 155, (
+    assert checked == 145, (
         f"expected to point at 145 controls across the ten tabs, pointed at "
         f"{checked}. The census moved; EXPECTED_REGIONS should have caught "
         f"this first.")

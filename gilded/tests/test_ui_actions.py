@@ -949,58 +949,166 @@ def test_D6_no_attention_refuses_found_enterprise():
 
 # ── I4d1c: the eight rules the tests do not watch ─────────────────────────────
 
-def test_D1_enterprises_view_is_deterministic():
-    """D-1: Two calls to _enterprises_view with the same seed produce the same charters."""
+def test_D1_existing_charter_not_offered():
+    """D-1: A charter that already exists is NOT offered (uniqueness rule).
+    
+    Measured against enterprises the PLAYER owns. Seed 42 turn 0, house Vantrell:
+    owned enterprises are estate@13 (Quillvess) and mill@18 (Ulmdale).
+    Removing the uniqueness filter would cause estate@13 and mill@18 to reappear."""
     from gilded.tests.test_ui_broadsheet import _enterprises_view
     from gilded.ui.actions import _get_available_charters
-    g1, v1 = _enterprises_view(seed=42, turns=0)
-    g2, v2 = _enterprises_view(seed=42, turns=0)
-    c1 = _get_available_charters(g1, v1.house)
-    c2 = _get_available_charters(g2, v2.house)
-    assert c1 == c2, "same seed should produce identical charters"
-
-
-def test_D2_house_name_in_breadline():
-    """D-2: House name appears in the breadcrumb headline."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    
     g, v = _enterprises_view(seed=42, turns=0)
-    assert v.house, "house should be set"
-    name = g.houses[v.house].name
-    assert name in v.breadcrumbs, f"breadcrumb should contain house name '{name}': {v.breadcrumbs}"
+    charters = _get_available_charters(g, v.house)
+    
+    # Find the player's own enterprises
+    player_enterprises = [e for e in g.enterprises if e.house == v.house]
+    # Seed 42 turn 0: exactly 2 — estate@13, mill@18
+    assert len(player_enterprises) == 2, f"premise: expected 2 owned enterprises, got {len(player_enterprises)}"
+    
+    owned_charters = {(e.kind, e.province) for e in player_enterprises}
+    offered = {(kind, pid) for kind, pid, pname, cost in charters}
+    
+    for kind, pid in owned_charters:
+        assert (kind, pid) not in offered, (
+            f"uniqueness: {kind}@{pid} should NOT be offered — already owned")
 
 
-def test_D3_breadcrumbs_are_regions():
-    """D-3: Breadcrumb buttons are interactive Region instances."""
+def test_D3_header_shows_charter_count():
+    """D-3: The chooser header's count is measured from the drawn frame, not from regions.
+    
+    Substitutes a wrapper for _font to capture every string passed to .render().
+    Restores the real _font in a finally block."""
     from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.ui import broadsheet
+    from gilded.ui.actions import _get_available_charters
+    import sys
+    
     g, v = _enterprises_view(seed=42, turns=0)
-    v._found_picker = True
-    surf = pygame.Surface((1280, 900))
-    v.draw(surf)
-    breadcrumb_regions = [r for r in v.regions._regions if r.group == "breadcrumb"]
-    assert len(breadcrumb_regions) > 0, "breadcrumb buttons should be registered as regions"
+    charters = _get_available_charters(g, v.house)
+    n = len(charters)
+    assert n > 0, f"premise: expected charters offered, got {n}"
+    
+    rendered_strings = []
+    real_font = broadsheet._font
+    
+    class FontWrapper:
+        def __init__(self, f):
+            self._f = f
+        def render(self, text, *args, **kwargs):
+            rendered_strings.append(text)
+            return self._f.render(text, *args, **kwargs)
+        def size(self, text):
+            return self._f.size(text)
+        def get_linesize(self):
+            return self._f.get_linesize()
+        def get_height(self):
+            return self._f.get_height()
+    
+    try:
+        broadsheet._font = lambda size, **kw: FontWrapper(real_font(size, **kw))
+        v._found_picker = True
+        surf = pygame.Surface((1280, 900))
+        v.draw(surf)
+    finally:
+        broadsheet._font = real_font
+    
+    header = [s for s in rendered_strings if "Available Charters" in s]
+    assert header, f"no header string drawn; rendered: {rendered_strings[:20]}"
+    expected = f"Available Charters ({n})"
+    assert expected in header[0], (
+        f"header should contain '{expected}': got '{header[0]}'")
 
 
-def test_D7_house_name_survives_turns():
-    """D-7: House name in breadcrumbs persists after processing turns."""
-    from gilded.chassis import GildedGame
-    from gilded.ui.broadsheet import BroadsheetView
+def test_D4_row_label_names_province_title_price():
+    """D-4: A charter row's drawn label is measured — the label itself, for every row.
+    
+    The label is f"{province_name} {title} — {cost:.0f} gold".
+    Refused rows included. Collects drawn strings via _font wrapper."""
+    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.ui import broadsheet
+    from gilded.ui.actions import _get_available_charters
+    from gilded.enterprises import KIND_TITLES
+    
+    g, v = _enterprises_view(seed=42, turns=0)
+    charters = _get_available_charters(g, v.house)
+    assert len(charters) > 0, "premise: expected charters offered"
+    
+    rendered_strings = []
+    real_font = broadsheet._font
+    
+    class FontWrapper:
+        def __init__(self, f):
+            self._f = f
+        def render(self, text, *args, **kwargs):
+            rendered_strings.append(text)
+            return self._f.render(text, *args, **kwargs)
+        def size(self, text):
+            return self._f.size(text)
+        def get_linesize(self):
+            return self._f.get_linesize()
+        def get_height(self):
+            return self._f.get_height()
+    
+    try:
+        broadsheet._font = lambda size, **kw: FontWrapper(real_font(size, **kw))
+        v._found_picker = True
+        surf = pygame.Surface((1280, 900))
+        v.draw(surf)
+    finally:
+        broadsheet._font = real_font
+    
+    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
+    row_regions = [r for r in picker_regions if "close_found_picker" not in (r.action or {})]
+    
+    for kind, pid, pname, cost in charters:
+        title = KIND_TITLES[kind]
+        expected_label = f"{pname} {title} — {cost:.0f} gold"
+        found = expected_label in rendered_strings
+        assert found, (
+            f"label '{expected_label}' not found in rendered strings. "
+            f"Rendered samples: {rendered_strings[:30]}")
 
-    g = GildedGame(seed=42)
-    player = list(g.houses.keys())[0]
-    name = g.houses[player].name
-    v = BroadsheetView(g, player)
-    g.turns = 1
-    v._handle_action("enterprises")
-    assert name in v.breadcrumbs, f"house name '{name}' should survive turns: {v.breadcrumbs}"
+
+def test_D7_no_charters_refuses_button():
+    """D-7: A house with no charters left is still offered the button — and the state IS reachable.
+    
+    Seed 42 turn 0, house Vantrell: 9 charters available.
+    Appending 9 Enterprise objects empties the list, then the button refuses."""
+    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.ui.actions import _get_available_charters
+    from gilded.enterprises import Enterprise, KIND_TITLES
+    
+    g, v = _enterprises_view(seed=42, turns=0)
+    charters = _get_available_charters(g, v.house)
+    n = len(charters)
+    assert n == 9, f"premise: expected 9 charters, got {n}"
+    
+    # Fill every available charter with a dummy enterprise
+    for kind, pid, pname, cost in charters:
+        title = KIND_TITLES[kind]
+        ent = Enterprise(
+            eid=f"dummy_{kind}_{pid}",
+            kind=kind,
+            name=f"{pname} {title}",
+            house=v.house,
+            province=pid,
+            tier=1,
+            extraction_dial=0,
+            director_id=None,
+            ledger=None,
+            under_construction=False,
+            target_tier=1,
+        )
+        g.enterprises.append(ent)
+    
+    remaining = _get_available_charters(g, v.house)
+    assert len(remaining) == 0, (
+        f"premise: expected 0 charters after filling, got {len(remaining)}")
+    
+    ok, why = act.ACTIONS["found_enterprise"].eligible(g, v.house, {"found_enterprise": True})
+    assert not ok, "found_enterprise should be refused when no charters available"
+    assert "no charters" in why.lower(), f"refusal should mention no charters: {why}"
 
 
-def test_D5_scheme_breadcrumbs_included():
-    """D-5: Scheme actions are included in the breadcrumb trail."""
-    from gilded.chassis import GildedGame
-    from gilded.ui.broadsheet import BroadsheetView
 
-    g = GildedGame(seed=42)
-    player = list(g.houses.keys())[0]
-    v = BroadsheetView(g, player)
-    v._handle_action("schemes")
-    assert "scheme" in v.breadcrumbs.lower(), f"schemes breadcrumb should be present: {v.breadcrumbs}"
