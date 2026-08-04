@@ -285,7 +285,10 @@ def _build_action_for_key(key, game, house, view=None):
                 return {"appoint_director": owned[0].eid, "char_id": chars[0].id}
         return None
     elif key == "open_director_picker":
-        return {"open_director_picker": True}
+        owned = [e for e in game.enterprises if e.house == house]
+        if owned:
+            return {"open_director_picker": owned[0].eid}
+        return None
     elif key == "close_director_picker":
         return {"close_director_picker": True}
     elif key == "cycle_exec":
