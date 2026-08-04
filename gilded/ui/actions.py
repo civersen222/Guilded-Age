@@ -282,6 +282,59 @@ def _close_director_picker_dispatch(game, house, view, action):
     return []
 
 
+def _takeover_reach(game, target_house):
+    """How much of `target_house` is genuinely for sale.
+
+    The combined average stake its disloyal kin hold across its enterprises.
+    This is the campaign's ceiling, and `house_stake` scores progress on the
+    same scale, so the two numbers can honestly be shown side by side.
+    """
+    from gilded.society.realm import disloyal_shareholders
+    ents = [e for e in game.enterprises if e.house == target_house]
+    if not ents:
+        return 0.0
+    sellers = disloyal_shareholders(game.realms[target_house], game.enterprises)
+    return sum(sum(e.ledger.get(s.id, 0.0) for e in ents)
+               for s in sellers) / len(ents)
+
+
+def _running_takeover(game, house, target_house):
+    """The player's unfinished campaign against `target_house`, or None."""
+    return next((t for t in game.takeovers
+                 if t.buyer_house == house and t.target_house == target_house
+                 and not t.complete), None)
+
+
+def _attack_takeover_eligible(game, house, action):
+    target = action.get("attack_takeover")
+    if target not in game.houses or target == house:
+        return False, "There is no such House to buy into."
+    if _running_takeover(game, house, target) is not None:
+        return False, (f"A quiet buying campaign against House {target} is "
+                       f"already under way.")
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    if _takeover_reach(game, target) <= 0.0:
+        return False, (f"No one in House {target} is disloyal enough to sell "
+                       f"you a share.")
+    return True, ""
+
+
+def _attack_takeover_dispatch(game, house, view, action):
+    from gilded.docket import INITIATIVES, initiative
+    from gilded.ai import _executor_for
+    from gilded.chassis import TurnEvent
+    target = action["attack_takeover"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, INITIATIVES["start_takeover"][0])
+    game.attention[house] -= 1
+    lines = initiative(game, house, "start_takeover", executor,
+                       target_house=target)
+    for line in lines:
+        game.events.append(TurnEvent(line, "ledger", house))
+    return lines
+
+
 # ── view-local keys (click already mutated the view) ─────────────────────────
 
 def _noop_eligible(game, house, action):
@@ -330,6 +383,11 @@ ACTIONS: dict[str, PlayerAction] = {
         key="defend_buyout", label="Defend Buyout", domain="commerce",
         attention_cost=1, gold_cost=0,
         eligible=_defend_buyout_eligible, dispatch=_defend_buyout_dispatch,
+    ),
+    "attack_takeover": PlayerAction(
+        key="attack_takeover", label="Hostile Takeover", domain="capital",
+        attention_cost=1, gold_cost=0,
+        eligible=_attack_takeover_eligible, dispatch=_attack_takeover_dispatch,
     ),
     # view verbs
     "toggle_narrate": PlayerAction(

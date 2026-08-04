@@ -178,7 +178,6 @@ def test_exactly_four_offered_verbs_are_unregistered():
     unregistered = _offered_keys(state.view) - set(act.ACTIONS)
     assert unregistered == {
         "buy_shares", "sell_shares", "found_enterprise",
-        "attack_takeover",
     }, f"the unregistered set moved: {sorted(unregistered)}"
 
 
@@ -211,7 +210,8 @@ def _enterprise_drawn_verbs(view):
     """
     drawn = set()
     for r in view.regions._regions:
-        if not (r.group or "").startswith("venture:"):
+        group = r.group or ""
+        if not (group.startswith("venture:") or group == "house"):
             continue
         payload = r.action
         if isinstance(payload, dict):
@@ -232,13 +232,13 @@ def test_exactly_three_enterprise_verbs_are_drawn():
     view.draw(pygame.Surface((800, 600)))
 
     drawn = _enterprise_drawn_verbs(view)
-    assert drawn == {"appoint_director", "expand_enterprise", "defend_buyout"}, (
+    assert drawn == {"appoint_director", "expand_enterprise", "defend_buyout",
+                     "attack_takeover"}, (
         f"the Enterprises tab's drawn verbs moved: {sorted(drawn)}")
 
     undrawn = _offered_keys(view) - drawn
     assert undrawn == {
         "buy_shares", "sell_shares", "found_enterprise",
-        "attack_takeover",
     }, f"the undrawn set moved: {sorted(undrawn)}"
 
 
@@ -302,6 +302,29 @@ def _build_action_for_key(key, game, house, view=None):
         return None
     elif key == "close_director_picker":
         return {"close_director_picker": True}
+    elif key == "attack_takeover":
+        # Disloyalty is grown, not dealt: at turn 0 the top-threat House has no
+        # disloyal kin in ANY seed 42-61 (measured, 0 of 20), so a turn-0
+        # fixture can only ever be ineligible. Letting turns elapse -- as the
+        # defend_buyout builder does -- makes seed 42 eligible on its third
+        # end_turn, with 5.0% for sale and attention intact. The cap of 12 is
+        # generous: the slowest seed that ever qualifies needs 11.
+        from gilded.intel import threat_rank
+        from gilded.society.realm import disloyal_shareholders
+        for _ in range(12):
+            threats = [x for x in threat_rank(game) if x != house]
+            if threats and disloyal_shareholders(game.realms[threats[0]],
+                                                 game.enterprises):
+                return {"attack_takeover": threats[0]}
+            game.end_turn()
+        # No seller ever appeared. Still return a WELL-FORMED action naming a
+        # real rival rather than None: None means "this verb cannot be
+        # constructed at all", while a real action against a loyal House is
+        # merely INELIGIBLE, which is a legitimate answer.
+        threats = [x for x in threat_rank(game) if x != house]
+        if threats:
+            return {"attack_takeover": threats[0]}
+        return None
     elif key == "cycle_exec":
         petitions = game.docket_by_house.get(house, [])
         if petitions:

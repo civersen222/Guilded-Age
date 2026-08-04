@@ -1712,8 +1712,22 @@ class BroadsheetView:
         threats = threat_rank(g)
         if threats:
             target_house = threats[0]
+            from gilded.ui.actions import _running_takeover, _takeover_reach
+            from gilded.society.schemes import TAKEOVER_THRESHOLD
+            from gilded.society.shares import house_stake
+            running = _running_takeover(g, self.house, target_house)
+            if running is None:
+                label = (f"Hostile Takeover of {target_house} — "
+                         f"{_takeover_reach(g, target_house):.1f}% for sale, "
+                         f"{TAKEOVER_THRESHOLD:.0f}% needed")
+            else:
+                held = house_stake(
+                    [e for e in g.enterprises if e.house == target_house],
+                    running.buyer.id)
+                label = (f"Takeover of {target_house} — holding "
+                         f"{held:.1f}% of {TAKEOVER_THRESHOLD:.0f}% needed")
             actions.append({
-                "label": f"Hostile Takeover of {target_house}",
+                "label": label,
                 "action": {"attack_takeover": target_house},
                 "eid": None
             })
@@ -1849,6 +1863,16 @@ class BroadsheetView:
             verb = list(action_dict.keys())[0] if action_dict else None
             eid = act.get("eid")
             if eid is None:
+                if verb == "attack_takeover":
+                    from gilded.ui.actions import ACTIONS
+                    ok, why = ACTIONS["attack_takeover"].eligible(
+                        self.game, self.house, action_dict)
+                    y = self._action_button(
+                        surface, content, action_rect, y, act, body, "house",
+                        "Hostile Takeover", None if ok else why, None,
+                        BUTTON_BG, BUTTON_EDGE)
+                    if y is None:
+                        return
                 continue
             ent = next((e for e in self.game.enterprises if e.eid == eid), None)
             if ent is None:
