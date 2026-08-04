@@ -167,17 +167,18 @@ def test_every_drawn_key_is_registered():
 # ── CHECK 1b — OFFERED ⊆ ACTIONS (split) ─────────────────────────────────────
 
 
-def test_exactly_five_offered_verbs_are_unregistered():
+def test_exactly_four_offered_verbs_are_unregistered():
     """Pins the CURRENT state by value, and passes today.
 
-    This is the half that can be scored. When Wave I4 registers the
-    five, this test goes RED and names what changed -- which is the
-    report the xfail below is structurally unable to make."""
+    This is the half that can be scored. I4b registered defend_buyout, taking
+    this from five to four. When a later wave registers the rest, this test
+    goes RED and names what changed -- which is the report the xfail below is
+    structurally unable to make."""
     state = _rich_state()
     unregistered = _offered_keys(state.view) - set(act.ACTIONS)
     assert unregistered == {
         "buy_shares", "sell_shares", "found_enterprise",
-        "defend_buyout", "attack_takeover",
+        "attack_takeover",
     }, f"the unregistered set moved: {sorted(unregistered)}"
 
 
@@ -196,13 +197,23 @@ def test_every_offered_key_is_registered():
 
 
 def _enterprise_drawn_verbs(view):
-    """Verbs the Enterprises tab actually draws, from its hit structures.
+    """Verbs the Enterprises tab actually draws, read from the REGION REGISTRY.
 
-    Unwraps the {"label","action","eid"} envelope exactly as
-    handle_click does -- `.get("action", payload)`, with the fallback,
-    so a bare action dict still works."""
+    Migrated in I4b. This used to walk `_enterprise_hits` + `_appoint_hits`,
+    the legacy lists I3 superseded. Those lists are now populated only by the
+    two buttons that predate the registry, so a button drawn correctly as a
+    Region and nothing else was invisible here -- and a census that cannot see
+    a new button reports the tab unchanged when it has changed. The registry is
+    what the mouse resolves against, so it is what "drawn" means.
+
+    Region.action is already unwrapped by the drawing code, but keep the
+    `.get("action", ...)` fallback so a payload envelope still reads correctly.
+    """
     drawn = set()
-    for _rect, payload in list(view._enterprise_hits) + list(view._appoint_hits):
+    for r in view.regions._regions:
+        if not (r.group or "").startswith("venture:"):
+            continue
+        payload = r.action
         if isinstance(payload, dict):
             for k in payload.get("action", payload):
                 if k != "char_id":
@@ -210,24 +221,24 @@ def _enterprise_drawn_verbs(view):
     return drawn
 
 
-def test_exactly_two_enterprise_verbs_are_drawn():
+def test_exactly_three_enterprise_verbs_are_drawn():
     """Pins the CURRENT state by value, and passes today.
 
-    When Wave I4 draws the five missing verbs, this test goes RED and
-    names what changed."""
+    I4b drew the third, defend_buyout. When a later wave draws the remaining
+    four, this test goes RED and names what changed."""
     state = _rich_state()
     view = state.view
     view.active_tab = "Enterprises"
     view.draw(pygame.Surface((800, 600)))
 
     drawn = _enterprise_drawn_verbs(view)
-    assert drawn == {"appoint_director", "expand_enterprise"}, (
+    assert drawn == {"appoint_director", "expand_enterprise", "defend_buyout"}, (
         f"the Enterprises tab's drawn verbs moved: {sorted(drawn)}")
 
     undrawn = _offered_keys(view) - drawn
     assert undrawn == {
         "buy_shares", "sell_shares", "found_enterprise",
-        "defend_buyout", "attack_takeover",
+        "attack_takeover",
     }, f"the undrawn set moved: {sorted(undrawn)}"
 
 
@@ -295,6 +306,31 @@ def _build_action_for_key(key, game, house, view=None):
         petitions = game.docket_by_house.get(house, [])
         if petitions:
             return {"cycle_exec": petitions[0].pid}
+        return None
+    elif key == "defend_buyout":
+        # Outside stakes are acquired DURING a turn: at turn 0 not one seed in
+        # 42-62 has one (measured, 0 of 20), and seed 42 never acquires one at
+        # any turn. So the builder lets a turn elapse -- that makes seed 46
+        # eligible, which is what test_dispatchability's seed sweep needs.
+        #
+        # When no real outside holder exists the builder still returns a
+        # WELL-FORMED action naming some outsider, rather than None. None means
+        # "this verb cannot be constructed at all" and fails the test outright;
+        # a real action against an empty stake is merely INELIGIBLE, which is a
+        # legitimate answer that test_eligible_contract is built to accept.
+        owned = [e for e in game.enterprises if e.house == house]
+        if not owned:
+            return None
+        game.end_turn()
+        hids = {c.id for c in game.realms[house].characters}
+        for e in owned:
+            for hid, pct in e.ledger.items():
+                if hid not in hids and pct > 0:
+                    return {"defend_buyout": (e.eid, hid)}
+        outsiders = [c.id for hn, r in game.realms.items() if hn != house
+                     for c in r.characters]
+        if outsiders:
+            return {"defend_buyout": (owned[0].eid, outsiders[0])}
         return None
     elif key == "tab":
         return {"tab": TABS[0]}
@@ -526,3 +562,304 @@ def test_set_stance_updates_directives():
     assert hasattr(dirs, 'stances'), "directives must have stances attr"
     assert dirs.stances.get("cooperation") == 50, \
         f"cooperation stance must be 50, got {dirs.stances.get('cooperation')}"
+
+
+# ── I4b — the buyout button: drawn, priced honestly, and it moves the shares ──
+#
+# `defend_buyout` is not a new engine verb. It is `buy_shares` with the
+# counterparty and the size already decided: the seller is the outside holder
+# the button names, and the size is the whole of that holder's stake. That is
+# why it needs no chooser and can land before buy_shares does.
+
+
+def _venture_regions(view):
+    """Every Region the Enterprises tab registered for a venture.
+
+    Reads the REGION REGISTRY, which is what the mouse actually resolves
+    against, rather than the legacy `_enterprise_hits` / `_appoint_hits`
+    lists that I3 superseded. A button that exists only as a Region is a
+    real button; a test that cannot see it would report it absent.
+    """
+    return [r for r in view.regions._regions
+            if (r.group or "").startswith("venture:")]
+
+
+def _buyout_offer(view):
+    """The single defend_buyout offer on the seed-99 fixture, with the
+    enterprise and the outside holder it names resolved."""
+    offers = [a for a in view.enterprise_actions()
+              if "defend_buyout" in a.get("action", {})]
+    assert len(offers) == 1, (
+        f"fixture premise moved: {len(offers)} buyout offers, expected 1")
+    offer = offers[0]
+    eid, outside_id = offer["action"]["defend_buyout"]
+    game = view.game
+    ent = next(e for e in game.enterprises if e.eid == eid)
+    return offer, ent, outside_id
+
+
+def _engine_price(view, ent, outside_id, pct):
+    """What the engine will actually charge to move *pct* of *ent* from the
+    outside holder to the player's ruler."""
+    from gilded.society.shares import priced_transfer
+    game = view.game
+    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
+    ruler = game.realms[view.house].ruler
+    return priced_transfer(ent, by_id[outside_id], ruler, pct,
+                           game.market, game, dry_run=True)
+
+
+def _fund_house(state, amount):
+    """Put *amount* in every purse in the player's house.
+
+    The buyout is routed through the domain SEAT HOLDER, not the ruler, and the
+    engine checks that person's purse. On the seed-99 fixture the seat holder
+    holds nothing while the ruler holds 140 gold -- so a test that funded only
+    the ruler would be testing the refusal path while believing it tested the
+    trade. Funding everyone makes the arrangement true whoever the engine picks,
+    without the test having to reach in and name the executor.
+    """
+    for c in state.game.realms[state.view.house].characters:
+        c.gold_reserve = amount
+
+
+def _buy_executor(state):
+    """The person the engine will actually route a share purchase through."""
+    from gilded.docket import INITIATIVES
+    from gilded.ai import _executor_for
+    game = state.game
+    return _executor_for(game, game.realms[state.view.house],
+                         INITIATIVES["buy_shares"][0])
+
+
+def test_the_buyout_reads_the_purse_the_engine_will_spend_from():
+    """FIND-3. A rich ruler does not make the trade affordable.
+
+    `initiative()` routes a purchase through the domain SEAT HOLDER, and
+    `_exec_share_trade` checks THAT person's gold -- not the ruler's. On the
+    seed-99 fixture the ruler holds 140 gold and the seat holder holds none,
+    so a button that read the ruler's purse would light up, spend the
+    attention, and buy nothing: a live control that silently does nothing,
+    which is the exact failure this arc exists to remove.
+
+    Both directions are asserted. Only refusing when the ruler is poor would
+    pass for a check that reads either purse; only accepting when the executor
+    is rich would pass for a check that reads neither. Together they name one
+    purse and no other.
+    """
+    state = _rich_state()
+    view, game = state.view, state.game
+    offer, _ent, _outside_id = _buyout_offer(view)
+    executor = _buy_executor(state)
+    ruler = game.realms[view.house].ruler
+    assert executor.id != ruler.id, (
+        "fixture premise moved: the executor IS the ruler, so this test "
+        "cannot tell the two purses apart")
+
+    # Rich ruler, empty executor -> must refuse, and must say whose purse.
+    _fund_house(state, 0.0)
+    ruler.gold_reserve = 10_000.0
+    ok, why = act.ACTIONS["defend_buyout"].eligible(game, view.house,
+                                                    offer["action"])
+    assert not ok, (
+        f"the buyout was offered because the ruler is rich, but "
+        f"{executor.name}, who must actually pay, holds nothing")
+    assert executor.name in why, (
+        f"the refusal does not name the person who cannot pay: {why!r}")
+
+    # Empty ruler, rich executor -> must allow.
+    _fund_house(state, 0.0)
+    executor.gold_reserve = 10_000.0
+    ok2, why2 = act.ACTIONS["defend_buyout"].eligible(game, view.house,
+                                                      offer["action"])
+    assert ok2, (
+        f"the buyout was refused while {executor.name}, who pays for it, "
+        f"holds 10,000 gold: {why2}")
+
+    # And the dispatch must spend the SAME purse the check read. If the check
+    # reads the executor and the dispatch routes through the ruler, the button
+    # lights up on a purse it will never touch and the trade dies inside the
+    # engine -- the same silent nothing, one layer down.
+    ent = next(e for e in game.enterprises
+               if e.eid == offer["action"]["defend_buyout"][0])
+    outside_id = offer["action"]["defend_buyout"][1]
+    before = ent.ledger.get(outside_id, 0.0)
+    act.ACTIONS["defend_buyout"].dispatch(game, view.house, view,
+                                          offer["action"])
+    assert ent.ledger.get(outside_id, 0.0) < before, (
+        f"the buyout was allowed on {executor.name}'s 10,000 gold and then "
+        f"moved nothing; the dispatch is spending a different purse")
+    assert executor.gold_reserve < 10_000.0, (
+        f"the shares moved but {executor.name}, whose purse the button "
+        f"checked, still holds all 10,000 gold")
+
+
+def test_the_buyout_quote_is_the_price_the_engine_charges():
+    """FIND-2. The button quotes a number; the engine charges another.
+
+    The quote is `share_price(ent, g) * pct`; the engine runs
+    `priced_transfer(...)`. They are different functions and they disagree
+    by a wide margin on this fixture -- the button was advertising a price
+    the game would never ask for.
+
+    Asserted as a PROPERTY, never as a ratio. The size of the disagreement
+    is an artifact of `share_price` clamping to its band floor at this
+    fixture's market value; a test that pinned the ratio would be pinning
+    the fixture, not the rule.
+    """
+    state = _rich_state()
+    view = state.view
+    offer, ent, outside_id = _buyout_offer(view)
+    pct = ent.ledger.get(outside_id, 0.0)
+    assert pct > 0, "fixture premise moved: the outside holder holds nothing"
+
+    expected = _engine_price(view, ent, outside_id, pct)
+    assert offer["price"] == pytest.approx(expected, rel=1e-9), (
+        f"the button quotes {offer['price']:.4f} but the engine charges "
+        f"{expected:.4f} for the same stake")
+
+
+def test_defend_buyout_is_registered():
+    """The verb the button emits has an entry in ACTIONS."""
+    state = _rich_state()
+    assert "defend_buyout" in act.ACTIONS, (
+        f"defend_buyout is offered but unregistered; ACTIONS has "
+        f"{sorted(act.ACTIONS)}")
+
+
+def test_the_buyout_button_is_drawn_on_the_enterprises_tab():
+    """A Region carrying the verb exists after a draw."""
+    state = _rich_state()
+    view = state.view
+    view.active_tab = "Enterprises"
+    view.draw(pygame.Surface((1280, 900)))
+
+    verbs = set()
+    for r in _venture_regions(view):
+        if isinstance(r.action, dict):
+            verbs |= set(r.action)
+    assert "defend_buyout" in verbs, (
+        f"the buyout button is not on the screen; venture regions carry "
+        f"{sorted(verbs)}")
+
+
+def test_the_buyout_button_explains_itself():
+    """I3e's law: every control answers the mouse. Offered -> a hint;
+    refused -> a reason. Neither may be blank."""
+    state = _rich_state()
+    view = state.view
+    view.active_tab = "Enterprises"
+    view.draw(pygame.Surface((1280, 900)))
+
+    from gilded.ui.widgets import RegionState
+    found = [r for r in _venture_regions(view)
+             if isinstance(r.action, dict) and "defend_buyout" in r.action]
+    assert found, "no buyout region to interrogate"
+    for r in found:
+        text = r.reason if r.state is RegionState.DISABLED else r.hint
+        assert text, (
+            f"the buyout button says nothing in state {r.state.name}")
+
+
+def test_buying_out_the_stake_moves_the_shares_and_the_gold():
+    """The conservation invariant, which survives a fumble.
+
+    `initiative()` halves the size on a botch, so the amount that moves is
+    not fixed. What IS fixed: whatever leaves the outside holder arrives in
+    the house, the house pays for it, and the size bought is the WHOLE stake
+    the button named -- or half of it on a fumble, never a token slice.
+    `ctx.scale` takes exactly two values, 1.0 and 0.5, so `moved >= pct/2` is
+    a property of the rule and not a reading of the rng; asserting a fixed
+    transfer size instead would be asserting the rng, which any later change
+    to call order would break.
+    """
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+    offer, ent, outside_id = _buyout_offer(view)
+
+    house_ids = {c.id for c in game.realms[view.house].characters}
+    before_holder = ent.ledger.get(outside_id, 0.0)
+    before_house = sum(v for k, v in ent.ledger.items() if k in house_ids)
+    before_gold = sum(c.gold_reserve
+                      for c in game.realms[view.house].characters)
+    assert before_holder > 0, "fixture premise moved: nothing to buy out"
+
+    ok, why = act.ACTIONS["defend_buyout"].eligible(game, view.house,
+                                                    offer["action"])
+    assert ok, f"the buyout is refused on a house holding 10,000 gold: {why}"
+    act.ACTIONS["defend_buyout"].dispatch(game, view.house, view,
+                                          offer["action"])
+
+    moved = before_holder - ent.ledger.get(outside_id, 0.0)
+    assert moved > 0, "the dispatch moved no shares at all"
+    assert moved >= before_holder * 0.5 - 1e-9, (
+        f"the button offered to buy out the whole {before_holder:.4f}% stake "
+        f"but only {moved:.4f}% moved; a fumble halves it, nothing takes it "
+        f"lower")
+    gained = sum(v for k, v in ent.ledger.items() if k in house_ids) - before_house
+    assert gained == pytest.approx(moved, rel=1e-9), (
+        f"{moved:.4f}% left the holder but {gained:.4f}% reached the house")
+    after_gold = sum(c.gold_reserve
+                     for c in game.realms[view.house].characters)
+    assert after_gold < before_gold, "the shares moved but were free"
+
+
+def test_the_buyout_costs_one_attention():
+    """It is an initiative like any other."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+    offer, _ent, _outside_id = _buyout_offer(view)
+
+    before = game.attention[view.house]
+    act.ACTIONS["defend_buyout"].dispatch(game, view.house, view,
+                                          offer["action"])
+    assert game.attention[view.house] == before - 1, (
+        f"attention went {before} -> {game.attention[view.house]}")
+
+
+def test_the_buyout_is_refused_when_the_house_cannot_afford_it():
+    """A refusal must name the obstacle, not merely deny."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    offer, ent, outside_id = _buyout_offer(view)
+    _fund_house(state, 0.0)
+
+    ok, why = act.ACTIONS["defend_buyout"].eligible(game, view.house,
+                                                    offer["action"])
+    assert not ok, "a penniless house was told it could buy the stake"
+    assert why, "the refusal gave no reason"
+    assert "gold" in why.lower() or "afford" in why.lower(), (
+        f"the refusal does not name money: {why!r}")
+
+
+def test_the_buyout_is_refused_with_no_attention_left():
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+    offer, _ent, _outside_id = _buyout_offer(view)
+    game.attention[view.house] = 0
+
+    ok, why = act.ACTIONS["defend_buyout"].eligible(game, view.house,
+                                                    offer["action"])
+    assert not ok, "a house with no attention was told it could act"
+    assert why, "the refusal gave no reason"
+
+
+def test_a_refused_buyout_is_drawn_greyed_and_carries_the_reason():
+    """The refusal reaches the screen, not just the registry."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 0.0)
+    view.active_tab = "Enterprises"
+    view.draw(pygame.Surface((1280, 900)))
+
+    from gilded.ui.widgets import RegionState
+    found = [r for r in _venture_regions(view)
+             if isinstance(r.action, dict) and "defend_buyout" in r.action]
+    assert found, "the buyout button vanished instead of being refused"
+    for r in found:
+        assert r.state is RegionState.DISABLED, (
+            "a house that cannot pay was offered a live buyout button")
+        assert r.reason, "the greyed buyout button carries no reason"

@@ -27,7 +27,17 @@ import pygame
 from gilded.dashboard import Delta, delta, scoreboard
 from gilded.grip import _name_for, report as grip_report
 from gilded.intel import report as intel_report, threat_rank
-from gilded.market import COMMODITIES
+from gilded.market import COMMODITIES, share_price
+
+
+def _buyout_price(ent, owner_id, game):
+    """Price to buy out a rival's stake in an enterprise."""
+    for holder, pct in ent.holders:
+        if holder == owner_id:
+            return share_price(ent, game) * pct
+    return 0
+
+
 from gilded.papers import compose
 from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
@@ -1682,7 +1692,7 @@ class BroadsheetView:
                 outside_id, outside_pct = el.top_outside
                 ent = next((e for e in g.enterprises if e.eid == el.eid), None)
                 if ent is not None:
-                    price = share_price(ent, g) * outside_pct
+                    price = _buyout_price(ent, outside_id, g)
                     actions.append({
                         "label": f"Buy out {_name_for(g, outside_id)}'s stake in {el.name}",
                         "action": {"defend_buyout": (el.eid, outside_id)},
@@ -1855,6 +1865,11 @@ class BroadsheetView:
                 fill = (50, 50, 70) if not reason else BUTTON_BG
                 edge = INK if not reason else BUTTON_EDGE
                 y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Appoint Director for {ent.name}", reason, self._appoint_hits, fill, edge)
+                if y is None:
+                    return
+
+            elif verb == "defend_buyout":
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", act.get("label", f"Buy out stake in {ent.name}"), None, self._enterprise_hits, BUTTON_BG, BUTTON_EDGE)
                 if y is None:
                     return
 

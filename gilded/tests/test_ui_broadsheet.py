@@ -1410,10 +1410,18 @@ def test_each_row_shows_its_own_tier():
 def test_defend_buyout_prices_the_actual_stake():
     """w8: cost must scale with the outside holder's percentage.
 
-    If the buyout were priced for 1% every time, a 10% stake would print
-    the same price as 1%.  This test builds a world with a substantial
-    outside stake and verifies the cost is proportional to the actual
-    percentage held.
+    Rewritten in I4b. The original recomputed `share_price(ent, g) *
+    outside_pct` -- which was the button's own expression, so the assertion
+    could only ever restate the implementation. It passed for as long as the
+    button quoted a price the engine would never charge (FIND-2: the two
+    disagreed by a factor of ~47 on the seed-99 fixture), and it would have
+    failed the moment the button was corrected. A test that goes red when a bug
+    is fixed is holding the bug in place.
+
+    The independent authority is `priced_transfer` -- the function the engine
+    actually runs when the stake changes hands. The property survives: the quote
+    is for the stake actually held, so it must equal what the engine charges for
+    that stake and must NOT equal the price of the whole venture.
     """
     g = GildedGame(seed=42)
     player = next(iter(g.houses))
@@ -1433,7 +1441,16 @@ def test_defend_buyout_prices_the_actual_stake():
             outside_id, outside_pct = el.top_outside
             ent = next((e for e in g.enterprises if e.eid == el.eid), None)
             if ent is not None:
-                expected_price = share_price(ent, g) * outside_pct
+                from gilded.society.shares import priced_transfer
+                from gilded.docket import INITIATIVES
+                from gilded.ai import _executor_for
+                by_id = {c.id: c for r in g.realms.values()
+                         for c in r.characters}
+                buyer = _executor_for(g, g.realms[ent.house],
+                                      INITIATIVES["buy_shares"][0])
+                expected_price = priced_transfer(
+                    ent, by_id[outside_id], buyer, ent.ledger[outside_id],
+                    g.market, g, dry_run=True)
                 # Find the buyout action for this venture
                 buyout_actions = [
                     a for a in actions
@@ -1444,14 +1461,16 @@ def test_defend_buyout_prices_the_actual_stake():
                     f"No buyout action for {el.name} with outside holder {outside_id}"
                 )
                 actual_price = buyout_actions[0].get("price", 0)
-                # The price should be proportional to the outside stake
+                # The quote must be what the engine charges for THIS stake
                 assert abs(actual_price - expected_price) < 0.01, (
-                    f"Buyout for {outside_pct*100:.0f}% stake should cost {expected_price:.2f}, not {actual_price:.2f}"
+                    f"Buyout for the {outside_pct:.2f}% stake is quoted at "
+                    f"{actual_price:.4f} but the engine charges "
+                    f"{expected_price:.4f}"
                 )
                 # And it should NOT equal the full share price (which would be pricing 100%)
                 wrong_price = share_price(ent, g)
                 assert abs(actual_price - wrong_price) > 0.01, (
-                    f"Buyout price {actual_price:.2f} looks like it's pricing 100%, not {outside_pct*100:.0f}%"
+                    f"Buyout price {actual_price:.2f} looks like it's pricing 100%, not {outside_pct:.2f}%"
                 )
                 break
 

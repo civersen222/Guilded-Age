@@ -212,6 +212,55 @@ def _appoint_director_dispatch(game, house, view, action):
     return lines
 
 
+def _defend_buyout_eligible(game, house, action):
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    payload = action.get("defend_buyout")
+    if not isinstance(payload, (list, tuple)) or len(payload) < 2:
+        return False, "No buyout target specified."
+    eid, outside_id = payload[0], payload[1]
+    ent = next((e for e in game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return False, "The enterprise no longer exists."
+    from gilded.society.shares import priced_transfer
+    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
+    seller = by_id.get(outside_id)
+    if seller is None:
+        return False, "The stakeholder is not found."
+    pct = ent.ledger.get(outside_id, 0.0)
+    if pct <= 0:
+        return False, f"{seller.name} has no stake in {ent.name}."
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    from gilded.docket import INITIATIVES, _fmt_gold
+    domain = INITIATIVES["buy_shares"][0]
+    executor = _executor_for(game, realm, domain)
+    quote = priced_transfer(ent, seller, executor, pct, game.market, game, dry_run=True)
+    if executor.gold_reserve < quote:
+        return False, f"Cannot afford the buyout ({_fmt_gold(quote)} gold needed)."
+    return True, ""
+
+
+def _defend_buyout_dispatch(game, house, view, action):
+    from gilded.docket import INITIATIVES, initiative
+    from gilded.ai import _executor_for
+    from gilded.chassis import TurnEvent
+    payload = action["defend_buyout"]
+    eid, outside_id = payload[0], payload[1]
+    ent = next((e for e in game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return []
+    pct = ent.ledger.get(outside_id, 0.0)
+    domain = INITIATIVES["buy_shares"][0]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, domain)
+    game.attention[house] -= 1
+    lines = initiative(game, house, "buy_shares", executor, eid=eid, seller_id=outside_id, pct=pct)
+    for line in lines:
+        game.events.append(TurnEvent(line, "ledger", house))
+    return lines
+
+
 # ── view verbs ────────────────────────────────────────────────────────────────
 
 def _toggle_narrate_eligible(game, house, action):
@@ -276,6 +325,11 @@ ACTIONS: dict[str, PlayerAction] = {
         key="appoint_director", label="Appoint Director", domain="commerce",
         attention_cost=1, gold_cost=0,
         eligible=_appoint_director_eligible, dispatch=_appoint_director_dispatch,
+    ),
+    "defend_buyout": PlayerAction(
+        key="defend_buyout", label="Defend Buyout", domain="commerce",
+        attention_cost=1, gold_cost=0,
+        eligible=_defend_buyout_eligible, dispatch=_defend_buyout_dispatch,
     ),
     # view verbs
     "toggle_narrate": PlayerAction(
