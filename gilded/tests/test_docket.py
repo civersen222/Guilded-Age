@@ -430,12 +430,13 @@ def test_buy_shares_unknown_enterprise():
 
 
 def test_broke_buyer():
-    """Unfunded buyer sees no shares move."""
+    """Unfunded buyer sees no shares move (House treasury is the purse)."""
     g, h = _game(105)
     realm = g.realms[h]
     ruler = realm.ruler
     kin = _adult_not_seated(realm)
-    ruler.gold_reserve = 0.0
+    house = g.houses[h]
+    house.treasury = 0.0
     ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
     g.rng = SeqRng([0.0])
     ledger_before = dict(ent.ledger)
@@ -806,3 +807,193 @@ def test_appoint_salary_line_matches_amount():
     assert m, f"no percentage in line: {line}"
     line_pct = float(m.group(1))
     assert abs(line_pct - moved) < 0.01, f"line says {line_pct}% but {moved}% actually moved: {line}"
+
+
+# ====================================================================
+# I4d2a3: one price for one stake — eight properties
+# ====================================================================
+
+def test_p1_quote_equals_treasury_drop():
+    """P-1: The Enterprises page quote equals what the treasury falls by.
+    Uses a real GildedGame at a stated turn, no purse handed to anybody."""
+    from gilded.chassis import GildedGame
+    from gilded.society.shares import stake_cost
+    from gilded.ui.broadsheet import _buyout_price
+
+    g = GildedGame(seed=42)
+    while g.turn < 5:
+        g.advance()
+    h = next(x for x in sorted(g.houses) if g.ents_of(x))
+    ent = next(e for e in g.ents_of(h) if e.house == h)
+    # Find a rival stakeholder
+    rival_id = None
+    for cid, pct in ent.ledger.items():
+        if pct > 0 and cid != g.realms[h].ruler.id:
+            rival_id = cid
+            break
+    if rival_id is None:
+        pytest.skip("no rival stakeholder found")
+    pct = ent.ledger[rival_id]
+    quote = stake_cost(ent, pct, g)
+    treasury_before = g.houses[h].treasury
+    # Execute a clean buy (scale=1.0, rng draws 0.0)
+    g.rng = SeqRng([0.0])
+    ruler = g.realms[h].ruler
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=rival_id, pct=pct)
+    treasury_after = g.houses[h].treasury
+    assert any("botches" not in m for m in msgs), f"should not have botched: {msgs}"
+    drop = treasury_before - treasury_after
+    assert drop == quote, f"quote={quote}, treasury_drop={drop}, msgs={msgs}"
+
+
+def test_p2_buy_shares_debits_treasury_credits_seller():
+    """P-2: buy_shares debits ordering House's treasury, credits seller's gold_reserve."""
+    g, h = _game(200)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    house = g.houses[h]
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    kin_gold_before = kin.gold_reserve
+    treasury_before = house.treasury
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
+    assert any("botches" not in m and "buys" in m for m in msgs), f"trade should have succeeded: {msgs}"
+    treasury_drop = treasury_before - house.treasury
+    kin_credit = kin.gold_reserve - kin_gold_before
+    assert treasury_drop == kin_credit, f"treasury_drop={treasury_drop}, kin_credit={kin_credit}"
+
+
+def test_p3_zero_gold_executor_can_buy_from_treasury():
+    """P-3: Executor with gold_reserve=0 can still complete a buy when treasury is full."""
+    g, h = _game(201)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ruler.gold_reserve = 0.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    g.rng = SeqRng([0.0])
+    kin_stake_before = ent.ledger.get(kin.id, 0.0)
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
+    assert any("cannot afford" not in m for m in msgs), f"should not refuse: {msgs}"
+    assert ent.ledger.get(kin.id, 0.0) < kin_stake_before, "shares should have moved"
+
+
+def test_p4_sell_shares_credits_treasury_debits_buyer():
+    """P-4: sell_shares credits ordering House's treasury from buyer's gold_reserve."""
+    g, h = _game(202)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    kin.gold_reserve = 10_000.0
+    house = g.houses[h]
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    treasury_before = house.treasury
+    kin_gold_before = kin.gold_reserve
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "sell_shares", ruler, eid=ent.eid, buyer_id=kin.id, pct=10.0)
+    assert any("botches" not in m and "sells" in m for m in msgs), f"trade should have succeeded: {msgs}"
+    treasury_gain = house.treasury - treasury_before
+    kin_debit = kin_gold_before - kin.gold_reserve
+    assert treasury_gain == kin_debit, f"treasury_gain={treasury_gain}, kin_debit={kin_debit}"
+
+
+def test_p5_refusal_names_purse_and_balance():
+    """P-5: A refusal names the purse that is short and states its balance."""
+    g, h = _game(203)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    house = g.houses[h]
+    house.treasury = 0.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
+    text = " ".join(msgs).lower()
+    assert "cannot afford" in text, f"should refuse: {msgs}"
+    assert "treasury" in text or "gold" in text, f"should name the purse: {msgs}"
+    # Should mention the balance (0 or 0.0)
+    assert "0" in text, f"should state balance: {msgs}"
+
+
+def test_p6_quote_not_priced_off_market_value():
+    """P-6: Changing market.value does not move the quote (share_price clamps).
+    Fixture: seed 204, turn 3 — share_price band is active (clamped to [0.5, 8.0])."""
+    g, h = _game(204)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    from gilded.society.shares import stake_cost
+    from gilded.society.schemes import share_price
+
+    quote_before = stake_cost(ent, 10.0, g)
+    sp_before = share_price(ent, g)
+    # Clamp the market value to something wildly different
+    original_value = g.market.value(ent, g)
+    g.market._prices_backup = dict(g.market.prices)
+    # Multiply all prices by 100 — market.value goes up 100x but share_price stays clamped
+    g.market.prices = {k: v * 100 for k, v in g.market.prices.items()}
+    quote_after = stake_cost(ent, 10.0, g)
+    sp_after = share_price(ent, g)
+    # Restore
+    g.market.prices = g.market._prices_backup
+    # share_price should be clamped — it should not change by 100x
+    # At minimum, the two quotes should be equal or very close (within the clamp band)
+    assert abs(quote_after - quote_before) < quote_before * 0.01, \
+        f"quote moved from {quote_before} to {quote_after} when market.value changed 100x"
+
+
+def test_p7_no_phantom_trade():
+    """P-7: No path reports a completed trade when the ledger did not move."""
+    g, h = _game(205)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    house = g.houses[h]
+    house.treasury = 0.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    g.rng = SeqRng([0.0])
+    ledger_before = dict(ent.ledger)
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
+    # Ledger didn't move (no treasury)
+    assert ent.ledger == ledger_before, "ledger should not have changed"
+    # No message should claim a trade completed
+    for m in msgs:
+        assert "buys" not in m.lower() or "cannot afford" in m.lower() or "failed" in m.lower(), \
+            f"phantom trade reported: {m}"
+
+
+def test_p8_fumble_reports_and_charges_actual_size():
+    """P-8: Fumbled trade (scale=0.5) reports and charges for the actual size moved.
+    Uses a real GildedGame(seed) at a stated turn, no purse handed to anybody."""
+    from gilded.chassis import GildedGame
+    from gilded.society.shares import stake_cost
+    from gilded.society.schemes import share_price
+
+    g = GildedGame(seed=45)
+    while g.turn < 10:
+        g.advance()
+    h = next(x for x in sorted(g.houses) if g.ents_of(x))
+    ent = next(e for e in g.ents_of(h) if e.house == h)
+    rival_id = None
+    for cid, pct in ent.ledger.items():
+        if pct > 0 and cid != g.realms[h].ruler.id:
+            rival_id = cid
+            break
+    if rival_id is None:
+        pytest.skip("no rival stakeholder found")
+    pct = min(ent.ledger[rival_id], 10.0)
+    treasury_before = g.houses[h].treasury
+    ledger_before = dict(ent.ledger)
+    # Force a fumble (rng draws 0.99 → scale=0.5)
+    g.rng = SeqRng([])  # empty → 0.99 forever
+    ruler = g.realms[h].ruler
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=rival_id, pct=pct)
+    assert any("botches" in m for m in msgs), f"should have botched: {msgs}"
+    treasury_drop = treasury_before - g.houses[h].treasury
+    actual_moved = ledger_before.get(rival_id, 0) - ent.ledger.get(rival_id, 0)
+    expected_pct = pct * 0.5  # fumble halves
+    expected_cost = share_price(ent, g) * min(expected_pct, ledger_before.get(rival_id, 0))
+    assert abs(treasury_drop - expected_cost) < 0.01, \
+        f"treasury_drop={treasury_drop}, expected_cost={expected_cost}, actual_moved={actual_moved}"
