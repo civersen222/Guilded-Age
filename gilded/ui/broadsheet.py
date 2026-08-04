@@ -773,6 +773,7 @@ class BroadsheetView:
         # director picker state: None or eid whose picker is open
         self._director_picker: Optional[int] = None
         self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        self.hover_pos: Tuple[int, int] | None = None
         self._w = 0
         self._h = 0
 
@@ -791,6 +792,9 @@ class BroadsheetView:
         cands = self._candidates(pid)
         idx = self._exec_idx.get(pid, 0) % len(cands)
         return cands[idx]
+
+    def handle_hover(self, pos: Tuple[int, int]) -> None:
+        self.hover_pos = pos
 
     # --- drawing -------------------------------------------------------------
 

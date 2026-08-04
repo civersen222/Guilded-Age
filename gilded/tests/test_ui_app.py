@@ -44,6 +44,14 @@ def test_end_turn_action_advances_the_game():
     assert state.game.turn == turn + 1
 
 
+def test_mousemotion_stores_hover_pos():
+    state = _state()
+    pygame.event.post(pygame.event.Event(pygame.MOUSEMOTION, pos=(120, 240)))
+    result = app.step_once(state)
+    assert result is True
+    assert state.view.hover_pos == (120, 240)
+
+
 def test_rule_action_spends_attention_and_clears_paper():
     state = _state()
     g, h = state.game, state.house

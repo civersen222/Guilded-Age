@@ -33,6 +33,62 @@ COLUMN_GAP = 24      # gutter between columns in pixels
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Interaction regions — WAVE I1
+# ────────────────────────────────────────────────────────────────────────────
+
+from enum import Enum
+
+
+class RegionState(Enum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    ACTIVE = "active"
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True)
+class Region:
+    rect: pygame.Rect
+    action: dict | None
+    state: RegionState = RegionState.ENABLED
+    reason: str = ""
+    hint: str = ""
+    group: str = ""
+
+    def __post_init__(self) -> None:
+        if self.state is RegionState.DISABLED and not self.reason:
+            raise ValueError(
+                "A DISABLED Region must carry a non-empty reason"
+            )
+        if self.state is RegionState.ENABLED and self.action is None:
+            raise ValueError(
+                "An ENABLED Region must carry an action"
+            )
+
+
+class RegionSet:
+    """Collects interactive regions in draw order; hit-tests scan in reverse."""
+
+    def __init__(self) -> None:
+        self._regions: list[Region] = []
+
+    def add(self, region: Region) -> None:
+        self._regions.append(region)
+
+    def at(self, pos: tuple[int, int]) -> Region | None:
+        for region in reversed(self._regions):
+            if region.rect.collidepoint(pos):
+                return region
+        return None
+
+    def clear(self) -> None:
+        self._regions.clear()
+
+    def __len__(self) -> int:
+        return len(self._regions)
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # TONES – colour meaning
 # ────────────────────────────────────────────────────────────────────────────
 

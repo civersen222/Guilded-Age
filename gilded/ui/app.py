@@ -181,6 +181,8 @@ def step_once(state: AppState) -> bool:
             action = state.view.handle_click(event.pos)
             if action:
                 _apply_action(state, action)
+        if event.type == pygame.MOUSEMOTION:
+            state.view.handle_hover(event.pos)
     state.view.draw(state.screen)
     pygame.display.flip()
     state.clock.tick(FPS)
