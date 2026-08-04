@@ -12,7 +12,7 @@ from gilded.world import MINOR_OWNER, Atlas
 TREASURY_LABELS = frozenset({
     "dividends", "trade", "expansion", "strike buyoff", "heir allowance",
     "compensation", "railway", "charter", "province purchase",
-    "reparations paid", "reparations received",
+    "reparations paid", "reparations received", "share purchase",
 })
 
 HOUSE_NAMES = ["Vantrell", "Karsgate", "Mordaine", "Ashworth", "Ferrenholt",

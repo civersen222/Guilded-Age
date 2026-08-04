@@ -371,16 +371,18 @@ class Takeover:
             return []
         msgs: List[str] = []
         target_ents = [e for e in enterprises if e.house == self.target_house]
+        from gilded.houses import House
+        house: House = game.houses[self.buyer_house]
         for seller in disloyal_shareholders(target_realm, enterprises):
             for ent in target_ents:
                 price = share_price(ent, game)
-                want = min(TAKEOVER_TRANCHE, self.buyer.gold_reserve / price)
+                want = min(TAKEOVER_TRANCHE, house.treasury / price)
                 if want <= 0:
                     break
                 moved = transfer_shares(ent, seller.id, self.buyer.id, want)
                 if moved > 0:
-                    cost = moved * price
-                    self.buyer.gold_reserve -= cost
+                    cost = min(moved * price, house.treasury)
+                    house.debit(game.turn, "share purchase", cost)
                     seller.gold_reserve += cost
                     modify_opinion(seller, self.buyer, 5, "a generous buyer")
         stake = house_stake(target_ents, self.buyer.id)
