@@ -1,6 +1,8 @@
-"""I2b — three checks over the action registry.
+"""I2d — three checks over the action registry.
 
-CHECK 1 — COVERAGE: every action key any tab can emit is in ACTIONS.
+CHECK 1a — DRAWN ⊆ ACTIONS: every drawn key is registered (passes).
+CHECK 1b — OFFERED ⊆ ACTIONS: every offered key is registered (xfail).
+CHECK 1c — OFFERED ⊆ DRAWN: every offered key is drawn (xfail).
 CHECK 2 — DISPATCHABILITY: every key in ACTIONS can actually run.
 CHECK 3 — BEHAVIOUR PRESERVED: the six game verbs still do what they did.
 """
@@ -14,9 +16,36 @@ import pygame
 from gilded.ui import app
 from gilded.ui import actions as act
 from gilded.ui.broadsheet import TABS
+from gilded.chassis import TurnEvent
 
 
-# ── CHECK 1 — COVERAGE ───────────────────────────────────────────────────────
+# ── CHECK 1 — COVERAGE (three checks) ────────────────────────────────────────
+
+
+def _offered_keys(view):
+    """Return the set of verb keys offered by enterprise_actions()."""
+    keys = set()
+    for offer in view.enterprise_actions():
+        for k in offer.get("action", {}):
+            if k != "char_id":
+                keys.add(k)
+    return keys
+
+
+def _rich_state():
+    """Seed 99 at turn 1 — the only fixture that offers all seven
+    enterprise verbs, including defend_buyout (needs an outside
+    holder, which seed 42 never acquires)."""
+    state = app.new_app_state(seed=99)
+    state.game.end_turn()
+    offered = _offered_keys(state.view)
+    assert offered == {
+        "appoint_director", "attack_takeover", "buy_shares",
+        "defend_buyout", "expand_enterprise", "found_enterprise",
+        "sell_shares",
+    }, f"fixture premise moved: offered verbs are {sorted(offered)}"
+    return state
+
 
 def _collect_emitted_keys(view):
     """Walk every tab, draw to a headless surface, collect all emitted action keys."""
@@ -116,41 +145,77 @@ def _open_director_picker(view, surf):
                 return
 
 
-def _try_open_director_picker(view, surf):
-    """Open the director picker by finding an enterprise with appoint_director hits."""
-    view.active_tab = "Enterprises"
-    view.draw(surf)
-    # Look for an appoint action without char_id (triggers picker)
-    for rect, payload in view._appoint_hits:
-        if isinstance(payload, dict):
-            action = payload.get("action", payload)
-            if "appoint_director" in action and "char_id" not in action:
-                eid = action["appoint_director"]
-                view._director_picker = eid
-                view._director_picker_hits.clear()
-                # Redraw to populate _director_picker_hits
-                view.draw(surf)
-                return
+# ── CHECK 1a — DRAWN ⊆ ACTIONS (passes) ──────────────────────────────────────
 
 
-def test_coverage_emitted_keys_in_actions():
-    """Every action key any tab can emit is in ACTIONS."""
-    state = app.new_app_state(seed=42)
+def test_every_drawn_key_is_registered():
+    """Every key any tab can draw is registered in ACTIONS."""
+    state = _rich_state()
+    drawn = _collect_emitted_keys(state.view)
+
+    assert drawn == {
+        "appoint_director", "close_director_picker", "end_turn",
+        "expand_enterprise", "open_director_picker",
+        "place_informant", "rule", "select_province", "set_stance",
+        "tab", "toggle_narrate",
+    }, f"the drawn set moved: {sorted(drawn)}"
+
+    unhandled = sorted(drawn - set(act.ACTIONS))
+    assert not unhandled, f"drawn but unhandled: {unhandled}"
+
+
+# ── CHECK 1b — OFFERED ⊆ ACTIONS (xfail) ─────────────────────────────────────
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "Five verbs the game OFFERS have no registry entry: buy_shares, "
+    "sell_shares, found_enterprise, defend_buyout, attack_takeover. "
+    "Wave I4 wires them; until then this is the honest measurement."))
+def test_every_offered_key_is_registered():
+    """Every verb the game offers via enterprise_actions() is in ACTIONS."""
+    state = _rich_state()
+    unregistered = _offered_keys(state.view) - set(act.ACTIONS)
+
+    assert unregistered == {
+        "buy_shares", "sell_shares", "found_enterprise",
+        "defend_buyout", "attack_takeover",
+    }, f"expected exactly the five unregistered verbs, got {sorted(unregistered)}"
+
+    assert not unregistered, f"offered but unregistered: {sorted(unregistered)}"
+
+
+# ── CHECK 1c — OFFERED ⊆ DRAWN (xfail) ───────────────────────────────────────
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "The Enterprises tab draws only expand_enterprise and "
+    "appoint_director. Five offered verbs are never drawn at all — "
+    "they are not dead buttons, they are absent ones. Wave I4 draws "
+    "them."))
+def test_every_offered_key_is_drawn():
+    """Every verb the game offers is actually drawn on screen."""
+    state = _rich_state()
     view = state.view
-
-    # Assert the fixture reaches Enterprises tab with ventures
     view.active_tab = "Enterprises"
-    surf = pygame.Surface((800, 600))
-    view.draw(surf)
-    assert view._enterprise_hits, "fixture owns no ventures"
+    view.draw(pygame.Surface((800, 600)))
 
-    emitted = _collect_emitted_keys(view)
+    drawn = set()
+    for _rect, payload in list(view._enterprise_hits) + list(view._appoint_hits):
+        if isinstance(payload, dict):
+            for k in payload.get("action", payload):
+                if k != "char_id":
+                    drawn.add(k)
 
-    # Assert a floor — if we collected fewer than 11, the walk is broken
-    assert len(emitted) >= 11, f"Collected only {len(emitted)} keys: {sorted(emitted)}"
+    assert drawn == {"appoint_director", "expand_enterprise"}, (
+        f"the Enterprises tab's drawn verbs moved: {sorted(drawn)}")
 
-    missing = sorted(emitted - set(act.ACTIONS))
-    assert not missing, f"emitted but unhandled: {missing}"
+    undrawn = _offered_keys(view) - drawn
+    assert undrawn == {
+        "buy_shares", "sell_shares", "found_enterprise",
+        "defend_buyout", "attack_takeover",
+    }, f"expected exactly the five undrawn verbs, got {sorted(undrawn)}"
+
+    assert not undrawn, f"offered but never drawn: {sorted(undrawn)}"
 
 
 # ── CHECK 2 — DISPATCHABILITY ────────────────────────────────────────────────
