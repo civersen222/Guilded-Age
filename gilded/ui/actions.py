@@ -237,7 +237,7 @@ def _defend_buyout_eligible(game, house, action):
     executor = _executor_for(game, realm, domain)
     quote = priced_transfer(ent, seller, executor, pct, game.market, game, dry_run=True)
     if executor.gold_reserve < quote:
-        return False, f"Cannot afford the buyout ({_fmt_gold(quote)} gold needed)."
+        return False, f"{executor.name} cannot afford the buyout ({_fmt_gold(quote)} gold needed)."
     return True, ""
 
 

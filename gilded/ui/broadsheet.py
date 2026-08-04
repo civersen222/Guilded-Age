@@ -27,15 +27,24 @@ import pygame
 from gilded.dashboard import Delta, delta, scoreboard
 from gilded.grip import _name_for, report as grip_report
 from gilded.intel import report as intel_report, threat_rank
-from gilded.market import COMMODITIES, share_price
+from gilded.market import COMMODITIES
 
 
 def _buyout_price(ent, owner_id, game):
     """Price to buy out a rival's stake in an enterprise."""
-    for holder, pct in ent.holders:
-        if holder == owner_id:
-            return share_price(ent, game) * pct
-    return 0
+    from gilded.society.shares import priced_transfer
+    from gilded.ai import _executor_for
+    from gilded.docket import INITIATIVES
+    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
+    seller = by_id.get(owner_id)
+    if seller is None:
+        return 0
+    pct = ent.ledger.get(owner_id, 0.0)
+    if pct <= 0:
+        return 0
+    realm = game.realms[ent.house]
+    executor = _executor_for(game, realm, INITIATIVES["buy_shares"][0])
+    return priced_transfer(ent, seller, executor, pct, game.market, game, dry_run=True)
 
 
 from gilded.papers import compose
@@ -1869,7 +1878,9 @@ class BroadsheetView:
                     return
 
             elif verb == "defend_buyout":
-                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", act.get("label", f"Buy out stake in {ent.name}"), None, self._enterprise_hits, BUTTON_BG, BUTTON_EDGE)
+                from gilded.ui.actions import ACTIONS
+                ok, why = ACTIONS["defend_buyout"].eligible(self.game, self.house, action_dict)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", act.get("label", f"Buy out stake in {ent.name}"), None if ok else why, self._enterprise_hits, BUTTON_BG, BUTTON_EDGE)
                 if y is None:
                     return
 
