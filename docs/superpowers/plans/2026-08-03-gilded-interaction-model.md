@@ -602,6 +602,30 @@ the unreachable verbs, and **removes the `xfail`**.
 > for. Prefer deleting over drawing a permanent apology; a control that can
 > never become enabled is a worse lie than no control.
 
+> **Second corrigendum, 2026-08-03, while writing Wave I2d.** Two more
+> measurements, both of which move I4.
+>
+> **`defend_buyout` is reachable, and seed 42 cannot reach it.** The offer
+> requires a venture with an outside holder (`el.top_outside is not None`).
+> Seed 42 has none at turn 0 and acquires none within forty turns. Seed 99
+> acquires one after a single `end_turn()`; seeds 1, 7, 17, 123 and 2024 all
+> do by turn 4. So the answer to the three-way question above is **wire it**:
+> the mechanic's precondition arises in normal play, the control is not a
+> permanent apology, and deleting it would remove a real affordance. That
+> leaves only `attack_takeover` genuinely open.
+>
+> **The old expected set of five was unreachable at the old fixture on two
+> counts, not one** — the five are never drawn, AND one of them is never even
+> offered at seed 42. Any check quantifying over the five must use the seed 99
+> turn 1 fixture. At that fixture `enterprise_actions()` returns eleven offers
+> spanning seven verbs; the Enterprises tab draws two of those seven.
+>
+> **The drawn set has zero slack against the registry.** Eleven keys are drawn
+> across all ten tabs, eleven are registered, and they are the same eleven —
+> at both fixtures. So `DRAWN ⊆ ACTIONS` is a true but weak invariant, and the
+> plan's original `>= 12` floor was never satisfiable. Floors stated without
+> measurement are guesses; this one cost two waves.
+
 ### The five dead buttons first
 
 The set was computed mechanically as *emitted minus handled*, not read off the
@@ -622,6 +646,10 @@ For those two the wave must answer a question first, and **answer it in the
 commit message**: is the key a misspelling of a real verb, in which case map it
 and say so — or is it a button for a mechanic that was never built, in which case
 **delete the button and its five tests**.
+
+*Settled by the second corrigendum for `defend_buyout`: its precondition is
+reachable in normal play, so it is wired, not deleted. The question stands
+open only for `attack_takeover`.*
 
 Do not invent an `attack_takeover` implementation to turn a check green. That is
 manufacturing the input, and the standing rule is that an unreachable path is
