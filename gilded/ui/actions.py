@@ -304,4 +304,9 @@ ACTIONS: dict[str, PlayerAction] = {
         attention_cost=0, gold_cost=0,
         eligible=_noop_eligible, dispatch=_noop_dispatch,
     ),
+    "cycle_exec": PlayerAction(
+        key="cycle_exec", label="Choose Executor", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_noop_eligible, dispatch=_noop_dispatch,
+    ),
 }

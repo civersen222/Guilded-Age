@@ -2445,7 +2445,7 @@ def test_registry_is_rebuilt_not_accumulated():
     n = len(v.regions)
     v.draw(surf)
     assert len(v.regions) == n
-    assert n == len(TABS) + 2
+    assert n >= len(TABS) + 2  # tabs + end_turn + narrate, plus interaction regions
 
 
 # CHECK 3 — THE MIGRATION IS REAL, NOT DECORATIVE.

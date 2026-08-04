@@ -1042,6 +1042,10 @@ class BroadsheetView:
                 exec_id = None if ex is None else ex.id
                 self._option_hits.append(
                     (brect, ("rule", p.pid, opt.key, exec_id)))
+                self.regions.add(Region(rect=brect,
+                                        action={"rule": (p.pid, opt.key, exec_id)},
+                                        hint=opt.text,
+                                        group=f"petition:{p.pid}"))
                 bx += bw + 8
             ex = self._chosen_executor(p.pid)
             ex_name = ("executor: default" if ex is None
@@ -1052,6 +1056,10 @@ class BroadsheetView:
             pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
             surface.blit(elabel, (erect.x + 10, erect.y + 5))
             self._exec_hits.append((erect, p.pid))
+            self.regions.add(Region(rect=erect,
+                                    action={"cycle_exec": p.pid},
+                                    hint="Choose who carries out this ruling.",
+                                    group=f"petition:{p.pid}"))
             y += card_h + 10
 
     def _draw_paper(self, surface, content: pygame.Rect) -> None:
@@ -1356,7 +1364,12 @@ class BroadsheetView:
             mx = int(x + frac * track_w)
             pygame.draw.circle(surface, INK, (mx, track_y), 7)
             track_rect = pygame.Rect(x, track_y - 12, track_w, 24)
+            left, right = POLES[key]
             self._dial_hits.append((track_rect, key))
+            self.regions.add(Region(rect=track_rect,
+                                    action={"set_stance": (key, None)},
+                                    hint=f"Set your stance on {key}: {left} vs {right}.",
+                                    group="policy"))
             y += 22
             # live effect line (displayed == applied)
             if key == "labor":
@@ -1399,6 +1412,10 @@ class BroadsheetView:
             rect = pygame.Rect(0, TAB_H + hud_h, self._w,
                                self._h - TAB_H - hud_h - BOTTOM_H)
         self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid)
+        self.regions.add(Region(rect=rect,
+                                action={"select_province": None},
+                                hint="Click a province to inspect it.",
+                                group="atlas"))
         if self.selected_pid is not None:
             self._draw_panel(surface,
                              province_panel_lines(self.game, self.selected_pid))
@@ -1505,6 +1522,10 @@ class BroadsheetView:
             pygame.draw.rect(surface, CARD_EDGE, btn_r, 1)
             surface.blit(btn_surf, (btn_r.left + 6, btn_r.top + 2))
             self._informant_hits.append((btn_r, {"place_informant": house}))
+            self.regions.add(Region(rect=btn_r,
+                                    action={"place_informant": house},
+                                    hint=f"Place an informant inside {house}.",
+                                    group="powers"))
             btn_y += btn_h + 4
 
     def enterprises_lines(self) -> List[str]:
@@ -1851,6 +1872,25 @@ class BroadsheetView:
             action = region.action
             if "tab" in action:
                 self.active_tab = action["tab"]
+            if "cycle_exec" in action:
+                pid = action["cycle_exec"]
+                cands = self._candidates(pid)
+                self._exec_idx[pid] = (self._exec_idx.get(pid, 0) + 1) % len(cands)
+                return None
+            if "set_stance" in action:
+                _, key = action["set_stance"]
+                for rect, k in self._dial_hits:
+                    if rect.collidepoint(pos):
+                        frac = (pos[0] - rect.x) / max(rect.width, 1)
+                        val = round((frac * 200 - 100) / 10) * 10
+                        return {"set_stance": (k, max(-100, min(100, val)))}
+                return {"set_stance": (key, 0)}
+            if "select_province" in action:
+                pid = pick_province(self.game.atlas, self._atlas_polys, pos)
+                if pid is not None:
+                    self.selected_pid = pid
+                    return {"select_province": pid}
+                return None
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):
