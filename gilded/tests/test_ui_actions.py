@@ -283,19 +283,20 @@ def _build_action_for_key(key, game, house, view=None):
             chars = [c for c in realm.characters if c.is_alive] if realm else []
             if chars:
                 return {"appoint_director": owned[0].eid, "char_id": chars[0].id}
-            return {"appoint_director": owned[0].eid, "char_id": None}
         return None
+    elif key == "open_director_picker":
+        return {"open_director_picker": True}
     elif key == "close_director_picker":
         return {"close_director_picker": True}
+    elif key == "cycle_exec":
+        petitions = game.docket_by_house.get(house, [])
+        if petitions:
+            return {"cycle_exec": petitions[0].pid}
+        return None
     elif key == "tab":
-        return {"tab": "Briefing"}
+        return {"tab": TABS[0]}
     elif key == "select_province":
         return {"select_province": 0}
-    elif key == "open_director_picker":
-        owned = [e for e in game.enterprises if e.house == house]
-        if owned:
-            return {"open_director_picker": owned[0].eid}
-        return None
     return None
 
 
@@ -311,7 +312,9 @@ def test_dispatchability(key):
 
     action = _build_action_for_key(key, g, h, view)
     if action is None:
-        pytest.skip(f"No reachable fixture for key '{key}'")
+        pytest.fail(f"No fixture builder for key '{key}'. Every key in "
+                    f"ACTIONS must be constructible here — add a branch to "
+                    f"_build_action_for_key.")
 
     # Assert eligible premise
     ok, reason = entry.eligible(g, h, action)
@@ -332,7 +335,9 @@ def test_dispatchability(key):
                 found = True
                 break
         if not found:
-            pytest.skip(f"No reachable fixture where eligible is True for key '{key}'")
+            pytest.fail(f"No fixture builder for key '{key}' where eligible is True. "
+                        f"Every key in ACTIONS must be constructible here — add a branch to "
+                        f"_build_action_for_key.")
 
     assert ok, f"eligible returned False for '{key}': {reason}"
 
@@ -356,7 +361,9 @@ def test_eligible_contract(key):
     g, h = state.game, state.house
     action = _build_action_for_key(key, g, h, state.view)
     if action is None:
-        pytest.skip(f"No action buildable for key '{key}'")
+        pytest.fail(f"No fixture builder for key '{key}'. Every key in "
+                    f"ACTIONS must be constructible here — add a branch to "
+                    f"_build_action_for_key.")
 
     ok, reason = entry.eligible(g, h, action)
     if ok:

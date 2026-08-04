@@ -1878,13 +1878,11 @@ class BroadsheetView:
                 self._exec_idx[pid] = (self._exec_idx.get(pid, 0) + 1) % len(cands)
                 return None
             if "set_stance" in action:
-                _, key = action["set_stance"]
-                for rect, k in self._dial_hits:
-                    if rect.collidepoint(pos):
-                        frac = (pos[0] - rect.x) / max(rect.width, 1)
-                        val = round((frac * 200 - 100) / 10) * 10
-                        return {"set_stance": (k, max(-100, min(100, val)))}
-                return {"set_stance": (key, 0)}
+                key, _ = action["set_stance"]
+                frac = (pos[0] - region.rect.x) / region.rect.width
+                value = int(round((frac * 200 - 100) / 10.0)) * 10
+                value = max(-100, min(100, value))
+                return {"set_stance": (key, value)}
             if "select_province" in action:
                 pid = pick_province(self.game.atlas, self._atlas_polys, pos)
                 if pid is not None:
@@ -1900,32 +1898,6 @@ class BroadsheetView:
             return {"end_turn": True}
         if self._narrate_rect is not None and self._narrate_rect.collidepoint(pos):
             return {"toggle_narrate": True}
-        if self.active_tab in ("Docket", "Briefing"):
-            for rect, pid in self._exec_hits:
-                if rect.collidepoint(pos):
-                    cands = self._candidates(pid)
-                    self._exec_idx[pid] = (self._exec_idx.get(pid, 0) + 1) % len(cands)
-                    return None
-            for rect, action in self._option_hits:
-                if rect.collidepoint(pos):
-                    _, pid, key, exec_id = action
-                    return {"rule": (pid, key, exec_id)}
-        if self.active_tab == "Policies":
-            for rect, key in self._dial_hits:
-                if rect.collidepoint(pos):
-                    frac = (pos[0] - rect.x) / rect.width
-                    value = int(round((frac * 200 - 100) / 10.0)) * 10
-                    value = max(-100, min(100, value))
-                    return {"set_stance": (key, value)}
-        if self.active_tab == "Atlas":
-            pid = pick_province(self.game.atlas, self._atlas_polys, pos)
-            if pid is not None:
-                self.selected_pid = pid
-                return {"select_province": pid}
-        if self.active_tab == "Powers":
-            for rect, act in self._informant_hits:
-                if rect.collidepoint(pos):
-                    return {"place_informant": act["place_informant"]}
         if self.active_tab == "Enterprises":
             if self._director_picker is not None:
                 for rect, action in self._director_picker_hits:
