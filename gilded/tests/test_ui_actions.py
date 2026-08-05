@@ -200,7 +200,7 @@ def _enterprise_drawn_verbs(view):
     drawn = set()
     for r in view.regions._regions:
         group = r.group or ""
-        if not (group.startswith("venture:") or group == "house"):
+        if not (group.startswith("venture:") or group.startswith("buy_shares:") or group.startswith("sell_shares:") or group == "house"):
             continue
         payload = r.action
         if isinstance(payload, dict):

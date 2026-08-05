@@ -1934,14 +1934,14 @@ class BroadsheetView:
             elif verb == "buy_shares":
                 from gilded.ui.actions import ACTIONS
                 ok, why = ACTIONS["buy_shares"].eligible(self.game, self.house, action_dict)
-                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Buy Shares in {ent.name}", None if ok else why, self._share_picker_hits, BUTTON_BG, BUTTON_EDGE)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"buy_shares:{eid}", f"Buy Shares in {ent.name}", None if ok else why, self._share_picker_hits, BUTTON_BG, BUTTON_EDGE)
                 if y is None:
                     return
 
             elif verb == "sell_shares":
                 from gilded.ui.actions import ACTIONS
                 ok, why = ACTIONS["sell_shares"].eligible(self.game, self.house, action_dict)
-                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Sell Shares in {ent.name}", None if ok else why, self._share_picker_hits, BUTTON_BG, BUTTON_EDGE)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"sell_shares:{eid}", f"Sell Shares in {ent.name}", None if ok else why, self._share_picker_hits, BUTTON_BG, BUTTON_EDGE)
                 if y is None:
                     return
 
