@@ -2224,28 +2224,33 @@ class BroadsheetView:
             return {"end_turn": True}
         if self._narrate_rect is not None and self._narrate_rect.collidepoint(pos):
             return {"toggle_narrate": True}
+        # Picker hit detection — must be reachable regardless of active tab
+        if self._director_picker is not None:
+            for rect, action in self._director_picker_hits:
+                if rect.collidepoint(pos):
+                    if "select_director" in action:
+                        self._director_picker = None
+                        self._director_picker_hits.clear()
+                        return action
+                    if "close_director_picker" in action:
+                        self._director_picker = None
+                        self._director_picker_hits.clear()
+                    return action
+        if self._found_picker is not None:
+            for rect, action in self._found_picker_hits:
+                if rect.collidepoint(pos):
+                    if "close_found_picker" in action:
+                        self._found_picker = None
+                        self._found_picker_hits.clear()
+                    return action
+        if self._share_picker is not None:
+            for rect, action in self._share_picker_hits:
+                if rect.collidepoint(pos):
+                    if "close_share_picker" in action:
+                        self._share_picker = None
+                        self._share_picker_hits.clear()
+                    return action
         if self.active_tab == "Enterprises":
-            if self._director_picker is not None:
-                for rect, action in self._director_picker_hits:
-                    if rect.collidepoint(pos):
-                        if "close_director_picker" in action:
-                            self._director_picker = None
-                            self._director_picker_hits.clear()
-                        return action
-            if self._found_picker is not None:
-                for rect, action in self._found_picker_hits:
-                    if rect.collidepoint(pos):
-                        if "close_found_picker" in action:
-                            self._found_picker = None
-                            self._found_picker_hits.clear()
-                        return action
-            if self._share_picker is not None:
-                for rect, action in self._share_picker_hits:
-                    if rect.collidepoint(pos):
-                        if "close_share_picker" in action:
-                            self._share_picker = None
-                            self._share_picker_hits.clear()
-                        return action
             for rect, act in self._enterprise_hits:
                 if rect.collidepoint(pos):
                     return act.get("action", act)
