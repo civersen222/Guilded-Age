@@ -814,7 +814,8 @@ def _init_buy_shares(ctx, eid=None, seller_id=None, pct=0.0, **kw) -> List[str]:
     seller = by_id.get(seller_id)
     if seller is None:
         return ["There is no such person to trade with"]
-    buyer = ctx.executor
+    realm = ctx.game.realms[ctx.house]
+    buyer = realm.ruler
     pct = pct * ctx.scale
     return _exec_share_trade(ctx, seller, buyer, ent, pct, "buy")
 
@@ -829,7 +830,8 @@ def _init_sell_shares(ctx, eid=None, buyer_id=None, pct=0.0, **kw) -> List[str]:
     buyer = by_id.get(buyer_id)
     if buyer is None:
         return ["There is no such person to trade with"]
-    seller = ctx.executor
+    realm = ctx.game.realms[ctx.house]
+    seller = realm.ruler
     pct = pct * ctx.scale
     return _exec_share_trade(ctx, seller, buyer, ent, pct, "sell")
 
