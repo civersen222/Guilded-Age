@@ -941,6 +941,8 @@ def test_c2_buy_refusal_names_house_not_executor():
     assert h.lower() in text.lower(), f"refusal should name the House '{h}': {text}"
     assert "treasury" in text.lower(), f"refusal should mention treasury: {text}"
     assert "cannot afford" in text.lower(), f"should refuse: {text}"
+    # Refusal must start with "House {KEY}" — not with the executor's name
+    assert text.startswith(f"House {h} "), f"refusal must name the House, not the executor: {text}"
 
 
 def test_p5_refusal_names_purse_and_balance():
