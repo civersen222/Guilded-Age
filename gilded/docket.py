@@ -780,9 +780,6 @@ def _exec_share_trade(ctx, seller, buyer, ent, pct: float, verb: str) -> List[st
     price_per_pct = share_price(ent, game)
     quote = price_per_pct * actual_pct
 
-    if quote <= 0:
-        return [f"Trade refused: {ent.name} has no positive value to trade"]
-
     from gilded.society.shares import transfer_shares
     from gilded.society.characters import modify_opinion
 
@@ -792,25 +789,19 @@ def _exec_share_trade(ctx, seller, buyer, ent, pct: float, verb: str) -> List[st
             return [f"House {ctx.house} cannot afford the stake ({_fmt_gold(quote)} gold needed, {_fmt_gold(house.treasury)} in treasury)"]
         moved = transfer_shares(ent, seller.id, buyer.id, actual_pct)
         cost = price_per_pct * moved
-        if cost > 0:
-            house.debit(game.turn, "share purchase", cost)
-            seller.gold_reserve += cost
-        if moved > 0:
-            return [f"{buyer.name} buys {moved:.1f}% of {ent.name} from {seller.name} for {_fmt_gold(cost)} gold"]
-        return [f"Trade failed: no shares moved in {ent.name}"]
+        house.debit(game.turn, "share purchase", cost)
+        seller.gold_reserve += cost
+        return [f"{buyer.name} buys {moved:.1f}% of {ent.name} from {seller.name} for {_fmt_gold(cost)} gold"]
     else:
         # sell_shares: buyer pays personally; House treasury receives
         if buyer.gold_reserve < quote:
             return [f"{buyer.name} cannot afford the stake ({_fmt_gold(quote)} gold needed, {_fmt_gold(buyer.gold_reserve)} available)"]
         moved = transfer_shares(ent, seller.id, buyer.id, actual_pct)
         cost = price_per_pct * moved
-        if cost > 0:
-            buyer.gold_reserve -= cost
-            house.credit(game.turn, "share purchase", cost)
-        if moved > 0:
-            modify_opinion(seller, buyer, 5, "a generous buyer")
-            return [f"{seller.name} sells {moved:.1f}% of {ent.name} to {buyer.name} for {_fmt_gold(cost)} gold"]
-        return [f"Trade failed: no shares moved in {ent.name}"]
+        buyer.gold_reserve -= cost
+        house.credit(game.turn, "share purchase", cost)
+        modify_opinion(seller, buyer, 5, "a generous buyer")
+        return [f"{seller.name} sells {moved:.1f}% of {ent.name} to {buyer.name} for {_fmt_gold(cost)} gold"]
 
 
 def _init_buy_shares(ctx, eid=None, seller_id=None, pct=0.0, **kw) -> List[str]:

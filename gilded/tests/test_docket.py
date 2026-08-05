@@ -899,22 +899,84 @@ def test_p4_sell_shares_credits_treasury_debits_buyer():
     assert treasury_gain == kin_debit, f"treasury_gain={treasury_gain}, kin_debit={kin_debit}"
 
 
-def test_p5_refusal_names_purse_and_balance():
-    """P-5: A refusal names the purse that is short and states its balance."""
+def test_c1_sell_refused_when_buyer_cannot_pay():
+    """C-1: A sell_shares is refused when the BUYING CHARACTER cannot pay,
+    even if the House treasury is full (surviving mutation M08)."""
+    from gilded.society.shares import stake_cost
+    g, h = _game(203)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    house = g.houses[h]
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    kin.gold_reserve = 0.0
+    house.treasury = 10000.0
+    ledger_before = dict(ent.ledger)
+    g.rng = SeqRng([0.99])
+    msgs = initiative(g, h, "sell_shares", ruler, eid=ent.eid, buyer_id=kin.id, pct=10.0)
+    text = " ".join(msgs).lower()
+    assert "cannot afford" in text, f"should refuse for buyer poverty: {msgs}"
+    assert ent.ledger == ledger_before, f"ledger should not have changed: {ent.ledger}"
+
+
+def test_c2_buy_refusal_names_house_not_executor():
+    """C-2: A buy refusal names THE HOUSE TREASURY that is short, not the executor.
+    Surviving mutation M10 changed the subject from House to executor."""
+    from gilded.society.shares import stake_cost
     g, h = _game(203)
     realm = g.realms[h]
     ruler = realm.ruler
     kin = _adult_not_seated(realm)
     house = g.houses[h]
     house.treasury = 0.0
+    ruler.gold_reserve = 500.0  # executor is well-funded
     ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
-    g.rng = SeqRng([0.0])
+    g.rng = SeqRng([0.1, 0.99])
     msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
-    text = " ".join(msgs).lower()
-    assert "cannot afford" in text, f"should refuse: {msgs}"
-    assert "treasury" in text or "gold" in text, f"should name the purse: {msgs}"
-    # Should mention the balance (0 or 0.0)
-    assert "0" in text, f"should state balance: {msgs}"
+    # Find the refusal message (skip botch/stress messages)
+    refusal = [m for m in msgs if "cannot afford" in m.lower()]
+    assert refusal, f"should have refusal message: {msgs}"
+    text = refusal[0]
+    # Must name the House, not the executor
+    assert h.lower() in text.lower(), f"refusal should name the House '{h}': {text}"
+    assert "treasury" in text.lower(), f"refusal should mention treasury: {text}"
+    assert "cannot afford" in text.lower(), f"should refuse: {text}"
+
+
+def test_p5_refusal_names_purse_and_balance():
+    """C-3/P-5: Refusal names the correct purse (House treasury for buy) and
+    states its balance accurately as a number, not just a string match.
+    Treasury set to 7.0 — renders as "7" which cannot be confused with the
+    quote (9.5) or any other figure on the line."""
+    import re
+    from gilded.society.shares import stake_cost
+    g, h = _game(203)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    house = g.houses[h]
+    house.treasury = 7.0  # unambiguous: renders "7", not "0" or "9.5"
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    quote = stake_cost(ent, 10.0, g)
+    g.rng = SeqRng([0.1, 0.99])
+    msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
+    refusal = [m for m in msgs if "cannot afford" in m.lower()]
+    assert refusal, f"should refuse: {msgs}"
+    text = refusal[0]
+    # Must name the House treasury, not the executor
+    assert h in text, f"refusal should name House '{h}': {text}"
+    assert "treasury" in text.lower(), f"refusal should mention treasury: {text}"
+    # Extract the stated balance from the refusal line — it should be 7.0
+    # The format is "(X gold needed, Y in treasury)" — extract Y
+    nums = [float(x) for x in re.findall(r'[\d.]+', text)]
+    # Last number in the line is the treasury balance
+    stated_balance = nums[-1]
+    assert abs(stated_balance - house.treasury) < 0.01, \
+        f"stated balance {stated_balance} != actual treasury {house.treasury}: {text}"
+    # Also verify the first number is the quote
+    stated_quote = nums[0]
+    assert abs(stated_quote - quote) < 0.01, \
+        f"stated quote {stated_quote} != actual quote {quote}: {text}"
 
 
 def test_p6_quote_not_priced_off_market_value():
