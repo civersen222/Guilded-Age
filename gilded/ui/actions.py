@@ -513,6 +513,7 @@ def share_size_ladder(game, house, eid, seller_id, buyer_id=None):
 
     Returns list of dicts with keys: pct, cost, offerable, reason.
     Canonical sizes: 1, 5, 10, 25, 35, 50, 75, 100.
+    The seller's whole stake is always included so any holder can be bought out.
     """
     from gilded.society.shares import stake_cost
     ent = next((e for e in game.enterprises if e.eid == eid), None)
@@ -522,6 +523,8 @@ def share_size_ladder(game, house, eid, seller_id, buyer_id=None):
     house_obj = game.houses[house]
     available = ent.ledger.get(seller_id, 0.0)
     canonical = [1, 5, 10, 25, 35, 50, 75, 100]
+    # R-2: add the seller's whole stake as a rung (deduplicate, keep sorted)
+    rungs = sorted(set(canonical + [available]))
     is_buy = buyer_id is None
     if is_buy:
         purse = house_obj.treasury
@@ -530,9 +533,7 @@ def share_size_ladder(game, house, eid, seller_id, buyer_id=None):
         buyer = by_id.get(buyer_id)
         purse = buyer.gold_reserve if buyer else 0.0
     options = []
-    for pct in canonical:
-        if pct > available:
-            continue
+    for pct in rungs:
         cost = stake_cost(ent, pct, game)
         if pct > available:
             options.append({"pct": pct, "cost": cost, "offerable": False,
