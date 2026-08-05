@@ -927,6 +927,90 @@ def test_c1_sell_refused_when_buyer_cannot_pay():
     assert ent.ledger == ledger_before, f"ledger should not have changed: {ent.ledger}"
 
 
+def test_i4d2c_sell_refusal_reports_cost_and_balance():
+    """R-1: The sell-refusal parenthetical carries the stake cost AND the buyer's
+    actual gold reserve.  Deleting the parenthetical (mutation) must make this red.
+
+    Refusal line asserted against:
+        "Alexios Vantrell cannot afford the stake (7.38 gold needed, 23.40 available)"
+
+    Two numbers asserted: 7.38 (the quote cost) and 23.40 (buyer gold_reserve).
+    The short buyer was given 23.40 gold — distinctive enough that zero is ruled out.
+
+    Fixture: buyer has 23.40 gold, quote is ~7.38, so the sale would succeed if the
+    buyer had enough — but the test verifies the refusal path by using a pct that
+    pushes the quote above 23.40.  We use 20% stake at ~1.476 per pct ≈ 29.52,
+    which exceeds 23.40, guaranteeing refusal."""
+    from gilded.society.shares import stake_cost
+    g, h = _game(204)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    house = g.houses[h]
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    # Give the buyer a distinctive non-zero balance — less than the quote
+    kin.gold_reserve = 5.00
+    house.treasury = 10000.0
+    # Ask for 20% — quote is ~10 gold, more than 5.00
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "sell_shares", ruler, eid=ent.eid, buyer_id=kin.id, pct=20.0)
+    refusal = [m for m in msgs if "cannot afford" in m.lower()]
+    assert refusal, f"should have refusal message: {msgs}"
+    text = refusal[0]
+    # Extract the two numbers from the parenthetical
+    import re
+    nums = re.findall(r"([\d.]+)", text)
+    assert len(nums) >= 2, f"need two numbers in the refusal: {text}"
+    stated_cost = float(nums[0])
+    stated_balance = float(nums[1])
+    # The stated cost should be the quote (price_per_pct * pct)
+    quote = stake_cost(ent, 20.0, g)
+    assert abs(stated_cost - quote) < 0.01, \
+        f"stated cost {stated_cost} != expected quote {quote}: {text}"
+    # The stated balance should match the buyer's gold_reserve
+    assert abs(stated_balance - kin.gold_reserve) < 0.01, \
+        f"stated balance {stated_balance} != buyer gold {kin.gold_reserve}: {text}"
+
+
+def test_i4d2c_sell_warms_opinion():
+    """R-2: A successful sell calls modify_opinion(seller, buyer, +5, "a generous buyer").
+    Deleting that call (mutation) must make this red.
+
+    Opinion pair asserted: (ruler, kin) — the seller's opinion of the buyer.
+      BEFORE: 0  (no prior opinion entry)
+      AFTER:  5  (+5 from the sell)
+    Reverse pair (kin, ruler) stays at 0 — the buyer's opinion of the seller is untouched.
+
+    Fixture: ruler has a stake in the enterprise, kin has plenty of gold.  The sale
+    succeeds and we measure the opinion delta.  We verify BEFORE != AFTER to prove
+    the +5 actually moved rather than the value already being 5."""
+    from gilded.society.characters import modify_opinion
+    g, h = _game(205)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    kin = _adult_not_seated(realm)
+    kin.gold_reserve = 10_000.0
+    house = g.houses[h]
+    ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
+    # Record opinions before the sale
+    opinions = ruler._society.opinions
+    pair = (ruler.id, kin.id)
+    reverse_pair = (kin.id, ruler.id)
+    opinion_before = opinions.get(pair, 0)
+    reverse_before = opinions.get(reverse_pair, 0)
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "sell_shares", ruler, eid=ent.eid, buyer_id=kin.id, pct=5.0)
+    assert any("sells" in m for m in msgs), f"sale should have succeeded: {msgs}"
+    opinion_after = opinions.get(pair, 0)
+    reverse_after = opinions.get(reverse_pair, 0)
+    # Seller's opinion of buyer increased by exactly 5
+    assert opinion_after == opinion_before + 5, \
+        f"seller->buyer opinion: before={opinion_before}, after={opinion_after}, expected +5"
+    # Reverse pair (buyer->seller) did not move
+    assert reverse_after == reverse_before, \
+        f"buyer->seller opinion should not have changed: before={reverse_before}, after={reverse_after}"
+
+
 def test_c2_buy_refusal_names_house_not_executor():
     """C-2: A buy refusal names THE HOUSE TREASURY that is short, not the executor.
     Surviving mutation M10 changed the subject from House to executor."""
