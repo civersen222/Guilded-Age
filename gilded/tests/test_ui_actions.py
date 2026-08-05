@@ -167,23 +167,13 @@ def test_every_drawn_key_is_registered():
 # ── CHECK 1b — OFFERED ⊆ ACTIONS (split) ─────────────────────────────────────
 
 
-def test_exactly_two_offered_verbs_are_unregistered():
-    """Pins the CURRENT state by value, and passes today.
-
-    This is the half that can be scored. I4b registered defend_buyout, I4d
-    registered found_enterprise, taking this from five to two. When a later
-    wave registers the rest, this test goes RED and names what changed."""
+def test_no_offered_verbs_are_unregistered():
+    """All offered verbs are now registered in ACTIONS."""
     state = _rich_state()
     unregistered = _offered_keys(state.view) - set(act.ACTIONS)
-    assert unregistered == {
-        "buy_shares", "sell_shares",
-    }, f"the unregistered set moved: {sorted(unregistered)}"
+    assert unregistered == set(), f"unregistered verbs remain: {sorted(unregistered)}"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Two verbs the game OFFERS have no registry entry (buy_shares, sell_shares). "
-    "When they are registered, this XPASSES and the test above goes red -- "
-    "two independent alarms, which is the point of the split."))
 def test_every_offered_key_is_registered():
     """Every verb the game offers via enterprise_actions() is in ACTIONS."""
     state = _rich_state()
@@ -353,6 +343,30 @@ def _build_action_for_key(key, game, house, view=None):
                      for c in r.characters]
         if outsiders:
             return {"defend_buyout": (owned[0].eid, outsiders[0])}
+        return None
+    elif key == "buy_shares":
+        owned = [e for e in game.enterprises if e.house == house]
+        if not owned:
+            return None
+        hids = {c.id for c in game.realms[house].characters}
+        for e in owned:
+            for hid, pct in e.ledger.items():
+                if hid not in hids and pct > 0:
+                    return {"buy_shares": (e.eid, hid)}
+        # No outside holder yet — create one by transferring shares
+        from gilded.society.shares import transfer_shares
+        outsiders = [c for hn, r in game.realms.items() if hn != house
+                     for c in r.characters]
+        if outsiders:
+            e = owned[0]
+            ruler = game.realms[house].ruler
+            transfer_shares(e, ruler.id, outsiders[0].id, 10.0)
+            return {"buy_shares": (e.eid, outsiders[0].id)}
+        return None
+    elif key == "sell_shares":
+        owned = [e for e in game.enterprises if e.house == house]
+        if owned:
+            return {"sell_shares": (owned[0].eid,)}
         return None
     elif key == "found_enterprise":
         from gilded.ui.actions import _get_available_charters
