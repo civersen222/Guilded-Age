@@ -345,14 +345,40 @@ def _build_action_for_key(key, game, house, view=None):
             return {"defend_buyout": (owned[0].eid, outsiders[0])}
         return None
     elif key == "buy_shares":
+        from gilded.ui.actions import buy_share_counterparties, share_size_ladder
         owned = [e for e in game.enterprises if e.house != house]
         if owned:
-            return {"buy_shares": owned[0].eid}
+            ent = owned[0]
+            cps = buy_share_counterparties(game, house, ent.eid)
+            if cps:
+                seller = cps[0]
+                ladder = share_size_ladder(game, house, ent.eid, seller["id"])
+                offerable = [r["pct"] for r in ladder if r["offerable"]]
+                if offerable:
+                    pct = offerable[0]
+                    return {"buy_shares": (ent.eid, seller["id"], pct)}
         return None
     elif key == "sell_shares":
+        from gilded.ui.actions import sell_share_counterparties, share_size_ladder
         owned = [e for e in game.enterprises if e.house == house]
         if owned:
-            return {"sell_shares": owned[0].eid}
+            ent = owned[0]
+            cps = sell_share_counterparties(game, house, ent.eid)
+            if not cps:
+                by_id = {c.id: c for r in game.realms.values() for c in r.characters}
+                for c in by_id.values():
+                    if c.id != game.realms[house].ruler.id and c.is_alive:
+                        c.gold_reserve = 10000.0
+                        break
+                cps = sell_share_counterparties(game, house, ent.eid)
+            if cps:
+                buyer = cps[0]
+                realm = game.realms[house]
+                ladder = share_size_ladder(game, house, ent.eid, realm.ruler.id, buyer["id"])
+                offerable = [r["pct"] for r in ladder if r["offerable"]]
+                if offerable:
+                    pct = offerable[0]
+                    return {"sell_shares": (ent.eid, buyer["id"], pct)}
         return None
     elif key == "found_enterprise":
         from gilded.ui.actions import _get_available_charters
