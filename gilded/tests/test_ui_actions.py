@@ -345,28 +345,14 @@ def _build_action_for_key(key, game, house, view=None):
             return {"defend_buyout": (owned[0].eid, outsiders[0])}
         return None
     elif key == "buy_shares":
-        owned = [e for e in game.enterprises if e.house == house]
-        if not owned:
-            return None
-        hids = {c.id for c in game.realms[house].characters}
-        for e in owned:
-            for hid, pct in e.ledger.items():
-                if hid not in hids and pct > 0:
-                    return {"buy_shares": (e.eid, hid)}
-        # No outside holder yet — create one by transferring shares
-        from gilded.society.shares import transfer_shares
-        outsiders = [c for hn, r in game.realms.items() if hn != house
-                     for c in r.characters]
-        if outsiders:
-            e = owned[0]
-            ruler = game.realms[house].ruler
-            transfer_shares(e, ruler.id, outsiders[0].id, 10.0)
-            return {"buy_shares": (e.eid, outsiders[0].id)}
+        owned = [e for e in game.enterprises if e.house != house]
+        if owned:
+            return {"buy_shares": owned[0].eid}
         return None
     elif key == "sell_shares":
         owned = [e for e in game.enterprises if e.house == house]
         if owned:
-            return {"sell_shares": (owned[0].eid,)}
+            return {"sell_shares": owned[0].eid}
         return None
     elif key == "found_enterprise":
         from gilded.ui.actions import _get_available_charters

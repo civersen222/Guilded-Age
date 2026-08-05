@@ -347,25 +347,43 @@ def _attack_takeover_dispatch(game, house, view, action):
 
 def _buy_shares_eligible(game, house, action):
     payload = action.get("buy_shares")
-    if not isinstance(payload, (list, tuple)) or len(payload) < 2:
-        return False, "No enterprise or seller specified."
-    eid, seller_id = payload[0], payload[1]
+    # OPEN form — bare int (chooser click)
+    if isinstance(payload, int):
+        return True, ""
+    # DECIDE form — (eid, char_id, pct) tuple
+    if not isinstance(payload, (list, tuple)) or len(payload) < 3:
+        return False, "Malformed buy_shares action."
+    eid, char_id, pct = payload[0], payload[1], payload[2]
+    if pct <= 0:
+        return False, "Percentage must be positive."
     ent = next((e for e in game.enterprises if e.eid == eid), None)
     if ent is None:
         return False, "The enterprise no longer exists."
-    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
-    seller = by_id.get(seller_id)
-    if seller is None:
-        return False, "The seller is not found."
-    pct = ent.ledger.get(seller_id, 0.0)
-    if pct <= 0:
-        return False, f"{seller.name} has no stake in {ent.name}."
     if _no_attention(game, house):
         return False, _attention_reason()
+    # Counterparty check
+    counterparties = buy_share_counterparties(game, house, eid)
+    cp_ids = {c["id"] for c in counterparties}
+    if char_id not in cp_ids:
+        return False, f"{char_id} is not a valid seller for this enterprise."
+    # Size ladder check
+    seller_entry = next((c for c in counterparties if c["id"] == char_id), None)
+    if seller_entry is None:
+        return False, "Seller not found."
+    ladder = share_size_ladder(game, house, eid, char_id)
+    offerable_rungs = [r for r in ladder if r["offerable"]]
+    offerable_pcts = {r["pct"] for r in offerable_rungs}
+    if pct not in offerable_pcts:
+        # Find the reason from the non-offerable rung
+        blocked = next((r for r in ladder if r["pct"] == pct), None)
+        if blocked and blocked.get("reason"):
+            return False, blocked["reason"]
+        return False, f"That size is not offerable."
+    # Affordability
     from gilded.society.shares import stake_cost
     from gilded.houses import House
     from gilded.docket import _fmt_gold
-    house_obj: House = game.houses[house]
+    house_obj = game.houses[house]
     quote = stake_cost(ent, pct, game)
     if house_obj.treasury < quote:
         return False, f"Cannot afford ({_fmt_gold(quote)} needed, {_fmt_gold(house_obj.treasury)} in treasury)"
@@ -377,16 +395,23 @@ def _buy_shares_dispatch(game, house, view, action):
     from gilded.ai import _executor_for
     from gilded.chassis import TurnEvent
     payload = action["buy_shares"]
-    eid, seller_id = payload[0], payload[1]
+    # OPEN form — bare int: pure, record on view, do nothing else
+    if isinstance(payload, int):
+        view._share_picker = {"direction": "buy", "eid": payload}
+        return []
+    # DECIDE form — (eid, char_id, pct)
+    eid, char_id, pct = payload[0], payload[1], payload[2]
+    ok, why = _buy_shares_eligible(game, house, action)
+    if not ok:
+        return [f"Refused: {why}"]
     ent = next((e for e in game.enterprises if e.eid == eid), None)
     if ent is None:
         return []
-    pct = ent.ledger.get(seller_id, 0.0)
     domain = INITIATIVES["buy_shares"][0]
     realm = game.realms[house]
     executor = _executor_for(game, realm, domain)
     game.attention[house] -= 1
-    lines = initiative(game, house, "buy_shares", executor, eid=eid, seller_id=seller_id, pct=pct)
+    lines = initiative(game, house, "buy_shares", executor, eid=eid, seller_id=char_id, pct=pct)
     for line in lines:
         game.events.append(TurnEvent(line, "ledger", house))
     return lines
@@ -396,18 +421,38 @@ def _buy_shares_dispatch(game, house, view, action):
 
 def _sell_shares_eligible(game, house, action):
     payload = action.get("sell_shares")
-    if not isinstance(payload, (list, tuple)) or len(payload) < 1:
-        return False, "No enterprise specified."
-    eid = payload[0]
+    # OPEN form — bare int (chooser click)
+    if isinstance(payload, int):
+        return True, ""
+    # DECIDE form — (eid, char_id, pct) tuple
+    if not isinstance(payload, (list, tuple)) or len(payload) < 3:
+        return False, "Malformed sell_shares action."
+    eid, char_id, pct = payload[0], payload[1], payload[2]
+    if pct <= 0:
+        return False, "Percentage must be positive."
     ent = next((e for e in game.enterprises if e.eid == eid), None)
     if ent is None:
         return False, "The enterprise no longer exists."
-    realm = game.realms[house]
-    my_pct = ent.ledger.get(realm.ruler.id, 0.0)
-    if my_pct <= 0:
-        return False, f"House {house} has no stake in {ent.name}."
     if _no_attention(game, house):
         return False, _attention_reason()
+    realm = game.realms[house]
+    # Counterparty check
+    counterparties = sell_share_counterparties(game, house, eid)
+    cp_ids = {c["id"] for c in counterparties}
+    if char_id not in cp_ids:
+        return False, f"{char_id} is not a valid buyer for this enterprise."
+    # Size ladder check
+    buyer_entry = next((c for c in counterparties if c["id"] == char_id), None)
+    if buyer_entry is None:
+        return False, "Buyer not found."
+    ladder = share_size_ladder(game, house, eid, realm.ruler.id, char_id)
+    offerable_rungs = [r for r in ladder if r["offerable"]]
+    offerable_pcts = {r["pct"] for r in offerable_rungs}
+    if pct not in offerable_pcts:
+        blocked = next((r for r in ladder if r["pct"] == pct), None)
+        if blocked and blocked.get("reason"):
+            return False, blocked["reason"]
+        return False, f"That size is not offerable."
     return True, ""
 
 
@@ -416,12 +461,23 @@ def _sell_shares_dispatch(game, house, view, action):
     from gilded.ai import _executor_for
     from gilded.chassis import TurnEvent
     payload = action["sell_shares"]
-    eid = payload[0]
+    # OPEN form — bare int: pure, record on view, do nothing else
+    if isinstance(payload, int):
+        view._share_picker = {"direction": "sell", "eid": payload}
+        return []
+    # DECIDE form — (eid, char_id, pct)
+    eid, char_id, pct = payload[0], payload[1], payload[2]
+    ok, why = _sell_shares_eligible(game, house, action)
+    if not ok:
+        return [f"Refused: {why}"]
+    ent = next((e for e in game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return []
     domain = INITIATIVES["sell_shares"][0]
     realm = game.realms[house]
     executor = _executor_for(game, realm, domain)
     game.attention[house] -= 1
-    lines = initiative(game, house, "sell_shares", executor, eid=eid)
+    lines = initiative(game, house, "sell_shares", executor, eid=eid, buyer_id=char_id, pct=pct)
     for line in lines:
         game.events.append(TurnEvent(line, "ledger", house))
     return lines
