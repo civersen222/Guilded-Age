@@ -290,6 +290,16 @@ def _close_found_picker_dispatch(game, house, view, action):
     return []
 
 
+def _close_share_picker_eligible(game, house, action):
+    return True, ""
+
+
+def _close_share_picker_dispatch(game, house, view, action):
+    view._share_picker = None
+    view._share_picker_hits.clear()
+    return []
+
+
 def _takeover_reach(game, target_house):
     """How much of `target_house` is genuinely for sale.
 
@@ -759,6 +769,11 @@ ACTIONS: dict[str, PlayerAction] = {
         key="close_found_picker", label="Close Found Picker", domain="view",
         attention_cost=0, gold_cost=0,
         eligible=_close_found_picker_eligible, dispatch=_close_found_picker_dispatch,
+    ),
+    "close_share_picker": PlayerAction(
+        key="close_share_picker", label="Close Share Picker", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_close_share_picker_eligible, dispatch=_close_share_picker_dispatch,
     ),
     # view-local keys
     "tab": PlayerAction(

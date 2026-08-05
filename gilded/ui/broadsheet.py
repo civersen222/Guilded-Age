@@ -830,6 +830,7 @@ class BroadsheetView:
         self._dial_hits = []
         self._enterprise_hits = []
         self._appoint_hits = []
+        self._share_picker_hits = []
         self._informant_hits = []
         self._director_picker_hits = []
         self._found_picker_hits = []
@@ -1930,6 +1931,20 @@ class BroadsheetView:
                 if y is None:
                     return
 
+            elif verb == "buy_shares":
+                from gilded.ui.actions import ACTIONS
+                ok, why = ACTIONS["buy_shares"].eligible(self.game, self.house, action_dict)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Buy Shares in {ent.name}", None if ok else why, self._share_picker_hits, BUTTON_BG, BUTTON_EDGE)
+                if y is None:
+                    return
+
+            elif verb == "sell_shares":
+                from gilded.ui.actions import ACTIONS
+                ok, why = ACTIONS["sell_shares"].eligible(self.game, self.house, action_dict)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Sell Shares in {ent.name}", None if ok else why, self._share_picker_hits, BUTTON_BG, BUTTON_EDGE)
+                if y is None:
+                    return
+
     def _draw_director_picker(self, surface, content, y, body) -> None:
         """Draw the director candidate picker for the open venture."""
         eid = self._director_picker
@@ -2078,13 +2093,12 @@ class BroadsheetView:
             return
 
         treasury = self.game.houses[self.house].treasury
-        cap = 8
-        shown = min(cap, len(counterparties))
-        sub = body.render(f"{shown} of {len(counterparties)} counterparties shown:", True, (160, 160, 140))
+        shown = len(counterparties)
+        sub = body.render(f"{shown} counterparties:", True, (160, 160, 140))
         surface.blit(sub, (PAD, y))
         y += body.get_height() + 4
 
-        for cp in counterparties[:cap]:
+        for cp in counterparties:
             if y > content.bottom - 40:
                 break
             cid = cp["id"]
@@ -2121,22 +2135,31 @@ class BroadsheetView:
 
                 lx = PAD + 12
                 for rung in ladder:
-                    btn_label = f"{rung:.0f}%"
+                    pct = rung["pct"]
+                    btn_label = f"{pct:g}%"
                     btn_surf = body.render(btn_label, True, INK)
                     btn_w = btn_surf.get_width() + 10
                     btn_h = body.get_height() + 4
                     btn_rect = pygame.Rect(lx, y + txt_h + 2, btn_w, btn_h)
-                    pygame.draw.rect(surface, (50, 50, 35), btn_rect)
-                    pygame.draw.rect(surface, (120, 120, 100), btn_rect, 1)
-                    surface.blit(btn_surf, (lx + 5, y + txt_h + 4))
 
-                    action_key = "buy_shares" if direction == "buy" else "sell_shares"
-                    action_payload = (eid, cid, rung) if direction == "buy" else (eid, cid, rung)
-                    self.regions.add(Region(rect=btn_rect, action={action_key: action_payload}, hint=f"{verb} {rung:.0f}% shares with {cname}.", group="picker"))
+                    if rung.get("offerable", True):
+                        pygame.draw.rect(surface, (50, 50, 35), btn_rect)
+                        pygame.draw.rect(surface, (120, 120, 100), btn_rect, 1)
+                        surface.blit(btn_surf, (lx + 5, y + txt_h + 4))
+
+                        action_key = "buy_shares" if direction == "buy" else "sell_shares"
+                        action_payload = (eid, cid, pct)
+                        self.regions.add(Region(rect=btn_rect, action={action_key: action_payload}, hint=f"{verb} {pct:g}% shares with {cname}.", group="picker"))
+                    else:
+                        pygame.draw.rect(surface, (60, 60, 50), btn_rect)
+                        pygame.draw.rect(surface, (100, 80, 60), btn_rect, 1)
+                        disabled_surf = body.render(btn_label, True, (140, 120, 100))
+                        surface.blit(disabled_surf, (lx + 5, y + txt_h + 4))
+                        reason = rung.get("reason", "Not available")
+                        self.regions.add(Region(rect=btn_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
+
                     lx += btn_w + 4
 
-                self._share_picker_hits.append((txt_rect, {"select_counterparty": cid}))
-                self.regions.add(Region(rect=txt_rect, action={"select_counterparty": cid}, hint=f"Select {cname} as counterparty.", group="picker"))
             else:
                 pygame.draw.rect(surface, (60, 60, 50), txt_rect)
                 pygame.draw.rect(surface, (100, 80, 60), txt_rect, 1)
@@ -2144,8 +2167,6 @@ class BroadsheetView:
                 surface.blit(disabled_surf, (PAD + 8, y + 4))
                 reason = f"Cannot afford this trade (treasury {treasury:.0f})"
                 self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
-
-            y += txt_h + len(ladder) * (body.get_height() + 6) + 4
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
