@@ -789,6 +789,9 @@ class BroadsheetView:
         self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         self._found_picker: Optional[bool] = None
         self._found_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        # share picker state: None or {"direction": "buy"/"sell", "eid": int}
+        self._share_picker: Optional[dict] = None
+        self._share_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         self.hover_pos: Tuple[int, int] | None = None
         self.regions = RegionSet()
         self.hovered: Optional[Region] = None
@@ -1856,6 +1859,11 @@ class BroadsheetView:
             self._draw_found_picker(surface, content, action_rect.top, f_b)
             return
 
+        # If the share picker is open, draw it instead of buttons
+        if self._share_picker is not None:
+            self._draw_share_picker(surface, content, action_rect.top, f_b)
+            return
+
         # Draw Expand and Appoint buttons for eligible ventures
         from gilded.enterprises import TIER_MAX
         from gilded.docket import director_candidates
@@ -2028,6 +2036,117 @@ class BroadsheetView:
                 self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
             y += txt_h + 2
 
+    def _draw_share_picker(self, surface, content: pygame.Rect, y, body) -> None:
+        """Draw the share trade picker (buyer/seller selection, then size)."""
+        picker = self._share_picker
+        direction = picker["direction"]
+        eid = picker["eid"]
+        ent = next((e for e in self.game.enterprises if e.eid == eid), None)
+        if ent is None:
+            return
+        from gilded.ui.actions import buy_share_counterparties, sell_share_counterparties, share_size_ladder
+        from gilded.society.shares import stake_cost
+        from gilded.docket import _fmt_gold
+
+        # Back button
+        back_text = "Back"
+        back_surf = body.render(back_text, True, INK)
+        back_w = back_surf.get_width() + 16
+        back_h = body.get_height() + 8
+        back_rect = pygame.Rect(PAD, y, back_w, back_h)
+        pygame.draw.rect(surface, (70, 70, 50), back_rect)
+        pygame.draw.rect(surface, INK, back_rect, 2)
+        surface.blit(back_surf, (PAD + 8, y + 4))
+        self._share_picker_hits.append((back_rect, {"close_share_picker": True}))
+        self.regions.add(Region(rect=back_rect, action={"close_share_picker": True}, hint="Return to the ventures.", group="picker"))
+        y += back_h + 4
+
+        # Header
+        verb = "Buy" if direction == "buy" else "Sell"
+        header = body.render(f"{verb} Shares in {ent.name}", True, INK)
+        surface.blit(header, (PAD, y))
+        y += body.get_height() + 6
+
+        if direction == "buy":
+            counterparties = buy_share_counterparties(self.game, self.house, eid)
+        else:
+            counterparties = sell_share_counterparties(self.game, self.house, eid)
+
+        if not counterparties:
+            no_text = body.render("No valid counterparties.", True, INK)
+            surface.blit(no_text, (PAD, y))
+            return
+
+        treasury = self.game.houses[self.house].treasury
+        cap = 8
+        shown = min(cap, len(counterparties))
+        sub = body.render(f"{shown} of {len(counterparties)} counterparties shown:", True, (160, 160, 140))
+        surface.blit(sub, (PAD, y))
+        y += body.get_height() + 4
+
+        for cp in counterparties[:cap]:
+            if y > content.bottom - 40:
+                break
+            cid = cp["id"]
+            cname = cp["name"]
+            if direction == "buy":
+                pct = cp["stake_pct"]
+                cost = cp["cost"]
+                label = f"{cname} ({pct:.1f}% — {_fmt_gold(cost)})"
+            else:
+                gold = cp["gold"]
+                label = f"{cname} ({_fmt_gold(gold)} gold)"
+
+            can_afford = True
+            if direction == "buy":
+                quote = stake_cost(ent, pct, self.game)
+                if treasury < quote:
+                    can_afford = False
+
+            txt_surf = body.render(label, True, INK if can_afford else (140, 120, 100))
+            txt_w = max(txt_surf.get_width() + 16, content.right - PAD * 2)
+            txt_h = body.get_height() + 8
+            txt_rect = pygame.Rect(PAD, y, txt_w, txt_h)
+
+            if can_afford:
+                pygame.draw.rect(surface, (60, 60, 40), txt_rect)
+                pygame.draw.rect(surface, INK, txt_rect, 2)
+                surface.blit(txt_surf, (PAD + 8, y + 4))
+
+                # Draw size ladder options for this counterparty
+                if direction == "buy":
+                    ladder = share_size_ladder(self.game, self.house, eid, cid)
+                else:
+                    ladder = share_size_ladder(self.game, self.house, eid, self.game.realms[self.house].ruler.id, cid)
+
+                lx = PAD + 12
+                for rung in ladder:
+                    btn_label = f"{rung:.0f}%"
+                    btn_surf = body.render(btn_label, True, INK)
+                    btn_w = btn_surf.get_width() + 10
+                    btn_h = body.get_height() + 4
+                    btn_rect = pygame.Rect(lx, y + txt_h + 2, btn_w, btn_h)
+                    pygame.draw.rect(surface, (50, 50, 35), btn_rect)
+                    pygame.draw.rect(surface, (120, 120, 100), btn_rect, 1)
+                    surface.blit(btn_surf, (lx + 5, y + txt_h + 4))
+
+                    action_key = "buy_shares" if direction == "buy" else "sell_shares"
+                    action_payload = (eid, cid, rung) if direction == "buy" else (eid, cid, rung)
+                    self.regions.add(Region(rect=btn_rect, action={action_key: action_payload}, hint=f"{verb} {rung:.0f}% shares with {cname}.", group="picker"))
+                    lx += btn_w + 4
+
+                self._share_picker_hits.append((txt_rect, {"select_counterparty": cid}))
+                self.regions.add(Region(rect=txt_rect, action={"select_counterparty": cid}, hint=f"Select {cname} as counterparty.", group="picker"))
+            else:
+                pygame.draw.rect(surface, (60, 60, 50), txt_rect)
+                pygame.draw.rect(surface, (100, 80, 60), txt_rect, 1)
+                disabled_surf = body.render(label, True, (140, 120, 100))
+                surface.blit(disabled_surf, (PAD + 8, y + 4))
+                reason = f"Cannot afford this trade (treasury {treasury:.0f})"
+                self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
+
+            y += txt_h + len(ladder) * (body.get_height() + 6) + 4
+
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
         house = g.houses[name]
@@ -2093,6 +2212,9 @@ class BroadsheetView:
             if "close_found_picker" in action:
                 self._found_picker = None
                 self._found_picker_hits.clear()
+            if "close_share_picker" in action:
+                self._share_picker = None
+                self._share_picker_hits.clear()
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):
@@ -2116,6 +2238,13 @@ class BroadsheetView:
                         if "close_found_picker" in action:
                             self._found_picker = None
                             self._found_picker_hits.clear()
+                        return action
+            if self._share_picker is not None:
+                for rect, action in self._share_picker_hits:
+                    if rect.collidepoint(pos):
+                        if "close_share_picker" in action:
+                            self._share_picker = None
+                            self._share_picker_hits.clear()
                         return action
             for rect, act in self._enterprise_hits:
                 if rect.collidepoint(pos):
