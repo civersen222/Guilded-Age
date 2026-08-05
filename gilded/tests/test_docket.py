@@ -1016,23 +1016,32 @@ def test_p6_quote_not_priced_off_market_value():
 
 
 def test_p7_no_phantom_trade():
-    """P-7: No path reports a completed trade when the ledger did not move."""
+    """P-7: No path reports a completed trade when the ledger did not move.
+    
+    Fixture: executor (ruler) has plenty of personal gold, but the House
+    treasury is empty. At 0d72e20 the old guard checked buyer.gold_reserve
+    (the executor's purse) — so the trade went through and the ledger moved.
+    At 22168fc the guard checks house.treasury — so it refuses and ledger stays.
+    This case goes RED against 0d72e20 because the ledger DID move there."""
+    from gilded.society.shares import stake_cost
     g, h = _game(205)
     realm = g.realms[h]
     ruler = realm.ruler
     kin = _adult_not_seated(realm)
     house = g.houses[h]
-    house.treasury = 0.0
+    house.treasury = 0.0          # House has nothing
+    ruler.gold_reserve = 500.0    # BUT executor is well-funded (old tree trades!)
     ent = _make_ent_with_ledger(g, h, ruler.id, kin.id)
-    g.rng = SeqRng([0.0])
+    quote = stake_cost(ent, 10.0, g)
+    g.rng = SeqRng([0.1, 0.99])   # pin rng so no fumble/botch surprises
     ledger_before = dict(ent.ledger)
     msgs = initiative(g, h, "buy_shares", ruler, eid=ent.eid, seller_id=kin.id, pct=10.0)
-    # Ledger didn't move (no treasury)
-    assert ent.ledger == ledger_before, "ledger should not have changed"
-    # No message should claim a trade completed
-    for m in msgs:
-        assert "buys" not in m.lower() or "cannot afford" in m.lower() or "failed" in m.lower(), \
-            f"phantom trade reported: {m}"
+    # Ledger must NOT have changed — no phantom trade
+    assert ent.ledger == ledger_before, \
+        f"phantom trade: ledger changed from {ledger_before} to {ent.ledger}"
+    # A refusal should be present
+    refusal = [m for m in msgs if "cannot afford" in m.lower()]
+    assert refusal, f"should have refused: {msgs}"
 
 
 def test_p8_fumble_reports_and_charges_actual_size():
