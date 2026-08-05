@@ -444,6 +444,108 @@ def _noop_dispatch(game, house, view, action):
 
 # ── registry ─────────────────────────────────────────────────────────────────
 
+# ── share trade helpers (I4d2b1) ──────────────────────────────────────────────
+
+def buy_share_counterparties(game, house, eid):
+    """Return people the House could buy shares FROM in enterprise *eid*.
+
+    Returns list of dicts with keys: id, name, stake_pct, cost.
+    Excludes the realm's ruler.  Built from the ledger, resolved across all realms.
+    """
+    from gilded.society.shares import stake_cost
+    ent = next((e for e in game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return []
+    realm = game.realms[house]
+    ruler_id = realm.ruler.id
+    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
+    options = []
+    for char_id, pct in ent.ledger.items():
+        if pct <= 0:
+            continue
+        if char_id == ruler_id:
+            continue
+        char = by_id.get(char_id)
+        if char is None:
+            continue
+        cost = stake_cost(ent, pct, game)
+        options.append({"id": char_id, "name": char.name, "stake_pct": pct, "cost": cost})
+    options.sort(key=lambda o: (-o["stake_pct"], o["name"]))
+    return options
+
+
+def sell_share_counterparties(game, house, eid):
+    """Return people the House's ruler could sell shares TO in enterprise *eid*.
+
+    Returns list of dicts with keys: id, name, gold.
+    Excludes the ruler.  Candidates must be alive, adult, and hold enough gold
+    to buy at least 1.00% of the enterprise.  Sorted richest first.
+    """
+    from gilded.society.shares import stake_cost
+    ent = next((e for e in game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return []
+    realm = game.realms[house]
+    ruler_id = realm.ruler.id
+    min_cost = stake_cost(ent, 1.0, game)
+    by_id = {c.id: c for r in game.realms.values() for c in r.characters}
+    options = []
+    for char in by_id.values():
+        if char.id == ruler_id:
+            continue
+        if not char.is_alive:
+            continue
+        if char.age < 16:
+            continue
+        if char.gold_reserve < min_cost:
+            continue
+        options.append({"id": char.id, "name": char.name, "gold": char.gold_reserve})
+    options.sort(key=lambda o: (-o["gold"], o["name"]))
+    return options
+
+
+def share_size_ladder(game, house, eid, seller_id, buyer_id=None):
+    """Return slice sizes that can be transacted for a share trade.
+
+    *seller_id* is the id of the person selling.
+    *buyer_id* is the id of the person buying (for a sell action).
+    When *buyer_id* is None, the trade is treated as a BUY (house treasury pays).
+
+    Returns list of dicts with keys: pct, cost, offerable, reason.
+    Canonical sizes: 1, 5, 10, 25, 35, 50, 75, 100.
+    """
+    from gilded.society.shares import stake_cost
+    ent = next((e for e in game.enterprises if e.eid == eid), None)
+    if ent is None:
+        return []
+    realm = game.realms[house]
+    house_obj = game.houses[house]
+    available = ent.ledger.get(seller_id, 0.0)
+    canonical = [1, 5, 10, 25, 35, 50, 75, 100]
+    is_buy = buyer_id is None
+    if is_buy:
+        purse = house_obj.treasury
+    else:
+        by_id = {c.id: c for r in game.realms.values() for c in r.characters}
+        buyer = by_id.get(buyer_id)
+        purse = buyer.gold_reserve if buyer else 0.0
+    options = []
+    for pct in canonical:
+        if pct > available:
+            continue
+        cost = stake_cost(ent, pct, game)
+        if pct > available:
+            options.append({"pct": pct, "cost": cost, "offerable": False,
+                           "reason": f"Seller only holds {available:.1f}%"})
+        elif cost > purse:
+            purse_name = "House treasury" if is_buy else "buyer"
+            options.append({"pct": pct, "cost": cost, "offerable": False,
+                           "reason": f"{purse_name} cannot afford {cost:.2f} gold (has {purse:.2f})"})
+        else:
+            options.append({"pct": pct, "cost": cost, "offerable": True, "reason": ""})
+    return options
+
+
 ACTIONS: dict[str, PlayerAction] = {
     # game verbs
     "end_turn": PlayerAction(
