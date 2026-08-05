@@ -249,7 +249,7 @@ def test_e40_no_duplicate_rung():
 def test_r4_actions_registry_updated():
     """ACTIONS dict now has 18 keys, including buy_shares and sell_shares."""
     from gilded.ui.actions import ACTIONS, PlayerAction
-    assert len(ACTIONS) == 18, f"ACTIONS has {len(ACTIONS)} keys, expected 18"
+    assert len(ACTIONS) == 19, f"ACTIONS has {len(ACTIONS)} keys, expected 19"
     assert "buy_shares" in ACTIONS, "buy_shares must be registered"
     assert "sell_shares" in ACTIONS, "sell_shares must be registered"
     assert isinstance(ACTIONS["buy_shares"], PlayerAction)

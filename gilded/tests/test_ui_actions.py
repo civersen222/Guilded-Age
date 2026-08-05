@@ -213,35 +213,29 @@ def _enterprise_drawn_verbs(view):
 def test_exactly_three_enterprise_verbs_are_drawn():
     """Pins the CURRENT state by value, and passes today.
 
-    I4b drew the third, defend_buyout. When a later wave draws the remaining
-    four, this test goes RED and names what changed."""
+    I4b drew the third, defend_buyout. I4d2b3d drew the remaining four,
+    buy_shares and sell_shares. All seven offered verbs are now drawn."""
     state = _rich_state()
     view = state.view
     view.active_tab = "Enterprises"
-    view.draw(pygame.Surface((800, 600)))
+    view.draw(pygame.Surface((1280, 900)))
 
     drawn = _enterprise_drawn_verbs(view)
     assert drawn == {"appoint_director", "expand_enterprise", "defend_buyout",
-                     "attack_takeover", "found_enterprise"}, (
+                     "attack_takeover", "found_enterprise",
+                     "buy_shares", "sell_shares"}, (
         f"the Enterprises tab's drawn verbs moved: {sorted(drawn)}")
 
     undrawn = _offered_keys(view) - drawn
-    assert undrawn == {
-        "buy_shares", "sell_shares",
-    }, f"the undrawn set moved: {sorted(undrawn)}"
+    assert undrawn == set(), f"the undrawn set moved: {sorted(undrawn)}"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "The Enterprises tab draws only expand_enterprise and "
-    "appoint_director. Five offered verbs are never drawn at all — "
-    "they are not dead buttons, they are absent ones. Wave I4 draws "
-    "them."))
 def test_every_offered_key_is_drawn():
     """Every verb the game offers is actually drawn on screen."""
     state = _rich_state()
     view = state.view
     view.active_tab = "Enterprises"
-    view.draw(pygame.Surface((800, 600)))
+    view.draw(pygame.Surface((1280, 900)))
 
     drawn = _enterprise_drawn_verbs(view)
     undrawn = _offered_keys(view) - drawn
@@ -291,6 +285,8 @@ def _build_action_for_key(key, game, house, view=None):
         return None
     elif key == "close_director_picker":
         return {"close_director_picker": True}
+    elif key == "close_share_picker":
+        return {"close_share_picker": True}
     elif key == "attack_takeover":
         # Disloyalty is grown, not dealt: at turn 0 the top-threat House has no
         # disloyal kin in ANY seed 42-61 (measured, 0 of 20), so a turn-0
