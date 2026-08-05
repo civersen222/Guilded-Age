@@ -1110,4 +1110,151 @@ def test_D7_no_charters_refuses_button():
     assert "no charters" in why.lower(), f"refusal should mention no charters: {why}"
 
 
+# ── I4d2b2d: six cases for the share verbs ────────────────────────────────────
+
+
+def test_decided_buy_moves_the_size_the_player_named():
+    """C-1: A decided buy of 5% moves exactly 5.00, not 1 and not the whole stake."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+
+    ent = game.enterprises[0]
+    seller_id = "000000c4"
+    pct = 5
+
+    before_seller = ent.ledger.get(seller_id, 0.0)
+    ruler_id = "000000b3"
+    before_ruler = ent.ledger.get(ruler_id, 0.0)
+
+    action = {"buy_shares": (ent.eid, seller_id, pct)}
+    act.ACTIONS["buy_shares"].dispatch(game, view.house, view, action)
+
+    after_seller = ent.ledger.get(seller_id, 0.0)
+    after_ruler = ent.ledger.get(ruler_id, 0.0)
+
+    assert after_seller == pytest.approx(before_seller - 5.00, rel=1e-9), (
+        f"seller had {before_seller:.2f}, now {after_seller:.2f} — expected -5.00")
+    assert after_ruler == pytest.approx(before_ruler + 5.00, rel=1e-9), (
+        f"ruler had {before_ruler:.2f}, now {after_ruler:.2f} — expected +5.00")
+
+
+def test_decided_buy_costs_exactly_one_attention():
+    """C-2: A decided buy decrements attention by exactly 1."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+
+    ent = game.enterprises[0]
+    seller_id = "000000c4"
+    pct = 5
+
+    before_attn = game.attention[view.house]
+
+    action = {"buy_shares": (ent.eid, seller_id, pct)}
+    act.ACTIONS["buy_shares"].dispatch(game, view.house, view, action)
+
+    assert game.attention[view.house] == before_attn - 1, (
+        f"attention went {before_attn} -> {game.attention[view.house]}, expected {before_attn - 1}")
+
+
+def test_decided_sell_moves_stock_and_gold():
+    """C-3: A decided sell of 10% moves stock to buyer and debits buyer's gold."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+
+    ent = game.enterprises[0]
+    buyer_id = "000000ec"
+    pct = 10
+    ruler_id = "000000b3"
+
+    before_ruler = ent.ledger.get(ruler_id, 0.0)
+    before_buyer_stock = ent.ledger.get(buyer_id, 0.0)
+    buyer_char = next(c for r in game.realms.values() for c in r.characters if c.id == buyer_id)
+    before_buyer_gold = buyer_char.gold_reserve
+
+    action = {"sell_shares": (ent.eid, buyer_id, pct)}
+    act.ACTIONS["sell_shares"].dispatch(game, view.house, view, action)
+
+    after_ruler = ent.ledger.get(ruler_id, 0.0)
+    after_buyer_stock = ent.ledger.get(buyer_id, 0.0)
+    after_buyer_gold = buyer_char.gold_reserve
+
+    assert after_ruler == pytest.approx(before_ruler - 10.00, rel=1e-9), (
+        f"ruler had {before_ruler:.2f}, now {after_ruler:.2f} — expected -10.00")
+    assert after_buyer_stock == pytest.approx(before_buyer_stock + 10.00, rel=1e-9), (
+        f"buyer had {before_buyer_stock:.2f}, now {after_buyer_stock:.2f} — expected +10.00")
+    assert after_buyer_gold == pytest.approx(before_buyer_gold - 14.76, rel=1e-2), (
+        f"buyer gold had {before_buyer_gold:.2f}, now {after_buyer_gold:.2f} — expected -14.76")
+
+
+def test_oversized_buy_is_refused_with_the_ladders_own_reason():
+    """C-4: A 25% buy from a 10% holder is refused with the ladder's reason string."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+
+    ent = game.enterprises[0]
+    seller_id = "000000c4"
+    pct = 25
+
+    ladder = act.share_size_ladder(game, view.house, ent.eid, seller_id)
+    rung_25 = next(r for r in ladder if r["pct"] == 25)
+    expected_reason = rung_25["reason"]
+
+    action = {"buy_shares": (ent.eid, seller_id, pct)}
+    ok, why = act.ACTIONS["buy_shares"].eligible(game, view.house, action)
+
+    assert not ok, "25% buy from a 10% holder should be refused"
+    assert why == expected_reason, (
+        f"reason '{why}' does not match ladder reason '{expected_reason}'")
+
+
+def test_a_refused_buy_dispatched_anyway_changes_nothing():
+    """C-5: Dispatching a refused 25% buy leaves ledger, treasury, and attention untouched."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+
+    ent = game.enterprises[0]
+    seller_id = "000000c4"
+    pct = 25
+    ruler_id = "000000b3"
+
+    before_seller = ent.ledger.get(seller_id, 0.0)
+    before_ruler = ent.ledger.get(ruler_id, 0.0)
+    before_treasury = game.houses[view.house].treasury
+    before_attn = game.attention[view.house]
+
+    action = {"buy_shares": (ent.eid, seller_id, pct)}
+    act.ACTIONS["buy_shares"].dispatch(game, view.house, view, action)
+
+    assert ent.ledger.get(seller_id, 0.0) == pytest.approx(before_seller, rel=1e-9), (
+        f"seller changed: {before_seller} -> {ent.ledger.get(seller_id, 0.0)}")
+    assert ent.ledger.get(ruler_id, 0.0) == pytest.approx(before_ruler, rel=1e-9), (
+        f"ruler changed: {before_ruler} -> {ent.ledger.get(ruler_id, 0.0)}")
+    assert game.houses[view.house].treasury == pytest.approx(before_treasury, rel=1e-9), (
+        f"treasury changed: {before_treasury} -> {game.houses[view.house].treasury}")
+    assert game.attention[view.house] == before_attn, (
+        f"attention changed: {before_attn} -> {game.attention[view.house]}")
+
+
+def test_a_zero_size_trade_is_refused():
+    """C-6: A buy of 0% is refused with a clear sentence."""
+    state = _rich_state()
+    view, game = state.view, state.game
+    _fund_house(state, 10_000.0)
+
+    ent = game.enterprises[0]
+    seller_id = "000000c4"
+    pct = 0
+
+    action = {"buy_shares": (ent.eid, seller_id, pct)}
+    ok, why = act.ACTIONS["buy_shares"].eligible(game, view.house, action)
+
+    assert not ok, "0% buy should be refused"
+    assert why == "Percentage must be positive.", (
+        f"unexpected refusal: '{why}'")
+
 
