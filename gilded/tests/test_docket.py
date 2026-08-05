@@ -88,6 +88,14 @@ def _adult_not_seated(realm):
                 and c.id not in seated)
 
 
+def _adults_not_seated(realm, exclude_ids=None):
+    """Return a list of adult, non-seated characters (excluding ruler + optional ids)."""
+    seated = {c.id for c in realm.court.positions.values() if c is not None}
+    exclude = set(exclude_ids or []) | {realm.ruler.id}
+    return [c for c in realm.characters
+            if c.is_alive and c.age >= 16 and c.id not in exclude and c.id not in seated]
+
+
 def test_capital_request_grant_funds_expansion():
     g, h = _game(42)
     realm = g.realms[h]
@@ -1080,3 +1088,140 @@ def test_p8_fumble_reports_and_charges_actual_size():
     expected_cost = share_price(ent, g) * min(expected_pct, ledger_before.get(rival_id, 0))
     assert abs(treasury_drop - expected_cost) < 0.01, \
         f"treasury_drop={treasury_drop}, expected_cost={expected_cost}, actual_moved={actual_moved}"
+
+
+# --- Regression tests for I4d2c fix: ruler-as-principal, not executor ---
+# These guard the fix that changed ctx.executor → realm.ruler in
+# _init_buy_shares and _init_sell_shares.  Before the fix, a courtier
+# executing a share trade would have their own ledger modified; after,
+# the ruler's ledger is the one that changes.
+
+
+def test_i4d2c_buy_shares_non_ruler_executor_ruler_gains_stake():
+    """Non-ruler executor triggers buy_shares → ruler's ledger increases,
+    not the executor's."""
+    g, h = _game(300)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    adults = _adults_not_seated(realm)
+    assert len(adults) >= 2, "need at least 2 adult non-seated characters"
+    executor, seller = adults[0], adults[1]
+    house = g.houses[h]
+    house.treasury = 10_000.0
+    # Create enterprise: ruler 60%, seller 40%
+    ent = _make_ent_with_ledger(g, h, ruler.id, seller.id)
+    executor_stake_before = ent.ledger.get(executor.id, 0.0)
+    ruler_stake_before = ent.ledger.get(ruler.id, 0.0)
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "buy_shares", executor, eid=ent.eid, seller_id=seller.id, pct=10.0)
+    assert len(msgs) >= 1
+    # Ruler's stake should increase (they are the buyer, not executor)
+    assert ent.ledger.get(ruler.id, 0.0) > ruler_stake_before, \
+        f"ruler stake should increase: {ruler_stake_before} -> {ent.ledger.get(ruler.id, 0.0)}"
+    # Executor's stake should NOT change (they're just the agent)
+    assert ent.ledger.get(executor.id, 0.0) == executor_stake_before, \
+        f"executor stake should not change: {executor_stake_before} -> {ent.ledger.get(executor.id, 0.0)}"
+
+
+def test_i4d2c_sell_shares_non_ruler_executor_ruler_loses_stake():
+    """Non-ruler executor triggers sell_shares → ruler's ledger decreases,
+    not the executor's."""
+    g, h = _game(301)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    adults = _adults_not_seated(realm)
+    assert len(adults) >= 2, "need at least 2 adult non-seated characters"
+    executor, buyer = adults[0], adults[1]
+    buyer.gold_reserve = 10_000.0
+    # Create enterprise: ruler 60%, buyer 40%
+    ent = _make_ent_with_ledger(g, h, ruler.id, buyer.id)
+    executor_stake_before = ent.ledger.get(executor.id, 0.0)
+    ruler_stake_before = ent.ledger.get(ruler.id, 0.0)
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "sell_shares", executor, eid=ent.eid, buyer_id=buyer.id, pct=10.0)
+    assert len(msgs) >= 1
+    # Ruler's stake should decrease (they are the seller, not executor)
+    assert ent.ledger.get(ruler.id, 0.0) < ruler_stake_before, \
+        f"ruler stake should decrease: {ruler_stake_before} -> {ent.ledger.get(ruler.id, 0.0)}"
+    # Executor's stake should NOT change (they're just the agent)
+    assert ent.ledger.get(executor.id, 0.0) == executor_stake_before, \
+        f"executor stake should not change: {executor_stake_before} -> {ent.ledger.get(executor.id, 0.0)}"
+
+
+def test_i4d2c_buy_shares_non_ruler_executor_treasury_pays():
+    """Non-ruler executor triggers buy_shares → House treasury is debited,
+    not the executor's personal purse."""
+    g, h = _game(302)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    adults = _adults_not_seated(realm)
+    assert len(adults) >= 2, "need at least 2 adult non-seated characters"
+    executor, seller = adults[0], adults[1]
+    house = g.houses[h]
+    house.treasury = 5_000.0
+    executor.gold_reserve = 50_000.0  # executor has plenty of personal gold
+    executor_gold_before = executor.gold_reserve
+    ent = _make_ent_with_ledger(g, h, ruler.id, seller.id)
+    treasury_before = house.treasury
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "buy_shares", executor, eid=ent.eid, seller_id=seller.id, pct=10.0)
+    assert len(msgs) >= 1
+    # Treasury should have decreased (House pays)
+    assert house.treasury < treasury_before, \
+        f"treasury should decrease: {treasury_before} -> {house.treasury}"
+    # Executor's personal gold should NOT have changed
+    assert executor.gold_reserve == executor_gold_before, \
+        f"executor gold should not change: {executor_gold_before} -> {executor.gold_reserve}"
+
+
+def test_i4d2c_sell_shares_non_ruler_executor_treasury_receives():
+    """Non-ruler executor triggers sell_shares → House treasury is credited,
+    buyer's personal purse is debited."""
+    g, h = _game(303)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    adults = _adults_not_seated(realm)
+    assert len(adults) >= 2, "need at least 2 adult non-seated characters"
+    executor, buyer = adults[0], adults[1]
+    buyer.gold_reserve = 50_000.0
+    buyer_gold_before = buyer.gold_reserve
+    house = g.houses[h]
+    treasury_before = house.treasury
+    ent = _make_ent_with_ledger(g, h, ruler.id, buyer.id)
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "sell_shares", executor, eid=ent.eid, buyer_id=buyer.id, pct=10.0)
+    assert len(msgs) >= 1
+    # Treasury should have increased (House receives)
+    assert house.treasury > treasury_before, \
+        f"treasury should increase: {treasury_before} -> {house.treasury}"
+    # Buyer's personal gold should have decreased
+    assert buyer.gold_reserve < buyer_gold_before, \
+        f"buyer gold should decrease: {buyer_gold_before} -> {buyer.gold_reserve}"
+
+
+def test_i4d2c_buy_shares_result_names_ruler_not_executor():
+    """Success message for buy_shares with non-ruler executor should name
+    the ruler as the buyer, not the executor."""
+    g, h = _game(304)
+    realm = g.realms[h]
+    ruler = realm.ruler
+    adults = _adults_not_seated(realm)
+    assert len(adults) >= 2, "need at least 2 adult non-seated characters"
+    executor, seller = adults[0], adults[1]
+    house = g.houses[h]
+    house.treasury = 10_000.0
+    ent = _make_ent_with_ledger(g, h, ruler.id, seller.id)
+    g.rng = SeqRng([0.0])
+    msgs = initiative(g, h, "buy_shares", executor, eid=ent.eid, seller_id=seller.id, pct=10.0)
+    assert len(msgs) >= 1
+    # Find the success message (contains "buys")
+    success = [m for m in msgs if "buys" in m.lower()]
+    assert success, f"should have a success message: {msgs}"
+    text = success[0]
+    # Should name the ruler as the buyer
+    assert ruler.name in text, \
+        f"result should name the ruler ({ruler.name}) as buyer: {text}"
+    # Should NOT name the executor as the buyer
+    # (executor could appear as the agent, but not as the party buying)
+    assert f" {executor.name} buys" not in text, \
+        f"result should not say executor buys: {text}"
