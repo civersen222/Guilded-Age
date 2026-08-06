@@ -695,6 +695,15 @@ def share_size_ladder(game, house, eid, seller_id, buyer_id=None):
                            "reason": f"{purse_name} cannot afford {cost:.2f} gold (has {purse:.2f})"})
         else:
             options.append({"pct": pct, "cost": cost, "offerable": True, "reason": ""})
+    # Fully-refused ladder: state the fact once, not once per rung
+    if not any(o["offerable"] for o in options):
+        reasons = [o["reason"] for o in options if o["reason"]]
+        if reasons and len(set(reasons)) == 1:
+            # All refused for the same reason — say it on the first rung only
+            for o in options:
+                if not o["offerable"]:
+                    o["reason"] = ""
+            options[0]["reason"] = reasons[0]
     return options
 
 

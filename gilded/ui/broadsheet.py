@@ -297,6 +297,8 @@ HUD_INK = (232, 226, 210)
 BUTTON_BG = (60, 82, 60)
 BUTTON_EDGE = (30, 46, 30)
 BUTTON_TEXT = (238, 240, 232)
+DISABLED_BUTTON_BG = (50, 50, 50)
+DISABLED_BUTTON_EDGE = (35, 35, 35)
 EXEC_BG = (78, 66, 96)
 ENDTURN_BG = (140, 60, 52)
 ATTN_COLOR = (150, 110, 40)
@@ -930,7 +932,12 @@ class BroadsheetView:
                 if y < 0:
                     y = 4
                 rect = pygame.Rect(x, y, panel_w, panel_h)
-                pygame.draw.rect(surface, INK, rect)
+                # Fill a margin around the tooltip to cover any content underneath
+                margin = pygame.Rect(x - 5, y - 5, panel_w + 10, panel_h + 10)
+                margin.clamp_ip(surface.get_rect())
+                surface.fill(PAPER_BG, margin)
+                # Draw tooltip panel filled with INK
+                surface.fill(INK, rect)
                 pygame.draw.rect(surface, CARD_EDGE, rect, 1)
                 cy = rect.top + pad
                 for line in lines:
@@ -1761,11 +1768,15 @@ class BroadsheetView:
     def _action_button(self, surface, content, action_rect, y, act, body, group, default_label, reason=None, hit_list=None, fill=None, edge=None):
         """Draw a single action button.  Returns next `y`, or `None` if content would overflow."""
         if fill is None:
-            fill = BUTTON_BG
+            fill = DISABLED_BUTTON_BG if reason else BUTTON_BG
         if edge is None:
-            edge = BUTTON_EDGE
+            edge = DISABLED_BUTTON_EDGE if reason else BUTTON_EDGE
+        # Disabled buttons always get the disabled fill/edge regardless of caller
+        if reason:
+            fill = DISABLED_BUTTON_BG
+            edge = DISABLED_BUTTON_EDGE
         btn_text = act.get("label", default_label)
-        text_color = FADED if reason else BUTTON_TEXT
+        text_color = BUTTON_TEXT
         btn_surf = body.render(btn_text, True, text_color)
         btn_w = btn_surf.get_width() + 16
         btn_h = body.get_height() + 8
@@ -2174,7 +2185,8 @@ class BroadsheetView:
                     disabled_surf = body.render(btn_label, True, (140, 120, 100))
                     surface.blit(disabled_surf, (lx + 5, rung_y + 2))
                     reason = rung.get("reason", "Not available")
-                    self.regions.add(Region(rect=btn_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
+                    if reason:
+                        self.regions.add(Region(rect=btn_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
 
                 lx += btn_w + 4
             # Advance y below the ladder buttons
