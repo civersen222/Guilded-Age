@@ -2161,6 +2161,10 @@ class BroadsheetView:
         y += body.get_height() + 4
 
         treasury = self.game.houses[self.house].treasury
+        shown = len(counterparties)
+        sub = body.render(f"{shown} counterparties:", True, (130, 130, 120))
+        surface.blit(sub, (PAD, y))
+        y += body.get_height() + 6
 
         for cp, ladder in ladder_data:
             if y > content.bottom - 80:
