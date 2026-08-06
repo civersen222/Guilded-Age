@@ -655,7 +655,7 @@ def test_sell_picker_empty_holder_one_refused_not_blank():
     # Find the sell_shares init action and trigger the picker
     sell_actions = [r for r in v.regions._regions
                     if r.action and "sell_shares" in r.action
-                    and r.action.get("eid") == ent.eid]
+                    and r.action.get("sell_shares") == ent.eid]
     assert sell_actions, "No sell_shares action for enterprise"
 
     # Init the picker by clicking

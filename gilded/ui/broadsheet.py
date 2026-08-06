@@ -1720,8 +1720,8 @@ class BroadsheetView:
             eid = el.eid
             actions.append({"label": f"Expand {el.name}", "action": {"expand_enterprise": eid}, "eid": eid})
             actions.append({"label": f"Appoint Director for {el.name}", "action": {"appoint_director": eid}, "eid": eid})
-            actions.append({"label": f"Buy Shares in {el.name}", "action": {"buy_shares": eid, "eid": eid}, "eid": eid})
-            actions.append({"label": f"Sell Shares in {el.name}", "action": {"sell_shares": eid, "eid": eid}, "eid": eid})
+            actions.append({"label": f"Buy Shares in {el.name}", "action": {"buy_shares": eid}, "eid": eid})
+            actions.append({"label": f"Sell Shares in {el.name}", "action": {"sell_shares": eid}, "eid": eid})
         # Found enterprise (page-level)
         from gilded.ui.actions import _get_available_charters
         charters = _get_available_charters(self.game, self.house)
