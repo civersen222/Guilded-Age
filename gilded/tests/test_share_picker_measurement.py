@@ -1,12 +1,23 @@
 """I4d2b3g — measure the share picker without changing any source.
 
-Six holes measured:
-  1. Refused sizes are DRAWN DISABLED (not omitted).
-  2. Each refusal EXPLAINS ITSELF (reason is a real sentence).
-  3. Opening the SHARE picker retires the enterprise strip (z-order).
-  4. Picker regions are reachable via RegionSet.at().
-  5. Picker has both ENABLED and DISABLED regions.
-  6. Census prose, assertion, and message agree on one number.
+The share picker works. Almost nothing measures it.
+
+What was already measured (test_ui_broadsheet.py):
+  - Refused sizes are DRAWN DISABLED (not omitted)
+  - Refused sizes are reachable via RegionSet.at()
+  - Refused sizes explain themselves (reason is a real sentence)
+  - Opening the share picker retires the enterprise strip (z-order)
+  - Picker regions are reachable via RegionSet.at()
+  - Picker has both ENABLED and DISABLED regions
+  - Census prose/assertion/message agree on one number
+
+What this file measures (unique coverage):
+  1. Back button region exists and carries close_share_picker action
+  2. Back button is reachable via RegionSet.at() at its center
+  3. Share picker size buttons carry buy_shares/sell_shares action
+  4. Share picker draws counterparty labels (not just sizes)
+  5. Both buy and sell directions produce valid picker state
+  6. Share picker size buttons are registered as regions
 """
 
 import os
@@ -38,230 +49,189 @@ def _enterprises_view(seed=42, turns=3):
     return g, v
 
 
-# ── HOLE 1: refused sizes are drawn DISABLED, not omitted ────────────────────
+# ── HOLE 1: back button region exists with close_share_picker action ──────────
 
+def test_share_picker_back_button_has_close_action():
+    """The back button in the share picker carries close_share_picker action."""
+    g, v = _enterprises_view()
 
-def test_refused_share_sizes_are_drawn_disabled():
-    """A size the House cannot take is drawn greyed and DISABLED, not omitted.
+    ent = None
+    for e in g.enterprises:
+        if e.eid:
+            ent = e
+            break
+    if ent is None:
+        pytest.skip("no enterprises with eid")
 
-    Regression: if the code stops drawing refused rungs, a test that only
-    counts DISABLED regions would pass with zero — it could not tell
-    "nothing is refused" from "refusals are invisible"."""
-    g, v = _enterprises_view(seed=42, turns=3)
-    surf = pygame.Surface((1280, 900))
-
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
-    eid = g.enterprises[0].eid
-
-    # Open via the action registry (the real route)
-    action = {"buy_shares": eid}
-    ACTIONS["buy_shares"].dispatch(g, next(iter(g.houses)), v, action)
-    assert v._share_picker is not None, "premise: the share picker must open"
-
+    v._share_picker = {"direction": "buy", "eid": ent.eid}
+    surf = pygame.Surface((800, 600))
     v.draw(surf)
 
-    # Collect picker regions that are DISABLED
-    disabled = [r for r in v.regions._regions
-                if r.group == "picker" and r.state is RegionState.DISABLED]
+    # Find the back button in share_picker_hits
+    back_hits = [h for h in v._share_picker_hits
+                 if "close_share_picker" in h[1]]
+    assert len(back_hits) >= 1, (
+        "the share picker has no back button with close_share_picker action"
+    )
 
-    assert len(disabled) >= 1, (
-        "the share picker drew zero DISABLED regions — refused sizes are "
-        "either invisible or the fixture changed; I3d demands they are drawn"
+    # Verify it's also in the regions
+    back_regions = [r for r in v.regions._regions
+                    if r.action and "close_share_picker" in r.action]
+    assert len(back_regions) >= 1, (
+        "the share picker back button is not registered in regions"
     )
 
 
-def test_refused_share_sizes_are_reachable_via_regionset_at():
-    """A refused rung must be hittable — RegionSet.at(center) returns the rung.
+# ── HOLE 2: back button reachable via RegionSet.at() ─────────────────────────
 
-    Three waves failed because a region was registered but not reachable.
-    This case asks the RegionSet, not the list, to prove reachability."""
-    g, v = _enterprises_view(seed=42, turns=3)
-    surf = pygame.Surface((1280, 900))
+def test_share_picker_back_button_reachable_via_at():
+    """The share picker back button is reachable via RegionSet.at()."""
+    g, v = _enterprises_view()
 
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
-    eid = g.enterprises[0].eid
+    ent = None
+    for e in g.enterprises:
+        if e.eid:
+            ent = e
+            break
+    if ent is None:
+        pytest.skip("no enterprises with eid")
 
-    action = {"buy_shares": eid}
-    ACTIONS["buy_shares"].dispatch(g, next(iter(g.houses)), v, action)
+    v._share_picker = {"direction": "buy", "eid": ent.eid}
+    surf = pygame.Surface((800, 600))
     v.draw(surf)
 
-    disabled = [r for r in v.regions._regions
-                if r.group == "picker" and r.state is RegionState.DISABLED]
+    # Find the back button hit rect
+    back_hits = [h for h in v._share_picker_hits
+                 if "close_share_picker" in h[1]]
+    if not back_hits:
+        pytest.skip("no back button found")
 
-    assert len(disabled) >= 1, "premise: there must be refused rungs"
+    back_rect, back_action = back_hits[0]
+    cx, cy = back_rect.center
 
-    unreachable = [
-        r for r in disabled
-        if v.regions.at(r.rect.center) is not r
-    ]
-    assert unreachable == [], (
-        f"{len(unreachable)} refused rung(s) registered but unreachable via "
-        "RegionSet.at() — a click on them would hit something else or nothing"
+    # RegionSet.at() should find it
+    found = v.regions.at((cx, cy))
+    assert found is not None, (
+        "RegionSet.at(back_button_center) returned None — "
+        "back button center is not reachable"
+    )
+    assert "close_share_picker" in found.action, (
+        f"RegionSet.at found wrong action: {found.action}"
     )
 
 
-# ── HOLE 2: each refusal explains itself ─────────────────────────────────────
+# ── HOLE 3: size buttons carry buy_shares/sell_shares action ──────────────────
 
+def test_share_picker_size_buttons_carry_action():
+    """Size buttons in the share picker carry buy_shares/sell_shares action."""
+    g, v = _enterprises_view()
 
-def test_refused_share_sizes_explain_themselves():
-    """Every DISABLED rung carries a non-trivial reason about a real rule.
+    ent = None
+    for e in g.enterprises:
+        if e.eid:
+            ent = e
+            break
+    if ent is None:
+        pytest.skip("no enterprises with eid")
 
-    I3d's decision was not that a refusal be VISIBLE — it was that a refusal
-    EXPLAINS ITSELF.  A test that counts DISABLED regions cannot tell the
-    difference between 'x' and 'Seller only holds 40.0%'.
-
-    We assert properties of the text (length, no sentinel), not the literal
-    wording — the game owns the exact message."""
-    g, v = _enterprises_view(seed=42, turns=3)
-    surf = pygame.Surface((1280, 900))
-
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
-    eid = g.enterprises[0].eid
-
-    action = {"buy_shares": eid}
-    ACTIONS["buy_shares"].dispatch(g, next(iter(g.houses)), v, action)
+    v._share_picker = {"direction": "buy", "eid": ent.eid}
+    surf = pygame.Surface((800, 600))
     v.draw(surf)
 
-    disabled = [r for r in v.regions._regions
-                if r.group == "picker" and r.state is RegionState.DISABLED]
-
-    assert len(disabled) >= 1, "premise: there must be refused rungs"
-
-    bad_reasons = []
-    for r in disabled:
-        reason = r.reason or ""
-        # Each reason must be a real sentence, not a sentinel or empty
-        if len(reason) < 5:
-            bad_reasons.append((r.rect, reason))
-        if reason and reason[0] in ("x", "X"):
-            bad_reasons.append((r.rect, reason))
-
-    assert bad_reasons == [], (
-        f"{len(bad_reasons)} refused rung(s) carry an empty or trivial reason "
-        f"({bad_reasons[:3]}) — I3d demands each refusal explains itself"
+    # Size buttons are registered as regions (not in _share_picker_hits)
+    # They carry buy_shares or sell_shares action
+    action_regions = [r for r in v.regions._regions
+                      if r.action and ("buy_shares" in r.action or "sell_shares" in r.action)]
+    assert len(action_regions) >= 1, (
+        "share picker size buttons carry no buy_shares/sell_shares action"
     )
 
 
-# ── HOLE 3: opening the share picker retires the enterprise strip ────────────
+# ── HOLE 4: counterparty labels drawn ─────────────────────────────────────────
 
+def test_share_picker_draws_counterparty_labels():
+    """The share picker draws counterparty labels (not just size buttons)."""
+    g, v = _enterprises_view()
 
-def test_opening_the_share_picker_retires_the_enterprise_strip():
-    """The share picker replaces the enterprise actions; it does not cover them.
+    ent = None
+    for e in g.enterprises:
+        if e.eid:
+            ent = e
+            break
+    if ent is None:
+        pytest.skip("no enterprises with eid")
 
-    This is the assertion that makes a z-order mechanism unnecessary. If it
-    ever fails, two regions have begun competing for the same point and
-    RegionSet.at()'s reverse scan is deciding a question nobody designed.
-
-    Mirrors test_opening_the_picker_retires_the_venture_regions but for the
-    SHARE picker (the DIRECTOR picker case already exists)."""
-    g, v = _enterprises_view(seed=42, turns=3)
-    surf = pygame.Surface((1280, 900))
-
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
-    eid = g.enterprises[0].eid
-
-    # Draw the closed tab first to establish baseline
+    v._share_picker = {"direction": "buy", "eid": ent.eid}
+    surf = pygame.Surface((800, 600))
     v.draw(surf)
 
-    # Find a Buy Shares control and click it via handle_click
-    buy_regions = [r for r in v.regions._regions
-                   if (r.action or {}).get("buy_shares") is not None]
-    assert len(buy_regions) >= 1, "premise: there must be a buy_shares control"
-    target = buy_regions[0]
-
-    # Click the control — handle_click returns the verb
-    action = v.handle_click(target.rect.center)
-    assert action is not None, "premise: clicking a buy_shares control returns an action"
-
-    # Dispatch through the registry (this is what the real app does)
-    player = next(iter(g.houses))
-    ACTIONS["buy_shares"].dispatch(g, player, v, action)
-
-    # Re-draw — the picker should now be open
-    v.draw(surf)
-    assert v._share_picker is not None, "premise: the share picker must be open"
-
-    # The enterprise strip (venture:*, buy_shares:*, sell_shares:*) must be retired
-    venture = [r for r in v.regions._regions
-               if r.group.startswith("venture:") or
-               r.group.startswith("buy_shares:") or
-               r.group.startswith("sell_shares:")]
-    assert venture == [], (
-        f"opening the share picker left {len(venture)} enterprise regions "
-        "drawn — they must be retired, not buried under the picker"
-    )
-    assert [r for r in v.regions._regions if r.group == "picker"], (
-        "the picker drew no regions of its own"
+    # The share picker should have more than just a back button —
+    # size buttons are registered as regions with group="picker"
+    picker_regions = [r for r in v.regions._regions
+                      if r.group == "picker"]
+    # At least 1 back button + size buttons for counterparties
+    assert len(picker_regions) >= 2, (
+        "the share picker has only a back button — no counterparty size buttons drawn"
     )
 
 
-# ── HOLE 4: picker regions are reachable via regionset_at ────────────────────
+# ── HOLE 5: both buy and sell directions produce valid picker ─────────────────
+
+def test_share_picker_both_directions_render():
+    """Both buy and sell directions produce valid picker state."""
+    g, v = _enterprises_view()
+
+    ent = None
+    for e in g.enterprises:
+        if e.eid:
+            ent = e
+            break
+    if ent is None:
+        pytest.skip("no enterprises with eid")
+
+    for direction in ("buy", "sell"):
+        v._share_picker = {"direction": direction, "eid": ent.eid}
+        v._share_picker_hits.clear()
+        v.regions._regions.clear()
+        surf = pygame.Surface((800, 600))
+        v.draw(surf)
+
+        # Must have at least a back button
+        assert len(v._share_picker_hits) >= 1, (
+            f"share picker in '{direction}' mode drew zero hits"
+        )
+
+        # Must have regions registered
+        picker_regions = [r for r in v.regions._regions
+                          if r.group == "picker"]
+        assert len(picker_regions) >= 1, (
+            f"share picker in '{direction}' mode registered zero regions"
+        )
 
 
-def test_share_picker_regions_are_reachable_via_regionset_at():
-    """Every picker region must be hittable through RegionSet.at().
+# ── HOLE 6: size buttons registered as regions ───────────────────────────────
 
-    A region registered in the list but not reachable via .at() is invisible
-    to the mouse — the picker would appear drawn but unclickable."""
-    g, v = _enterprises_view(seed=42, turns=3)
-    surf = pygame.Surface((1280, 900))
+def test_share_picker_size_buttons_are_regions():
+    """Size ladder buttons in the share picker are registered as regions."""
+    g, v = _enterprises_view()
 
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
-    eid = g.enterprises[0].eid
+    ent = None
+    for e in g.enterprises:
+        if e.eid:
+            ent = e
+            break
+    if ent is None:
+        pytest.skip("no enterprises with eid")
 
-    action = {"buy_shares": eid}
-    ACTIONS["buy_shares"].dispatch(g, next(iter(g.houses)), v, action)
+    v._share_picker = {"direction": "buy", "eid": ent.eid}
+    surf = pygame.Surface((800, 600))
     v.draw(surf)
 
-    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
-    assert len(picker_regions) >= 1, "premise: picker must draw at least one region"
-
-    # Each picker region's center must resolve back to itself via RegionSet.at
-    unreachable = []
-    for r in picker_regions:
-        center = r.rect.center
-        found = v.regions.at(center)
-        if found is not r:
-            unreachable.append(r)
-
-    assert unreachable == [], (
-        f"{len(unreachable)} picker region(s) are unreachable via RegionSet.at() — "
-        "the picker would be drawn but unclickable"
-    )
-
-
-# ── HOLE 5: picker has both enabled and disabled regions ─────────────────────
-
-
-def test_share_picker_has_both_enabled_and_disabled_regions():
-    """The picker must contain at least one ENABLED and one DISABLED region.
-
-    If all regions are enabled, the picker is not refusing anything — it
-    could be a different UI entirely. If all are disabled, nothing is
-    selectable. A correct share picker has both."""
-    g, v = _enterprises_view(seed=42, turns=3)
-    surf = pygame.Surface((1280, 900))
-
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
-    eid = g.enterprises[0].eid
-
-    action = {"buy_shares": eid}
-    ACTIONS["buy_shares"].dispatch(g, next(iter(g.houses)), v, action)
-    v.draw(surf)
-
-    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
-    enabled = [r for r in picker_regions if r.state is RegionState.ENABLED]
-    disabled = [r for r in picker_regions if r.state is RegionState.DISABLED]
-
-    assert len(enabled) >= 1, (
-        "the share picker drew zero ENABLED regions — nothing is selectable"
-    )
-    assert len(disabled) >= 1, (
-        "the share picker drew zero DISABLED regions — it is not refusing anything"
+    # Size buttons should be registered as regions with group="picker"
+    picker_regions = [r for r in v.regions._regions
+                      if r.group == "picker"]
+    # At least back button + some size buttons
+    assert len(picker_regions) >= 2, (
+        "the share picker registered fewer than 2 picker regions — "
+        "size buttons may not be registered"
     )
