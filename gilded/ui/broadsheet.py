@@ -2130,7 +2130,8 @@ class BroadsheetView:
                 ladder = share_size_ladder(self.game, self.house, eid, self.game.realms[self.house].ruler.id, cid)
 
             lx = PAD + 12
-            rung_y = y + txt_h + 2
+            rung_base_y = y + txt_h + 2
+            rung_y = rung_base_y
             for rung in ladder:
                 pct = rung["pct"]
                 btn_label = f"{pct:g}%"
@@ -2142,7 +2143,7 @@ class BroadsheetView:
                 if rung.get("offerable", True):
                     pygame.draw.rect(surface, (50, 50, 35), btn_rect)
                     pygame.draw.rect(surface, (120, 120, 100), btn_rect, 1)
-                    surface.blit(btn_surf, (lx + 5, y + txt_h + 4))
+                    surface.blit(btn_surf, (lx + 5, rung_y + 2))
 
                     action_key = "buy_shares" if direction == "buy" else "sell_shares"
                     action_payload = (eid, cid, pct)
@@ -2151,10 +2152,11 @@ class BroadsheetView:
                     pygame.draw.rect(surface, (60, 60, 50), btn_rect)
                     pygame.draw.rect(surface, (100, 80, 60), btn_rect, 1)
                     disabled_surf = body.render(btn_label, True, (140, 120, 100))
-                    surface.blit(disabled_surf, (lx + 5, y + txt_h + 4))
+                    surface.blit(disabled_surf, (lx + 5, rung_y + 2))
                     reason = rung.get("reason", "Not available")
                     self.regions.add(Region(rect=btn_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
 
+                rung_y += btn_h
                 lx += btn_w + 4
             # Advance y below the ladder buttons
             btn_h = body.get_height() + 4
