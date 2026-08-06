@@ -673,8 +673,9 @@ def share_size_ladder(game, house, eid, seller_id, buyer_id=None):
     house_obj = game.houses[house]
     available = ent.ledger.get(seller_id, 0.0)
     canonical = [1, 5, 10, 25, 35, 50, 75, 100]
-    # R-2: add the seller's whole stake as a rung (deduplicate, keep sorted)
-    rungs = sorted(set(canonical + [available]))
+    # R-2: add the seller's whole stake as a rung so any holder can be bought out
+    # but a stake of zero is not a slice anyone can trade
+    rungs = sorted(set(canonical + [available] if available > 0 else canonical))
     is_buy = buyer_id is None
     if is_buy:
         purse = house_obj.treasury

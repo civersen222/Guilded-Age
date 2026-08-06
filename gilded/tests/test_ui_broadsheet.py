@@ -4054,8 +4054,8 @@ def test_empty_pool_greys_appoint_and_says_so():
     assert region.state is RegionState.DISABLED
     assert target.name in region.reason, (
         f"the reason must name the venture: {region.reason!r}")
-    assert "fit to direct" in region.reason, (
-        f"the reason must say no one is fit to direct it: {region.reason!r}")
+    assert "qualified to direct" in region.reason, (
+        f"the reason must say no one is qualified to direct it: {region.reason!r}")
     assert v.handle_click(region.rect.center) is None, (
         "a greyed Appoint must not open the picker")
     assert v._director_picker is None, (

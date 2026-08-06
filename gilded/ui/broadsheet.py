@@ -287,6 +287,7 @@ def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
     return result
 
 PAD = 16
+TOOLTIP_MAX_WIDTH = 300  # maximum tooltip panel content width
 
 TAB_BG = (54, 48, 42)
 TAB_ACTIVE = (206, 176, 108)
@@ -895,8 +896,14 @@ class BroadsheetView:
                 words = text.split()
                 lines = []
                 current_line = ""
-                max_w = 300
+                max_w = TOOLTIP_MAX_WIDTH
+                ellipsis = "..."
                 for word in words:
+                    # Truncate words wider than the cap so they don't overflow the panel
+                    if font.size(word)[0] > max_w:
+                        while font.size(word + ellipsis)[0] > max_w and len(word) > 1:
+                            word = word[:-1]
+                        word += ellipsis
                     test = (current_line + " " + word).strip()
                     if font.size(test)[0] <= max_w:
                         current_line = test
@@ -908,7 +915,8 @@ class BroadsheetView:
                     lines.append(current_line)
                 line_h = font.get_linesize()
                 pad = 4
-                panel_w = max_w + 2 * pad
+                content_w = max(font.size(line)[0] for line in lines) if lines else 0
+                panel_w = min(content_w + 2 * pad, max_w + 2 * pad)
                 panel_h = len(lines) * line_h + 2 * pad
                 x = self.hover_pos[0] + 12
                 y = self.hover_pos[1] + 12
@@ -1757,7 +1765,7 @@ class BroadsheetView:
         if edge is None:
             edge = BUTTON_EDGE
         btn_text = act.get("label", default_label)
-        text_color = FADED if reason else INK
+        text_color = FADED if reason else BUTTON_TEXT
         btn_surf = body.render(btn_text, True, text_color)
         btn_w = btn_surf.get_width() + 16
         btn_h = body.get_height() + 8
@@ -1931,10 +1939,8 @@ class BroadsheetView:
                 pool = director_candidates(self.game, self.house, eid)
                 reason = None
                 if not pool:
-                    reason = f"No one in the house pool is fit to direct {ent.name}."
-                fill = (50, 50, 70) if not reason else BUTTON_BG
-                edge = INK if not reason else BUTTON_EDGE
-                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Appoint Director for {ent.name}", reason, self._appoint_hits, fill, edge)
+                    reason = f"No one in your house is qualified to direct {ent.name}."
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Appoint Director for {ent.name}", reason, self._appoint_hits, BUTTON_BG, BUTTON_EDGE)
                 if y is None:
                     return
 
