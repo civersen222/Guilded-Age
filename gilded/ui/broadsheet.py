@@ -955,7 +955,7 @@ class BroadsheetView:
                 surface.fill(PAPER_BG, band)
                 surface.blit(tooltip_surf, rect.topleft)
                 self.tooltip_text = text
-                self.tooltip_rect = band
+                self.tooltip_rect = rect
 
     def _draw_tab_bar(self, surface) -> None:
         pygame.draw.rect(surface, TAB_BG, (0, 0, self._w, TAB_H))
