@@ -36,8 +36,7 @@ def test_share_picker_rows_do_not_overlap():
     surf = pygame.Surface((1280, 900))
 
     # Open the share picker for the first enterprise
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
+    assert g.enterprises, "no enterprises in this seed"
     eid = g.enterprises[0].eid
     v._share_picker = {"direction": "buy", "eid": eid}
 
@@ -88,16 +87,14 @@ def test_share_picker_sell_direction_rows_do_not_overlap():
     g, v = _enterprises_view(seed=42, turns=3)
     surf = pygame.Surface((1280, 900))
 
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
+    assert g.enterprises, "no enterprises in this seed"
     eid = g.enterprises[0].eid
     v._share_picker = {"direction": "sell", "eid": eid}
 
     v.draw(surf)
 
     picker_regions = [r for r in v.regions._regions if r.group == "picker"]
-    if len(picker_regions) < 2:
-        pytest.skip("not enough picker regions in sell mode")
+    assert len(picker_regions) >= 2, "not enough picker regions in sell mode"
 
     # D-1: every registered region must be reachable via regions.at()
     buried = []

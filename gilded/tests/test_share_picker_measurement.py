@@ -45,7 +45,7 @@ def _enterprises_view(seed=42, turns=3):
 
 
 def test_refused_sizes_are_drawn_disabled_not_omitted():
-    """Refused sizes must appear on screen as DISABLED regions — not omitted.
+    """Share picker draws DISABLED regions for sizes refused by the rules.
 
     Regression: if _draw_share_picker skips rungs where offerable is False,
     the refused sizes vanish entirely. The picker shows only affordable
@@ -55,16 +55,14 @@ def test_refused_sizes_are_drawn_disabled_not_omitted():
     where everything is affordable or everything is refused cannot discriminate."""
     g, v = _enterprises_view(seed=42, turns=3)
 
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
+    assert g.enterprises, "no enterprises in this seed"
 
     ent = None
     for e in g.enterprises:
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))
@@ -81,16 +79,17 @@ def test_refused_sizes_are_drawn_disabled_not_omitted():
         f"{len(disabled)} disabled across {len(picker_regions)} picker regions"
     )
 
-    # Count the pct values from DISABLED regions
-    disabled_pcts = set()
-    for r in disabled:
-        if r.hint:
-            disabled_pcts.add(r.hint)
-
-    assert len(disabled_pcts) >= 1, (
-        "DISABLED regions exist but have no hints — the refused sizes are "
-        "present but say nothing"
+    # There must also be some enabled regions (affordable sizes)
+    assert len(enabled) >= 1, (
+        f"no enabled regions — all sizes refused; found {len(disabled)} disabled, "
+        f"{len(enabled)} enabled"
     )
+
+    # Each DISABLED region should have a hint mentioning a pct
+    for r in disabled:
+        assert r.hint or r.reason, (
+            f"DISABLED region has no hint or reason — the refusal is silent"
+        )
 
 
 def test_refused_sizes_are_reachable_via_regionset_at():
@@ -102,16 +101,14 @@ def test_refused_sizes_are_reachable_via_regionset_at():
     it is unfindable."""
     g, v = _enterprises_view(seed=42, turns=3)
 
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
+    assert g.enterprises, "no enterprises in this seed"
 
     ent = None
     for e in g.enterprises:
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))
@@ -120,8 +117,7 @@ def test_refused_sizes_are_reachable_via_regionset_at():
     picker_regions = [r for r in v.regions._regions if r.group == "picker"]
     disabled = [r for r in picker_regions if r.state == RegionState.DISABLED]
 
-    if not disabled:
-        pytest.skip("no DISABLED regions to check reachability for")
+    assert disabled, "no DISABLED regions to check reachability for"
 
     # Each DISABLED region should be findable via regions.at() at its center
     found_disabled = 0
@@ -157,16 +153,14 @@ def test_refused_size_reason_names_the_constraint():
     holding limit or the buyer's affordability."""
     g, v = _enterprises_view(seed=42, turns=3)
 
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
+    assert g.enterprises, "no enterprises in this seed"
 
     ent = None
     for e in g.enterprises:
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))
@@ -175,8 +169,7 @@ def test_refused_size_reason_names_the_constraint():
     picker_regions = [r for r in v.regions._regions if r.group == "picker"]
     disabled = [r for r in picker_regions if r.state == RegionState.DISABLED]
 
-    if not disabled:
-        pytest.skip("no DISABLED regions to check reasons for")
+    assert disabled, "no DISABLED regions to check reasons for"
 
     for r in disabled:
         reason = r.reason or ""
@@ -214,16 +207,14 @@ def test_refused_size_hint_carries_explanation():
     The hint should mirror the reason."""
     g, v = _enterprises_view(seed=42, turns=3)
 
-    if not g.enterprises:
-        pytest.skip("no enterprises in this seed")
+    assert g.enterprises, "no enterprises in this seed"
 
     ent = None
     for e in g.enterprises:
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))
@@ -232,8 +223,7 @@ def test_refused_size_hint_carries_explanation():
     picker_regions = [r for r in v.regions._regions if r.group == "picker"]
     disabled = [r for r in picker_regions if r.state == RegionState.DISABLED]
 
-    if not disabled:
-        pytest.skip("no DISABLED regions to check hints for")
+    assert disabled, "no DISABLED regions to check hints for"
 
     found_hint = False
     for r in disabled:
@@ -266,8 +256,7 @@ def test_share_picker_back_button_has_close_action():
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))
@@ -299,8 +288,7 @@ def test_share_picker_back_button_reachable_via_at():
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))
@@ -309,8 +297,7 @@ def test_share_picker_back_button_reachable_via_at():
     # Find the back button hit rect
     back_hits = [h for h in v._share_picker_hits
                  if "close_share_picker" in h[1]]
-    if not back_hits:
-        pytest.skip("no back button found")
+    assert back_hits, "no back button found"
 
     back_rect, back_action = back_hits[0]
     cx, cy = back_rect.center
@@ -337,8 +324,7 @@ def test_share_picker_size_buttons_carry_action():
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))
@@ -363,8 +349,7 @@ def test_share_picker_draws_counterparty_labels():
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))
@@ -392,8 +377,7 @@ def test_share_picker_both_directions_render():
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     for direction in ("buy", "sell"):
         v._share_picker = {"direction": direction, "eid": ent.eid}
@@ -419,8 +403,7 @@ def test_share_picker_size_buttons_are_regions():
         if e.eid:
             ent = e
             break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    assert ent is not None, "no enterprises with eid"
 
     v._share_picker = {"direction": "buy", "eid": ent.eid}
     surf = pygame.Surface((800, 600))

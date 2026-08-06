@@ -177,6 +177,7 @@ def test_revolution_explanation_names_low_legitimacy():
 
 def test_revolution_explanation_names_striking_province():
     """When a province is striking at peak militancy, explanation names it."""
+    from gilded.society.labor import Movement
     game = GildedGame(seed=42)
     house_name = list(game.houses)[0]
     game.brewing_turns[house_name] = 1
@@ -184,9 +185,9 @@ def test_revolution_explanation_names_striking_province():
     provs = game.provinces_of(house_name)
     # Make the first province striking at peak militancy
     target = provs[0]
-    mv = getattr(target, "movement", None)
-    if mv is None:
-        pytest.skip("No movement on province")
+    # Movement is only created by tick_movement; attach one manually for the test
+    mv = Movement(target.pid)
+    target.movement = mv
     mv.state = "striking"
     mv.militancy = 70.0  # above REVOLUTION_MILITANCY_PEAK
     # Ensure other provinces are not striking
