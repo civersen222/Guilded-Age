@@ -4309,6 +4309,6 @@ def test_every_control_on_every_tab_explains_itself():
                 f"expected the INK fill {INK}")
             checked += 1
     assert checked == 149, (
-        f"expected to point at 145 controls across the ten tabs, pointed at "
+        f"expected to point at 149 controls across the ten tabs, pointed at "
         f"{checked}. The census moved; EXPECTED_REGIONS should have caught "
         f"this first.")
