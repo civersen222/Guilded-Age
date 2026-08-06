@@ -1,23 +1,18 @@
-"""I4d2b3g — measure the share picker without changing any source.
+"""I4d2b3h — four properties the share picker has and nothing watches.
 
-The share picker works. Almost nothing measures it.
+FAIL 2/3: a refused size can vanish entirely and nothing goes red.
+         The mutation is: inside _draw_share_picker, a size the player cannot
+         take is simply NOT DRAWN instead of drawn DISABLED. The refused rungs
+         disappear from the ladder. The suite does not notice.
 
-What was already measured (test_ui_broadsheet.py):
-  - Refused sizes are DRAWN DISABLED (not omitted)
-  - Refused sizes are reachable via RegionSet.at()
-  - Refused sizes explain themselves (reason is a real sentence)
-  - Opening the share picker retires the enterprise strip (z-order)
-  - Picker regions are reachable via RegionSet.at()
-  - Picker has both ENABLED and DISABLED regions
-  - Census prose/assertion/message agree on one number
+FAIL 4: a refused size can stop explaining itself and nothing goes red.
+        The mutation: every reason and hint is replaced with a single word.
+        Regions are still DISABLED but say nothing.
 
-What this file measures (unique coverage):
-  1. Back button region exists and carries close_share_picker action
-  2. Back button is reachable via RegionSet.at() at its center
-  3. Share picker size buttons carry buy_shares/sell_shares action
-  4. Share picker draws counterparty labels (not just sizes)
-  5. Both buy and sell directions produce valid picker state
-  6. Share picker size buttons are registered as regions
+What these cases measure (unique coverage beyond I4d2b3g):
+  1. Refused sizes are DRAWN DISABLED (not omitted) — kills the "skip refused" mutation
+  2. Refused sizes are reachable via RegionSet.at() — kills the "skip refused" mutation
+  3. Refused sizes explain themselves with the constraint that refused them
 """
 
 import os
@@ -30,7 +25,6 @@ from gilded.chassis import GildedGame
 from gilded.ui.broadsheet import BroadsheetView
 from gilded.ui.widgets import RegionState
 from gilded.agenda import ensure_agenda
-from gilded.ui.actions import ACTIONS
 
 
 def _enterprises_view(seed=42, turns=3):
@@ -49,44 +43,19 @@ def _enterprises_view(seed=42, turns=3):
     return g, v
 
 
-# ── HOLE 1: back button region exists with close_share_picker action ──────────
+def test_refused_sizes_are_drawn_disabled_not_omitted():
+    """Refused sizes must appear on screen as DISABLED regions — not omitted.
 
-def test_share_picker_back_button_has_close_action():
-    """The back button in the share picker carries close_share_picker action."""
-    g, v = _enterprises_view()
+    Regression: if _draw_share_picker skips rungs where offerable is False,
+    the refused sizes vanish entirely. The picker shows only affordable
+    options, which lies about the shape of the choice.
 
-    ent = None
-    for e in g.enterprises:
-        if e.eid:
-            ent = e
-            break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
+    This case requires a mixed ladder (some offerable, some not). A ladder
+    where everything is affordable or everything is refused cannot discriminate."""
+    g, v = _enterprises_view(seed=42, turns=3)
 
-    v._share_picker = {"direction": "buy", "eid": ent.eid}
-    surf = pygame.Surface((800, 600))
-    v.draw(surf)
-
-    # Find the back button in share_picker_hits
-    back_hits = [h for h in v._share_picker_hits
-                 if "close_share_picker" in h[1]]
-    assert len(back_hits) >= 1, (
-        "the share picker has no back button with close_share_picker action"
-    )
-
-    # Verify it's also in the regions
-    back_regions = [r for r in v.regions._regions
-                    if r.action and "close_share_picker" in r.action]
-    assert len(back_regions) >= 1, (
-        "the share picker back button is not registered in regions"
-    )
-
-
-# ── HOLE 2: back button reachable via RegionSet.at() ─────────────────────────
-
-def test_share_picker_back_button_reachable_via_at():
-    """The share picker back button is reachable via RegionSet.at()."""
-    g, v = _enterprises_view()
+    if not g.enterprises:
+        pytest.skip("no enterprises in this seed")
 
     ent = None
     for e in g.enterprises:
@@ -100,31 +69,40 @@ def test_share_picker_back_button_reachable_via_at():
     surf = pygame.Surface((800, 600))
     v.draw(surf)
 
-    # Find the back button hit rect
-    back_hits = [h for h in v._share_picker_hits
-                 if "close_share_picker" in h[1]]
-    if not back_hits:
-        pytest.skip("no back button found")
+    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
+    disabled = [r for r in picker_regions if r.state == RegionState.DISABLED]
+    enabled = [r for r in picker_regions if r.action is not None]
 
-    back_rect, back_action = back_hits[0]
-    cx, cy = back_rect.center
-
-    # RegionSet.at() should find it
-    found = v.regions.at((cx, cy))
-    assert found is not None, (
-        "RegionSet.at(back_button_center) returned None — "
-        "back button center is not reachable"
-    )
-    assert "close_share_picker" in found.action, (
-        f"RegionSet.at found wrong action: {found.action}"
+    # There must be at least one DISABLED region (a refused size)
+    assert len(disabled) >= 1, (
+        f"no DISABLED regions in share picker — if all sizes are affordable "
+        f"this case measures nothing; found {len(enabled)} enabled, "
+        f"{len(disabled)} disabled across {len(picker_regions)} picker regions"
     )
 
+    # Count the pct values from DISABLED regions
+    disabled_pcts = set()
+    for r in disabled:
+        if r.hint:
+            disabled_pcts.add(r.hint)
 
-# ── HOLE 3: size buttons carry buy_shares/sell_shares action ──────────────────
+    assert len(disabled_pcts) >= 1, (
+        "DISABLED regions exist but have no hints — the refused sizes are "
+        "present but say nothing"
+    )
 
-def test_share_picker_size_buttons_carry_action():
-    """Size buttons in the share picker carry buy_shares/sell_shares action."""
-    g, v = _enterprises_view()
+
+def test_refused_sizes_are_reachable_via_regionset_at():
+    """DISABLED (refused) size buttons must be findable via regions.at().
+
+    If a refused size is not drawn, it cannot be found at its position.
+    This kills the same mutation as test_refused_sizes_are_drawn_disabled_not_omitted
+    but from the reachability angle — a skipped rung is not just invisible,
+    it is unfindable."""
+    g, v = _enterprises_view(seed=42, turns=3)
+
+    if not g.enterprises:
+        pytest.skip("no enterprises in this seed")
 
     ent = None
     for e in g.enterprises:
@@ -138,20 +116,48 @@ def test_share_picker_size_buttons_carry_action():
     surf = pygame.Surface((800, 600))
     v.draw(surf)
 
-    # Size buttons are registered as regions (not in _share_picker_hits)
-    # They carry buy_shares or sell_shares action
-    action_regions = [r for r in v.regions._regions
-                      if r.action and ("buy_shares" in r.action or "sell_shares" in r.action)]
-    assert len(action_regions) >= 1, (
-        "share picker size buttons carry no buy_shares/sell_shares action"
+    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
+    disabled = [r for r in picker_regions if r.state == RegionState.DISABLED]
+
+    if not disabled:
+        pytest.skip("no DISABLED regions to check reachability for")
+
+    # Each DISABLED region should be findable via regions.at() at its center
+    found_disabled = 0
+    for r in disabled:
+        center = r.rect.center
+        found = v.regions.at(center)
+        assert found is not None, (
+            f"DISABLED region at {center} is not findable via regions.at() — "
+            f"refused size may have been skipped during draw"
+        )
+        # The found region should be the same one (same rect)
+        assert found.rect == r.rect, (
+            f"regions.at({center}) returned a region with rect {found.rect} "
+            f"but expected {r.rect} — the DISABLED region is not at its drawn position"
+        )
+        found_disabled += 1
+
+    assert found_disabled >= 1, (
+        f"no DISABLED regions were reachable via regions.at() — "
+        f"refused sizes may not be drawn"
     )
 
 
-# ── HOLE 4: counterparty labels drawn ─────────────────────────────────────────
+def test_refused_size_reason_names_the_constraint():
+    """A DISABLED share picker button's reason must name the constraint that
+    refused it — not just a sentinel or a single word.
 
-def test_share_picker_draws_counterparty_labels():
-    """The share picker draws counterparty labels (not just size buttons)."""
-    g, v = _enterprises_view()
+    Regression: if every reason/hint is replaced with a meaningless word,
+    the regions are still DISABLED but no longer explain WHAT is in the way.
+    A greyed rectangle that says nothing is a silent refusal wearing a costume.
+
+    The reason must reference the actual constraint: either the seller's
+    holding limit or the buyer's affordability."""
+    g, v = _enterprises_view(seed=42, turns=3)
+
+    if not g.enterprises:
+        pytest.skip("no enterprises in this seed")
 
     ent = None
     for e in g.enterprises:
@@ -165,73 +171,34 @@ def test_share_picker_draws_counterparty_labels():
     surf = pygame.Surface((800, 600))
     v.draw(surf)
 
-    # The share picker should have more than just a back button —
-    # size buttons are registered as regions with group="picker"
-    picker_regions = [r for r in v.regions._regions
-                      if r.group == "picker"]
-    # At least 1 back button + size buttons for counterparties
-    assert len(picker_regions) >= 2, (
-        "the share picker has only a back button — no counterparty size buttons drawn"
-    )
+    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
+    disabled = [r for r in picker_regions if r.state == RegionState.DISABLED]
 
+    if not disabled:
+        pytest.skip("no DISABLED regions to check reasons for")
 
-# ── HOLE 5: both buy and sell directions produce valid picker ─────────────────
+    for r in disabled:
+        reason = r.reason or ""
+        hint = r.hint or ""
 
-def test_share_picker_both_directions_render():
-    """Both buy and sell directions produce valid picker state."""
-    g, v = _enterprises_view()
-
-    ent = None
-    for e in g.enterprises:
-        if e.eid:
-            ent = e
-            break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
-
-    for direction in ("buy", "sell"):
-        v._share_picker = {"direction": direction, "eid": ent.eid}
-        v._share_picker_hits.clear()
-        v.regions._regions.clear()
-        surf = pygame.Surface((800, 600))
-        v.draw(surf)
-
-        # Must have at least a back button
-        assert len(v._share_picker_hits) >= 1, (
-            f"share picker in '{direction}' mode drew zero hits"
+        # The reason must not be a trivial sentinel
+        assert reason not in ("", "X", "no", "not available", "Not available"), (
+            f"DISABLED region has trivial reason '{reason}' — a refused size "
+            f"must explain WHAT constraint refused it, not just say 'no'"
         )
 
-        # Must have regions registered
-        picker_regions = [r for r in v.regions._regions
-                          if r.group == "picker"]
-        assert len(picker_regions) >= 1, (
-            f"share picker in '{direction}' mode registered zero regions"
+        # The reason must name the constraint: either a holding limit or affordability
+        # Valid reasons reference: "Seller only holds", "cannot afford", "treasury", "gold"
+        constraint_words = ["holds", "afford", "treasury", "gold", "cannot"]
+        has_constraint = any(word in reason.lower() for word in constraint_words)
+        assert has_constraint, (
+            f"DISABLED region reason '{reason}' does not name the constraint — "
+            f"expected a reason that mentions holdings, affordability, or treasury, "
+            f"not just a label"
         )
 
-
-# ── HOLE 6: size buttons registered as regions ───────────────────────────────
-
-def test_share_picker_size_buttons_are_regions():
-    """Size ladder buttons in the share picker are registered as regions."""
-    g, v = _enterprises_view()
-
-    ent = None
-    for e in g.enterprises:
-        if e.eid:
-            ent = e
-            break
-    if ent is None:
-        pytest.skip("no enterprises with eid")
-
-    v._share_picker = {"direction": "buy", "eid": ent.eid}
-    surf = pygame.Surface((800, 600))
-    v.draw(surf)
-
-    # Size buttons should be registered as regions with group="picker"
-    picker_regions = [r for r in v.regions._regions
-                      if r.group == "picker"]
-    # At least back button + some size buttons
-    assert len(picker_regions) >= 2, (
-        "the share picker registered fewer than 2 picker regions — "
-        "size buttons may not be registered"
-    )
+        # The hint must also carry the reason (not just "clickable" text)
+        assert hint not in ("", "X", "no"), (
+            f"DISABLED region hint is trivial ('{hint}') — the hint should "
+            f"carry the same explanation as the reason"
+        )

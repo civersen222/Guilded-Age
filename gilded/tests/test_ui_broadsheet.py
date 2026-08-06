@@ -4270,7 +4270,7 @@ def test_the_tooltip_follows_a_tab_switch():
 
 
 def test_every_control_on_every_tab_explains_itself():
-    """143 controls, ten tabs, and each one says something when pointed at,
+    """149 controls, ten tabs, and each one says something when pointed at,
     inside a panel that is on the screen and has actually been painted.
 
     The pixel check is what stops a tooltip that is computed and never
