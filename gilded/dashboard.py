@@ -91,8 +91,7 @@ def _revolution_explanation(brewing_turns: int, legitimacy: float, provinces) ->
         parts.append(f"mandate collapsed (legitimacy {legitimacy:.0f})")
     for p in provinces:
         mv = getattr(p, "movement", None)
-        if (mv is not None and mv.state == "striking"
-                and mv.militancy >= REVOLUTION_MILITANCY_PEAK):
+        if mv is not None and mv.state == "striking":
             parts.append(f"{p.name} striking")
     return "; ".join(parts) if parts else ""
 
