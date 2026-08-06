@@ -27,7 +27,7 @@ def _offered_keys(view):
     keys = set()
     for offer in view.enterprise_actions():
         for k in offer.get("action", {}):
-            if k != "char_id":
+            if k not in ("char_id", "eid"):
                 keys.add(k)
     return keys
 
@@ -205,7 +205,7 @@ def _enterprise_drawn_verbs(view):
         payload = r.action
         if isinstance(payload, dict):
             for k in payload.get("action", payload):
-                if k != "char_id":
+                if k not in ("char_id", "eid"):
                     drawn.add(k)
     return drawn
 
