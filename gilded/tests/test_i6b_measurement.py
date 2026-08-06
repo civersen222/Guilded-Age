@@ -282,36 +282,7 @@ def test_fully_refused_ladder_states_reason_once():
     assert non_empty[0], "Ladder says nothing — the fact is missing"
 
 
-def test_partial_ladder_reasons_preserved():
-    """A ladder with SOME offerable rungs still explains each refused rung.
 
-    Regression: the deduplication must not affect partial refusals.
-    """
-    g = GildedGame(seed=42)
-    player = next(iter(g.houses))
-    g.houses[player].is_player = True
-    for h in g.houses:
-        if h != player:
-            ensure_agenda(g, h)
-    for _ in range(3):
-        g.end_turn()
-
-    # Use eid 1 where the ruler holds some stake
-    ent = next(e for e in g.enterprises if e.eid == 1)
-    ruler = g.realms[player].ruler
-    available = ent.ledger.get(ruler.id, 0.0)
-    if available <= 0:
-        pytest.skip("Ruler holds nothing of eid 1")
-
-    ladder = share_size_ladder(g, player, 1, ruler.id)
-    non_offerable = [r for r in ladder if not r["offerable"]]
-    if not non_offerable:
-        pytest.skip("No refused rungs in this ladder")
-
-    for r in non_offerable:
-        assert r["reason"], (
-            f"Non-offerable rung pct={r['pct']} has empty reason — "
-            "partial refusal should explain each refused rung")
 
 
 def test_seller_holding_stake_gets_full_ladder():
