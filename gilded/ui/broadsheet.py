@@ -932,11 +932,9 @@ class BroadsheetView:
                 if y < 0:
                     y = 4
                 rect = pygame.Rect(x, y, panel_w, panel_h)
-                # Fill a margin around the tooltip to cover any content underneath
-                margin = pygame.Rect(x - 5, y - 5, panel_w + 10, panel_h + 10)
-                margin.clamp_ip(surface.get_rect())
-                surface.fill(PAPER_BG, margin)
-                # Draw tooltip panel filled with INK
+                # Clamp drawing to tooltip rect so no pixel outside is changed
+                old_clip = surface.get_clip()
+                surface.set_clip(rect)
                 surface.fill(INK, rect)
                 pygame.draw.rect(surface, CARD_EDGE, rect, 1)
                 cy = rect.top + pad
@@ -944,6 +942,18 @@ class BroadsheetView:
                     surf_t = font.render(line, True, PAPER_BG)
                     surface.blit(surf_t, (rect.left + pad, cy))
                     cy += line_h
+                surface.set_clip(old_clip)
+                # Save tooltip pixels, then fill the 5px band with PAPER_BG
+                # so pre-existing page content doesn't bleed into the band.
+                tooltip_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+                tooltip_surf.blit(surface, (0, 0), rect)
+                band = pygame.Rect(
+                    max(0, rect.left - 5), max(0, rect.top - 5),
+                    min(surface.get_width(), rect.right + 5) - max(0, rect.left - 5),
+                    min(surface.get_height(), rect.bottom + 5) - max(0, rect.top - 5),
+                )
+                surface.fill(PAPER_BG, band)
+                surface.blit(tooltip_surf, rect.topleft)
                 self.tooltip_text = text
                 self.tooltip_rect = rect
 
@@ -2113,9 +2123,53 @@ class BroadsheetView:
             counterparties = sell_share_counterparties(self.game, self.house, eid)
 
         if not counterparties:
-            no_text = body.render("No valid counterparties.", True, INK)
-            surface.blit(no_text, (PAD, y))
+            no_cp_surf = body.render("No counterparties available.", True, INK)
+            surface.blit(no_cp_surf, (PAD, y))
             return
+
+        # Collect all ladder data per counterparty to check for uniform refusal
+        ladder_data = []
+        for cp in counterparties:
+            cid = cp["id"]
+            if direction == "buy":
+                ladder = share_size_ladder(self.game, self.house, eid, cid)
+            else:
+                ladder = share_size_ladder(self.game, self.house, eid, self.game.realms[self.house].ruler.id, cid)
+            ladder_data.append((cp, ladder))
+
+        # Check if ALL rungs across ALL counterparties are refused for the SAME reason
+        all_rungs = []
+        all_reasons = set()
+        for cp, ladder in ladder_data:
+            for rung in ladder:
+                all_rungs.append(rung)
+                if not rung.get("offerable", True):
+                    reason = rung.get("reason", "")
+                    if reason:
+                        all_reasons.add(reason)
+
+        all_refused = all(not rung.get("offerable", True) for rung in all_rungs)
+        same_reason = len(all_reasons) == 1
+        refusal_msg = all_reasons.pop() if same_reason and all_refused else None
+
+        if all_refused and same_reason:
+            # Draw single refusal region — one line, not one per counterparty
+            sub_surf = body.render(refusal_msg, True, (160, 160, 140))
+            txt_w = max(sub_surf.get_width() + 16, content.right - PAD * 2)
+            txt_h = body.get_height() + 8
+            txt_rect = pygame.Rect(PAD, y, txt_w, txt_h)
+            pygame.draw.rect(surface, (60, 60, 50), txt_rect)
+            pygame.draw.rect(surface, (100, 80, 60), txt_rect, 1)
+            disabled_surf = body.render(refusal_msg, True, (140, 120, 100))
+            surface.blit(disabled_surf, (PAD + 8, y + 4))
+            self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=refusal_msg, hint=refusal_msg, group="picker"))
+            return
+
+        # Draw per-counterparty picker (normal case — at least some rungs are offerable)
+        house_name = self.house
+        sub = body.render(f"Choose a counterparty:", True, (160, 160, 140))
+        surface.blit(sub, (PAD, y))
+        y += body.get_height() + 4
 
         treasury = self.game.houses[self.house].treasury
         shown = len(counterparties)
@@ -2123,7 +2177,7 @@ class BroadsheetView:
         surface.blit(sub, (PAD, y))
         y += body.get_height() + 4
 
-        for cp in counterparties:
+        for cp, ladder in ladder_data:
             if y > content.bottom - 80:
                 break
             cid = cp["id"]
@@ -2149,11 +2203,6 @@ class BroadsheetView:
             # Per-rung affordability (from share_size_ladder) replaces the
             # per-counterparty treasury check — a rung that is affordable must
             # show even if the full stake is not.
-            if direction == "buy":
-                ladder = share_size_ladder(self.game, self.house, eid, cid)
-            else:
-                ladder = share_size_ladder(self.game, self.house, eid, self.game.realms[self.house].ruler.id, cid)
-
             lx = PAD + 12
             rung_base_y = y + txt_h + 2
             rung_y = rung_base_y
