@@ -2134,13 +2134,14 @@ class BroadsheetView:
                     ladder = share_size_ladder(self.game, self.house, eid, self.game.realms[self.house].ruler.id, cid)
 
                 lx = PAD + 12
+                rung_y = y + txt_h + 2
                 for rung in ladder:
                     pct = rung["pct"]
                     btn_label = f"{pct:g}%"
                     btn_surf = body.render(btn_label, True, INK)
                     btn_w = btn_surf.get_width() + 10
                     btn_h = body.get_height() + 4
-                    btn_rect = pygame.Rect(lx, y + txt_h + 2, btn_w, btn_h)
+                    btn_rect = pygame.Rect(lx, rung_y, btn_w, btn_h)
 
                     if rung.get("offerable", True):
                         pygame.draw.rect(surface, (50, 50, 35), btn_rect)
@@ -2159,6 +2160,9 @@ class BroadsheetView:
                         self.regions.add(Region(rect=btn_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
 
                     lx += btn_w + 4
+                # Advance y below the ladder buttons
+                btn_h = body.get_height() + 4
+                y = rung_y + btn_h + 6
 
             else:
                 pygame.draw.rect(surface, (60, 60, 50), txt_rect)
@@ -2167,6 +2171,7 @@ class BroadsheetView:
                 surface.blit(disabled_surf, (PAD + 8, y + 4))
                 reason = f"Cannot afford this trade (treasury {treasury:.0f})"
                 self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
+            y += txt_h + 12
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
