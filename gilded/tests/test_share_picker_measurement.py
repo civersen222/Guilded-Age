@@ -1,11 +1,12 @@
 """I4d2b3g — measure the share picker without changing any source.
 
-Five holes measured:
+Six holes measured:
   1. Refused sizes are DRAWN DISABLED (not omitted).
   2. Each refusal EXPLAINS ITSELF (reason is a real sentence).
   3. Opening the SHARE picker retires the enterprise strip (z-order).
-  4. Census prose, assertion, and message agree on one number.
-  5. All four properties above have dedicated cases.
+  4. Picker regions are reachable via RegionSet.at().
+  5. Picker has both ENABLED and DISABLED regions.
+  6. Census prose, assertion, and message agree on one number.
 """
 
 import os
@@ -195,4 +196,72 @@ def test_opening_the_share_picker_retires_the_enterprise_strip():
     )
     assert [r for r in v.regions._regions if r.group == "picker"], (
         "the picker drew no regions of its own"
+    )
+
+
+# ── HOLE 4: picker regions are reachable via regionset_at ────────────────────
+
+
+def test_share_picker_regions_are_reachable_via_regionset_at():
+    """Every picker region must be hittable through RegionSet.at().
+
+    A region registered in the list but not reachable via .at() is invisible
+    to the mouse — the picker would appear drawn but unclickable."""
+    g, v = _enterprises_view(seed=42, turns=3)
+    surf = pygame.Surface((1280, 900))
+
+    if not g.enterprises:
+        pytest.skip("no enterprises in this seed")
+    eid = g.enterprises[0].eid
+
+    action = {"buy_shares": eid}
+    ACTIONS["buy_shares"].dispatch(g, next(iter(g.houses)), v, action)
+    v.draw(surf)
+
+    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
+    assert len(picker_regions) >= 1, "premise: picker must draw at least one region"
+
+    # Each picker region's center must resolve back to itself via RegionSet.at
+    unreachable = []
+    for r in picker_regions:
+        center = r.rect.center
+        found = v.regions.at(center)
+        if found is not r:
+            unreachable.append(r)
+
+    assert unreachable == [], (
+        f"{len(unreachable)} picker region(s) are unreachable via RegionSet.at() — "
+        "the picker would be drawn but unclickable"
+    )
+
+
+# ── HOLE 5: picker has both enabled and disabled regions ─────────────────────
+
+
+def test_share_picker_has_both_enabled_and_disabled_regions():
+    """The picker must contain at least one ENABLED and one DISABLED region.
+
+    If all regions are enabled, the picker is not refusing anything — it
+    could be a different UI entirely. If all are disabled, nothing is
+    selectable. A correct share picker has both."""
+    g, v = _enterprises_view(seed=42, turns=3)
+    surf = pygame.Surface((1280, 900))
+
+    if not g.enterprises:
+        pytest.skip("no enterprises in this seed")
+    eid = g.enterprises[0].eid
+
+    action = {"buy_shares": eid}
+    ACTIONS["buy_shares"].dispatch(g, next(iter(g.houses)), v, action)
+    v.draw(surf)
+
+    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
+    enabled = [r for r in picker_regions if r.state is RegionState.ENABLED]
+    disabled = [r for r in picker_regions if r.state is RegionState.DISABLED]
+
+    assert len(enabled) >= 1, (
+        "the share picker drew zero ENABLED regions — nothing is selectable"
+    )
+    assert len(disabled) >= 1, (
+        "the share picker drew zero DISABLED regions — it is not refusing anything"
     )
