@@ -13,6 +13,7 @@ What these cases measure (unique coverage beyond I4d2b3g):
   1. Refused sizes are DRAWN DISABLED (not omitted) — kills the "skip refused" mutation
   2. Refused sizes are reachable via RegionSet.at() — kills the "skip refused" mutation
   3. Refused sizes explain themselves with the constraint that refused them
+  4. Refused sizes carry a non-trivial hint (not just "clickable" text)
 """
 
 import os
@@ -202,3 +203,53 @@ def test_refused_size_reason_names_the_constraint():
             f"DISABLED region hint is trivial ('{hint}') — the hint should "
             f"carry the same explanation as the reason"
         )
+
+
+def test_refused_size_hint_carries_explanation():
+    """A DISABLED share picker button's hint must carry the explanation
+    of why it's refused — not just a trivial sentinel like 'clickable'.
+
+    Regression: if every hint is replaced with a single word, the button
+    is still greyed but no longer tells the player WHAT to do about it.
+    The hint should mirror the reason."""
+    g, v = _enterprises_view(seed=42, turns=3)
+
+    if not g.enterprises:
+        pytest.skip("no enterprises in this seed")
+
+    ent = None
+    for e in g.enterprises:
+        if e.eid:
+            ent = e
+            break
+    if ent is None:
+        pytest.skip("no enterprises with eid")
+
+    v._share_picker = {"direction": "buy", "eid": ent.eid}
+    surf = pygame.Surface((800, 600))
+    v.draw(surf)
+
+    picker_regions = [r for r in v.regions._regions if r.group == "picker"]
+    disabled = [r for r in picker_regions if r.state == RegionState.DISABLED]
+
+    if not disabled:
+        pytest.skip("no DISABLED regions to check hints for")
+
+    found_hint = False
+    for r in disabled:
+        hint = r.hint or ""
+
+        # The hint must not be a trivial sentinel
+        assert hint not in ("", "X", "no", "clickable"), (
+            f"DISABLED region hint is trivial ('{hint}') — "
+            f"the hint should explain the refusal, not just be a label"
+        )
+
+        # The hint should reference the constraint (holding limit or affordability)
+        assert any(kw in hint.lower() for kw in ("hold", "afford", "treasury", "share")), (
+            f"DISABLED region hint '{hint}' does not name the constraint — "
+            f"expected a hint that mentions holdings, affordability, or treasury"
+        )
+        found_hint = True
+
+    assert found_hint, "no DISABLED regions had hints to check"
