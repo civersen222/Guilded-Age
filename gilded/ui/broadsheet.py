@@ -943,17 +943,6 @@ class BroadsheetView:
                     surface.blit(surf_t, (rect.left + pad, cy))
                     cy += line_h
                 surface.set_clip(old_clip)
-                # Save tooltip pixels, fill 5px band with PAPER_BG so pre-existing
-                # page content doesn't bleed into the tooltip border, then restore.
-                tooltip_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
-                tooltip_surf.blit(surface, (0, 0), rect)
-                band = pygame.Rect(
-                    max(0, rect.left - 5), max(0, rect.top - 5),
-                    min(surface.get_width(), rect.right + 5) - max(0, rect.left - 5),
-                    min(surface.get_height(), rect.bottom + 5) - max(0, rect.top - 5),
-                )
-                surface.fill(PAPER_BG, band)
-                surface.blit(tooltip_surf, rect.topleft)
                 self.tooltip_text = text
                 self.tooltip_rect = rect
 
