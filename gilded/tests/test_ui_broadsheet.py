@@ -3927,7 +3927,7 @@ def test_enterprises_picker_open_census():
     v.handle_click(appoint.rect.center)
     v.draw(pygame.Surface((1280, 900)))
     assert len(v.regions) == 21, (
-        f"picker-open census moved: {len(v.regions)} regions, expected 22")
+        f"picker-open census moved: {len(v.regions)} regions, expected 21")
 
 
 # ── I3d — a refused control is visible and says why ──────────────────────
