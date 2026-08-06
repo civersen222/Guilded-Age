@@ -49,6 +49,20 @@ def test_share_picker_rows_do_not_overlap():
         "need at least 2 picker regions to check for overlap"
     )
 
+    # D-1: For every Region the picker registers, asking the RegionSet what
+    # lies at that Region's own centre returns that same Region — not a
+    # different one drawn later. Registration is not reachability.
+    buried = []
+    for r in picker_regions:
+        hit = v.regions.at(r.rect.center)
+        if hit is not r:
+            buried.append((r, hit))
+    assert not buried, (
+        f"{len(buried)} picker regions buried by later-drawn regions: "
+        + "; ".join(f"{r.hint} at {r.rect.center} -> {hit.hint if hit else 'None'}"
+                     for r, hit in buried)
+    )
+
     # Extract unique y coordinates — each row gets its own y
     unique_ys = set(r.rect.y for r in picker_regions)
     assert len(unique_ys) >= 3, (
@@ -84,6 +98,18 @@ def test_share_picker_sell_direction_rows_do_not_overlap():
     picker_regions = [r for r in v.regions._regions if r.group == "picker"]
     if len(picker_regions) < 2:
         pytest.skip("not enough picker regions in sell mode")
+
+    # D-1: every registered region must be reachable via regions.at()
+    buried = []
+    for r in picker_regions:
+        hit = v.regions.at(r.rect.center)
+        if hit is not r:
+            buried.append((r, hit))
+    assert not buried, (
+        f"{len(buried)} sell-mode picker regions buried: "
+        + "; ".join(f"{r.hint} -> {hit.hint if hit else 'None'}"
+                     for r, hit in buried)
+    )
 
     ys = [r.rect.y for r in picker_regions]
     unique_ys = set(ys)
