@@ -348,7 +348,7 @@ class GildedGame:
             happiness = int(50.0 - unrest)
             self.legitimacy[h] = tick_legitimacy(
                 self.legitimacy[h], happiness, self.tide,
-                self.tide.consume_fresh(h))
+                self.tide.consume_fresh(h)).value
 
         # 8. revolution checks and pending successions
         for h in sorted(self.houses):

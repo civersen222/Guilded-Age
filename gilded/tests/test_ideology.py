@@ -7,6 +7,7 @@ from gilded.houses import assign_houses
 from gilded.society.ideology import (
     COLLECTIVE_ID,
     IdeologicalTide,
+    LEGITIMACY_MAX,
     LEGITIMACY_START,
     REVOLUTION_OWNER,
     TRANSFORM_LEGITIMACY,
@@ -47,15 +48,69 @@ def test_atrocities_feed_tide_and_stain_house():
 
 def test_legitimacy_recovers_and_drains():
     up = tick_legitimacy(50.0, 20)
-    assert up > 50.0
+    assert up.value > 50.0
     down = tick_legitimacy(50.0, -30)
-    assert down < 50.0
+    assert down.value < 50.0
     tide = IdeologicalTide()
     tide.level = 100.0
     drained = tick_legitimacy(50.0, 0, tide, fresh_atrocities=2.0)
-    assert drained < 50.0
-    assert tick_legitimacy(0.0, -100) == 0.0
-    assert tick_legitimacy(100.0, 20) == 100.0
+    assert drained.value < 50.0
+    assert tick_legitimacy(0.0, -100).value == 0.0
+    assert tick_legitimacy(100.0, 20).value == 100.0
+
+
+def test_tick_legitimacy_attributed_contented():
+    """Unclamped, contented: all three causes live, distinguishable magnitudes."""
+    tide = IdeologicalTide()
+    tide.level = 50.0
+    result = tick_legitimacy(50.0, 10, tide, fresh_atrocities=2.0)
+    # Value inside range — clamp should NOT have bitten
+    assert 0.0 < result.value < LEGITIMACY_MAX
+    causes = result.causes
+    labels = [c.label for c in causes]
+    assert "Contentment" in labels
+    assert "Atrocities" in labels
+    assert "Tide pressure" in labels
+    assert result.check()
+
+
+def test_tick_legitimacy_attributed_miserable():
+    """Unclamped, miserable: all three causes live, driving arm is Unhappiness."""
+    tide = IdeologicalTide()
+    tide.level = 30.0
+    result = tick_legitimacy(60.0, -15, tide, fresh_atrocities=1.0)
+    assert 0.0 < result.value < LEGITIMACY_MAX
+    labels = [c.label for c in result.causes]
+    assert "Unhappiness" in labels
+    assert "Atrocities" in labels
+    assert "Tide pressure" in labels
+    assert result.check()
+
+
+def test_tick_legitimacy_clamped_at_floor():
+    """Clamped fixture: house near floor taking heavy hit — clamp cause present."""
+    tide = IdeologicalTide()
+    tide.level = 100.0
+    result = tick_legitimacy(5.0, -30, tide, fresh_atrocities=3.0)
+    assert result.value == 0.0
+    labels = [c.label for c in result.causes]
+    assert "Floor/Ceiling" in labels
+    assert result.check()
+
+
+def test_tick_legitimacy_value_identity():
+    """Same inputs produce the same value to the bit — no formula change."""
+    tide = IdeologicalTide()
+    tide.level = 75.0
+    result = tick_legitimacy(42.0, 5, tide, fresh_atrocities=1.5)
+    # The value must equal what the old formula would produce
+    import math
+    expected = 42.0
+    expected += 0.4 + 0.6 * min(5, 20) / 20.0
+    expected -= 3.0 * 1.5
+    expected -= 0.35 * (75.0 / 100.0)
+    expected = max(0.0, min(100.0, expected))
+    assert math.isclose(result.value, expected, abs_tol=1e-9)
 
 
 def test_record_scandal():

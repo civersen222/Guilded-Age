@@ -93,19 +93,14 @@ def test_scoreboard_tide_phase_computed_from_level():
 
 
 def test_scoreboard_field_roster_complete():
-    """Scoreboard must have exactly these fields — adding a new one breaks the suite."""
-    actual_fields = {f.name for f in dataclasses.fields(Scoreboard)}
-    expected_fields = {
-        "year", "turn", "century_pct", "era_idx", "era_title", "next_era",
-        "axes", "legitimacy", "prestige", "treasury", "tide_level", "tide_phase",
-        "atrocities", "rival_name", "rival_axes", "rank", "unrest_avg",
+    roster = {
+        "year", "turn", "century_pct", "era_idx", "era_title",
+        "next_era", "axes", "legitimacy", "prestige", "treasury",
+        "tide_level", "tide_phase", "atrocities", "rival_name",
+        "rival_axes", "rank", "unrest_avg",
+        "brewing_turns",
     }
-    missing = expected_fields - actual_fields
-    extra = actual_fields - expected_fields
-    if missing:
-        assert False, f"Scoreboard missing fields: {missing}"
-    if extra:
-        assert False, f"Scoreboard has extra fields not in roster: {extra}"
+    assert set(Scoreboard.__dataclass_fields__) == roster
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

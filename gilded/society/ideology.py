@@ -11,6 +11,8 @@ enterprise lists instead of cities.
 
 from typing import List, Tuple
 
+from gilded.provenance import Cause, Attributed
+
 from gilded.society.labor import DIAL_DEFAULT
 
 TIDE_BASE_RISE = 0.25          # per turn: ~25 points over a 100-turn century
@@ -83,18 +85,32 @@ LEGITIMACY_VICTORY_FLOOR = 40.0   # no accumulation victory below this
 
 
 def tick_legitimacy(current: float, happiness: int, tide=None,
-                    fresh_atrocities: float = 0.0) -> float:
+                    fresh_atrocities: float = 0.0) -> Attributed:
     """One turn of a House's mandate: contentment slowly rebuilds it;
     misery, fresh atrocities and the rising tide all drain it."""
+    previous = current
+    causes: list[Cause] = []
     if happiness >= 0:
-        current += (LEGITIMACY_HAPPY_RECOVERY
-                    + LEGITIMACY_HAPPY_BONUS * min(happiness, 20) / 20.0)
+        amt = LEGITIMACY_HAPPY_RECOVERY + LEGITIMACY_HAPPY_BONUS * min(happiness, 20) / 20.0
+        current += amt
+        causes.append(Cause("Contentment", amt, "ideology.tick_legitimacy"))
     else:
-        current -= LEGITIMACY_UNHAPPY_DRAIN * float(-happiness)
-    current -= LEGITIMACY_ATROCITY_DRAIN * fresh_atrocities
+        amt = LEGITIMACY_UNHAPPY_DRAIN * float(-happiness)
+        current -= amt
+        causes.append(Cause("Unhappiness", -amt, "ideology.tick_legitimacy"))
+    if fresh_atrocities > 0.0:
+        amt = LEGITIMACY_ATROCITY_DRAIN * fresh_atrocities
+        current -= amt
+        causes.append(Cause("Atrocities", -amt, "ideology.tick_legitimacy"))
     if tide is not None:
-        current -= LEGITIMACY_TIDE_DRAIN * (tide.level / 100.0)
-    return max(0.0, min(LEGITIMACY_MAX, current))
+        amt = LEGITIMACY_TIDE_DRAIN * (tide.level / 100.0)
+        current -= amt
+        causes.append(Cause("Tide pressure", -amt, "ideology.tick_legitimacy"))
+    clamped = max(0.0, min(LEGITIMACY_MAX, current))
+    clamp_amt = clamped - current
+    if clamp_amt != 0.0:
+        causes.append(Cause("Floor/Ceiling", clamp_amt, "ideology.tick_legitimacy"))
+    return Attributed(clamped, previous, tuple(causes))
 
 
 def record_scandal(legitimacy: dict, house: str, severity: float = 1.0,

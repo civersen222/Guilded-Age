@@ -47,6 +47,7 @@ def _board(
     next_era: str = "The Age of Steel",
     prestige: float = 50.0,
     unrest_avg: float = 20.0,
+    brewing_turns: int = 0,
 ) -> Scoreboard:
     if axes is None:
         axes = {"capital": 50.0, "standing": 60.0, "blood": 40.0, "world": 70.0}
@@ -70,6 +71,7 @@ def _board(
         rival_axes=rival_axes,
         rank=rank,
         unrest_avg=unrest_avg,
+        brewing_turns=brewing_turns,
     )
 
 
@@ -535,3 +537,33 @@ def test_axis_meters_use_fmt():
         expected = str(int(mt.value))
         assert mt.value_text() == expected, \
             f"{name} value_text() = '{mt.value_text()}', expected '{expected}'"
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Rule I5a: Revolution countdown chip
+# ────────────────────────────────────────────────────────────────────────────
+
+def test_revolution_chip_absent_when_zero():
+    b = _board(brewing_turns=0)
+    d = _delta()
+    m = hud_model(b, d)
+    assert "revolution" not in m.chips
+
+
+def test_revolution_chip_present_when_brewing():
+    b = _board(brewing_turns=2)
+    d = _delta()
+    m = hud_model(b, d)
+    assert "revolution" in m.chips
+    chip = m.chips["revolution"]
+    assert chip.tone == "bad"
+    assert "2" in chip.text
+    assert "3" in chip.text
+
+
+def test_revolution_chip_shows_count():
+    b = _board(brewing_turns=1)
+    d = _delta()
+    m = hud_model(b, d)
+    assert "revolution" in m.chips
+    assert "1" in m.chips["revolution"].text

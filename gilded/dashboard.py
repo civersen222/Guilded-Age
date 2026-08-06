@@ -45,6 +45,7 @@ class Scoreboard:
     rival_axes: Optional[Dict[str, float]]
     rank: int
     unrest_avg: float
+    brewing_turns: int = 0
 
 
 def _axes_for(game, house_name: str) -> Dict[str, float]:
@@ -114,6 +115,7 @@ def scoreboard(game, house_name: str) -> Scoreboard:
         rival_axes=rival_axes,
         rank=rank,
         unrest_avg=unrest_avg,
+        brewing_turns=game.brewing_turns.get(house_name, 0),
     )
 
 

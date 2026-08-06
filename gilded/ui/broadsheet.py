@@ -176,6 +176,14 @@ def hud_model(board, d: Delta) -> HudModel:
         tone="neutral",
     )
 
+    # Revolution countdown — only visible when brewing_turns > 0
+    if board.brewing_turns > 0:
+        from gilded.society.ideology import REVOLUTION_BREWING_TURNS
+        chips["revolution"] = Chip(
+            text=f"Revolution: {board.brewing_turns}/{REVOLUTION_BREWING_TURNS}",
+            tone="bad",
+        )
+
     # Texts
     texts["era"] = f"{board.era_title} · {board.year} ({board.century_pct * 100:.0f}%)"
     texts["rank"] = f"Rank #{board.rank}"
@@ -214,9 +222,12 @@ def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
 
     y += rh + _ROW_GAP
 
-    # --- Row 3: chips (treasury, atrocities, phase) + era text ---
+    # --- Row 3: chips (treasury, atrocities, phase + revolution if brewing) + era text ---
     chip_specs = []
-    for key in ["treasury", "atrocities", "phase"]:
+    row3_keys = ["treasury", "atrocities", "phase"]
+    if "revolution" in model.chips:
+        row3_keys.append("revolution")
+    for key in row3_keys:
         surf = fs.render(model.chips[key].text, True, INK)
         w = surf.get_width() + 16
         chip_specs.append((key, w))
