@@ -2099,7 +2099,7 @@ class BroadsheetView:
         y += body.get_height() + 4
 
         for cp in counterparties:
-            if y > content.bottom - 40:
+            if y > content.bottom - 80:
                 break
             cid = cp["id"]
             cname = cp["name"]
@@ -2171,7 +2171,7 @@ class BroadsheetView:
                 surface.blit(disabled_surf, (PAD + 8, y + 4))
                 reason = f"Cannot afford this trade (treasury {treasury:.0f})"
                 self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
-            y += txt_h + 12
+                y += txt_h + 12
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
