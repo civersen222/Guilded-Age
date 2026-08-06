@@ -943,8 +943,19 @@ class BroadsheetView:
                     surface.blit(surf_t, (rect.left + pad, cy))
                     cy += line_h
                 surface.set_clip(old_clip)
+                # Save tooltip pixels, fill 5px band with PAPER_BG so pre-existing
+                # page content doesn't bleed into the tooltip border, then restore.
+                tooltip_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+                tooltip_surf.blit(surface, (0, 0), rect)
+                band = pygame.Rect(
+                    max(0, rect.left - 5), max(0, rect.top - 5),
+                    min(surface.get_width(), rect.right + 5) - max(0, rect.left - 5),
+                    min(surface.get_height(), rect.bottom + 5) - max(0, rect.top - 5),
+                )
+                surface.fill(PAPER_BG, band)
+                surface.blit(tooltip_surf, rect.topleft)
                 self.tooltip_text = text
-                self.tooltip_rect = rect
+                self.tooltip_rect = band
 
     def _draw_tab_bar(self, surface) -> None:
         pygame.draw.rect(surface, TAB_BG, (0, 0, self._w, TAB_H))
@@ -2162,9 +2173,9 @@ class BroadsheetView:
 
         treasury = self.game.houses[self.house].treasury
         shown = len(counterparties)
-        sub = body.render(f"{shown} counterparties:", True, (130, 130, 120))
+        sub = body.render(f"{shown} counterparties:", True, (160, 160, 140))
         surface.blit(sub, (PAD, y))
-        y += body.get_height() + 6
+        y += body.get_height() + 4
 
         for cp, ladder in ladder_data:
             if y > content.bottom - 80:

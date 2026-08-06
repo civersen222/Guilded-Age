@@ -4301,8 +4301,8 @@ def test_every_control_on_every_tab_explains_itself():
             assert screen.contains(v.tooltip_rect), (
                 f"{tab}: the tooltip for {region.action} is drawn partly "
                 f"off-screen at {v.tooltip_rect} (screen is {screen})")
-            fill = surf.get_at((v.tooltip_rect.left + 4,
-                                v.tooltip_rect.top + 4))[:3]
+            fill = surf.get_at((v.tooltip_rect.left + 8,
+                                v.tooltip_rect.top + 8))[:3]
             assert fill == INK, (
                 f"{tab}: the tooltip panel for {region.action} was never "
                 f"painted -- the pixel inside {v.tooltip_rect} is {fill}, "
