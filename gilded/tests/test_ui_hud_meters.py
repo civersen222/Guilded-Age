@@ -48,6 +48,7 @@ def _board(
     prestige: float = 50.0,
     unrest_avg: float = 20.0,
     brewing_turns: int = 0,
+    revolution_explanation: str = "",
 ) -> Scoreboard:
     if axes is None:
         axes = {"capital": 50.0, "standing": 60.0, "blood": 40.0, "world": 70.0}
@@ -72,6 +73,7 @@ def _board(
         rank=rank,
         unrest_avg=unrest_avg,
         brewing_turns=brewing_turns,
+        revolution_explanation=revolution_explanation,
     )
 
 
@@ -567,3 +569,27 @@ def test_revolution_chip_shows_count():
     m = hud_model(b, d)
     assert "revolution" in m.chips
     assert "1" in m.chips["revolution"].text
+
+
+def test_revolution_chip_includes_explanation():
+    """When revolution_explanation is set, the chip text includes it."""
+    b = _board(brewing_turns=2, revolution_explanation="mandate collapsed; Yorkshire striking")
+    d = _delta()
+    m = hud_model(b, d)
+    chip = m.chips["revolution"]
+    assert "mandate collapsed" in chip.text, \
+        f"Expected 'mandate collapsed' in chip text, got '{chip.text}'"
+    assert "Yorkshire striking" in chip.text, \
+        f"Expected 'Yorkshire striking' in chip text, got '{chip.text}'"
+
+
+def test_revolution_chip_without_explanation():
+    """When revolution_explanation is empty, the chip shows only the count."""
+    b = _board(brewing_turns=2, revolution_explanation="")
+    d = _delta()
+    m = hud_model(b, d)
+    chip = m.chips["revolution"]
+    assert "2" in chip.text
+    assert "3" in chip.text
+    assert "—" not in chip.text, \
+        f"Expected no separator when explanation is empty, got '{chip.text}'"

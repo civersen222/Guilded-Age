@@ -179,8 +179,11 @@ def hud_model(board, d: Delta) -> HudModel:
     # Revolution countdown — only visible when brewing_turns > 0
     if board.brewing_turns > 0:
         from gilded.society.ideology import REVOLUTION_BREWING_TURNS
+        rev_text = f"Revolution: {board.brewing_turns}/{REVOLUTION_BREWING_TURNS}"
+        if board.revolution_explanation:
+            rev_text += f" — {board.revolution_explanation}"
         chips["revolution"] = Chip(
-            text=f"Revolution: {board.brewing_turns}/{REVOLUTION_BREWING_TURNS}",
+            text=rev_text,
             tone="bad",
         )
 

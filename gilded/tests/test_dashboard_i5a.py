@@ -143,3 +143,73 @@ def test_scoreboard_tide_reflects_game_tide():
     game.tide.level = 45.0
     sb = scoreboard(game, list(game.houses)[0])
     assert sb.tide_level == 45.0
+
+
+# ─── 7. Measurement: revolution explanation names its causes ──────────
+
+def test_revolution_explanation_empty_when_not_brewing():
+    """When brewing_turns is 0, the explanation is empty."""
+    game = GildedGame(seed=42)
+    house_name = list(game.houses)[0]
+    game.brewing_turns[house_name] = 0
+    game.legitimacy[house_name] = 5.0  # below floor
+    sb = scoreboard(game, house_name)
+    assert sb.revolution_explanation == "", \
+        f"Expected empty explanation when brewing=0, got '{sb.revolution_explanation}'"
+
+
+def test_revolution_explanation_names_low_legitimacy():
+    """When legitimacy is below floor, explanation mentions mandate collapsed."""
+    game = GildedGame(seed=42)
+    house_name = list(game.houses)[0]
+    game.brewing_turns[house_name] = 1
+    game.legitimacy[house_name] = 5.0  # below REVOLUTION_LEGITIMACY_FLOOR
+    # Ensure no province is striking at peak militancy
+    provs = game.provinces_of(house_name)
+    for p in provs:
+        mv = getattr(p, "movement", None)
+        if mv is not None:
+            mv.militancy = 0.0
+    sb = scoreboard(game, house_name)
+    assert "mandate collapsed" in sb.revolution_explanation, \
+        f"Expected 'mandate collapsed' in explanation, got '{sb.revolution_explanation}'"
+
+
+def test_revolution_explanation_names_striking_province():
+    """When a province is striking at peak militancy, explanation names it."""
+    game = GildedGame(seed=42)
+    house_name = list(game.houses)[0]
+    game.brewing_turns[house_name] = 1
+    game.legitimacy[house_name] = 50.0  # above floor — legitimacy NOT a cause
+    provs = game.provinces_of(house_name)
+    # Make the first province striking at peak militancy
+    target = provs[0]
+    mv = getattr(target, "movement", None)
+    if mv is None:
+        pytest.skip("No movement on province")
+    mv.state = "striking"
+    mv.militancy = 70.0  # above REVOLUTION_MILITANCY_PEAK
+    # Ensure other provinces are not striking
+    for p in provs[1:]:
+        other_mv = getattr(p, "movement", None)
+        if other_mv is not None:
+            other_mv.militancy = 0.0
+    sb = scoreboard(game, house_name)
+    assert target.name in sb.revolution_explanation, \
+        f"Expected province name '{target.name}' in explanation, got '{sb.revolution_explanation}'"
+    assert "striking" in sb.revolution_explanation, \
+        f"Expected 'striking' in explanation, got '{sb.revolution_explanation}'"
+
+
+def test_revolution_explanation_severed_wire():
+    """Severing revolution_explanation in scoreboard() is caught."""
+    game = GildedGame(seed=42)
+    house_name = list(game.houses)[0]
+    game.brewing_turns[house_name] = 1
+    game.legitimacy[house_name] = 5.0
+    sb = scoreboard(game, house_name)
+    # If the field is missing or not populated, this assertion fails
+    assert hasattr(sb, "revolution_explanation"), \
+        "Scoreboard must have revolution_explanation field"
+    assert sb.revolution_explanation != "", \
+        "With brewing_turns=1 and low legitimacy, explanation must not be empty"

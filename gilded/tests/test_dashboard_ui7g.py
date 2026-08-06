@@ -99,6 +99,7 @@ def test_scoreboard_field_roster_complete():
         "tide_level", "tide_phase", "atrocities", "rival_name",
         "rival_axes", "rank", "unrest_avg",
         "brewing_turns",
+        "revolution_explanation",
     }
     assert set(Scoreboard.__dataclass_fields__) == roster
 

@@ -17,6 +17,8 @@ from gilded.chassis import TURN_BUDGET, year_of
 from gilded.endings import (
     _axis_blood, _axis_capital, _axis_standing, _axis_world)
 from gilded.saga.content.eras import ERAS
+from gilded.society.ideology import (
+    REVOLUTION_LEGITIMACY_FLOOR, REVOLUTION_MILITANCY_PEAK)
 
 # Significance floor: measured at seeds 7,42,1,3,11 for 24 turns.
 # 0.01 still leaves lines that render as zero; 0.5 suppresses 173 real movements.
@@ -46,6 +48,7 @@ class Scoreboard:
     rank: int
     unrest_avg: float
     brewing_turns: int = 0
+    revolution_explanation: str = ""
 
 
 def _axes_for(game, house_name: str) -> Dict[str, float]:
@@ -76,6 +79,22 @@ def _era_fields(game):
     else:
         hint = "the final age"
     return idx, title, hint
+
+
+def _revolution_explanation(brewing_turns: int, legitimacy: float, provinces) -> str:
+    """Build a plain-language explanation of what is keeping the revolution
+    countdown running. Returns empty string when the count is zero."""
+    if brewing_turns <= 0:
+        return ""
+    parts = []
+    if legitimacy < REVOLUTION_LEGITIMACY_FLOOR:
+        parts.append(f"mandate collapsed (legitimacy {legitimacy:.0f})")
+    for p in provinces:
+        mv = getattr(p, "movement", None)
+        if (mv is not None and mv.state == "striking"
+                and mv.militancy >= REVOLUTION_MILITANCY_PEAK):
+            parts.append(f"{p.name} striking")
+    return "; ".join(parts) if parts else ""
 
 
 def scoreboard(game, house_name: str) -> Scoreboard:
@@ -116,6 +135,11 @@ def scoreboard(game, house_name: str) -> Scoreboard:
         rank=rank,
         unrest_avg=unrest_avg,
         brewing_turns=game.brewing_turns.get(house_name, 0),
+        revolution_explanation=_revolution_explanation(
+            game.brewing_turns.get(house_name, 0),
+            game.legitimacy.get(house_name, 0.0),
+            provs,
+        ),
     )
 
 
