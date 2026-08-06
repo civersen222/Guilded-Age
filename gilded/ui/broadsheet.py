@@ -2111,67 +2111,54 @@ class BroadsheetView:
                 gold = cp["gold"]
                 label = f"{cname} ({_fmt_gold(gold)} gold)"
 
-            can_afford = True
-            if direction == "buy":
-                quote = stake_cost(ent, pct, self.game)
-                if treasury < quote:
-                    can_afford = False
-
-            txt_surf = body.render(label, True, INK if can_afford else (140, 120, 100))
+            txt_surf = body.render(label, True, INK)
             txt_w = max(txt_surf.get_width() + 16, content.right - PAD * 2)
             txt_h = body.get_height() + 8
             txt_rect = pygame.Rect(PAD, y, txt_w, txt_h)
 
-            if can_afford:
-                pygame.draw.rect(surface, (60, 60, 40), txt_rect)
-                pygame.draw.rect(surface, INK, txt_rect, 2)
-                surface.blit(txt_surf, (PAD + 8, y + 4))
+            pygame.draw.rect(surface, (60, 60, 40), txt_rect)
+            pygame.draw.rect(surface, INK, txt_rect, 2)
+            surface.blit(txt_surf, (PAD + 8, y + 4))
 
-                # Draw size ladder options for this counterparty
-                if direction == "buy":
-                    ladder = share_size_ladder(self.game, self.house, eid, cid)
-                else:
-                    ladder = share_size_ladder(self.game, self.house, eid, self.game.realms[self.house].ruler.id, cid)
-
-                lx = PAD + 12
-                rung_y = y + txt_h + 2
-                for rung in ladder:
-                    pct = rung["pct"]
-                    btn_label = f"{pct:g}%"
-                    btn_surf = body.render(btn_label, True, INK)
-                    btn_w = btn_surf.get_width() + 10
-                    btn_h = body.get_height() + 4
-                    btn_rect = pygame.Rect(lx, rung_y, btn_w, btn_h)
-
-                    if rung.get("offerable", True):
-                        pygame.draw.rect(surface, (50, 50, 35), btn_rect)
-                        pygame.draw.rect(surface, (120, 120, 100), btn_rect, 1)
-                        surface.blit(btn_surf, (lx + 5, y + txt_h + 4))
-
-                        action_key = "buy_shares" if direction == "buy" else "sell_shares"
-                        action_payload = (eid, cid, pct)
-                        self.regions.add(Region(rect=btn_rect, action={action_key: action_payload}, hint=f"{verb} {pct:g}% shares with {cname}.", group="picker"))
-                    else:
-                        pygame.draw.rect(surface, (60, 60, 50), btn_rect)
-                        pygame.draw.rect(surface, (100, 80, 60), btn_rect, 1)
-                        disabled_surf = body.render(btn_label, True, (140, 120, 100))
-                        surface.blit(disabled_surf, (lx + 5, y + txt_h + 4))
-                        reason = rung.get("reason", "Not available")
-                        self.regions.add(Region(rect=btn_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
-
-                    lx += btn_w + 4
-                # Advance y below the ladder buttons
-                btn_h = body.get_height() + 4
-                y = rung_y + btn_h + 6
-
+            # Draw size ladder options for this counterparty
+            # Per-rung affordability (from share_size_ladder) replaces the
+            # per-counterparty treasury check — a rung that is affordable must
+            # show even if the full stake is not.
+            if direction == "buy":
+                ladder = share_size_ladder(self.game, self.house, eid, cid)
             else:
-                pygame.draw.rect(surface, (60, 60, 50), txt_rect)
-                pygame.draw.rect(surface, (100, 80, 60), txt_rect, 1)
-                disabled_surf = body.render(label, True, (140, 120, 100))
-                surface.blit(disabled_surf, (PAD + 8, y + 4))
-                reason = f"Cannot afford this trade (treasury {treasury:.0f})"
-                self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
-                y += txt_h + 12
+                ladder = share_size_ladder(self.game, self.house, eid, self.game.realms[self.house].ruler.id, cid)
+
+            lx = PAD + 12
+            rung_y = y + txt_h + 2
+            for rung in ladder:
+                pct = rung["pct"]
+                btn_label = f"{pct:g}%"
+                btn_surf = body.render(btn_label, True, INK)
+                btn_w = btn_surf.get_width() + 10
+                btn_h = body.get_height() + 4
+                btn_rect = pygame.Rect(lx, rung_y, btn_w, btn_h)
+
+                if rung.get("offerable", True):
+                    pygame.draw.rect(surface, (50, 50, 35), btn_rect)
+                    pygame.draw.rect(surface, (120, 120, 100), btn_rect, 1)
+                    surface.blit(btn_surf, (lx + 5, y + txt_h + 4))
+
+                    action_key = "buy_shares" if direction == "buy" else "sell_shares"
+                    action_payload = (eid, cid, pct)
+                    self.regions.add(Region(rect=btn_rect, action={action_key: action_payload}, hint=f"{verb} {pct:g}% shares with {cname}.", group="picker"))
+                else:
+                    pygame.draw.rect(surface, (60, 60, 50), btn_rect)
+                    pygame.draw.rect(surface, (100, 80, 60), btn_rect, 1)
+                    disabled_surf = body.render(btn_label, True, (140, 120, 100))
+                    surface.blit(disabled_surf, (lx + 5, y + txt_h + 4))
+                    reason = rung.get("reason", "Not available")
+                    self.regions.add(Region(rect=btn_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
+
+                lx += btn_w + 4
+            # Advance y below the ladder buttons
+            btn_h = body.get_height() + 4
+            y = rung_y + btn_h + 6
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
