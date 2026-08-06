@@ -2156,11 +2156,11 @@ class BroadsheetView:
 
         # Draw per-counterparty picker (normal case — at least some rungs are offerable)
         house_name = self.house
-        treasury = self.game.houses[self.house].treasury
-        shown = len(counterparties)
-        sub = body.render(f"{shown} counterparties:", True, (160, 160, 140))
+        sub = body.render(f"Choose a counterparty:", True, (160, 160, 140))
         surface.blit(sub, (PAD, y))
         y += body.get_height() + 4
+
+        treasury = self.game.houses[self.house].treasury
 
         for cp, ladder in ladder_data:
             if y > content.bottom - 80:
