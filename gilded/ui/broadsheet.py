@@ -297,7 +297,7 @@ HUD_INK = (232, 226, 210)
 BUTTON_BG = (60, 82, 60)
 BUTTON_EDGE = (30, 46, 30)
 BUTTON_TEXT = (238, 240, 232)
-DISABLED_BUTTON_BG = (50, 50, 50)
+DISABLED_BUTTON_BG = (30, 30, 30)
 DISABLED_BUTTON_EDGE = (35, 35, 35)
 EXEC_BG = (78, 66, 96)
 ENDTURN_BG = (140, 60, 52)
@@ -1771,10 +1771,6 @@ class BroadsheetView:
             fill = DISABLED_BUTTON_BG if reason else BUTTON_BG
         if edge is None:
             edge = DISABLED_BUTTON_EDGE if reason else BUTTON_EDGE
-        # Disabled buttons always get the disabled fill/edge regardless of caller
-        if reason:
-            fill = DISABLED_BUTTON_BG
-            edge = DISABLED_BUTTON_EDGE
         btn_text = act.get("label", default_label)
         text_color = BUTTON_TEXT
         btn_surf = body.render(btn_text, True, text_color)
@@ -1915,8 +1911,7 @@ class BroadsheetView:
                         self.game, self.house, action_dict)
                     y = self._action_button(
                         surface, content, action_rect, y, act, body, "house",
-                        "Hostile Takeover", None if ok else why, None,
-                        BUTTON_BG, BUTTON_EDGE)
+                        "Hostile Takeover", None if ok else why, None)
                     if y is None:
                         return
                 elif verb == "found_enterprise":
@@ -1925,8 +1920,7 @@ class BroadsheetView:
                         self.game, self.house, action_dict)
                     y = self._action_button(
                         surface, content, action_rect, y, act, body, "house",
-                        None, None if ok else why, None,
-                        BUTTON_BG, BUTTON_EDGE)
+                        None, None if ok else why, None)
                     if y is None:
                         return
                 continue
@@ -1942,7 +1936,7 @@ class BroadsheetView:
                         reason = f"{ent.name} is still building; it cannot expand until the work is finished."
                     else:
                         reason = f"{ent.name} is already at its greatest extent."
-                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Expand {ent.name}", reason, self._enterprise_hits, BUTTON_BG, BUTTON_EDGE)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Expand {ent.name}", reason, self._enterprise_hits)
                 if y is None:
                     return
 
@@ -1951,28 +1945,28 @@ class BroadsheetView:
                 reason = None
                 if not pool:
                     reason = f"No one in your house is qualified to direct {ent.name}."
-                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Appoint Director for {ent.name}", reason, self._appoint_hits, BUTTON_BG, BUTTON_EDGE)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", f"Appoint Director for {ent.name}", reason, self._appoint_hits)
                 if y is None:
                     return
 
             elif verb == "defend_buyout":
                 from gilded.ui.actions import ACTIONS
                 ok, why = ACTIONS["defend_buyout"].eligible(self.game, self.house, action_dict)
-                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", act.get("label", f"Buy out stake in {ent.name}"), None if ok else why, self._enterprise_hits, BUTTON_BG, BUTTON_EDGE)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"venture:{eid}", act.get("label", f"Buy out stake in {ent.name}"), None if ok else why, self._enterprise_hits)
                 if y is None:
                     return
 
             elif verb == "buy_shares":
                 from gilded.ui.actions import ACTIONS
                 ok, why = ACTIONS["buy_shares"].eligible(self.game, self.house, action_dict)
-                y = self._action_button(surface, content, action_rect, y, act, body, f"buy_shares:{eid}", f"Buy Shares in {ent.name}", None if ok else why, self._share_picker_hits, BUTTON_BG, BUTTON_EDGE)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"buy_shares:{eid}", f"Buy Shares in {ent.name}", None if ok else why, self._share_picker_hits)
                 if y is None:
                     return
 
             elif verb == "sell_shares":
                 from gilded.ui.actions import ACTIONS
                 ok, why = ACTIONS["sell_shares"].eligible(self.game, self.house, action_dict)
-                y = self._action_button(surface, content, action_rect, y, act, body, f"sell_shares:{eid}", f"Sell Shares in {ent.name}", None if ok else why, self._share_picker_hits, BUTTON_BG, BUTTON_EDGE)
+                y = self._action_button(surface, content, action_rect, y, act, body, f"sell_shares:{eid}", f"Sell Shares in {ent.name}", None if ok else why, self._share_picker_hits)
                 if y is None:
                     return
 
