@@ -2156,7 +2156,6 @@ class BroadsheetView:
                     reason = rung.get("reason", "Not available")
                     self.regions.add(Region(rect=btn_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
 
-                rung_y += btn_h
                 lx += btn_w + 4
             # Advance y below the ladder buttons
             btn_h = body.get_height() + 4
