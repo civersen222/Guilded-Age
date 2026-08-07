@@ -115,9 +115,10 @@ if not pygame.font.get_init():
 def font(size: int, bold: bool = False) -> pygame.font.Font:
     """Cached SysFont("georgia,serif"), lazily calling pygame.font.init()."""
     key = (size, bold)
-    if key not in _font_cache or not pygame.font.get_init():
-        pygame.font.init()
-        _font_cache.clear()
+    if key not in _font_cache:
+        if not pygame.font.get_init():
+            pygame.font.init()
+            _font_cache.clear()
         _font_cache[key] = pygame.font.SysFont("georgia,serif", size, bold)
     return _font_cache[key]
 
