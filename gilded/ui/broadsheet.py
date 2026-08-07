@@ -2225,14 +2225,11 @@ class BroadsheetView:
             btn_h = body.get_height() + 4
             y = rung_y + btn_h + 6
 
-    def _draw_house(self, surface, content: pygame.Rect) -> None:
+    def house_lines(self) -> List[str]:
+        """Build text lines for the House tab, including opinion info."""
         g, name = self.game, self.house
         house = g.houses[name]
         realm = g.realms.get(name)
-        title = _font(30, bold=True).render(f"HOUSE {name.upper()}", True, INK)
-        surface.blit(title, (PAD, content.y + 6))
-        y = content.y + 6 + title.get_height() + 10
-        body = _font(18)
         rows = [
             f"treasury {house.treasury:.0f} gold   prestige {house.prestige:.0f}",
             f"legitimacy {g.legitimacy.get(name, 0.0):.0f}",
@@ -2243,8 +2240,29 @@ class BroadsheetView:
             rows.append(f"ruler: {realm.ruler.name if realm.ruler else '(vacant)'}")
             for seat, holder in sorted(realm.court.positions.items(),
                                        key=lambda kv: kv[0].value):
-                rows.append(f"  {seat.value}: "
-                            f"{holder.name if holder is not None else '(vacant)'}")
+                line = f"  {seat.value}: {holder.name if holder is not None else '(vacant)'}"
+                if holder is not None and realm.ruler is not None:
+                    pair = (holder.id, realm.ruler.id)
+                    opinion = g.society.opinions.get(pair, 0)
+                    if opinion != 0:
+                        line += f"  (opinion: {opinion:+d})"
+                    hist = g.society.opinion_history.get(pair, [])
+                    if hist:
+                        reasons = "; ".join(e.reason for e in hist)
+                        line += f"  [{reasons}]"
+                    elif opinion != 0:
+                        line += "  (no recorded history)"
+                rows.append(line)
+        return rows
+
+    def _draw_house(self, surface, content: pygame.Rect) -> None:
+        g, name = self.game, self.house
+        house = g.houses[name]
+        title = _font(30, bold=True).render(f"HOUSE {name.upper()}", True, INK)
+        surface.blit(title, (PAD, content.y + 6))
+        y = content.y + 6 + title.get_height() + 10
+        body = _font(18)
+        rows = self.house_lines()
         for row in rows:
             if y > content.bottom - 20:
                 return

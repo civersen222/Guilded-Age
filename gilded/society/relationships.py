@@ -156,3 +156,4 @@ def set_state(society, state: dict) -> None:
     society.opinions.update(state.get("opinions", {}))
     society.last_rulers.clear()
     society.last_rulers.update(state.get("last_rulers", {}))
+    society.opinion_history.clear()

@@ -1,6 +1,7 @@
 """Characters, secrets, dynasties (extracted verbatim from root simulation.py for the Gilded Machine; spec section 4)."""
 
 from typing import Dict, List, Tuple, Set, Optional
+from dataclasses import dataclass
 import random
 import uuid
 from gilded.society.character_deepening import (
@@ -19,6 +20,14 @@ from gilded.society.dispositions import initial_dispositions, labels_for, inheri
 # Per-game society state carrier — replaces process-global mutable stores
 # (_ID_COUNTER, opinion_matrix, _last_rulers) so multiple GildedGame
 # instances in one process don't share identity/opinion/ruler state.
+
+@dataclass
+class OpinionEntry:
+    amount: int
+    reason: str
+
+OPINION_LEDGER_CAP = 20
+
 class SocietyState:
     """Carries per-game society state: rng, opinions, last-ruler memory,
     and a deterministic character-id counter."""
@@ -28,6 +37,7 @@ class SocietyState:
         self.opinions: Dict[Tuple[str, str], int] = {}
         self.last_rulers: Dict[str, str] = {}
         self._id = 0
+        self.opinion_history: Dict[Tuple[str, str], List[OpinionEntry]] = {}
 
     def next_id(self) -> str:
         self._id += 1
@@ -335,6 +345,14 @@ def modify_opinion(char_a: Character, char_b: Character, amount: int, reason: st
     pair = (char_a.id, char_b.id)
     current = m.get(pair, 0)
     m[pair] = current + amount
+    # Record to ledger only if reason is non-empty
+    if reason:
+        hist = char_a._society.opinion_history
+        entries = hist.get(pair, [])
+        entries.append(OpinionEntry(amount=amount, reason=reason))
+        if len(entries) > OPINION_LEDGER_CAP:
+            entries.pop(0)
+        hist[pair] = entries
     return f"{char_a.name} -> {char_b.name}: {amount:+d} ({reason})"
 
 def generate_child(name: str, parent_a: Character, parent_b: Character, rng: random.Random) -> Character:
