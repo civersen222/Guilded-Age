@@ -16,18 +16,12 @@ import pygame
 
 from gilded.world import MINOR_OWNER
 
-# Houses take these in name order; province fill falls back to MINOR_COLOR.
-HOUSE_COLORS = [(122, 74, 58), (58, 90, 122), (74, 106, 74), (140, 120, 60),
-                (110, 70, 110), (70, 110, 110), (150, 90, 70), (95, 95, 130)]
-MINOR_COLOR = (90, 90, 90)
-OCEAN_COLOR = (26, 35, 51)
-FRONT_COLOR = (208, 64, 64)
-
-BORDER_COLOR = (12, 12, 12)
-NAME_COLOR = (232, 226, 210)
-GLYPH_COLOR = (250, 240, 200)
-RAIL_COLOR = (198, 164, 84)
-SELECT_COLOR = (245, 245, 235)
+# Re-export palette names from widgets.py so existing imports continue to work.
+from gilded.ui.widgets import (
+    HOUSE_COLORS, MINOR_COLOR, OCEAN_COLOR, FRONT_COLOR,
+    BORDER_COLOR, NAME_COLOR, GLYPH_COLOR, RAIL_COLOR, SELECT_COLOR,
+    PANEL_BG,
+)
 
 _ENDOWMENT_GLYPH = {"coalfield": "C", "iron": "I", "timber": "T",
                     "farmland": "F", "harbor": "H"}
@@ -361,7 +355,7 @@ def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
     # Draw background
     bg = pygame.Surface((legend_w, legend_h))
     bg.set_alpha(200)
-    bg.fill((18, 16, 14))
+    bg.fill(PANEL_BG)
     surface.blit(bg, legend_rect.topleft)
     # Draw rows
     def _draw_col(col_rows, col_x):

@@ -25,6 +25,46 @@ CARD_BG = (248, 244, 234)
 CARD_EDGE = (120, 108, 92)
 
 # ────────────────────────────────────────────────────────────────────────────
+# Screen palette — colours shared across all rendered screens
+# ────────────────────────────────────────────────────────────────────────────
+
+BLACK = (0, 0, 0)
+PANEL_BG = (18, 16, 14)
+TAB_BG = (54, 48, 42)
+TAB_ACTIVE = (206, 176, 108)
+TAB_TEXT = (232, 226, 210)
+HUD_BG = (44, 40, 34)
+HUD_INK = (232, 226, 210)
+BUTTON_BG = (60, 82, 60)
+BUTTON_EDGE = (30, 46, 30)
+BUTTON_TEXT = (238, 240, 232)
+DISABLED_BUTTON_BG = (30, 30, 30)
+DISABLED_BUTTON_EDGE = (35, 35, 35)
+EXEC_BG = (78, 66, 96)
+ENDTURN_BG = (140, 60, 52)
+ATTN_COLOR = (150, 110, 40)
+SKIM_HIGHLIGHT = (240, 220, 210)
+PICKER_BACK_BG = (70, 70, 50)
+PICKER_ROW_BG = (60, 60, 60)
+DISABLED_FILL = (60, 60, 50)
+DISABLED_EDGE = (100, 80, 60)
+DISABLED_TEXT = (140, 120, 100)
+PICKER_SUBTITLE = (160, 160, 140)
+PICKER_ROW_ALT_BG = (60, 60, 40)
+OFFERABLE_BG = (50, 50, 35)
+OFFERABLE_EDGE = (120, 120, 100)
+HOUSE_COLORS = [(122, 74, 58), (58, 90, 122), (74, 106, 74), (140, 120, 60),
+                (110, 70, 110), (70, 110, 110), (150, 90, 70), (95, 95, 130)]
+MINOR_COLOR = (90, 90, 90)
+OCEAN_COLOR = (26, 35, 51)
+FRONT_COLOR = (208, 64, 64)
+BORDER_COLOR = (12, 12, 12)
+NAME_COLOR = (232, 226, 210)
+GLYPH_COLOR = (250, 240, 200)
+RAIL_COLOR = (198, 164, 84)
+SELECT_COLOR = (245, 245, 235)
+
+# ────────────────────────────────────────────────────────────────────────────
 # Typographic constants (Wave 5)
 # ────────────────────────────────────────────────────────────────────────────
 

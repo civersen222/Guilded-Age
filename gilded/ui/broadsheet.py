@@ -57,7 +57,15 @@ from gilded.ui.ledger import (
     totals_line, history_cells,
 )
 from gilded.ui.figures import figure
-from gilded.ui.widgets import INK, Region, RegionSet, RegionState
+from gilded.ui.widgets import (
+    INK, Region, RegionSet, RegionState,
+    BLACK, PANEL_BG, TAB_BG, TAB_ACTIVE, TAB_TEXT, HUD_BG, HUD_INK,
+    BUTTON_BG, BUTTON_EDGE, BUTTON_TEXT, DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE,
+    EXEC_BG, ENDTURN_BG, ATTN_COLOR,
+    SKIM_HIGHLIGHT, PICKER_BACK_BG, PICKER_ROW_BG,
+    DISABLED_FILL, DISABLED_EDGE, DISABLED_TEXT,
+    PICKER_SUBTITLE, PICKER_ROW_ALT_BG, OFFERABLE_BG, OFFERABLE_EDGE,
+)
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
 
@@ -289,19 +297,7 @@ def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
 PAD = 16
 TOOLTIP_MAX_WIDTH = 300  # maximum tooltip panel content width
 
-TAB_BG = (54, 48, 42)
-TAB_ACTIVE = (206, 176, 108)
-TAB_TEXT = (232, 226, 210)
-HUD_BG = (44, 40, 34)
-HUD_INK = (232, 226, 210)
-BUTTON_BG = (60, 82, 60)
-BUTTON_EDGE = (30, 46, 30)
-BUTTON_TEXT = (238, 240, 232)
-DISABLED_BUTTON_BG = (30, 30, 30)
-DISABLED_BUTTON_EDGE = (35, 35, 35)
-EXEC_BG = (78, 66, 96)
-ENDTURN_BG = (140, 60, 52)
-ATTN_COLOR = (150, 110, 40)
+# Re-exported from widgets.py for backward compatibility (imported at module level above)
 
 # ── Enterprises table ─────────────────────────────────────────────────
 
@@ -422,14 +418,14 @@ class PowersTable(Table):
         if not text.strip():
             return text
         max_w = cell.width - 8
-        surf = f.render(text, True, (0, 0, 0))
+        surf = f.render(text, True, BLACK)
         if surf.get_width() <= max_w:
             return text  # fits, no truncation needed
         # Text is too long — shorten and append ellipsis
         ellipsis = "…"
         while len(text) > 1:
             candidate = text + ellipsis
-            surf = f.render(candidate, True, (0, 0, 0))
+            surf = f.render(candidate, True, BLACK)
             if surf.get_width() <= max_w:
                 return candidate
             text = text[:-1]
@@ -1531,7 +1527,7 @@ class BroadsheetView:
         rect = pygame.Rect(self._w - w - PAD, TAB_H + _hud_height() + PAD, w, h)
         panel = pygame.Surface(rect.size)
         panel.set_alpha(225)
-        panel.fill((18, 16, 14))
+        panel.fill(PANEL_BG)
         surface.blit(panel, rect.topleft)
         y = rect.y + PAD
         for i, line in enumerate(lines):
@@ -1848,7 +1844,7 @@ class BroadsheetView:
             row_rect = tbl_layout.row_rects[ri]
             # Highlight skim rows
             if ri in model.skim_rows:
-                pygame.draw.rect(surface, (240, 220, 210), row_rect)
+                pygame.draw.rect(surface, SKIM_HIGHLIGHT, row_rect)
             for ci, cell in enumerate(row):
                 if ci >= len(tbl_layout.cell_rects[ri]):
                     continue
@@ -1986,7 +1982,7 @@ class BroadsheetView:
         back_w = back_surf.get_width() + 16
         back_h = body.get_height() + 8
         back_rect = pygame.Rect(PAD, y, back_w, back_h)
-        pygame.draw.rect(surface, (70, 70, 50), back_rect)
+        pygame.draw.rect(surface, PICKER_BACK_BG, back_rect)
         pygame.draw.rect(surface, INK, back_rect, 2)
         surface.blit(back_surf, (PAD + 8, y + 4))
         self._director_picker_hits.append((back_rect, {"close_director_picker": True}))
@@ -2012,7 +2008,7 @@ class BroadsheetView:
             ln_w = ln_surf.get_width() + 16
             ln_h = small.get_height() + 8
             ln_rect = pygame.Rect(PAD, y, ln_w, ln_h)
-            pygame.draw.rect(surface, (60, 60, 60), ln_rect)
+            pygame.draw.rect(surface, PICKER_ROW_BG, ln_rect)
             pygame.draw.rect(surface, INK, ln_rect, 1)
             surface.blit(ln_surf, (PAD + 8, y + 4))
             self._director_picker_hits.append((ln_rect, {
@@ -2034,7 +2030,7 @@ class BroadsheetView:
         back_w = back_surf.get_width() + 16
         back_h = body.get_height() + 8
         back_rect = pygame.Rect(PAD, y, back_w, back_h)
-        pygame.draw.rect(surface, (70, 70, 50), back_rect)
+        pygame.draw.rect(surface, PICKER_BACK_BG, back_rect)
         pygame.draw.rect(surface, INK, back_rect, 2)
         surface.blit(back_surf, (PAD + 8, y + 4))
         self._found_picker_hits.append((back_rect, {"close_found_picker": True}))
@@ -2067,9 +2063,9 @@ class BroadsheetView:
                 hint = f"Found {article} {title.lower()} in {pname} for {cost:.0f} gold."
                 self.regions.add(Region(rect=txt_rect, action={"found_enterprise": (kind, pid)}, hint=hint, group="picker"))
             else:
-                pygame.draw.rect(surface, (60, 60, 50), txt_rect)
-                pygame.draw.rect(surface, (100, 80, 60), txt_rect, 1)
-                disabled_surf = body.render(label, True, (140, 120, 100))
+                pygame.draw.rect(surface, DISABLED_FILL, txt_rect)
+                pygame.draw.rect(surface, DISABLED_EDGE, txt_rect, 1)
+                disabled_surf = body.render(label, True, DISABLED_TEXT)
                 surface.blit(disabled_surf, (PAD + 8, y + 4))
                 reason = f"Cannot afford {cost:.0f} gold (treasury {treasury:.0f})"
                 self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=reason, hint=reason, group="picker"))
@@ -2093,7 +2089,7 @@ class BroadsheetView:
         back_w = back_surf.get_width() + 16
         back_h = body.get_height() + 8
         back_rect = pygame.Rect(PAD, y, back_w, back_h)
-        pygame.draw.rect(surface, (70, 70, 50), back_rect)
+        pygame.draw.rect(surface, PICKER_BACK_BG, back_rect)
         pygame.draw.rect(surface, INK, back_rect, 2)
         surface.blit(back_surf, (PAD + 8, y + 4))
         self._share_picker_hits.append((back_rect, {"close_share_picker": True}))
@@ -2143,26 +2139,26 @@ class BroadsheetView:
 
         if all_refused and same_reason:
             # Draw single refusal region — one line, not one per counterparty
-            sub_surf = body.render(refusal_msg, True, (160, 160, 140))
+            sub_surf = body.render(refusal_msg, True, PICKER_SUBTITLE)
             txt_w = max(sub_surf.get_width() + 16, content.right - PAD * 2)
             txt_h = body.get_height() + 8
             txt_rect = pygame.Rect(PAD, y, txt_w, txt_h)
-            pygame.draw.rect(surface, (60, 60, 50), txt_rect)
-            pygame.draw.rect(surface, (100, 80, 60), txt_rect, 1)
-            disabled_surf = body.render(refusal_msg, True, (140, 120, 100))
+            pygame.draw.rect(surface, DISABLED_FILL, txt_rect)
+            pygame.draw.rect(surface, DISABLED_EDGE, txt_rect, 1)
+            disabled_surf = body.render(refusal_msg, True, DISABLED_TEXT)
             surface.blit(disabled_surf, (PAD + 8, y + 4))
             self.regions.add(Region(rect=txt_rect, action=None, state=RegionState.DISABLED, reason=refusal_msg, hint=refusal_msg, group="picker"))
             return
 
         # Draw per-counterparty picker (normal case — at least some rungs are offerable)
         house_name = self.house
-        sub = body.render(f"Choose a counterparty:", True, (160, 160, 140))
+        sub = body.render(f"Choose a counterparty:", True, PICKER_SUBTITLE)
         surface.blit(sub, (PAD, y))
         y += body.get_height() + 4
 
         treasury = self.game.houses[self.house].treasury
         shown = len(counterparties)
-        sub = body.render(f"{shown} counterparties:", True, (160, 160, 140))
+        sub = body.render(f"{shown} counterparties:", True, PICKER_SUBTITLE)
         surface.blit(sub, (PAD, y))
         y += body.get_height() + 4
 
@@ -2184,7 +2180,7 @@ class BroadsheetView:
             txt_h = body.get_height() + 8
             txt_rect = pygame.Rect(PAD, y, txt_w, txt_h)
 
-            pygame.draw.rect(surface, (60, 60, 40), txt_rect)
+            pygame.draw.rect(surface, PICKER_ROW_ALT_BG, txt_rect)
             pygame.draw.rect(surface, INK, txt_rect, 2)
             surface.blit(txt_surf, (PAD + 8, y + 4))
 
@@ -2204,17 +2200,17 @@ class BroadsheetView:
                 btn_rect = pygame.Rect(lx, rung_y, btn_w, btn_h)
 
                 if rung.get("offerable", True):
-                    pygame.draw.rect(surface, (50, 50, 35), btn_rect)
-                    pygame.draw.rect(surface, (120, 120, 100), btn_rect, 1)
+                    pygame.draw.rect(surface, OFFERABLE_BG, btn_rect)
+                    pygame.draw.rect(surface, OFFERABLE_EDGE, btn_rect, 1)
                     surface.blit(btn_surf, (lx + 5, rung_y + 2))
 
                     action_key = "buy_shares" if direction == "buy" else "sell_shares"
                     action_payload = (eid, cid, pct)
                     self.regions.add(Region(rect=btn_rect, action={action_key: action_payload}, hint=f"{verb} {pct:g}% shares with {cname}.", group="picker"))
                 else:
-                    pygame.draw.rect(surface, (60, 60, 50), btn_rect)
-                    pygame.draw.rect(surface, (100, 80, 60), btn_rect, 1)
-                    disabled_surf = body.render(btn_label, True, (140, 120, 100))
+                    pygame.draw.rect(surface, DISABLED_FILL, btn_rect)
+                    pygame.draw.rect(surface, DISABLED_EDGE, btn_rect, 1)
+                    disabled_surf = body.render(btn_label, True, DISABLED_TEXT)
                     surface.blit(disabled_surf, (lx + 5, rung_y + 2))
                     reason = rung.get("reason", "Not available")
                     if reason:
