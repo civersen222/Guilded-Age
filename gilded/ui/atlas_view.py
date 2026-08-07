@@ -74,6 +74,9 @@ def atlas_transform(atlas, rect: pygame.Rect) -> AtlasTransform:
 
 
 def _font(size: int) -> pygame.font.Font:
+    if not pygame.font.get_init():
+        pygame.font.init()
+        _font_cache.clear()
     f = _font_cache.get(size)
     if f is None:
         f = pygame.font.SysFont("georgia,serif", size)
