@@ -21,13 +21,12 @@ from gilded.ui.widgets import (
     HOUSE_COLORS, MINOR_COLOR, OCEAN_COLOR, FRONT_COLOR,
     BORDER_COLOR, NAME_COLOR, GLYPH_COLOR, RAIL_COLOR, SELECT_COLOR,
     PANEL_BG,
+    font as _font,
+    TYPE_CAPTION, TYPE_BODY,
 )
 
 _ENDOWMENT_GLYPH = {"coalfield": "C", "iron": "I", "timber": "T",
                     "farmland": "F", "harbor": "H"}
-
-_font_cache: Dict[int, pygame.font.Font] = {}
-
 
 # --- transform ----------------------------------------------------------------
 
@@ -67,16 +66,6 @@ def atlas_transform(atlas, rect: pygame.Rect) -> AtlasTransform:
     return AtlasTransform(scale=scale, ox=ox, oy=oy)
 
 
-def _font(size: int) -> pygame.font.Font:
-    f = _font_cache.get(size)
-    if f is None:
-        if not pygame.font.get_init():
-            pygame.font.init()
-        f = pygame.font.SysFont("georgia,serif", size)
-        _font_cache[size] = f
-    return f
-
-
 # --- legend ------------------------------------------------------------------
 
 LegendRow = namedtuple("LegendRow", ["kind", "label", "color", "glyph"])
@@ -104,7 +93,7 @@ def _rects_collide(a: pygame.Rect, b: pygame.Rect) -> bool:
 def atlas_label_rects(game, transform, rect: pygame.Rect,
                       selected_pid=None) -> List[Tuple[int, pygame.Rect]]:
     """Greedy label placement: selected first, then by population desc, name asc."""
-    name_font = _font(14)
+    name_font = _font(TYPE_BODY)
     # Build ordered list — sort by population desc, name asc, then promote
     # selected_pid to position 0 so the greedy pass tries it first.
     pids = list(game.atlas.provinces.keys())
@@ -140,7 +129,7 @@ def atlas_label_rects(game, transform, rect: pygame.Rect,
 def atlas_glyph_rects(game, transform, rect: pygame.Rect,
                       selected_pid=None) -> List[Tuple[int, pygame.Rect]]:
     """Glyphs only under provinces whose name was drawn, no collisions."""
-    glyph_font = _font(12)
+    glyph_font = _font(TYPE_CAPTION)
     label_rects = atlas_label_rects(game, transform, rect, selected_pid)
     label_pids = {pid for pid, _ in label_rects}
     all_rects = [r for _, r in label_rects]  # label rects to check against
@@ -323,7 +312,7 @@ def _dashed_line(surface, color, start, end, dash: int = 8, gap: int = 6,
 def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
     """Draw the legend in the top-left of the content rect. Returns its rect."""
     rows = atlas_legend_rows(game)
-    font = _font(12)
+    font = _font(TYPE_CAPTION)
     row_h = font.get_height() + 4
     # Two columns layout
     mid = (len(rows) + 1) // 2
@@ -421,7 +410,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
 
         # province labels
         labels = atlas_label_rects(game, transform, rect, selected_pid)
-        font = _font(12)
+        font = _font(TYPE_CAPTION)
         for pid, lr in labels:
             prov = game.atlas.provinces[pid]
             t = font.render(prov.name, True, NAME_COLOR)
@@ -429,7 +418,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
 
         # endowment glyphs
         glyphs = atlas_glyph_rects(game, transform, rect, selected_pid)
-        glyph_font = _font(11)
+        glyph_font = _font(TYPE_CAPTION)
         for pid, gr in glyphs:
             prov = game.atlas.provinces[pid]
             for end in prov.endowments:

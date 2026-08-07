@@ -47,6 +47,7 @@ from gilded.ui.widgets import (
     CARD_BG, CARD_EDGE, FADED, INK, PAPER_BG,
     Chip, Column, Meter, Table, TableLayout, font as _font, wrap as _wrap,
     column_plan, flow_columns, FlowResult,
+    TYPE_CAPTION, TYPE_BODY, TYPE_TEXT, TYPE_SUBTITLE, TYPE_HEADING, TYPE_TITLE,
 )
 from gilded.grip import (
     BAND_CONTESTED, BAND_IMPERILED, BAND_IRON_GRIP, BAND_SEIZED,
@@ -80,7 +81,7 @@ TIDE_DANGER = 70.0
 _HUD_ROWS = 3
 _METER_BAR_H = 14
 _CHIP_H = 18
-_TEXT_PT = 13
+_TEXT_PT = TYPE_CAPTION
 _ROW_GAP = 4
 _PAD = 6
 
@@ -576,7 +577,7 @@ def powers_layout(model, content: pygame.Rect) -> Dict[str, pygame.Rect]:
     bottom_limit = content.bottom - margin
 
     # Title
-    f_title = _font(24, bold=True)
+    f_title = _font(TYPE_HEADING, bold=True)
     title_h = f_title.get_linesize()
     title_rect = pygame.Rect(x, y, w, title_h)
     y += title_h + 8
@@ -688,9 +689,9 @@ def enterprises_model(report) -> EnterprisesModel:
     # Overflow detection
     if tbl_h > _ENT_TABLE_H_MAX:
         # Estimate how many rows fit
-        f = _font(14)
+        f = _font(TYPE_BODY)
         body_h = f.get_linesize()
-        header_h = _font(14, bold=True).get_linesize()
+        header_h = _font(TYPE_BODY, bold=True).get_linesize()
         gap = 2
         rule_h = 1
         available_data_h = _ENT_TABLE_H_MAX - header_h - rule_h - gap
@@ -890,7 +891,7 @@ class BroadsheetView:
                 text = r.hint
             if text:
                 pygame.draw.rect(surface, INK, r.rect, 2)
-                font = _font(15)
+                font = _font(TYPE_BODY)
                 words = text.split()
                 lines = []
                 current_line = ""
@@ -945,7 +946,7 @@ class BroadsheetView:
     def _draw_tab_bar(self, surface) -> None:
         pygame.draw.rect(surface, TAB_BG, (0, 0, self._w, TAB_H))
         tabw = self._w // len(TABS)
-        font = _font(18, bold=True)
+        font = _font(TYPE_TEXT, bold=True)
         self._tab_rects = {}
         TAB_HINTS = {
             "Briefing": "Your command post — see what changed and act on it.",
@@ -1018,7 +1019,7 @@ class BroadsheetView:
         y = self._h - BOTTOM_H
         pygame.draw.rect(surface, TAB_BG, (0, y, self._w, BOTTOM_H))
         attn = self.game.attention.get(self.house, 0)
-        font = _font(18, bold=True)
+        font = _font(TYPE_TEXT, bold=True)
         label = font.render(f"Attention: {attn}", True, ATTN_COLOR)
         surface.blit(label, (PAD, y + (BOTTOM_H - label.get_height()) / 2))
         nlabel = font.render(
@@ -1074,12 +1075,12 @@ class BroadsheetView:
     def _draw_briefing(self, surface, content: pygame.Rect) -> None:
         board = scoreboard(self.game, self.house)
         d = delta(self.prev_board, board)
-        title = _font(30, bold=True).render(
+        title = _font(TYPE_TITLE, bold=True).render(
             f"COUNCIL BRIEFING - {board.year}", True, INK)
         surface.blit(title, (PAD, content.y + 6))
         y = content.y + 6 + title.get_height() + 8
-        head = _font(19, bold=True)
-        body = _font(17)
+        head = _font(TYPE_SUBTITLE, bold=True)
+        body = _font(TYPE_TEXT)
         width = content.width - 2 * PAD
 
         surface.blit(head.render("Since last session", True, INK), (PAD, y))
@@ -1112,8 +1113,8 @@ class BroadsheetView:
     def _draw_petition_cards(self, surface, content: pygame.Rect,
                              y: int) -> None:
         petitions = self.game.docket_by_house.get(self.house, [])
-        body = _font(17)
-        small = _font(15, bold=True)
+        body = _font(TYPE_TEXT)
+        small = _font(TYPE_BODY, bold=True)
         width = content.width - 2 * PAD
         for p in petitions:
             lines = _wrap(p.text, body, width - 20)
@@ -1168,7 +1169,7 @@ class BroadsheetView:
             report = self.narrator.render(report, self.game.director, self.game)
         items = {"Gazette": report.gazette, "Ledger": report.ledger,
                  "Letters": report.letters}[self.active_tab]
-        head_font = _font(30, bold=True)
+        head_font = _font(TYPE_TITLE, bold=True)
         head = head_font.render(
             f"THE {self.active_tab.upper()} - {report.year}", True, INK)
         surface.blit(head, (PAD, content.y + 6))
@@ -1177,7 +1178,7 @@ class BroadsheetView:
         pygame.draw.line(surface, INK,
                          (PAD, rule_y),
                          (content.width - PAD, rule_y), 1)
-        body = _font(18)
+        body = _font(TYPE_TEXT)
         # Content area for columns: below the rule
         body_top = rule_y + 6
         body_rect = pygame.Rect(content.x, body_top,
@@ -1211,9 +1212,9 @@ class BroadsheetView:
         model = ledger_model(house, resolved_turn, notices)
 
         surface.set_clip(content)
-        f_title = _font(26, bold=True)
-        f_body = _font(14)
-        f_small = _font(12)
+        f_title = _font(TYPE_HEADING, bold=True)
+        f_body = _font(TYPE_BODY)
+        f_small = _font(TYPE_CAPTION)
         y = content.y + 8
         bottom = content.bottom
         overflow_items = 0
@@ -1250,7 +1251,7 @@ class BroadsheetView:
             cols = [Column("Label", width=2.0, align="left"),
                     Column("Amount", width=1.0, align="right")]
             data = [[r.label, money(r.amount)] for r in model.rows]
-            tbl = Table(cols, data, size=14)
+            tbl = Table(cols, data, size=TYPE_BODY)
             tbl_h = tbl.height()
             tbl_rect = pygame.Rect(PAD, y, content.width - 2 * PAD, tbl_h)
             tbl_layout = tbl.layout(tbl_rect)
@@ -1304,7 +1305,7 @@ class BroadsheetView:
                       Column("Outlay", width=1.0, align="right"),
                       Column("Net", width=1.0, align="right")]
             h_data = [history_cells(tl) for tl in model.history]
-            h_tbl = Table(h_cols, h_data, size=12)
+            h_tbl = Table(h_cols, h_data, size=TYPE_CAPTION)
             h_tbl_h = h_tbl.height()
             h_tbl_rect = pygame.Rect(PAD, y, content.width - 2 * PAD, h_tbl_h)
             h_tbl_layout = h_tbl.layout(h_tbl_rect)
@@ -1350,7 +1351,7 @@ class BroadsheetView:
             s_cols = [Column("Label", width=2.0, align="left"),
                       Column("Amount", width=1.0, align="right")]
             s_data = [[r.label, money(r.amount)] for r in model.summary]
-            s_tbl = Table(s_cols, s_data, size=14)
+            s_tbl = Table(s_cols, s_data, size=TYPE_BODY)
             s_tbl_h = s_tbl.height()
             s_tbl_rect = pygame.Rect(PAD, y, content.width - 2 * PAD, s_tbl_h)
             s_tbl_layout = s_tbl.layout(s_tbl_rect)
@@ -1414,7 +1415,7 @@ class BroadsheetView:
         surface.set_clip(None)
 
     def _draw_docket(self, surface, content: pygame.Rect) -> None:
-        title = _font(30, bold=True).render("THE DOCKET", True, INK)
+        title = _font(TYPE_TITLE, bold=True).render("THE DOCKET", True, INK)
         surface.blit(title, (PAD, content.y + 6))
         y = content.y + 6 + title.get_height() + 10
         self._draw_petition_cards(surface, content, y)
@@ -1437,9 +1438,9 @@ class BroadsheetView:
         eff = policy.effects(self.game, h)
         directives = self.game.directives[h]
         realm = self.game.realms[h]
-        title = _font(22, bold=True)
-        label = _font(17, bold=True)
-        small = _font(15)
+        title = _font(TYPE_SUBTITLE, bold=True)
+        label = _font(TYPE_TEXT, bold=True)
+        small = _font(TYPE_BODY)
         x = content.x + PAD
         w = content.width - 2 * PAD
         y = content.y + PAD
@@ -1521,7 +1522,7 @@ class BroadsheetView:
                              province_panel_lines(self.game, self.selected_pid))
 
     def _draw_panel(self, surface, lines: List[str]) -> None:
-        font = _font(16)
+        font = _font(TYPE_TEXT)
         w = max(font.size(l)[0] for l in lines) + 2 * PAD
         h = len(lines) * (font.get_height() + 2) + 2 * PAD
         rect = pygame.Rect(self._w - w - PAD, TAB_H + _hud_height() + PAD, w, h)
@@ -1531,7 +1532,7 @@ class BroadsheetView:
         surface.blit(panel, rect.topleft)
         y = rect.y + PAD
         for i, line in enumerate(lines):
-            f = _font(18, bold=True) if i == 0 else font
+            f = _font(TYPE_TEXT, bold=True) if i == 0 else font
             surface.blit(f.render(line, True, TAB_TEXT), (rect.x + PAD, y))
             y += font.get_height() + 2
 
@@ -1559,7 +1560,7 @@ class BroadsheetView:
         detail_rect = layout["detail"]
 
         # Title
-        f_title = _font(24, bold=True)
+        f_title = _font(TYPE_HEADING, bold=True)
         title_surf = f_title.render("THE POWERS", True, INK)
         surface.blit(title_surf, (title_rect.left, title_rect.top))
 
@@ -1997,7 +1998,7 @@ class BroadsheetView:
         y += body.get_height() + 8
 
         # Draw top N candidates
-        small = _font(16)
+        small = _font(TYPE_TEXT)
         for c in pool[:cap]:
             if y > content.bottom - 20:
                 return
@@ -2254,10 +2255,10 @@ class BroadsheetView:
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         g, name = self.game, self.house
         house = g.houses[name]
-        title = _font(30, bold=True).render(f"HOUSE {name.upper()}", True, INK)
+        title = _font(TYPE_TITLE, bold=True).render(f"HOUSE {name.upper()}", True, INK)
         surface.blit(title, (PAD, content.y + 6))
         y = content.y + 6 + title.get_height() + 10
-        body = _font(18)
+        body = _font(TYPE_TEXT)
         rows = self.house_lines()
         for row in rows:
             if y > content.bottom - 20:

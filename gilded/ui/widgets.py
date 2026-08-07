@@ -142,6 +142,20 @@ TONES: dict[str, tuple[int, int, int]] = {
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Type scale — six sizes, each named for the role it plays on screen
+# ────────────────────────────────────────────────────────────────────────────
+
+TYPE_CAPTION = 12    # smallest labels, legend text, map glyphs
+TYPE_BODY = 14       # table rows, meter labels, panel content
+TYPE_TEXT = 17       # paragraph prose, body copy, list items
+TYPE_SUBTITLE = 20   # section headers, tab titles, subtitles
+TYPE_HEADING = 24    # card titles, page headings
+TYPE_TITLE = 29      # largest screen titles
+
+TYPE_SIZES = (TYPE_CAPTION, TYPE_BODY, TYPE_TEXT, TYPE_SUBTITLE, TYPE_HEADING, TYPE_TITLE)
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Font helpers
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -375,7 +389,7 @@ class Table:
         self,
         cols: Sequence[Column],
         data: Sequence[Sequence[str]],
-        size: int = 14,
+        size: int = TYPE_BODY,
         row_rule: bool = False,
     ):
         self.cols = list(cols)
@@ -543,7 +557,7 @@ class Meter:
         delta: float | None = None,
         danger: tuple[str, float] | None = None,
         invert: bool = False,
-        size: int = 14,
+        size: int = TYPE_BODY,
         fmt: str = "{:.0f}",
     ):
         self.label = label
@@ -695,7 +709,7 @@ _CHIP_PAD_Y = 4
 
 
 class Chip:
-    def __init__(self, text: str, tone: str = "neutral", pt: int = 13):
+    def __init__(self, text: str, tone: str = "neutral", pt: int = TYPE_CAPTION):
         if tone not in TONES:
             raise ValueError(f"unknown tone: {tone!r}")
         self.text = text
@@ -744,7 +758,7 @@ _TITLE_GAP = 4
 
 
 class Panel:
-    def __init__(self, rect: pygame.Rect, title: str = "", size: int = 14):
+    def __init__(self, rect: pygame.Rect, title: str = "", size: int = TYPE_BODY):
         self.rect = rect
         self.title = title
         self.size = size

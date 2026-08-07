@@ -111,7 +111,7 @@ def test_r12_treasury_unsigned_on_surface():
 
     # Build the two possible header strings using the same font as _draw_ledger
     f_body = _font(14)
-    f_title = _font(26, bold=True)
+    f_title = _font(24, bold=True)
     resolved_turn = g.turn - 1
     gold_text = f"Turn {resolved_turn}  |  Treasury: {gold(house.treasury)} gold"
     money_text = f"Turn {resolved_turn}  |  Treasury: {money(house.treasury)} gold"
