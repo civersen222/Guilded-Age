@@ -1,4 +1,4 @@
-﻿"""The atlas renderer (mission G21): the map as the player sees it.
+"""The atlas renderer (mission G21): the map as the player sees it.
 
 Provinces come out of world.py as sets of lattice cells; this module traces
 each set's boundary into a screen polygon (marching-squares edge walk), fills
