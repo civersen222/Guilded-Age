@@ -1,4 +1,4 @@
-"""The atlas renderer (mission G21): the map as the player sees it.
+﻿"""The atlas renderer (mission G21): the map as the player sees it.
 
 Provinces come out of world.py as sets of lattice cells; this module traces
 each set's boundary into a screen polygon (marching-squares edge walk), fills
@@ -74,11 +74,10 @@ def atlas_transform(atlas, rect: pygame.Rect) -> AtlasTransform:
 
 
 def _font(size: int) -> pygame.font.Font:
-    if not pygame.font.get_init():
-        pygame.font.init()
-        _font_cache.clear()
     f = _font_cache.get(size)
     if f is None:
+        if not pygame.font.get_init():
+            pygame.font.init()
         f = pygame.font.SysFont("georgia,serif", size)
         _font_cache[size] = f
     return f
