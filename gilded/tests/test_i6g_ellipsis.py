@@ -17,7 +17,6 @@ from gilded.ui.widgets import Region
 def _pygame():
     pygame.init()
     yield
-    pygame.quit()
 
 
 def _game_view(seed=42, turns=3):
@@ -48,38 +47,47 @@ def test_overwide_word_truncates_panel_width():
 
     regions = v.regions._regions
     assert regions, "No regions found"
-    original_region = regions[0]
+
+    # Pick a region with a non-overlapping rect for hovering.
+    # The last region (End Turn button) has a unique rect position.
+    orig = regions[-1]
 
     # A single word with no spaces — long enough to exceed TOOLTIP_MAX_WIDTH
     long_word = "a" * 96
     target = Region(
-        rect=original_region.rect,
-        action=original_region.action,
-        state=original_region.state,
-        reason=original_region.reason,
+        rect=orig.rect,
+        action=orig.action,
+        state=orig.state,
+        reason=orig.reason,
         hint=long_word,
-        group=original_region.group,
+        group=orig.group,
     )
-    v.regions._regions[0] = target
 
     # Draw without hover first
     v.hover_pos = None
     v.hovered = None
     v.draw(surf)
 
-    # Hover to produce the tooltip — set hovered directly so the replaced
-    # region's hint is used (at() iterates in reverse and may pick a different
-    # region whose rect overlaps)
+    # Monkeypatch regions.at() to always return target, regardless of
+    # what position is passed. This ensures the tooltip is drawn for our
+    # over-wide word, not some other region's hint.
+    orig_at = v.regions.at
+    v.regions.at = lambda pos: target
+
     v.hover_pos = target.rect.center
-    v.hovered = target
     v.draw(surf)
 
     tr = v.tooltip_rect
     assert tr is not None, "Long word produced no tooltip"
 
+    # Assert the tooltip the view ACTUALLY drew is the over-wide text,
+    # not some other region's hint that got picked instead.
+    assert v.tooltip_text is not None, "No tooltip text produced"
+    assert "aaaa" in v.tooltip_text, (
+        f"tooltip_text is '{v.tooltip_text}' — the over-wide word was not "
+        f"the text the view drew; the hover hit the wrong region")
+
     cap = TOOLTIP_MAX_WIDTH + 8  # max_w + 2*pad (pad=4)
     assert tr.width < cap, (
         f"tooltip panel width {tr.width} >= cap {cap} — the over-wide word "
         f"was NOT truncated (panel fills to the cap instead of shrinking)")
-
-    v.regions._regions[0] = original_region
