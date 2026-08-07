@@ -943,6 +943,17 @@ class BroadsheetView:
                     surface.blit(surf_t, (rect.left + pad, cy))
                     cy += line_h
                 surface.set_clip(old_clip)
+                # Save tooltip pixels, then fill the 5px band with PAPER_BG
+                # so pre-existing page content doesn't bleed into the band.
+                tooltip_surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+                tooltip_surf.blit(surface, (0, 0), rect)
+                band = pygame.Rect(
+                    max(0, rect.left - 5), max(0, rect.top - 5),
+                    min(surface.get_width(), rect.right + 5) - max(0, rect.left - 5),
+                    min(surface.get_height(), rect.bottom + 5) - max(0, rect.top - 5),
+                )
+                surface.fill(PAPER_BG, band)
+                surface.blit(tooltip_surf, rect.topleft)
                 self.tooltip_text = text
                 self.tooltip_rect = rect
 
@@ -2287,16 +2298,6 @@ class BroadsheetView:
             if "close_director_picker" in action:
                 self._director_picker = None
                 self._director_picker_hits.clear()
-            if "buy_shares" in action and "char_id" not in action:
-                eid = action["buy_shares"]
-                self._share_picker = {"direction": "buy", "eid": eid}
-                self._share_picker_hits.clear()
-                return {"open_share_picker": eid}
-            if "sell_shares" in action and "char_id" not in action:
-                eid = action["sell_shares"]
-                self._share_picker = {"direction": "sell", "eid": eid}
-                self._share_picker_hits.clear()
-                return {"open_share_picker": eid}
             if "close_found_picker" in action:
                 self._found_picker = None
                 self._found_picker_hits.clear()

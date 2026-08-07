@@ -106,17 +106,36 @@ TONES: dict[str, tuple[int, int, int]] = {
 # ────────────────────────────────────────────────────────────────────────────
 
 _font_cache: dict[tuple[int, bool], pygame.font.Font] = {}
+_font_gen = 0  # bumped each time the font module is re-initialized
+_font_prev_init = pygame.font.get_init()
+
+
+def _check_font_gen():
+    """Clear cache if pygame.font was quit/re-init since last call."""
+    global _font_gen, _font_prev_init
+    cur = pygame.font.get_init()
+    if not cur and _font_prev_init:
+        # font module was quit — clear cache
+        _font_cache.clear()
+        _font_gen += 1
+    elif cur and not _font_prev_init:
+        # font module was re-init — old fonts are stale
+        _font_cache.clear()
+        _font_gen += 1
+    _font_prev_init = cur
 
 
 def font(size: int, bold: bool = False) -> pygame.font.Font:
     """Cached SysFont("georgia,serif"), lazily calling pygame.font.init()."""
+    _check_font_gen()
+    if not pygame.font.get_init():
+        pygame.font.init()
     key = (size, bold)
-    if key not in _font_cache:
-        if not pygame.font.get_init():
-            pygame.font.init()
-            _font_cache.clear()
-        _font_cache[key] = pygame.font.SysFont("georgia,serif", size, bold)
-    return _font_cache[key]
+    f = _font_cache.get(key)
+    if f is None:
+        f = pygame.font.SysFont("georgia,serif", size, bold)
+        _font_cache[key] = f
+    return f
 
 
 def wrap(text: str, f: pygame.font.Font, width: int) -> list[str]:
