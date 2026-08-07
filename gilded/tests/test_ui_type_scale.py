@@ -78,22 +78,29 @@ def _draw_all_screens():
     enterprises = [e.eid for e in g.enterprises if e.house == house]
     if enterprises:
         eid = enterprises[0]
-        # Found picker (treasury = 0)
-        g.houses[house].treasury = 0.0
-        view._found_picker = True
-        with patch.object(pygame.font, "SysFont", recording_sysfont):
-            view.draw(surf)
-        view._found_picker = False
-        # Director picker
-        view._director_picker = eid
-        with patch.object(pygame.font, "SysFont", recording_sysfont):
-            view.draw(surf)
-        view._director_picker = None
-        # Share picker
-        view._share_picker = {"direction": "buy", "eid": eid}
-        with patch.object(pygame.font, "SysFont", recording_sysfont):
-            view.draw(surf)
-        view._share_picker = None
+    else:
+        eid = g.enterprises[0].eid
+    # Director picker
+    view._director_picker = eid
+    with patch.object(pygame.font, "SysFont", recording_sysfont):
+        view.draw(surf)
+    view._director_picker = None
+    # Share picker
+    view._share_picker = {"direction": "buy", "eid": eid}
+    with patch.object(pygame.font, "SysFont", recording_sysfont):
+        view.draw(surf)
+    view._share_picker = None
+    # Found picker
+    view._found_picker = True
+    with patch.object(pygame.font, "SysFont", recording_sysfont):
+        view.draw(surf)
+    view._found_picker = False
+    # Found picker with treasury at zero
+    g.houses[house].treasury = 0
+    view._found_picker = True
+    with patch.object(pygame.font, "SysFont", recording_sysfont):
+        view.draw(surf)
+    view._found_picker = False
 
     return sizes_seen, pairs_seen, call_count
 
@@ -193,12 +200,21 @@ def test_one_cache_property():
     With one cache, each (size, bold) pair reaches pygame.font.SysFont
     exactly once. A second cache would cause duplicate calls for pairs
     already cached by the shared cache, making calls > pairs.
+
+    Additionally, atlas_view._font must be the SAME function object as
+    widgets.font — a second cache installed by rebinding atlas_view's
+    font symbol would break this identity check.
     """
     sizes_seen, pairs_seen, call_count = _draw_all_screens()
     assert len(sizes_seen) > 0, "No font sizes were recorded — measurement failed"
     assert call_count == len(pairs_seen), (
         f"SysFont calls ({call_count}) != distinct pairs ({len(pairs_seen)}) — "
         "multiple font caches detected"
+    )
+    import gilded.ui.atlas_view as av
+    assert av._font is widgets.font, (
+        "atlas_view._font is not the same object as widgets.font — "
+        "a second font cache has been installed"
     )
 
 
