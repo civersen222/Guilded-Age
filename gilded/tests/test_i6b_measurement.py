@@ -1,4 +1,4 @@
-﻿"""I6b — measurement cases for the three properties I6 touched.
+"""I6b — measurement cases for the three properties I6 touched.
 
 What these cases measure (unique coverage):
   1. Refused button fill differs from enabled button fill (sampled pixels)
