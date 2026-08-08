@@ -7,6 +7,7 @@ import copy
 import dataclasses
 import random
 
+from gilded.enterprises import Enterprise
 from gilded.peerage import (
     CourtSeat, Kin, CourtReport, report, band_for,
     BANDS, BAND_DISLOYAL, BAND_DUBIOUS, BAND_LOYAL, BAND_TRUSTED,
@@ -24,6 +25,13 @@ def _realm(seed=42, house="Vantrell"):
     rng = random.Random(seed)
     society = SocietyState(rng)
     return create_house_realm(house, society)
+
+
+def _make_enterprise(house):
+    return Enterprise(
+        eid=1, kind="coal", name="Test Mine", house=house, province=0,
+        tier=1, extraction_dial=50.0, director_id="", ledger={},
+    )
 
 
 def _game(realm, seed=42):
@@ -156,16 +164,91 @@ def test_band_edge_moves_with_constant():
 
 # ── D4c: is_disloyal agrees with disloyal_shareholders ─────────────────────
 
+def test_kin_is_disloyal_agrees_with_disloyal_shareholders():
+    """Four hand-built characters — is_disloyal must agree with
+    disloyal_shareholders on every one, with at least one True and one False.
+
+    Characters:
+    1. Below the line, holding shares  → True
+    2. Opinion == DISLOYAL_OPINION, holding shares → True
+    3. Far below the line, holding NOTHING → False (no shares, not in list)
+    4. Loyal shareholder → False
+    """
+    realm = _realm()
+    ruler = realm.ruler
+    society = realm.society
+
+    # Hand-build four characters with distinct disloyalty profiles
+    chs = []
+    for i in range(4):
+        ch = realm.characters[i + 1]  # skip ruler (index 0)
+        assert ch.id != ruler.id
+        chs.append(ch)
+
+    # 1. Below the line, holding shares → disloyal
+    chs[0].loyalty = DISLOYAL_LOYALTY - 10
+    # Ensure shares: add to an enterprise ledger
+    ent = _make_enterprise(realm.house_name)
+    ent.ledger = {chs[0].id: 10.0}
+
+    # 2. Opinion == DISLOYAL_OPINION, holding shares → disloyal
+    chs[1].loyalty = 70.0  # well above line
+    society.opinions[(chs[1].id, ruler.id)] = DISLOYAL_OPINION
+    ent.ledger[chs[1].id] = 5.0
+
+    # 3. Far below the line, holding NOTHING → NOT disloyal (no shares)
+    chs[2].loyalty = 10.0  # very low
+    society.opinions[(chs[2].id, ruler.id)] = 50  # neutral opinion
+    # No shares — not in any ledger
+
+    # 4. Loyal shareholder → NOT disloyal
+    chs[3].loyalty = 80.0
+    society.opinions[(chs[3].id, ruler.id)] = 10  # positive
+    ent.ledger[chs[3].id] = 15.0
+
+    # Run disloyal_shareholders (the simulation authority)
+    ds = disloyal_shareholders(realm, [ent], house_only=True)
+    ds_ids = {c.id for c in ds}
+
+    # Build report
+    game = _game(realm)
+    game.ents_of = lambda h: [ent]
+    r = report(game, realm.house_name)
+
+    # Collect Kin is_disloyal values
+    kin_map = {k.char_id: k for k in r.kin}
+    has_true = False
+    has_false = False
+    disagreements = 0
+
+    for ch in chs:
+        kin = kin_map.get(ch.id)
+        if kin is None:
+            continue
+        expected = ch.id in ds_ids
+        actual = kin.is_disloyal
+        if expected != actual:
+            disagreements += 1
+        if actual:
+            has_true = True
+        if not actual:
+            has_false = True
+
+    assert disagreements == 0, f"disagreements on {disagreements} characters"
+    assert has_true, "need at least one True"
+    assert has_false, "need at least one False"
+
+
 def test_kin_is_disloyal_agrees_with_rule_low_loyalty_shareholder():
     realm = _realm()
     ruler = realm.ruler
-    # Pick a character with shares, set loyalty below DISLOYAL_LOYALTY
     ch = realm.characters[1]  # not the ruler
     ch.loyalty = DISLOYAL_LOYALTY - 10
-    # Give shares
-    ch._shares = {"x1": 10.0}
-    # The Kin record should mark is_disloyal=True
+    # Give shares via enterprise ledger
+    ent = _make_enterprise(realm.house_name)
+    ent.ledger[ch.id] = 10.0
     game = _game(realm)
+    game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
     if kin_for_ch:
@@ -177,9 +260,11 @@ def test_kin_is_disloyal_agrees_with_rule_disloyal_opinion():
     ruler = realm.ruler
     ch = realm.characters[2]
     ch.loyalty = 70.0  # well above line
-    # Set opinion to exactly DISLOYAL_OPINION
     realm.society.opinions[(ch.id, ruler.id)] = DISLOYAL_OPINION
+    ent = _make_enterprise(realm.house_name)
+    ent.ledger[ch.id] = 5.0
     game = _game(realm)
+    game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
     if kin_for_ch:
@@ -192,7 +277,10 @@ def test_kin_is_disloyal_false_for_loyal_shareholder():
     ch = realm.characters[3]
     ch.loyalty = 75.0
     realm.society.opinions[(ch.id, ruler.id)] = 10
+    ent = _make_enterprise(realm.house_name)
+    ent.ledger[ch.id] = 15.0
     game = _game(realm)
+    game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
     if kin_for_ch:
@@ -395,7 +483,10 @@ def test_is_disloyal_uses_constant():
     ruler = realm.ruler
     ch = realm.characters[10]
     ch.loyalty = DISLOYAL_LOYALTY - 1  # just below
+    ent = _make_enterprise(realm.house_name)
+    ent.ledger[ch.id] = 10.0
     game = _game(realm)
+    game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
     if kin_for_ch:
@@ -408,7 +499,10 @@ def test_opinion_disloyal_uses_constant():
     ch = realm.characters[11]
     ch.loyalty = 80.0  # well above loyalty threshold
     realm.society.opinions[(ch.id, ruler.id)] = DISLOYAL_OPINION  # exactly at opinion threshold
+    ent = _make_enterprise(realm.house_name)
+    ent.ledger[ch.id] = 10.0
     game = _game(realm)
+    game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
     if kin_for_ch:

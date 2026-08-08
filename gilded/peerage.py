@@ -191,8 +191,10 @@ def report(game, house: str) -> CourtReport:
         loyalty = _get_loyalty(ch)
         shares = house_stake(house_ents, ch.id)
 
-        # Disloyal flag — match disloyal_shareholders rule exactly
-        is_disloyal = loyalty < DISLOYAL_LOYALTY or opinion <= DISLOYAL_OPINION
+        # Disloyal flag — match disloyal_shareholders rule exactly:
+        # must have shares AND (low loyalty OR bad opinion vs ruler)
+        is_disloyal = (shares > 0
+                       and (loyalty < DISLOYAL_LOYALTY or opinion <= DISLOYAL_OPINION))
 
         # Grievances — opinion history of THIS character OF THE RULER
         hist_key = (ch.id, ruler_id)
