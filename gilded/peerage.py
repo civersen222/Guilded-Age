@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 from gilded.society.court import CourtPosition
 from gilded.society.realm import DISLOYAL_LOYALTY, DISLOYAL_OPINION, disloyal_shareholders
 from gilded.society.shares import house_stake
-from gilded.society.succession import succession_order
+from gilded.society.succession import succession_order, resolve_succession
 
 
 # ── Bands ────────────────────────────────────────────────────────────────────
@@ -172,8 +172,9 @@ def report(game, house: str) -> CourtReport:
         if ch.id not in succ_rank_map:
             succ_rank_map[ch.id] = idx
 
-    # Heir if ruler died now
-    heir_if_died = succ_order[0].id if succ_order else None
+    # Heir if ruler died now — use shared resolve_succession (same as tick)
+    heir = resolve_succession(realm)
+    heir_if_died = heir.id if heir else None
 
     # Aggrieved if ruler died now — living dynasty adults ≥ 16 who are not the heir
     aggrieved: List[str] = []
