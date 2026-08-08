@@ -86,24 +86,6 @@ def _find_scale_tuple_in_tree() -> str:
     raise AssertionError("No scale tuple in widgets.py")
 
 
-def _get_scale_step_names() -> list[str]:
-    """Return the six TYPE_* constant names from the live module.
-
-    Resolved by convention (prefix TYPE_) so it survives a rename of the
-    tuple but not of the steps themselves — which is correct, because the
-    steps' names are part of the contract.
-    """
-    return [
-        name for name in dir(widgets)
-        if name.startswith("TYPE_") and not name.startswith("TYPE_") == False
-    ]
-    # Actually let's be explicit:
-    return [
-        n for n in dir(widgets)
-        if n.startswith("TYPE_") and isinstance(getattr(widgets, n, None), int)
-    ]
-
-
 def _get_scale_step_names_explicit() -> list[str]:
     """Return the six TYPE_* constant names from the live module, sorted by value."""
     steps = {}
