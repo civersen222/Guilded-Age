@@ -284,26 +284,6 @@ def test_atlas_view_has_no_font_function():
     )
 
 
-# ── no point size literals outside widgets.py ────────────────────────────────
-
-
-def test_lint_no_font_size_outside_widgets():
-    """No integer point size is spelled under gilded/ui/ outside widgets.py.
-
-    Measured by verifying every size that reaches pygame is in the type scale.
-    If a literal size exists in the source, it would appear in the render
-    and fail this check.
-    """
-    sizes_seen, _, _ = _measure_all_screens()
-    assert len(sizes_seen) > 0, "No font sizes were recorded — measurement failed"
-    scale_values = {
-        widgets.TYPE_CAPTION, widgets.TYPE_BODY, widgets.TYPE_TEXT,
-        widgets.TYPE_SUBTITLE, widgets.TYPE_HEADING, widgets.TYPE_TITLE,
-    }
-    for s in sizes_seen:
-        assert s in scale_values, f"Size {s} not in type scale {sorted(scale_values)}"
-
-
 # ── recorded sizes match the scale ───────────────────────────────────────────
 
 
