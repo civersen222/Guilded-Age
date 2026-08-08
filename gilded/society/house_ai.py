@@ -16,6 +16,7 @@ from gilded.society.characters import Character, generate_child, modify_opinion,
 from gilded.society.realm import MALE_NAMES, FEMALE_NAMES, _make_character
 from gilded.society.population import bulk_pass, relevance_set
 from gilded.society.dispositions import apply_drift, guardian_rub_off
+from gilded.society.succession import resolve_succession
 
 FEAST_INTERVAL = 12
 CHILD_INTERVAL = 8
@@ -43,12 +44,7 @@ def tick_realm(realm, turn, rng: random.Random, tide=None,
     # --- succession: the oldest kin takes the chair the moment it empties ---
     ruler = realm.ruler
     if not ruler.is_alive:
-        kin = [c for c in realm.dynasty.all_characters.values() if c.is_alive and c.id != ruler.id]
-        adults = [c for c in kin if c.age >= 16]
-        heir = max(adults, key=lambda c: c.age) if adults else (max(kin, key=lambda c: c.age) if kin else None)
-        if heir is None:
-            living = [c for c in realm.characters if c.is_alive and c.age >= 16]
-            heir = max(living, key=lambda c: c.get_effective_stat("statecraft")) if living else None
+        heir = resolve_succession(realm)
         if heir is None:
             heir = _make_character(realm.house_name, ruler.base_stats, [], 20, 35, rng, realm.society)
             realm.characters.append(heir)
