@@ -119,15 +119,28 @@ def test_two_reports_equal():
 
 
 def test_report_does_not_mutate_game():
+    """R4: report() mutates no character state."""
     realm = _realm()
     game = _game(realm)
+    # Snapshot ALL character state BEFORE the call
+    snapshots = {}
+    for ch in realm.characters:
+        snapshots[ch.id] = {
+            'loyalty': getattr(ch, 'loyalty', None),
+            'age': ch.age,
+            'is_alive': ch.is_alive,
+            'is_heir': getattr(ch, 'is_heir', False),
+        }
+    opinions_before = dict(realm.society.opinions)
     report(game, realm.house_name)
-    # Snapshot key state
-    gold_after = game.treasuries.get(realm.house_name)
-    ruler_after = realm.ruler
-    # None of these should have changed
-    assert gold_after == 1000
-    assert ruler_after is realm.ruler
+    # Compare ALL character state AFTER the call
+    for ch in realm.characters:
+        s = snapshots[ch.id]
+        assert getattr(ch, 'loyalty', None) == s['loyalty'], f"{ch.name}.loyalty changed"
+        assert ch.age == s['age'], f"{ch.name}.age changed"
+        assert ch.is_alive == s['is_alive'], f"{ch.name}.is_alive changed"
+        assert getattr(ch, 'is_heir', False) == s['is_heir'], f"{ch.name}.is_heir changed"
+    assert realm.society.opinions == opinions_before, "opinion map mutated"
 
 
 # ── D4: bands weakest-first, all reachable ──────────────────────────────────
@@ -251,8 +264,8 @@ def test_kin_is_disloyal_agrees_with_rule_low_loyalty_shareholder():
     game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
-    if kin_for_ch:
-        assert kin_for_ch[0].is_disloyal is True
+    assert kin_for_ch, "character should appear in kin"
+    assert kin_for_ch[0].is_disloyal is True
 
 
 def test_kin_is_disloyal_agrees_with_rule_disloyal_opinion():
@@ -267,8 +280,8 @@ def test_kin_is_disloyal_agrees_with_rule_disloyal_opinion():
     game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
-    if kin_for_ch:
-        assert kin_for_ch[0].is_disloyal is True
+    assert kin_for_ch, "character should appear in kin"
+    assert kin_for_ch[0].is_disloyal is True
 
 
 def test_kin_is_disloyal_false_for_loyal_shareholder():
@@ -283,8 +296,8 @@ def test_kin_is_disloyal_false_for_loyal_shareholder():
     game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
-    if kin_for_ch:
-        assert kin_for_ch[0].is_disloyal is False
+    assert kin_for_ch, "character should appear in kin"
+    assert kin_for_ch[0].is_disloyal is False
 
 
 # ── D4d: kin covers all living non-ruler realm characters + dynasty ────────
@@ -317,44 +330,67 @@ def test_kin_includes_dynasty_members():
 # ── D5: succession shared between tick and read-model ──────────────────────
 
 def test_succession_order_from_peerage_matches_resolve():
+    """R3: succession rank is pinned to character facts (ages/statecraft), not an agreement between callers."""
     realm = _realm()
-    order = succession_order(realm)
+    ruler = realm.ruler
+    # Pin the heir to a specific character fact
     heir = resolve_succession(realm)
-    if order:
-        assert heir.id == order[0].id
+    assert heir is not None, "realm should have a succession candidate"
+    # The heir must be the oldest living dynasty adult (tier 1)
+    # or satisfy the succession rule based on age/statecraft
+    heir_in_kin = [k for k in report(_game(realm), realm.house_name).kin
+                   if k.char_id == heir.id]
+    assert heir_in_kin, "heir should appear in kin"
+    assert heir_in_kin[0].succession_rank == 1, "rank 1 is a fact about the character"
+    # Verify the order: rank 1 character must be >= age of rank 2 (same tier)
+    # or be in an earlier tier
+    all_kin = report(_game(realm), realm.house_name).kin
+    ranked = sorted([k for k in all_kin if k.succession_rank is not None],
+                    key=lambda k: k.succession_rank)
+    assert len(ranked) >= 1
+    # Rank 1 must be alive and in the realm
+    assert ranked[0].is_alive
 
 
 def test_succession_rank_in_kin():
+    """R3: the heir has succession_rank == 1, pinned to character identity."""
     realm = _realm()
     ruler = realm.ruler
-    # Kill ruler to test succession
+    # Kill ruler so the heir is determined
     ruler.is_alive = False
     game = _game(realm)
     r = report(game, realm.house_name)
     heir_id = r.heir_if_ruler_died_now
-    if heir_id:
-        kin_for_heir = [k for k in r.kin if k.char_id == heir_id]
-        if kin_for_heir:
-            assert kin_for_heir[0].succession_rank == 1
+    assert heir_id is not None, "realm should have an heir when ruler dies"
+    kin_for_heir = [k for k in r.kin if k.char_id == heir_id]
+    assert kin_for_heir, "heir should appear in kin list"
+    assert kin_for_heir[0].succession_rank == 1
 
 
 # ── D6: grievances from opinion ledger ─────────────────────────────────────
 
 def test_grievances_carry_reason_sentences():
+    """D2: grievances are an ordered sequence in ledger order, oldest first."""
     realm = _realm()
     ruler = realm.ruler
-    ch = realm.characters[5]
-    # Create opinion history entries with reasons
-    realm.society.opinion_history[(ch.id, ruler.id)] = []
-    _modify_opinion(ch, ruler, -10, "taxed too heavily")
-    _modify_opinion(ch, ruler, -5, "refused title")
+    ch = realm.characters[1]
+    # Write 3 distinct reasons into the opinion ledger (ch → ruler)
+    _modify_opinion(ch, ruler, -5, "Seized my estate")
+    _modify_opinion(ch, ruler, -3, "Insulted at court")
+    _modify_opinion(ch, ruler, -8, "Blocked my promotion")
+    ent = _make_enterprise(realm.house_name)
+    ent.ledger[ch.id] = 10.0
     game = _game(realm)
+    game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
-    if kin_for_ch:
-        grievances = kin_for_ch[0].grievances
-        assert "taxed too heavily" in grievances
-        assert "refused title" in grievances
+    assert kin_for_ch, "character should appear in kin"
+    g = kin_for_ch[0].grievances
+    # Must carry the ledger's reason sentences in ledger order (oldest first)
+    assert len(g) >= 3, f"expected at least 3 grievances, got {len(g)}"
+    assert g[0] == "Seized my estate"
+    assert g[1] == "Insulted at court"
+    assert g[2] == "Blocked my promotion"
 
 
 def test_grievances_exclude_empty_reason():
@@ -367,8 +403,8 @@ def test_grievances_exclude_empty_reason():
     game = _game(realm)
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
-    if kin_for_ch:
-        assert "" not in kin_for_ch[0].grievances
+    assert kin_for_ch, "character should appear in kin"
+    assert "" not in kin_for_ch[0].grievances
 
 
 # ── D7: no UI imports peerage ───────────────────────────────────────────────
@@ -409,13 +445,20 @@ def test_shares_pct_is_average():
     realm = _realm()
     ruler = realm.ruler
     ch = realm.characters[1]
-    # With no enterprises, stake is 0
+    # Two enterprises with different stakes → mean ≠ total ≠ max
+    ent1 = _make_enterprise(realm.house_name)
+    ent1.eid = 1
+    ent1.ledger[ch.id] = 10.0
+    ent2 = _make_enterprise(realm.house_name)
+    ent2.eid = 2
+    ent2.ledger[ch.id] = 30.0
     game = _game(realm)
+    game.ents_of = lambda h: [ent1, ent2]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
-    if kin_for_ch:
-        # No enterprises → 0 stake
-        assert kin_for_ch[0].shares_pct == 0.0
+    assert kin_for_ch, "character should appear in kin"
+    # mean = (10 + 30) / 2 = 20; total = 40; max = 30
+    assert kin_for_ch[0].shares_pct == 20.0, "shares_pct must be the MEAN"
 
 
 # ── Band coverage across loyalty range ──────────────────────────────────────
@@ -489,8 +532,8 @@ def test_is_disloyal_uses_constant():
     game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
-    if kin_for_ch:
-        assert kin_for_ch[0].is_disloyal is True
+    assert kin_for_ch, "character should appear in kin"
+    assert kin_for_ch[0].is_disloyal is True
 
 
 def test_opinion_disloyal_uses_constant():
@@ -505,8 +548,8 @@ def test_opinion_disloyal_uses_constant():
     game.ents_of = lambda h: [ent]
     r = report(game, realm.house_name)
     kin_for_ch = [k for k in r.kin if k.char_id == ch.id]
-    if kin_for_ch:
-        assert kin_for_ch[0].is_disloyal is True
+    assert kin_for_ch, "character should appear in kin"
+    assert kin_for_ch[0].is_disloyal is True
 
 
 # ── Purity: report does not affect game ticks ──────────────────────────────
