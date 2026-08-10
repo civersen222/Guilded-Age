@@ -14,7 +14,7 @@ import pygame
 from gilded.chassis import GildedGame
 from gilded.ui.broadsheet import BroadsheetView
 from gilded.peerage import report as peerage_report
-from gilded.ui.house_tab import _house_tab_lines
+from gilded.ui.house_tab import _house_tab_lines, draw_house_tab
 
 
 def _view():
@@ -133,3 +133,14 @@ def test_house_tab_lines_returns_lines():
     lines = _house_tab_lines(rpt)
     assert isinstance(lines, list)
     assert len(lines) > 0
+
+
+def test_draw_house_tab_draws():
+    """draw_house_tab renders to a surface without raising."""
+    g, v = _view()
+    rpt = peerage_report(g, v.house)
+    surf = pygame.Surface((640, 480))
+    rect = pygame.Rect(0, 0, 640, 480)
+    draw_house_tab(surf, rect, rpt)
+    # Surface should have pixels set
+    assert surf.get_at((320, 240)) != (0, 0, 0, 0)
