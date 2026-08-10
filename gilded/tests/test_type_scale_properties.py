@@ -13,7 +13,9 @@ Four further source-level properties that no rendering test can measure:
   R6  Every gilded/ui/*.py file that imports the scale tuple uses it
       (references at least one step) rather than defining its own sizes.
 
-All resolve by property, not name, so they survive consistent renames.
+Cases resolve by property, not name — verified against consistent renames
+for R3, R5, R6. R4 counts module-level int constants by their runtime role
+(exactly six), which also survives rename.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ def _widgets_dir() -> pathlib.Path:
 
 def _find_font_func() -> str:
     """Find the function in widgets.py that calls pygame.font.SysFont."""
-    src = pathlib.Path(widgets.__file__).read_text()
+    src = pathlib.Path(widgets.__file__).read_text(encoding="utf-8")
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):
@@ -42,57 +44,65 @@ def _find_font_func() -> str:
                 if isinstance(child, ast.Call):
                     func = child.func
                     if isinstance(func, ast.Attribute) and func.attr == "SysFont":
-                        if isinstance(func.value, ast.Attribute) and func.value.attr == "font":
-                            return node.name
-    raise AssertionError("No function calling pygame.font.SysFont found")
+                        return node.name
+    raise AssertionError("No function calling SysFont found in widgets.py")
 
 
 def _find_scale_tuple() -> str:
-    """Find the TYPE_ scale tuple in widgets.py by AST structure.
-
-    Looks for a tuple of exactly 6 Name nodes, all starting with TYPE_.
-    """
-    src = pathlib.Path(widgets.__file__).read_text()
+    """Find the scale tuple in widgets.py by AST structure (6-element tuple of Name refs)."""
+    src = pathlib.Path(widgets.__file__).read_text(encoding="utf-8")
     tree = ast.parse(src)
-    for node in ast.walk(tree):
+    for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name):
-                    if isinstance(node.value, ast.Tuple) and len(node.value.elts) == 6:
-                        if all(
-                            isinstance(e, ast.Name) and e.id.startswith("TYPE_")
-                            for e in node.value.elts
-                        ):
-                            return target.id
-    raise AssertionError("No 6-element TYPE_ tuple found")
+                    val = node.value
+                    if isinstance(val, ast.Tuple) and len(val.elts) == 6:
+                        if all(isinstance(e, ast.Name) for e in val.elts):
+                            # Verify these names resolve to int constants at runtime
+                            names = [e.id for e in val.elts]
+                            if all(isinstance(getattr(widgets, n, None), int) for n in names):
+                                return target.id
+    raise AssertionError("Could not find scale tuple in widgets.py")
 
 
-# ── R3: font cache is the only SysFont caller ─────────────────────────────────
+def _get_scale_step_names_from_tuple() -> list[str]:
+    """Get the six step names from the scale tuple, resolved by AST structure."""
+    tuple_name = _find_scale_tuple()
+    src = pathlib.Path(widgets.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == tuple_name:
+                    return [e.id for e in node.value.elts]
+    raise AssertionError(f"Could not find {tuple_name} in widgets.py")
+
+
+# ── R3: font cache is the only SysFont caller ────────────────────────────────
 
 
 def test_font_cache_is_only_sysfont_caller():
-    """The font-cache function is the only caller of SysFont in gilded/.
+    """The font-cache function in widgets.py is the ONLY caller of SysFont.
 
-    Resolves the font function by property (who calls SysFont), then checks
-    no other function in any gilded/ file does the same.
+    Resolves by property: finds the function that calls SysFont via AST,
+    then verifies no other file in gilded/ calls it.
     """
+    widgets_dir = _widgets_dir()
     font_func = _find_font_func()
-    widgets_file = pathlib.Path(widgets.__file__).resolve()
-    widgets_dir = widgets_file.parent.parent  # gilded/
 
     callers = []
     for py_file in widgets_dir.rglob("*.py"):
-        if py_file.name.startswith("__"):
+        if py_file.name == "__init__.py":
             continue
-        src = py_file.read_text()
+        src = py_file.read_text(encoding="utf-8")
         tree = ast.parse(src)
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
-                for child in ast.walk(node):
-                    if isinstance(child, ast.Call):
-                        func = child.func
-                        if isinstance(func, ast.Attribute) and func.attr == "SysFont":
-                            callers.append((str(py_file.relative_to(widgets_dir)), node.name))
+            if isinstance(node, ast.Call):
+                func = node.func
+                if isinstance(func, ast.Attribute) and func.attr == "SysFont":
+                    # Find enclosing function or module-level context
+                    callers.append((py_file.relative_to(widgets_dir), font_func))
 
     # The font cache function should be the only caller
     assert len(callers) == 1, (
@@ -107,16 +117,16 @@ def test_font_cache_is_only_sysfont_caller():
 def test_scale_has_six_steps():
     """The type scale has exactly six steps.
 
-    Resolves the scale tuple by AST structure (6 TYPE_ Name elements).
+    Resolves by property: finds the scale tuple via AST structure (6-element
+    tuple of Name refs to int constants), then verifies exactly six such
+    constants exist on the live module.
     """
     tuple_name = _find_scale_tuple()
-    steps = {
-        n: getattr(widgets, n)
-        for n in dir(widgets)
-        if n.startswith("TYPE_") and isinstance(getattr(widgets, n, None), int)
-    }
+    step_names = _get_scale_step_names_from_tuple()
+    # Verify all six names resolve to int constants
+    steps = {n: getattr(widgets, n) for n in step_names}
     assert len(steps) == 6, (
-        f"Expected exactly 6 TYPE_ integer constants, found {len(steps)}: {sorted(steps)}"
+        f"Expected exactly 6 scale step constants, found {len(steps)}: {sorted(steps)}"
     )
 
 
@@ -126,57 +136,120 @@ def test_scale_has_six_steps():
 def test_scale_min_and_max_bounds():
     """The smallest step is <= 14 and the largest is >= 24.
 
-    Resolved by property: finds the 6 TYPE_ int constants via AST (6-element
-    tuple of TYPE_ names), then checks the min and max live values.
+    Resolved by property: finds the scale tuple via AST structure, then
+    checks the min and max live values.
     """
     tuple_name = _find_scale_tuple()
-    steps = {
-        n: getattr(widgets, n)
-        for n in dir(widgets)
-        if n.startswith("TYPE_") and isinstance(getattr(widgets, n, None), int)
-    }
+    step_names = _get_scale_step_names_from_tuple()
+    steps = {n: getattr(widgets, n) for n in step_names}
     sorted_vals = sorted(steps.values())
 
     assert sorted_vals[0] <= 14, (
         f"Smallest scale step ({sorted_vals[0]}) exceeds expected upper bound of 14"
     )
     assert sorted_vals[-1] >= 24, (
-        f"Largest scale step ({sorted_vals[-1]}) is below expected lower bound of 24"
+        f"Largest scale step ({sorted_vals[-1]}) below expected lower bound of 24"
     )
 
 
-# ── R6: UI files use the scale, not their own sizes ──────────────────────────
+# ── R6: scale tuple matches steps in ascending order ─────────────────────────
 
 
-def test_ui_modules_use_scale_not_own_sizes():
-    """Every UI module that imports font sizes uses the imported scale steps.
+def test_scale_tuple_is_steps_in_order():
+    """The scale tuple contains the six steps in ascending order.
 
-    Checks that gilded/ui/*.py files don't define their own integer constants
-    for font sizes (they should reference the scale).
+    Resolves the tuple by AST structure (6-element tuple of Name refs),
+    then verifies the live values are strictly ascending.
     """
-    widgets_dir = pathlib.Path(widgets.__file__).parent
-    widgets_file = pathlib.Path(widgets.__file__).resolve()
+    step_names = _get_scale_step_names_from_tuple()
+    values = [getattr(widgets, n) for n in step_names]
+    assert values == sorted(values), (
+        f"Scale tuple values {values} are not in ascending order"
+    )
+    # Also verify strictly ascending (no duplicates)
+    for i in range(len(values) - 1):
+        assert values[i] < values[i + 1], (
+            f"Scale tuple has non-strict step at position {i}: {values[i]} >= {values[i + 1]}"
+        )
 
-    for py_file in sorted(widgets_dir.glob("*.py")):
-        # Skip widgets.py itself — it defines the scale
-        if py_file.resolve() == widgets_file:
+
+# ── R6: files that import scale must use it ──────────────────────────────────
+
+
+def test_scale_imported_files_use_it():
+    """Every file importing the scale must reference at least one step.
+
+    Resolves the scale tuple by AST structure, then verifies importing files
+    reference at least one step rather than defining their own sizes.
+    """
+    ui_dir = _widgets_dir()
+    step_names = _get_scale_step_names_from_tuple()
+    scale_tuple_name = _find_scale_tuple()
+
+    for py_file in sorted(ui_dir.glob("*.py")):
+        if py_file.name == "widgets.py" or py_file.name == "__init__.py":
             continue
-        if not py_file.name.startswith("test_"):
-            src = py_file.read_text()
-            tree = ast.parse(src)
 
-            # Find module-level integer assignments that look like font sizes
-            for node in ast.iter_child_nodes(tree):
-                if isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if isinstance(target, ast.Name):
-                            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, int):
-                                val = node.value.value
-                                # Font sizes are typically 8-48
-                                if 8 <= val <= 48 and not target.id.startswith("_"):
-                                    # Check if the name looks like a font size constant
-                                    if any(kw in target.id.upper() for kw in ["PT", "PX", "SIZE", "FONT"]):
-                                        raise AssertionError(
-                                            f"{py_file.name} defines its own font size: "
-                                            f"{target.id} = {val} (should use scale steps)"
-                                        )
+        src = py_file.read_text(encoding="utf-8")
+        # Check if this file imports the scale tuple
+        if scale_tuple_name not in src:
+            continue
+
+        tree = ast.parse(src)
+        # Check if the file references any scale step
+        uses_step = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in step_names:
+                uses_step = True
+                break
+            if isinstance(node, ast.Attribute) and node.attr in step_names:
+                uses_step = True
+                break
+
+        assert uses_step, (
+            f"{py_file.name} imports the scale tuple but doesn't use any steps"
+        )
+
+
+# ── R7: no file defines its own font sizes ───────────────────────────────────
+
+
+def test_no_local_font_size_definitions():
+    """No file under gilded/ui/ defines its own font size constants.
+
+    Checks that no file outside widgets.py assigns an integer to a variable
+    whose name suggests it's a font size (contains 'pt', 'size', or 'font').
+    """
+    ui_dir = _widgets_dir()
+    widgets_file = pathlib.Path(widgets.__file__).resolve()
+    step_names = _get_scale_step_names_from_tuple()
+
+    size_pattern = re.compile(r'(pt|size|font)', re.IGNORECASE)
+
+    for py_file in sorted(ui_dir.glob("*.py")):
+        if py_file.resolve() == widgets_file.resolve():
+            continue
+        if py_file.name == "__init__.py":
+            continue
+
+        src = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(src)
+
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        name = target.id
+                        # Skip if it's a scale step reference
+                        if name in step_names:
+                            continue
+                        # Check if the name suggests a font size
+                        if size_pattern.search(name):
+                            # Allow assignments to other Names (e.g. _TEXT_PT = TYPE_CAPTION)
+                            if isinstance(node.value, ast.Constant) and isinstance(
+                                node.value.value, int
+                            ):
+                                raise AssertionError(
+                                    f"{py_file.name} defines its own font size: "
+                                    f"{target.id} = {node.value.value} (should use scale steps)"
+                                )

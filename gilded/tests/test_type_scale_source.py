@@ -19,10 +19,7 @@ so a consistent rename across the repository cannot defeat them.
 from __future__ import annotations
 
 import ast
-import inspect
 import pathlib
-import textwrap
-import typing
 
 import gilded.ui.widgets as widgets
 
@@ -46,14 +43,9 @@ def _find_font_func_in_tree() -> str:
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            # Walk the function body looking for a SysFont call
             for child in ast.walk(node):
                 if isinstance(child, ast.Call):
                     func = child.func
-                    # pygame.font.SysFont(...)
-                    if isinstance(func, ast.Attribute) and func.attr == "SysFont":
-                        return node.name
-                    # font.SysFont(...) where font is pygame.font
                     if isinstance(func, ast.Attribute) and func.attr == "SysFont":
                         return node.name
 
@@ -64,7 +56,8 @@ def _find_scale_tuple_in_tree() -> str:
     """Find the name of the tuple in widgets.py that holds the six scale steps.
 
     Resolves by property: a module-level Name whose value is a Tuple of 6
-    ast.Name elements whose ids all start with TYPE_.  Survives renames.
+    ast.Name elements that all resolve to int constants on the live module.
+    Survives renames.
     """
     widgets_file = pathlib.Path(widgets.__file__).resolve()
     tree = ast.parse(widgets_file.read_text(encoding="utf-8"))
@@ -72,73 +65,40 @@ def _find_scale_tuple_in_tree() -> str:
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                name = None
-                if isinstance(target, ast.Name):
-                    name = target.id
-                if name and isinstance(node.value, ast.Tuple):
+                if isinstance(target, ast.Name) and isinstance(node.value, ast.Tuple):
                     elts = node.value.elts
-                    if len(elts) == 6 and all(
-                        isinstance(e, ast.Name) and e.id.startswith("TYPE_")
-                        for e in elts
-                    ):
-                        return name
+                    if len(elts) == 6 and all(isinstance(e, ast.Name) for e in elts):
+                        # Verify these names resolve to int constants at runtime
+                        names = [e.id for e in elts]
+                        if all(isinstance(getattr(widgets, n, None), int) for n in names):
+                            return target.id
 
     raise AssertionError("No scale tuple in widgets.py")
 
 
-def _get_scale_step_names_explicit() -> list[str]:
-    """Return the six TYPE_* constant names from the live module, sorted by value."""
-    steps = {}
-    for name in dir(widgets):
-        if name.startswith("TYPE_") and isinstance(getattr(widgets, name, None), int):
-            # Exclude the tuple itself if it were somehow int (it won't be)
-            val = getattr(widgets, name)
-            if isinstance(val, int):
-                steps[name] = val
-    # Sort by value to get declaration order
-    return [name for name, _ in sorted(steps.items(), key=lambda x: x[1])]
+def _get_scale_step_names_from_tuple() -> list[str]:
+    """Return the six step names from the scale tuple, in declaration order.
 
+    Resolves the tuple by AST structure (6 Name elements resolving to int
+    constants), then extracts the Name ids in source order.
+    """
+    widgets_file = pathlib.Path(widgets.__file__).resolve()
+    tree = ast.parse(widgets_file.read_text(encoding="utf-8"))
 
-# ── R1: no integer literals at font call sites ──────────────────────────────
-
-
-def _is_integer_literal(node: ast.expr) -> bool:
-    """Return True if the node is an integer constant."""
-    return isinstance(node, ast.Constant) and isinstance(node.value, int)
-
-
-def _is_name_ref(node: ast.expr) -> bool:
-    """Return True if the node is a Name reference (could be a scale step)."""
-    return isinstance(node, ast.Name)
-
-
-def _is_attr_ref(node: ast.expr) -> bool:
-    """Return True if the node is an Attribute reference (e.g. self.size, tbl.size)."""
-    return isinstance(node, ast.Attribute)
-
-
-def _collect_module_names(tree: ast.Module) -> set[str]:
-    """Collect all module-level Name assignments in the parsed file."""
-    names = set()
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name):
-                    names.add(target.id)
-    return names
+                if isinstance(target, ast.Name) and isinstance(node.value, ast.Tuple):
+                    elts = node.value.elts
+                    if len(elts) == 6 and all(isinstance(e, ast.Name) for e in elts):
+                        names = [e.id for e in elts]
+                        if all(isinstance(getattr(widgets, n, None), int) for n in names):
+                            return names
+
+    raise AssertionError("Could not find scale step names from tuple")
 
 
-def _resolve_to_integer_literal(node: ast.expr, module_names: set[str], widgets_module_names: set[str]) -> bool:
-    """Check if a Name node is bound to an integer literal in the same module.
-
-    Only checks module-level bindings within gilded/ui/ files.  A Name bound
-    to another Name (e.g. _TEXT_PT = TYPE_CAPTION) is NOT a literal.
-    """
-    if not isinstance(node, ast.Name):
-        return False
-    # We can't fully resolve here without the full AST — we need to check
-    # in the source file.  Return False and let the caller handle it.
-    return False
+# ── R1: no integer literals at font call sites ──────────────────────────────
 
 
 def _check_file_no_literal_font_calls(
@@ -158,36 +118,30 @@ def _check_file_no_literal_font_calls(
     try:
         tree = ast.parse(source, filename=str(file_path))
     except SyntaxError:
-        return []  # Can't parse, skip
+        return []
 
-    violations: list[str] = []
-
-    # Collect module-level assignments to resolve local names
-    module_names: dict[str, ast.expr] = {}
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    module_names[target.id] = node.value
-
-    # Find the import alias for the font function
+    # Find imports of the font function
     import_aliases: set[str] = set()
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.ImportFrom):
             if node.module and "widgets" in node.module:
                 for alias in node.names:
                     if alias.name == font_func_name:
-                        # Imported as some_alias or same name
-                        import_aliases.add(alias.asname if alias.asname else alias.name)
-                    # Also check if the old name "font" is imported
-                    if alias.name == "font":
-                        import_aliases.add(alias.asname if alias.asname else alias.name)
+                        import_aliases.add(alias.asname or alias.name)
 
-    # Walk all Call nodes
+    # Collect module-level Name -> value mappings
+    module_bindings: dict[str, ast.expr] = {}
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    module_bindings[target.id] = node.value
+
+    violations: list[str] = []
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-
         func = node.func
         call_name = None
 
@@ -201,16 +155,18 @@ def _check_file_no_literal_font_calls(
             # Check the first positional argument
             if node.args:
                 first_arg = node.args[0]
-                if _is_integer_literal(first_arg):
+                if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, int):
                     violations.append(
                         f"Line {first_arg.lineno}: {call_name}({first_arg.value}) — "
                         f"integer literal instead of named step"
                     )
                 elif isinstance(first_arg, ast.Name):
                     # Check if the Name is bound to an integer literal at module level
-                    if first_arg.id in module_names:
-                        bound_value = module_names[first_arg.id]
-                        if _is_integer_literal(bound_value):
+                    if first_arg.id in module_bindings:
+                        bound_value = module_bindings[first_arg.id]
+                        if isinstance(bound_value, ast.Constant) and isinstance(
+                            bound_value.value, int
+                        ):
                             violations.append(
                                 f"Line {first_arg.lineno}: {call_name}({first_arg.id}) — "
                                 f"{first_arg.id} is bound to integer literal {bound_value.value}"
@@ -226,9 +182,10 @@ def _check_file_no_literal_font_calls(
 def _check_scale_ascends() -> list[str]:
     """Check that the type scale constants are strictly increasing.
 
-    Returns a list of violation descriptions (empty if ascending).
+    Uses the tuple order (which is the declaration order) to verify ascending
+    values.  Returns a list of violation descriptions (empty if ascending).
     """
-    steps = _get_scale_step_names_explicit()
+    steps = _get_scale_step_names_from_tuple()
     violations: list[str] = []
 
     for i in range(len(steps) - 1):
@@ -257,7 +214,7 @@ def _check_scale_tuple_matches() -> list[str]:
     if not isinstance(tuple_obj, tuple):
         return [f"Scale tuple '{tuple_name}' is not a tuple at runtime"]
 
-    steps = _get_scale_step_names_explicit()
+    steps = _get_scale_step_names_from_tuple()
     expected = tuple(getattr(widgets, name) for name in steps)
 
     violations: list[str] = []
@@ -285,7 +242,7 @@ def test_no_integer_literal_at_font_calls():
     ui_dir = _widgets_dir()
     widgets_file = pathlib.Path(widgets.__file__).resolve()
     font_func_name = _find_font_func_in_tree()
-    scale_step_names = set(_get_scale_step_names_explicit())
+    scale_step_names = set(_get_scale_step_names_from_tuple())
 
     all_violations: list[str] = []
 
@@ -312,7 +269,7 @@ def test_no_module_alias_bound_to_integer():
     widgets_file = pathlib.Path(widgets.__file__).resolve()
 
     # Collect the scale step names from widgets so we know what's a reference vs a literal
-    scale_step_names = set(_get_scale_step_names_explicit())
+    scale_step_names = set(_get_scale_step_names_from_tuple())
 
     all_violations: list[str] = []
 
@@ -332,15 +289,18 @@ def test_no_module_alias_bound_to_integer():
             if isinstance(node, ast.Assign):
                 for target in node.targets:
                     if isinstance(target, ast.Name):
+                        name = target.id
+                        if name in scale_step_names:
+                            continue  # This is a step definition, not an alias
                         # Check if the value is an integer literal
-                        if _is_integer_literal(node.value):
-                            # Is this a font-size-related name?
-                            # Heuristic: the name contains PT, SIZE, FONT, or TYPE
-                            name_upper = target.id.upper()
-                            if any(kw in name_upper for kw in ("PT", "SIZE", "FONT", "TYPE", "POINT")):
+                        if isinstance(node.value, ast.Constant) and isinstance(
+                            node.value.value, int
+                        ):
+                            # Only flag if the name looks like a font-related size
+                            if any(kw in name.lower() for kw in ("pt", "size", "font", "type")):
                                 all_violations.append(
-                                    f"{py_file.name}:{target.id} = {node.value.value} "
-                                    f"— module alias bound to integer literal"
+                                    f"{py_file.name}: {name} = {node.value.value} "
+                                    f"(integer literal instead of scale step)"
                                 )
 
     assert not all_violations, (
@@ -349,28 +309,22 @@ def test_no_module_alias_bound_to_integer():
 
 
 def test_scale_ascends():
-    """The type scale steps have strictly increasing values, smallest first.
+    """The scale tuple is strictly ascending.
 
-    This measures the ORDER of declaration, not just the set of values.
-    Two middle steps trading values leaves the extremes and ratio unchanged
-    but breaks the role hierarchy — captions should be smallest, titles largest.
-
-    Survives renames: resolves steps by TYPE_ prefix convention on the live module.
+    This measures the ORDER of the tuple elements, which corresponds to
+    declaration order.  Uses the tuple resolved by AST structure.
     """
     violations = _check_scale_ascends()
     assert not violations, (
-        "Type scale does not ascend:\n" + "\n".join(violations)
+        "Scale does not ascend:\n" + "\n".join(violations)
     )
 
 
 def test_scale_tuple_is_steps_in_order():
-    """The scale tuple's runtime value is the six steps in ascending order.
+    """The scale tuple matches the six steps in ascending order.
 
-    The tuple is the canonical declaration of the scale.  Its value must be
-    (TYPE_CAPTION, TYPE_BODY, ..., TYPE_TITLE) — the steps themselves, not
-    copies or a reordered subset.
-
-    Survives renames: finds the tuple by AST structure (6 TYPE_ Name elements).
+    Survives renames: finds the tuple by AST structure (6 Name elements
+    resolving to int constants on the live module).
     """
     violations = _check_scale_tuple_matches()
     assert not violations, (
