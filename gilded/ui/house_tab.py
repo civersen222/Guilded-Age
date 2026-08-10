@@ -71,7 +71,11 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
     for k in in_line[:10]:
         rank_str = f"#{k.succession_rank}"
         loyalty_str = f"{k.loyalty:.0f}"
-        rows.append(f"  {rank_str} {k.name}  loyalty {loyalty_str}")
+        prefix = "  * " if k.char_id == heir_id else "    "
+        line = f"{prefix}{rank_str} {k.name}  loyalty {loyalty_str}"
+        if k.grievances:
+            line += f"  [{', '.join(k.grievances)}]"
+        rows.append(line)
     if len(in_line) > 10:
         rows.append(f"  ... and {len(in_line) - 10} more in line")
     rows.append("")
@@ -129,9 +133,11 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect, report: CourtR
         # Color lines that start with "!!" or "? " in the loyalty risks section
         color = INK
         if line.startswith("  !!"):
-            color = _BAND_COLOR.get(BAND_DISLOYAL, INK)
+            color = TONES.get("bad", INK)
         elif line.startswith("  ?"):
-            color = _BAND_COLOR.get(BAND_DUBIOUS, INK)
+            color = TONES.get("warn", INK)
+        elif "* " in line:
+            color = TONES.get("good", INK)
 
         surface.blit(body.render(line, True, color), (PAD, y))
         y += body.get_height() + 4
