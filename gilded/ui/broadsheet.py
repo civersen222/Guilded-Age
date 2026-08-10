@@ -58,6 +58,7 @@ from gilded.ui.ledger import (
     totals_line, history_cells,
 )
 from gilded.ui.figures import figure
+from gilded.ui.house_tab import draw_house_tab, _house_tab_lines
 from gilded.ui.widgets import (
     INK, Region, RegionSet, RegionState,
     BLACK, PANEL_BG, TAB_BG, TAB_ACTIVE, TAB_TEXT, HUD_BG, HUD_INK,
@@ -2223,48 +2224,15 @@ class BroadsheetView:
             y = rung_y + btn_h + 6
 
     def house_lines(self) -> List[str]:
-        """Build text lines for the House tab, including opinion info."""
-        g, name = self.game, self.house
-        house = g.houses[name]
-        realm = g.realms.get(name)
-        rows = [
-            f"treasury {house.treasury:.0f} gold   prestige {house.prestige:.0f}",
-            f"legitimacy {g.legitimacy.get(name, 0.0):.0f}",
-            f"capital {g.atlas.provinces[house.capital].name}",
-            f"at war with: {', '.join(sorted(house.at_war_with)) or 'no one'}",
-        ]
-        if realm is not None:
-            rows.append(f"ruler: {realm.ruler.name if realm.ruler else '(vacant)'}")
-            for seat, holder in sorted(realm.court.positions.items(),
-                                       key=lambda kv: kv[0].value):
-                line = f"  {seat.value}: {holder.name if holder is not None else '(vacant)'}"
-                if holder is not None and realm.ruler is not None:
-                    pair = (holder.id, realm.ruler.id)
-                    opinion = g.society.opinions.get(pair, 0)
-                    if opinion != 0:
-                        line += f"  (opinion: {opinion:+d})"
-                    hist = g.society.opinion_history.get(pair, [])
-                    if hist:
-                        reasons = "; ".join(e.reason for e in hist)
-                        line += f"  [{reasons}]"
-                    elif opinion != 0:
-                        line += "  (no recorded history)"
-                rows.append(line)
-        return rows
+        """Build text lines for the House tab from the peerage read-model."""
+        from gilded.peerage import report as peerage_report
+        rpt = peerage_report(self.game, self.house)
+        return _house_tab_lines(rpt)
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
-        g, name = self.game, self.house
-        house = g.houses[name]
-        title = _font(TYPE_TITLE, bold=True).render(f"HOUSE {name.upper()}", True, INK)
-        surface.blit(title, (PAD, content.y + 6))
-        y = content.y + 6 + title.get_height() + 10
-        body = _font(TYPE_TEXT)
-        rows = self.house_lines()
-        for row in rows:
-            if y > content.bottom - 20:
-                return
-            surface.blit(body.render(row, True, INK), (PAD, y))
-            y += body.get_height() + 4
+        from gilded.peerage import report as peerage_report
+        rpt = peerage_report(self.game, self.house)
+        draw_house_tab(surface, content, rpt)
 
     # --- clicking ------------------------------------------------------------
 
