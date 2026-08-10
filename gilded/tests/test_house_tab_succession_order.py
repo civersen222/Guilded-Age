@@ -14,6 +14,7 @@ import pygame
 from gilded.chassis import GildedGame
 from gilded.ui.broadsheet import BroadsheetView
 from gilded.peerage import report as peerage_report
+from gilded.ui.house_tab import _house_tab_lines
 
 
 def _view():
@@ -123,3 +124,12 @@ def test_succession_order_pixel_change():
     second_char.name = old_name
 
     assert pixels1 != pixels2, "Pixels should change when second-in-line is renamed"
+
+
+def test_house_tab_lines_returns_lines():
+    """_house_tab_lines is called by draw_house_tab and returns a list of strings."""
+    g, v = _view()
+    rpt = peerage_report(g, v.house)
+    lines = _house_tab_lines(rpt)
+    assert isinstance(lines, list)
+    assert len(lines) > 0
