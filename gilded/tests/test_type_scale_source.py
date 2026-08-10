@@ -77,10 +77,10 @@ def _find_scale_tuple_in_tree() -> str:
 
 
 def _get_scale_step_names_from_tuple() -> list[str]:
-    """Return the six step names from the scale tuple, in declaration order.
+    """Return the six step names from the scale tuple, in tuple element order.
 
     Resolves the tuple by AST structure (6 Name elements resolving to int
-    constants), then extracts the Name ids in source order.
+    constants), then extracts the Name ids in the order they appear in the tuple.
     """
     widgets_file = pathlib.Path(widgets.__file__).resolve()
     tree = ast.parse(widgets_file.read_text(encoding="utf-8"))
@@ -96,6 +96,32 @@ def _get_scale_step_names_from_tuple() -> list[str]:
                             return names
 
     raise AssertionError("Could not find scale step names from tuple")
+
+
+def _get_scale_step_names_from_source() -> list[str]:
+    """Return the six step names in the order they are assigned in the source.
+
+    Scans module-level assignments in source-file order.  A step is a Name
+    assigned a constant integer, where the Name is also referenced by the
+    scale tuple.  Returns them in declaration order.
+    """
+    tuple_name = _find_scale_tuple_in_tree()
+    step_names_set = set(_get_scale_step_names_from_tuple())
+
+    widgets_file = pathlib.Path(widgets.__file__).resolve()
+    tree = ast.parse(widgets_file.read_text(encoding="utf-8"))
+
+    declared_in_order: list[str] = []
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in step_names_set:
+                    if isinstance(node.value, ast.Constant) and isinstance(
+                        node.value.value, int
+                    ):
+                        declared_in_order.append(target.id)
+
+    return declared_in_order
 
 
 # ── R1: no integer literals at font call sites ──────────────────────────────
@@ -179,30 +205,11 @@ def _check_file_no_literal_font_calls(
 # ── R2: scale ascends ────────────────────────────────────────────────────────
 
 
-def _check_scale_ascends() -> list[str]:
-    """Check that the type scale constants are strictly increasing.
-
-    Uses the tuple order (which is the declaration order) to verify ascending
-    values.  Returns a list of violation descriptions (empty if ascending).
-    """
-    steps = _get_scale_step_names_from_tuple()
-    violations: list[str] = []
-
-    for i in range(len(steps) - 1):
-        name_curr = steps[i]
-        name_next = steps[i + 1]
-        val_curr = getattr(widgets, name_curr)
-        val_next = getattr(widgets, name_next)
-        if val_curr >= val_next:
-            violations.append(
-                f"{name_curr}={val_curr} >= {name_next}={val_next} — scale does not ascend"
-            )
-
-    return violations
-
-
 def _check_scale_tuple_matches() -> list[str]:
-    """Check that the scale tuple's runtime value is the six steps in ascending order.
+    """Check that the scale tuple's runtime value matches the six steps in declaration order.
+
+    Declaration order is resolved from the source file (not the tuple), so this
+    catches a tuple whose element order diverges from how the steps are declared.
 
     Returns a list of violation descriptions.
     """
@@ -214,14 +221,38 @@ def _check_scale_tuple_matches() -> list[str]:
     if not isinstance(tuple_obj, tuple):
         return [f"Scale tuple '{tuple_name}' is not a tuple at runtime"]
 
-    steps = _get_scale_step_names_from_tuple()
-    expected = tuple(getattr(widgets, name) for name in steps)
+    decl_names = _get_scale_step_names_from_source()
+    expected = tuple(getattr(widgets, name) for name in decl_names)
 
     violations: list[str] = []
     if tuple_obj != expected:
         violations.append(
-            f"Scale tuple {tuple_name} = {tuple_obj} != expected {expected}"
+            f"Scale tuple {tuple_name} = {tuple_obj} != expected {expected} "
+            f"(from declaration order {decl_names})"
         )
+
+    return violations
+
+
+def _check_declaration_order_ascends() -> list[str]:
+    """Check that the six steps are declared in ascending order by value.
+
+    Resolves declaration order from the source file (not the tuple).
+
+    Returns a list of violation descriptions.
+    """
+    decl_names = _get_scale_step_names_from_source()
+    violations: list[str] = []
+    for i in range(len(decl_names) - 1):
+        name_curr = decl_names[i]
+        name_next = decl_names[i + 1]
+        val_curr = getattr(widgets, name_curr)
+        val_next = getattr(widgets, name_next)
+        if val_curr >= val_next:
+            violations.append(
+                f"Declaration order: {name_curr}={val_curr} precedes "
+                f"{name_next}={val_next} — declarations must ascend"
+            )
 
     return violations
 
@@ -309,24 +340,24 @@ def test_no_module_alias_bound_to_integer():
 
 
 def test_scale_ascends():
-    """The scale tuple is strictly ascending.
+    """The six scale steps must be declared in ascending order by value.
 
-    This measures the ORDER of the tuple elements, which corresponds to
-    declaration order.  Uses the tuple resolved by AST structure.
+    Resolves declaration order from the source file (not the tuple), so
+    this catches declarations written out of ascending order even when
+    the tuple itself is correct.
     """
-    violations = _check_scale_ascends()
-    assert not violations, (
-        "Scale does not ascend:\n" + "\n".join(violations)
-    )
+    violations = _check_declaration_order_ascends()
+    assert not violations, "\n".join(violations)
 
 
 def test_scale_tuple_is_steps_in_order():
-    """The scale tuple matches the six steps in ascending order.
+    """The scale tuple must equal the six steps in their declaration order.
 
-    Survives renames: finds the tuple by AST structure (6 Name elements
-    resolving to int constants on the live module).
+    Declaration order is resolved from the source file, not derived from
+    the tuple itself.  This catches a tuple whose element order diverges
+    from how the steps are declared in the source.
     """
     violations = _check_scale_tuple_matches()
     assert not violations, (
-        "Scale tuple does not match steps in ascending order:\n" + "\n".join(violations)
+        "Scale tuple does not match steps in declaration order:\n" + "\n".join(violations)
     )
