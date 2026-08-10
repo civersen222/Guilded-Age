@@ -212,3 +212,73 @@ def test_tab_draws_at_1600x1000():
     rect = pygame.Rect(0, 0, 1600, 1000)
 
     draw_house_tab(surf, rect, rpt)
+
+
+def test_grievance_shows_for_seated_kin():
+    """R-C: Recording a grievance for a seated court member changes the tab."""
+    g, v = _view()
+    realm = g.realms.get(v.house)
+    if realm is None or realm.ruler is None:
+        pytest.skip("No realm or ruler")
+
+    rpt = report(g, v.house)
+    seat_holder = None
+    for s in rpt.seats:
+        if not s.vacant and s.holder_id:
+            seat_holder = s
+            break
+    if seat_holder is None:
+        pytest.skip("No seated court holders")
+
+    target_char = None
+    for ch in realm.characters:
+        if ch.id == seat_holder.holder_id:
+            target_char = ch
+            break
+    if target_char is None:
+        pytest.skip("Seat holder char not found")
+
+    modify_opinion(target_char, realm.ruler, -10, "passed over")
+
+    lines = v.house_lines()
+    assert any("grievance" in line.lower() or "passed over" in line.lower() for line in lines), \
+        "Grievance should appear for seated court member"
+
+
+def test_grievance_pixel_change():
+    """Recording a grievance for a seated court member changes the pixels."""
+    g, v = _view()
+    realm = g.realms.get(v.house)
+    if realm is None or realm.ruler is None:
+        pytest.skip("No realm or ruler")
+
+    rpt = report(g, v.house)
+    seat_holder = None
+    for s in rpt.seats:
+        if not s.vacant and s.holder_id:
+            seat_holder = s
+            break
+    if seat_holder is None:
+        pytest.skip("No seated court holders")
+
+    surf1 = pygame.Surface((1280, 900))
+    rect = pygame.Rect(0, 0, 1280, 900)
+    draw_house_tab(surf1, rect, rpt)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
+
+    target_char = None
+    for ch in realm.characters:
+        if ch.id == seat_holder.holder_id:
+            target_char = ch
+            break
+    if target_char is None:
+        pytest.skip("Seat holder char not found")
+
+    modify_opinion(target_char, realm.ruler, -10, "passed over")
+    rpt2 = report(g, v.house)
+
+    surf2 = pygame.Surface((1280, 900))
+    draw_house_tab(surf2, rect, rpt2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
+
+    assert pixels1 != pixels2, "Pixels should change when grievance is recorded"
