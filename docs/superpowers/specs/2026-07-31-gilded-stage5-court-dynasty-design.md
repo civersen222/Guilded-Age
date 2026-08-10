@@ -1,19 +1,20 @@
 # Gilded Stage 5 — Court & Dynasty
 
-> **STATUS: DRAFT — NOT APPROVED, NOT DISPATCHED.**
-> Every earlier stage of this roadmap was approved by the user before any game
-> code was briefed. This one was drafted while he was away, so that the reading
-> and the inventory were not wasted time — but §7 lists four design choices that
-> are matters of taste, and taste is the one thing the measurement loop cannot
-> settle. **No Stage 5 wave may be briefed or dispatched until those four are
-> answered.** The hardening waves that ran alongside this draft are a separate,
-> already-authorised lane.
+> **STATUS: APPROVED 2026-08-07. IN FLIGHT.**
+> This was drafted while the user was away, and §7 listed four design choices
+> that are matters of taste — taste being the one thing the measurement loop
+> cannot settle. Those four were answered on 2026-08-07, each by taking this
+> spec's own recommendation; the answers are recorded in §7 and the gate the old
+> header carried is discharged. **See §10 for which waves have landed.**
 
 **Stage:** 5 of the 8-stage experience roadmap
 (1 Frame · 2 Living Adversaries · 3 Policy dials · 4 Enterprises · **5 Court &
 Dynasty** · 6 Diplomacy & War · 7 Initiatives · 8 Consequence & polish).
 
-**Base:** `28599a2` on `master`. Gilded suite floor: **1057 passed, 0 skipped.**
+**Base when drafted:** `28599a2`, suite floor 1057 passed.
+**Base for the next wave (5B):** `80aa0e8` on `master`. Gilded suite floor:
+**1625 passed, 0 skipped, 0 xfail, 0 xpass**, over **1567 named cases**. Both
+re-measured on three consecutive runs, not carried forward from the draft.
 
 ---
 
@@ -24,7 +25,9 @@ An inventory of `gilded/society/` produced an unusually lopsided result:
 > **The simulation substrate is rich and ticking every turn. The player-facing
 > surface is a read-only list of six names.**
 
-The House tab (`gilded/ui/broadsheet.py:1783-1807`) prints treasury, prestige,
+⚠ **Line numbers re-measured on `80aa0e8`, see §10.2.** The House tab
+(`house_lines()` at `gilded/ui/broadsheet.py:2225`, `_draw_house()` at `:2255`)
+prints treasury, prestige,
 legitimacy, capital, war status, the ruler's name, and the six court seats with
 their occupants. Nothing on it can be clicked. Meanwhile, underneath it:
 
@@ -191,7 +194,7 @@ Unchanged from the UI-legibility spec §9, and non-negotiable:
 | **5B** | Court tab: seats, loyalty meters, kin list, succession preview | render tests read the surface, not the model |
 | **5C** | A1 appoint/dismiss wired to `court.appoint/dismiss` | the lever changes the sim, and the change is visible |
 | **5D** | A2 heir designation + succession prefers the designated heir + `_trig_heir_radicalization` reachable | a test proves the chain can now fire |
-| **5E** | A3 player-arranged marriage | |
+| ~~5E~~ | ~~A3 player-arranged marriage~~ | **struck — deferred to Stage 6, see §7 Q4** |
 
 5A is built with **no consumer on purpose**, exactly as `widgets.py` was in the
 UI-legibility Wave 1, so it is not shaped around one screen's accident.
@@ -204,33 +207,30 @@ once.
 
 ---
 
-## 7. OPEN CHOICES — the user must answer these four
+## 7. THE FOUR CHOICES — ANSWERED 2026-08-07
 
-These are matters of taste. They are not blockers to *understanding* the stage,
-but they are blockers to briefing it.
+Each was answered by taking this spec's own recommendation. They are recorded as
+decisions, not options, because a spec that keeps its questions open after they
+are settled reads as still-blocked to every later reader.
 
-**Q1 — Where does this live?** (a) Extend the existing **House** tab, which is
-currently near-empty and thematically exact; or (b) a **new Court tab**, leaving
-House as the realm summary. Recommendation: **(a)** — the tab list is already ten
-long, and House is the natural home.
+**Q1 — Where does this live?** **(a) Extend the existing House tab.** The tab
+list is already ten long and House is the thematically exact home. No new tab.
+`TABS` at `broadsheet.py:71` does not grow, and the region census in
+`test_ui_broadsheet.py` moves only by the regions this stage's own levers add.
 
-**Q2 — What does a court appointment cost?** (a) **Free**, like the Stage-3
-policy dials; (b) **one attention**, like placing an informant; or (c) free to
-appoint, but dismissing costs standing with the dismissed man's kin.
-Recommendation: **(c)** — it is the only option where the lever has a *shape*,
-and it feeds the succession spine directly.
+**Q2 — What does a court appointment cost?** **(c) Free to appoint; dismissing
+costs standing with the dismissed man's kin.** It is the only option where the
+lever has a *shape*, and it feeds the succession spine directly. Scoped to
+Wave 5C, not 5B.
 
-**Q3 — How explicit is the heir?** (a) A **designation lever** the player sets,
-with the aggrieved consequences fired at designation time rather than at death;
-or (b) **no lever** — succession order is merely made visible, and the drama is
-in watching it. Recommendation: **(a)** — it turns a passive reveal into a
-decision, and it is what activates the dormant radicalization chain.
+**Q3 — How explicit is the heir?** **(a) A designation lever**, with the
+aggrieved consequences fired at designation time rather than at death. It turns
+a passive reveal into a decision, and it is what activates the dormant
+`_trig_heir_radicalization` chain. Scoped to Wave 5D.
 
-**Q4 — Is Wave 5E (player-arranged marriage) in this stage or deferred to
-Stage 6 Diplomacy?** Marriage is a cross-house instrument and already nudges
-inter-house relations (+3 per blood tie). Recommendation: **defer to Stage 6** —
-it is a diplomacy lever wearing a family costume, and Stage 5 is already five
-waves.
+**Q4 — Is Wave 5E (player-arranged marriage) in this stage?** **Deferred to
+Stage 6 Diplomacy.** It is a diplomacy lever wearing a family costume, and
+Stage 5 is already four waves without it. **5E is struck from this stage.**
 
 ---
 
@@ -307,9 +307,58 @@ behave as claimed; `grip.BANDS` is weakest-first at `grip.py:19`;
 nowhere else in the repository**, so §1.2's claim that `_trig_heir_radicalization`
 (`chains_pack1.py:50`) can never fire is exact.
 
-### 9.5 Status is unchanged
+### 9.5 Status when these corrections were written
 
-These corrections make the spec accurate. They do not make it approved. The gate
-in the header stands: §7's four questions are taste, taste is the one thing the
-measurement loop cannot settle, and no Stage 5 wave — **including 5A0 and 5A,
-which no open question touches** — is briefed until the user has read this.
+These corrections made the spec accurate. They did not make it approved; the
+header gate stood until 2026-08-07, when §7's four questions were answered.
+Superseded by §10.
+
+---
+
+## 10. Delivery record — measured on `80aa0e8`, 2026-08-10
+
+### 10.1 What has landed
+
+| Wave | Commit | State |
+|------|--------|-------|
+| **5A0** the opinion ledger | `9593e32` (dispatched as I5b) | **landed.** `society.opinion_history[(a,b)]` holds `OpinionEntry(.amount, .reason)`; the House tab prints the reasons as text |
+| **5A** `gilded/peerage.py` | `ae39931`, hardened by `4eb355d`, `ee2d729`, `c5f977a` (5A2) | **landed.** `report(game, house) -> CourtReport` at `:107`, `band_for(loyalty) -> str` at `:27`; `CourtSeat` `:45`, `Kin` `:58`, `CourtReport` `:73`. 34 cases in `test_peerage.py` |
+| **5B** the Court surface | — | **next** |
+| **5C** appoint / dismiss | — | pending |
+| **5D** heir designation | — | pending |
+
+### 10.2 What 5B actually faces, re-measured
+
+The draft's §1 numbers are two months and roughly forty waves stale. Measured on
+`80aa0e8`:
+
+- `TABS` is ten long at `broadsheet.py:71`, ending in `"House"`.
+- `house_lines() -> List[str]` at `:2225` builds flat text; `_draw_house()` at
+  `:2255` blits those strings one per line and returns early on overflow.
+- **The House tab reads `realm.court.positions` and `g.society.opinions`
+  directly. It does not import `gilded/peerage.py` at all.** The read-model 5A
+  was built for has no consumer, which is exactly what 5A intended and exactly
+  what 5B must change.
+- House registers **no regions of its own**: `EXPECTED_REGIONS["House"] == 12`
+  at `test_ui_broadsheet.py:39`, which is the ten tabs plus `end_turn` plus
+  `narrate`. 5B is read-only, so that number must not move.
+- Nothing on the tab shows a loyalty number, a band, a kinsman, a succession
+  rank, or who inherits — every one of §3.1's L1-L5 is still unsurfaced.
+
+### 10.3 Laws any new surface inherits
+
+Established by Stage-6 hardening waves I6i and I6j and enforced by tests that
+already exist:
+
+- **Palette:** no literal RGB tuple outside `gilded/ui/widgets.py`
+  (`test_i6i_palette.py::test_palette_lint_no_literal_rgb`). Use the named
+  constants at `widgets.py:21-64` and `TONES` at `:133-141`.
+- **Type scale:** no integer point size outside `widgets.py` — every size comes
+  from one of the six named steps at `widgets.py:148-155`, and this is enforced
+  at the level of the *source text*, at a call site and at a screen's own
+  module-level alias (`test_ui_type_scale.py`, `test_type_scale_properties.py`,
+  `test_type_scale_source.py`).
+- The closest existing analogue for a list surface is the Enterprises tab,
+  `broadsheet.py:1789-1967`: model → layout → `table.layout(rect)` → iterate
+  `row_rects` / `cell_rects` / `text_rects`. It **clips** on overflow; it does
+  not scroll or paginate.
