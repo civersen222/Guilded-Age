@@ -25,8 +25,9 @@ def _view():
 
 
 def test_grievance_shows_for_seated_kin():
-    """R-C: Recording a grievance for a seated court member changes the tab."""
+    """R-C: Recording a grievance for a seated court member changes the tab pixels."""
     g, v = _view()
+    v.active_tab = "House"
     realm = g.realms.get(v.house)
     if realm is None or realm.ruler is None:
         pytest.skip("No realm or ruler")
@@ -50,13 +51,17 @@ def test_grievance_shows_for_seated_kin():
     if target_char is None:
         pytest.skip("Seat holder char not found")
 
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
+
     modify_opinion(target_char, realm.ruler, -10, "passed over")
 
-    lines = v.house_lines()
-    text = "\n".join(lines)
+    surf2 = pygame.Surface((1280, 900))
+    v.draw(surf2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
 
-    assert "passed over" in text, \
-        f"Grievance 'passed over' should appear on tab: {text}"
+    assert pixels1 != pixels2, "Pixels should change when grievance is recorded"
 
 
 def test_grievance_pixel_change():

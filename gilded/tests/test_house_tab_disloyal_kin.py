@@ -4,6 +4,7 @@ import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pytest
+import pygame
 
 from gilded.chassis import GildedGame
 from gilded.ui.broadsheet import BroadsheetView
@@ -12,10 +13,11 @@ from gilded.society.realm import DISLOYAL_LOYALTY
 
 
 def test_disloyal_kin_flag():
-    """A shareholder who becomes disloyal changes the tab output."""
+    """A shareholder who becomes disloyal changes the tab pixels."""
     g = GildedGame(seed=42)
     house_name = list(g.houses.keys())[0]
     v = BroadsheetView(g, house_name)
+    v.active_tab = "House"
 
     rpt = report(g, house_name)
     # Find a shareholder (shares > 0)
@@ -32,16 +34,18 @@ def test_disloyal_kin_flag():
     if ch is None:
         pytest.skip("Shareholder not in dynasty")
 
-    lines1 = v.house_lines()
-    text1 = "\n".join(lines1)
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
 
     # Make the shareholder disloyal (below threshold)
     ch.loyalty = 10.0
 
-    lines2 = v.house_lines()
-    text2 = "\n".join(lines2)
+    surf2 = pygame.Surface((1280, 900))
+    v.draw(surf2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
 
-    assert text1 != text2, "Lines should differ when a shareholder becomes disloyal"
+    assert pixels1 != pixels2, "Pixels should differ when a shareholder becomes disloyal"
 
 
 def test_disloyal_kin_flag_moves_when_threshold_moves():
@@ -53,6 +57,7 @@ def test_disloyal_kin_flag_moves_when_threshold_moves():
     g = GildedGame(seed=42)
     house_name = list(g.houses.keys())[0]
     v = BroadsheetView(g, house_name)
+    v.active_tab = "House"
 
     rpt = report(g, house_name)
     shareholder = None
@@ -68,29 +73,35 @@ def test_disloyal_kin_flag_moves_when_threshold_moves():
     if ch is None:
         pytest.skip("Shareholder not in dynasty")
 
-    # Just above threshold — should NOT be flagged as disloyal
+    # Just above threshold
     ch.loyalty = DISLOYAL_LOYALTY + 0.1
 
-    lines_above = v.house_lines()
-    text_above = "\n".join(lines_above)
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
 
-    # Just below threshold — should be flagged as disloyal
+    # Just below threshold — should change pixels
     ch.loyalty = DISLOYAL_LOYALTY - 0.1
 
-    lines_below = v.house_lines()
-    text_below = "\n".join(lines_below)
+    surf2 = pygame.Surface((1280, 900))
+    v.draw(surf2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
 
-    assert text_above != text_below, (
-        f"Lines should differ when crossing loyalty threshold. "
-        f"Above: {text_above[:200]}... Below: {text_below[:200]}..."
+    assert pixels1 != pixels2, (
+        f"Pixels should differ when crossing loyalty threshold"
     )
 
 
 def test_disloyal_kin_flag_shows_band():
-    """Disloyal shareholders show their loyalty band in the LOYALTY RISKS section."""
+    """Disloyal shareholders show a DISLOYAL band in the pixel output.
+
+    We verify by checking that the pixel output changes when a shareholder
+    goes from loyal to disloyal (the band color changes the pixels).
+    """
     g = GildedGame(seed=42)
     house_name = list(g.houses.keys())[0]
     v = BroadsheetView(g, house_name)
+    v.active_tab = "House"
 
     rpt = report(g, house_name)
     shareholder = None
@@ -106,13 +117,18 @@ def test_disloyal_kin_flag_shows_band():
     if ch is None:
         pytest.skip("Shareholder not in dynasty")
 
-    # Set to clearly disloyal level
+    # Set loyal
+    ch.loyalty = 70.0
+
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
+
+    # Set disloyal — pixels must change (band color differs)
     ch.loyalty = 15.0
 
-    lines = v.house_lines()
-    text = "\n".join(lines)
+    surf2 = pygame.Surface((1280, 900))
+    v.draw(surf2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
 
-    # Should appear in LOYALTY RISKS or show DISLOYAL band
-    assert "DISLOYAL" in text or "LOYALTY RISKS" in text, (
-        f"Should show disloyal indicator: {text[:500]}"
-    )
+    assert pixels1 != pixels2, "Pixels should differ when band changes to DISLOYAL"

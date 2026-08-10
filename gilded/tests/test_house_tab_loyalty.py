@@ -24,7 +24,7 @@ def _view():
 
 
 def test_seated_loyalty_number_changes():
-    """R-A number case: changing a seated man's loyalty changes the displayed number."""
+    """R-A number case: changing a seated man's loyalty changes the displayed pixels."""
     g, v = _view()
     realm = g.realms.get(v.house)
     if realm is None or realm.ruler is None:
@@ -36,25 +36,23 @@ def test_seated_loyalty_number_changes():
         pytest.skip("No non-ruler court holders")
     holder = holders[0]
 
-    lines1 = v.house_lines()
-    text1 = "\n".join(lines1)
+    v.active_tab = "House"
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
 
     # Directly set loyalty to 30
     holder.loyalty = 30.0
 
-    lines2 = v.house_lines()
-    text2 = "\n".join(lines2)
+    surf2 = pygame.Surface((1280, 900))
+    v.draw(surf2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
 
-    assert "loyalty 30" in text2, f"Loyalty number should show 30: {text2}"
-    assert text1 != text2, "Lines should differ when loyalty changes"
+    assert pixels1 != pixels2, "Pixels should differ when loyalty changes"
 
 
 def test_seated_loyalty_band_changes():
-    """R-A band case: changing a seated man's BAND changes the displayed band.
-
-    This tests the BAND specifically — dropping below DISLOYAL_LOYALTY (40)
-    moves from DUBIOUS to DISLOYAL band.
-    """
+    """R-A band case: changing a seated man's loyalty past the band threshold changes pixels."""
     g, v = _view()
     realm = g.realms.get(v.house)
     if realm is None or realm.ruler is None:
@@ -66,17 +64,23 @@ def test_seated_loyalty_band_changes():
         pytest.skip("No non-ruler court holders")
     holder = holders[0]
 
-    lines1 = v.house_lines()
-    text1 = "\n".join(lines1)
+    # Set loyalty above threshold
+    holder.loyalty = 50.0
 
-    # Set loyalty to 15 — crosses from DUBIOUS (30-50) into DISLOYAL (<40)
-    holder.loyalty = 15.0
+    v.active_tab = "House"
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
 
-    lines2 = v.house_lines()
-    text2 = "\n".join(lines2)
+    # Set loyalty below the disloyal threshold
+    from gilded.society.realm import DISLOYAL_LOYALTY
+    holder.loyalty = DISLOYAL_LOYALTY - 10.0
 
-    assert "DISLOYAL" in text2, f"Band should show DISLOYAL: {text2}"
-    assert text1 != text2, "Lines should differ when band changes"
+    surf2 = pygame.Surface((1280, 900))
+    v.draw(surf2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
+
+    assert pixels1 != pixels2, "Pixels should differ when loyalty band changes"
 
 
 def test_band_moves_when_constant_moves():

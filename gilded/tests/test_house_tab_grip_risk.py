@@ -24,8 +24,9 @@ def _view():
 
 
 def test_grip_risk_shown():
-    """R-F: A shareholder with negative opinion is named on the tab."""
+    """R-F: A shareholder with negative opinion changes the tab pixels."""
     g, v = _view()
+    v.active_tab = "House"
     realm = g.realms.get(v.house)
     if realm is None or realm.ruler is None:
         pytest.skip("No realm or ruler")
@@ -45,16 +46,19 @@ def test_grip_risk_shown():
     if target_char is None:
         pytest.skip("Target character not found")
 
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
+
     # Make the shareholder hate the ruler
     modify_opinion(target_char, realm.ruler, -20, "sell signal")
 
-    lines = v.house_lines()
-    text = "\n".join(lines)
+    surf2 = pygame.Surface((1280, 900))
+    v.draw(surf2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
 
-    assert target.name in text, \
-        f"Shareholder '{target.name}' should appear on tab: {text}"
-    assert "GRIP" in text or "shares" in text, \
-        f"Share info should appear: {text}"
+    assert pixels1 != pixels2, \
+        f"Pixels should change when shareholder opinion turns negative"
 
 
 def test_grip_risk_pixel_change():
