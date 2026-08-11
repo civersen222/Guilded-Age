@@ -200,6 +200,29 @@ def test_kinsman_grievances_shown():
         f"Grievance for '{kin_with_grievance.name}' should be visible in tab lines"
 
 
+def test_succession_order_completeness():
+    """R-1: The tab draws all succession rows it owes within its display limit.
+
+    The tab shows up to 10 succession rows.  Verify the first 10 alive candidates
+    from the simulation's succession_order all appear in the tab output.
+    """
+    g, v = _view()
+    realm = g.realms.get(v.house)
+    assert realm is not None
+
+    sim_order = succession_order(realm)
+    assert len(sim_order) >= 3, "Game must have at least 3 succession candidates"
+
+    rpt = peerage_report(g, v.house)
+    lines = _house_tab_lines(rpt)
+    text = "\n".join(lines)
+
+    # The tab shows up to 10 succession rows — check those first 10 alive candidates appear
+    shown = [c.name for c in sim_order if c.name and c.is_alive][:10]
+    missing = [name for name in shown if name not in text]
+    assert not missing, f"Tab is missing succession candidates it should show: {missing}"
+
+
 def test_house_tab_lines_returns_lines():
     g, v = _view()
     rpt = peerage_report(g, v.house)
