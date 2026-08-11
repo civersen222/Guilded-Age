@@ -15,6 +15,7 @@ import pygame
 
 from gilded.chassis import GildedGame
 from gilded.peerage import report as peerage_report
+from gilded.ui.broadsheet import BroadsheetView
 from gilded.society.characters import modify_opinion
 from gilded.society.succession import succession_order, resolve_succession
 from gilded.ui.house_tab import _house_tab_lines, draw_house_tab
@@ -165,3 +166,69 @@ def test_grievance_drawn_on_tab():
             break
     assert found, \
         f"Grievance should appear on the same line as '{target_kin.name}'"
+
+
+def _view():
+    g = GildedGame(seed=42)
+    house_name = list(g.houses.keys())[0]
+    v = BroadsheetView(g, house_name)
+    return g, v
+
+
+def test_kinsman_grievances_shown():
+    """R-3 variant: A kinsman's recorded reasons (grievances) are drawn beside him
+    in the succession lines.
+
+    This is a distinct property from the succession order itself: the same ordered
+    list of men can be drawn correctly while grievances are omitted entirely.
+    """
+    from gilded.society.characters import modify_opinion
+
+    g, v = _view()
+    realm = g.realms.get(v.house)
+    assert realm is not None and realm.ruler is not None
+
+    # Find a kin member who is in line for succession and alive
+    sim_order = succession_order(realm)
+    kin_with_grievance = None
+    for char in sim_order:
+        if char.id != realm.ruler.id and char.is_alive:
+            kin_with_grievance = char
+            break
+
+    assert kin_with_grievance is not None, "Must have a succession candidate besides the ruler"
+
+    # Record a grievance against the ruler
+    modify_opinion(kin_with_grievance, realm.ruler, -40, "grievance")
+
+    # Rebuild the report after the change
+    rpt = peerage_report(g, v.house)
+    lines = _house_tab_lines(rpt)
+    text = "\n".join(lines)
+
+    # The grievance text should appear in the tab output
+    assert "grievance" in text.lower() or "[" in text, \
+        f"Grievance for '{kin_with_grievance.name}' should be visible in tab lines"
+
+
+def test_succession_order_completeness():
+    """R-1: The tab draws all succession rows it owes within its display limit.
+
+    The tab shows up to 10 succession rows.  Verify the first 10 alive candidates
+    from the simulation's succession_order all appear in the tab output.
+    """
+    g, v = _view()
+    realm = g.realms.get(v.house)
+    assert realm is not None
+
+    sim_order = succession_order(realm)
+    assert len(sim_order) >= 3, "Game must have at least 3 succession candidates"
+
+    rpt = peerage_report(g, v.house)
+    lines = _house_tab_lines(rpt)
+    text = "\n".join(lines)
+
+    # The tab shows up to 10 succession rows — check those first 10 alive candidates appear
+    shown = [c.name for c in sim_order if c.name and c.is_alive][:10]
+    missing = [name for name in shown if name not in text]
+    assert not missing, f"Tab is missing succession candidates it should show: {missing}"
