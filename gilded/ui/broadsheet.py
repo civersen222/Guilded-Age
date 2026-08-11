@@ -802,6 +802,8 @@ class BroadsheetView:
 
         # court appointment picker state: None or position_key
         self._court_picker: Optional[str] = None
+        # heir picker state: None or True (picker open)
+        self._heir_picker: Optional[bool] = None
         # director picker state: None or eid whose picker is open
         self._director_picker: Optional[int] = None
         self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
@@ -2318,6 +2320,14 @@ class BroadsheetView:
                 return {"open_appointment_picker": pk}
             if "close_appointment_picker" in action:
                 self._court_picker = None
+            if "open_heir_picker" in action:
+                self._heir_picker = True
+                return {"open_heir_picker": True}
+            if "close_heir_picker" in action:
+                self._heir_picker = None
+            if "designate_heir" in action:
+                self._heir_picker = None
+                return action
             if "appoint_director" in action:
                 if "char_id" not in action:
                     eid = action["appoint_director"]

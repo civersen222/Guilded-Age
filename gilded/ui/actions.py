@@ -17,6 +17,8 @@ from gilded.ui.court_actions import (
     _appoint_to_seat_eligible, _appoint_to_seat_dispatch,
     _designate_heir_eligible, _designate_heir_dispatch,
     _clear_heir_eligible, _clear_heir_dispatch,
+    _open_heir_picker_eligible, _open_heir_picker_dispatch,
+    _close_heir_picker_eligible, _close_heir_picker_dispatch,
 )
 
 
@@ -845,5 +847,15 @@ ACTIONS: dict[str, PlayerAction] = {
         key="clear_heir", label="Clear Heir", domain="house",
         attention_cost=0, gold_cost=0,
         eligible=_clear_heir_eligible, dispatch=_clear_heir_dispatch,
+    ),
+    "open_heir_picker": PlayerAction(
+        key="open_heir_picker", label="Open Heir Picker", domain="house",
+        attention_cost=0, gold_cost=0,
+        eligible=_open_heir_picker_eligible, dispatch=_open_heir_picker_dispatch,
+    ),
+    "close_heir_picker": PlayerAction(
+        key="close_heir_picker", label="Close Heir Picker", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_close_heir_picker_eligible, dispatch=_close_heir_picker_dispatch,
     ),
 }

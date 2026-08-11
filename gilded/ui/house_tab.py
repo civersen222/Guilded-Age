@@ -196,6 +196,136 @@ def _appointment_reason(game: Any, house: str, seat: CourtSeat) -> Optional[str]
     return reason if not ok else None
 
 
+def _heir_picker_reason(game, house):
+    """Return a refusal reason if opening the heir picker is not allowed, else None."""
+    from gilded.ui.court_actions import _open_heir_picker_eligible
+    ok, reason = _open_heir_picker_eligible(game, house, {})
+    return reason if not ok else None
+
+
+def _clear_heir_reason(game, house, report):
+    """Return a refusal reason if clearing heir is not allowed, else None."""
+    from gilded.ui.court_actions import _clear_heir_eligible
+    ok, reason = _clear_heir_eligible(game, house, {"clear_heir": True})
+    return reason if not ok else None
+
+
+def _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD):
+    """Draw the heir designation and clearing controls."""
+    game = getattr(view, 'game', None)
+    house = getattr(view, 'house', None)
+
+    if game is None or house is None:
+        return y
+
+    # If heir picker is open, draw the picker instead of controls
+    if getattr(view, '_heir_picker', None):
+        return _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD)
+
+    # "Designate Heir" button
+    refuse_designate = _heir_picker_reason(game, house)
+    btn_text = "Designate Heir"
+    btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, refuse_designate is None)
+
+    if refuse_designate:
+        view.regions.add(Region(
+            rect=btn_rect,
+            action={"open_heir_picker": True},
+            state=RegionState.DISABLED,
+            reason=refuse_designate,
+            hint=refuse_designate,
+            group="heir_controls",
+        ))
+    else:
+        view.regions.add(Region(
+            rect=btn_rect,
+            action={"open_heir_picker": True},
+            hint="Open heir designation picker",
+            group="heir_controls",
+        ))
+
+    y += btn_h + 4
+
+    # "Clear Heir" button
+    refuse_clear = _clear_heir_reason(game, house, report)
+    btn_text = "Clear Heir"
+    btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, refuse_clear is None)
+
+    if refuse_clear:
+        view.regions.add(Region(
+            rect=btn_rect,
+            action={"clear_heir": True},
+            state=RegionState.DISABLED,
+            reason=refuse_clear,
+            hint=refuse_clear,
+            group="heir_controls",
+        ))
+    else:
+        view.regions.add(Region(
+            rect=btn_rect,
+            action={"clear_heir": True},
+            hint="Clear the designated heir",
+            group="heir_controls",
+        ))
+
+    y += btn_h + 4
+    return y
+
+
+def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD):
+    """Draw the heir picker with candidates in succession order."""
+    game = getattr(view, 'game', None)
+    house = getattr(view, 'house', None)
+
+    if game is None or house is None:
+        return y
+
+    realm = game.realms[house]
+
+    # Build succession line (excluding ruler)
+    from gilded.society.succession import succession_order
+    order = succession_order(realm)
+    ruler_id = realm.ruler.id
+    candidates = [c for c in order if c.id != ruler_id]
+
+    # Title
+    surface.blit(body.render("Select Heir:", True, INK), (PAD, y))
+    y += body.get_height() + 6
+
+    # Cancel button
+    from gilded.ui.widgets import INK as _INK
+    cancel_rect = _draw_button(surface, "Cancel", PAD, y, btn_w, btn_h, True)
+    view.regions.add(Region(
+        rect=cancel_rect,
+        action={"close_heir_picker": True},
+        hint="Cancel — spends nothing",
+        group="heir_picker",
+    ))
+    y += btn_h + 6
+
+    # Candidate buttons — in succession order
+    from gilded.peerage import _get_loyalty
+    for candidate in candidates:
+        if y + btn_h > content.bottom:
+            break
+        loyalty = _get_loyalty(candidate)
+        opinion = candidate._society.opinions.get((candidate.id, ruler_id), 0) if ruler_id else 0
+        loyalty_str = f"{loyalty:.0f}"
+        opinion_str = f"{opinion:+d}"
+        row_text = f"{candidate.name}  loyalty {loyalty_str}  opinion {opinion_str}"
+
+        btn_rect = _draw_button(surface, row_text, PAD, y, btn_w, btn_h, True)
+        view.regions.add(Region(
+            rect=btn_rect,
+            action={"designate_heir": True, "char_id": candidate.id},
+            hint=row_text,
+            group="heir_picker",
+        ))
+        y += btn_h + 2
+
+    return y
+
+
 def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                    report: CourtReport, view: Any = None) -> None:
     """Draw the House tab on *surface* within *content* rect.
@@ -267,6 +397,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                 ))
 
         y += 2 * (btn_h + 2) + 8
+
+        # ── Heir controls (row 3 of buttons) ──────────────────────────────
+        # "Designate Heir" button — opens the heir picker
+        y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
 
     # Draw text lines
     for line in lines:

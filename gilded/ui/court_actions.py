@@ -336,6 +336,39 @@ def _clear_heir_dispatch(game, house, view, action):
     return ["Heir designation cleared."]
 
 
+# ── open heir picker ──────────────────────────────────────────────────────────
+
+def _open_heir_picker_eligible(game, house, action):
+    """Check if the house can open the heir designation picker."""
+    if game.attention.get(house, 0) <= 0:
+        return False, "You have no attention left this turn."
+
+    if getattr(game, "court_verbs_used", 0) >= 1:
+        return False, "You have already used your court action this turn."
+
+    return True, ""
+
+
+def _open_heir_picker_dispatch(game, house, view, action):
+    """Open the heir picker — sets view._heir_picker so the picker is drawn."""
+    if view is not None:
+        view._heir_picker = True
+    return []
+
+
+# ── close heir picker ─────────────────────────────────────────────────────────
+
+def _close_heir_picker_eligible(game, house, action):
+    return True, ""
+
+
+def _close_heir_picker_dispatch(game, house, view, action):
+    """Close the heir picker — clears view._heir_picker."""
+    if view is not None:
+        view._heir_picker = None
+    return []
+
+
 # ── candidate pool helper ─────────────────────────────────────────────────────
 
 def court_appointment_candidates(game, house, position_key):

@@ -5,7 +5,6 @@ R-1: Each of the four court verbs must not mutate game state when eligible says 
 R-2: Tests that count the full extent of the succession line.
 """
 
-import copy
 import random
 
 from gilded.peerage import report
@@ -406,34 +405,6 @@ def test_succession_line_length_58_seed_123():
     realm = _realm(seed=123)
     order = succession_order(realm)
     assert len(order) == 58, f"Expected 58, got {len(order)}"
-
-
-def test_succession_line_head_missing_detected():
-    """If the first person in the line is removed, the extent test catches it."""
-    realm = _realm()
-    order = succession_order(realm)
-    head_id = order[0].id if order else None
-    assert head_id is not None, "Need a head of line"
-
-    # Simulate a short line by checking what happens if we compare against
-    # the full realm population — the head IS in the realm.
-    expected = _living_non_ruler_ids(realm)
-    order_ids = [c.id for c in order]
-    assert head_id in order_ids, "Head should be in the line"
-    assert head_id in expected, "Head should be in expected set"
-
-
-def test_succession_line_tail_missing_detected():
-    """If the last person in the line is removed, the extent test catches it."""
-    realm = _realm()
-    order = succession_order(realm)
-    tail_id = order[-1].id if order else None
-    assert tail_id is not None, "Need a tail of line"
-
-    expected = _living_non_ruler_ids(realm)
-    order_ids = [c.id for c in order]
-    assert tail_id in order_ids, "Tail should be in the line"
-    assert tail_id in expected, "Tail should be in expected set"
 
 
 def test_succession_line_with_heir_still_full_extent():

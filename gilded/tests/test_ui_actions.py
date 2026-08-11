@@ -500,6 +500,10 @@ def _build_action_for_key(key, game, house, view=None):
                     c.is_heir = True
                     break
         return {"clear_heir": True}
+    elif key == "close_heir_picker":
+        return {"close_heir_picker": True}
+    elif key == "open_heir_picker":
+        return {"open_heir_picker": True}
     return None
 
 
