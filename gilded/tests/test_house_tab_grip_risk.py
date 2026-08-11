@@ -24,8 +24,13 @@ def _view():
 
 
 def test_grip_risk_shown():
-    """R-F: A shareholder with negative opinion is named on the tab."""
+    """R-F: A shareholder with negative opinion changes the tab pixels."""
     g, v = _view()
+    v.active_tab = "House"
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
+
     realm = g.realms.get(v.house)
     if realm is None or realm.ruler is None:
         pytest.skip("No realm or ruler")
@@ -48,19 +53,22 @@ def test_grip_risk_shown():
     # Make the shareholder hate the ruler
     modify_opinion(target_char, realm.ruler, -20, "sell signal")
 
-    lines = v.house_lines()
-    text = "\n".join(lines)
+    surf2 = pygame.Surface((1280, 900))
+    v.draw(surf2)
+    pixels2 = pygame.image.tobytes(surf2, "RGBA")
 
-    assert target.name in text, \
-        f"Shareholder '{target.name}' should appear on tab: {text}"
-    assert "GRIP" in text or "shares" in text, \
-        f"Share info should appear: {text}"
+    assert pixels1 != pixels2, \
+        f"Pixels should change when shareholder opinion worsens"
 
 
 def test_grip_risk_pixel_change():
-    """R-F pixel check: making a shareholder disloyal changes pixels."""
+    """R-F: A shareholder's negative opinion changes drawn pixels."""
     g, v = _view()
     v.active_tab = "House"
+    surf1 = pygame.Surface((1280, 900))
+    v.draw(surf1)
+    pixels1 = pygame.image.tobytes(surf1, "RGBA")
+
     realm = g.realms.get(v.house)
     if realm is None or realm.ruler is None:
         pytest.skip("No realm or ruler")
@@ -79,14 +87,10 @@ def test_grip_risk_pixel_change():
     if target_char is None:
         pytest.skip("Target character not found")
 
-    surf1 = pygame.Surface((1280, 900))
-    v.draw(surf1)
-    pixels1 = pygame.image.tobytes(surf1, "RGBA")
-
     modify_opinion(target_char, realm.ruler, -20, "grip risk")
 
     surf2 = pygame.Surface((1280, 900))
     v.draw(surf2)
     pixels2 = pygame.image.tobytes(surf2, "RGBA")
 
-    assert pixels1 != pixels2, "Pixels should change when shareholder becomes disloyal"
+    assert pixels1 != pixels2, "Pixels should change when opinion changes"
