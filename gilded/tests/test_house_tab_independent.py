@@ -39,20 +39,35 @@ def test_succession_order_drawn_matches_simulation():
     # What the tab draws — from the read-model
     rpt = peerage_report(g, house_name)
     lines = _house_tab_lines(rpt)
-    text = "\n".join(lines)
 
-    # The first two names from the simulation should appear in rank order on the tab
-    first_name = sim_order[0].name
-    second_name = sim_order[1].name
+    # Build a lookup from (succession_rank, name) -> char_id from the report
+    kin_by_rank_name: dict = {}
+    for k in rpt.kin:
+        if k.succession_rank is not None:
+            kin_by_rank_name[(k.succession_rank, k.name)] = k.char_id
 
-    assert first_name in text, f"First in line '{first_name}' should appear on tab"
-    assert second_name in text, f"Second in line '{second_name}' should appear on tab"
+    # Parse the #N succession rows (skip "First in line:" header)
+    # Rows may have a leading "* " prefix for the heir
+    drawn_ids = []
+    for line in lines:
+        stripped = line.strip()
+        if '#' in stripped and not stripped.startswith('First'):
+            parts = stripped.split()
+            rank_token = [p for p in parts if p.startswith('#')][0]
+            rank = int(rank_token.lstrip('#'))
+            # Name is the two tokens after the rank marker
+            name_idx = parts.index(rank_token) + 1
+            name = parts[name_idx] + ' ' + parts[name_idx + 1]
+            key = (rank, name)
+            if key in kin_by_rank_name:
+                drawn_ids.append(kin_by_rank_name[key])
 
-    # First should appear before second
-    first_pos = text.index(first_name)
-    second_pos = text.index(second_name)
-    assert first_pos < second_pos, \
-        f"Tab shows '{second_name}' before '{first_name}' — order doesn't match simulation"
+    # Compare drawn order to simulation order position by position
+    sim_ids = [c.id for c in sim_order]
+    n = min(len(drawn_ids), len(sim_ids))
+    for i in range(n):
+        assert drawn_ids[i] == sim_ids[i], \
+            f"Position {i}: tab shows {drawn_ids[i]}, simulation expects {sim_ids[i]}"
 
 
 def test_heir_matches_simulation():
