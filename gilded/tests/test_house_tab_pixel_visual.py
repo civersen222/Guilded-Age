@@ -158,7 +158,7 @@ def test_pixel_identical_on_double_draw():
     assert pixels1 == pixels2, "Pixels must be identical when drawing the same game twice"
 
 
-def test_draw_at_1024x700():
+def test_pixel_draw_at_1024x700():
     """The tab must draw without raising at 1024x700."""
     g = GildedGame(seed=42)
     house_name = list(g.houses.keys())[0]
@@ -166,7 +166,7 @@ def test_draw_at_1024x700():
     assert len(pixels) > 0, "Tab should produce pixels at 1024x700"
 
 
-def test_draw_at_1600x1000():
+def test_pixel_draw_at_1600x1000():
     """The tab must draw without raising at 1600x1000."""
     g = GildedGame(seed=42)
     house_name = list(g.houses.keys())[0]
