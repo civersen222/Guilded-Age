@@ -7,11 +7,8 @@ Nothing reads a rect, an accessor, a helper or any other name introduced by this
 import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
-import pytest
-
 import pygame
 from gilded.chassis import GildedGame
-from gilded.ui.broadsheet import BroadsheetView
 from gilded.peerage import report as peerage_report
 from gilded.society.characters import modify_opinion
 

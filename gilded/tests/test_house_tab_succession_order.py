@@ -11,8 +11,6 @@ game would crown.  This is a different claim from R-2 and must not go red togeth
 import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
-import pytest
-
 import pygame
 
 from gilded.chassis import GildedGame
