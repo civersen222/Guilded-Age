@@ -1,4 +1,4 @@
-﻿"""Stage 5B — R-F: Shareholder who holds House stock and hates ruler is named.
+"""Stage 5B — R-F: Shareholder who holds House stock and hates ruler is named.
 
 This is the Grip shortfall's cause.
 """

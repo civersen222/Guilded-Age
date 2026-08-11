@@ -1,4 +1,4 @@
-﻿"""Stage 5B3 — DoD 1: Pixel-level visual tests for the House tab.
+"""Stage 5B3 — DoD 1: Pixel-level visual tests for the House tab.
 
 The House tab is drawn to an off-screen surface and raw pixels are compared.
 Nothing reads a rect, an accessor, a helper or any other name introduced by this work.
