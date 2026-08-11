@@ -2245,9 +2245,9 @@ class BroadsheetView:
             self._draw_court_picker(surface, content, rpt)
 
     def _draw_court_picker(self, surface, content, report):
-        """Draw the appointment picker for a vacant court seat."""
+        """Draw the appointment picker for a vacant court seat using Regions."""
         from gilded.ui.court_actions import _get_appointment_pool
-        from gilded.ui.widgets import font as _font, TYPE_TEXT, INK, BUTTON_BG, BUTTON_EDGE, BUTTON_TEXT
+        from gilded.ui.widgets import font as _font, TYPE_TEXT, INK
         PAD = 12
         body = _font(TYPE_TEXT)
         pk = self._court_picker
@@ -2260,9 +2260,13 @@ class BroadsheetView:
         y += body.get_height() + 8
 
         # Back button
-        from gilded.ui.house_tab import _draw_button
         back_rect = _draw_button(surface, "Cancel", PAD, y, btn_w, btn_h, True)
-        self._court_picker_hits.append((back_rect, {"close_appointment_picker": True}))
+        self.regions.add(Region(
+            rect=back_rect,
+            action={"close_appointment_picker": True},
+            hint="Cancel appointment",
+            group="picker",
+        ))
         y += btn_h + 8
 
         # Draw candidate buttons
@@ -2273,7 +2277,12 @@ class BroadsheetView:
                 break
             btn_text = f"{ch.name}"
             btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, True)
-            self._court_picker_hits.append((btn_rect, {"appoint_to_seat": pk, "char_id": ch.id}))
+            self.regions.add(Region(
+                rect=btn_rect,
+                action={"appoint_to_seat": pk, "char_id": ch.id},
+                hint=f"Appoint {ch.name} as {pos_name}",
+                group="picker",
+            ))
             y += btn_h + 4
 
     # --- clicking ------------------------------------------------------------
@@ -2363,20 +2372,7 @@ class BroadsheetView:
                         self._share_picker = None
                         self._share_picker_hits.clear()
                     return action
-        if self.active_tab == "Enterprises":
-            for rect, act in self._enterprise_hits:
-                if rect.collidepoint(pos):
-                    return act.get("action", act)
-            for rect, act in self._appoint_hits:
-                if rect.collidepoint(pos):
-                    action = act.get("action", act)
-                    if "appoint_director" in action and "char_id" not in action:
-                        eid = action["appoint_director"]
-                        self._director_picker = eid
-                        self._director_picker_hits.clear()
-                        return {"open_director_picker": eid}
-                    return action
-        # Court picker hit detection
+        # Court picker hit detection — must be reachable regardless of active tab
         if self._court_picker is not None:
             for rect, action in self._court_picker_hits:
                 if rect.collidepoint(pos):
@@ -2393,5 +2389,18 @@ class BroadsheetView:
                         self._court_picker = pk
                         self._court_picker_hits.clear()
                         return {"open_appointment_picker": pk}
+                    return action
+        if self.active_tab == "Enterprises":
+            for rect, act in self._enterprise_hits:
+                if rect.collidepoint(pos):
+                    return act.get("action", act)
+            for rect, act in self._appoint_hits:
+                if rect.collidepoint(pos):
+                    action = act.get("action", act)
+                    if "appoint_director" in action and "char_id" not in action:
+                        eid = action["appoint_director"]
+                        self._director_picker = eid
+                        self._director_picker_hits.clear()
+                        return {"open_director_picker": eid}
                     return action
         return None

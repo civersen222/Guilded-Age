@@ -1,4 +1,4 @@
-"""Stage 5B3 — DoD 1: Pixel-level visual tests for the House tab.
+﻿"""Stage 5B3 — DoD 1: Pixel-level visual tests for the House tab.
 
 The House tab is drawn to an off-screen surface and raw pixels are compared.
 Nothing reads a rect, an accessor, a helper or any other name introduced by this work.
@@ -80,8 +80,7 @@ def test_pixel_change_on_grievance_by_in_line_kin():
     assert realm is not None and realm.ruler is not None, "Game must have a realm with a ruler"
 
     rpt = peerage_report(g, house_name)
-    # Find a kinsman in line for succession who holds no seat AND is visible on screen
-    # Kin are sorted alphabetically in the tab, so pick one early in the alphabet
+    # Find a kinsman in line for succession who holds no seat
     in_line = [k for k in rpt.kin if k.succession_rank is not None and k.is_alive]
     in_line.sort(key=lambda k: k.succession_rank)
     in_line_no_seat = None
@@ -99,8 +98,7 @@ def test_pixel_change_on_grievance_by_in_line_kin():
 
     assert in_line_no_seat is not None, "Tab should have an in-line kin without seat"
 
-    # Use a tall surface so all kin are rendered (72+ lines * ~20px each + header)
-    pixels1 = _draw_tab(g, house_name, size=(1280, 2000))
+    pixels1 = _draw_tab(g, house_name)
 
     # Record a grievance against the ruler by this kinsman
     ch = None
@@ -111,7 +109,7 @@ def test_pixel_change_on_grievance_by_in_line_kin():
     assert ch is not None, "Kin character must exist in realm"
     modify_opinion(ch, realm.ruler, -40, "grievance")
 
-    pixels2 = _draw_tab(g, house_name, size=(1280, 2000))
+    pixels2 = _draw_tab(g, house_name)
     assert pixels1 != pixels2, "Pixels must change when grievance is recorded"
 
 

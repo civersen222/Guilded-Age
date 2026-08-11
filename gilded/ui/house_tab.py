@@ -1,10 +1,11 @@
 """Stage 5B — House tab: the men who will betray you, with numbers.
 
 Draws from the peerage read-model (CourtReport).  5C adds interactive
-buttons for court seat appointment and dismissal.
+buttons for court seat appointment and dismissal, registered as proper
+Regions in the view's RegionSet.
 """
 
-from typing import Any, List
+from typing import Any, List, Optional
 
 import pygame
 
@@ -18,6 +19,7 @@ from gilded.ui.widgets import (
     TYPE_TEXT,
     TYPE_TITLE,
     TONES,
+    Region, RegionState,
 )
 
 _BAND_COLOR: dict = {
@@ -70,12 +72,13 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
 
     # ── Succession order ──────────────────────────────────────────────────
     rows.append("SUCCESSION")
-    ranked = [(k.succession_rank, k.name, k.loyalty) for k in report.kin
+    ranked = [(k.succession_rank, k.name, k.loyalty, k.opinion_of_ruler) for k in report.kin
               if k.is_alive and k.succession_rank is not None]
     ranked.sort()
-    for rank, name, loyalty in ranked[:10]:
+    for rank, name, loyalty, opinion in ranked[:10]:
         loyalty_str = f"{loyalty:.0f}" if loyalty is not None else "?"
-        rows.append(f"  #{rank} {name}  loyalty {loyalty_str}")
+        opinion_str = f"{opinion:+d}"
+        rows.append(f"  #{rank} {name}  loyalty {loyalty_str} opinion {opinion_str}")
     rows.append("")
 
     # ── Kin — loyalty and opinion ──────────────────────────────────────────
@@ -97,9 +100,9 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
         grievance_str = f"  [{', '.join(k.grievances)}]" if k.grievances else ""
         shares_str = f"  shares {k.shares_pct:.1f}%" if k.shares_pct > 0 else ""
         if band_str:
-            rows.append(f"  {k.name}  loyalty {loyalty_str} ({band_str}){seated_str}{grievance_str}{shares_str}")
+            rows.append(f"  {k.name}  loyalty {loyalty_str} opinion {opinion_str} ({band_str}){seated_str}{grievance_str}{shares_str}")
         else:
-            rows.append(f"  {k.name}  loyalty {loyalty_str}{seated_str}{grievance_str}{shares_str}")
+            rows.append(f"  {k.name}  loyalty {loyalty_str} opinion {opinion_str}{seated_str}{grievance_str}{shares_str}")
     rows.append("")
 
     # ── Disloyal kin ───────────────────────────────────────────────────────
@@ -108,13 +111,11 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
         rows.append("DISLOYAL KIN (loyalty < 50)")
         for k in disloyal:
             grievance_str = f"  [{', '.join(k.grievances)}]" if k.grievances else ""
-            shares_str = f"  shares {k.shares_pct:.1f}%" if k.shares_pct > 0 else ""
-            rows.append(f"  ?  {k.name}  loyalty {k.loyalty:.0f} (DUBIOUS){grievance_str}{shares_str}")
+            rows.append(f"  {k.name}  loyalty {k.loyalty:.0f}{grievance_str}")
         rows.append("")
 
-    # ── Grip risks — shareholders with bad opinion (R-F) ──────────────────
-    grip_risks = [k for k in report.kin
-                  if k.shares_pct > 0 and k.opinion_of_ruler < 0 and k.is_alive]
+    # ── Grip risks ─────────────────────────────────────────────────────────
+    grip_risks = [k for k in report.kin if k.shares_pct > 0 and k.opinion_of_ruler < -30 and k.is_alive]
     if grip_risks:
         rows.append("GRIP RISKS (shareholders who hate the ruler)")
         for k in grip_risks:
@@ -124,9 +125,8 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
     return rows
 
 
-# ── Drawing ─────────────────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
-# Position key mapping: seat position -> action key
 def _position_key(seat: CourtSeat) -> str:
     """Convert seat position name to a lowercase action key."""
     return seat.position.lower().replace(" ", "_")
@@ -150,11 +150,51 @@ def _draw_button(surface: pygame.Surface, text: str, x: int, y: int,
     return rect
 
 
+def _seat_action_label(seat: CourtSeat) -> str:
+    """Return the hint text for a seat control."""
+    if seat.vacant:
+        return f"Appoint a {seat.position.lower()}"
+    return f"Dismiss {seat.holder_name} from {seat.position.lower()}"
+
+
+def _seat_action_key(seat: CourtSeat) -> str:
+    """Return the action key for a seat control."""
+    if seat.vacant:
+        return "open_appointment_picker"
+    return "dismiss_seat"
+
+
+def _seat_action_payload(seat: CourtSeat) -> dict:
+    """Return the action dict for a seat control."""
+    pk = _position_key(seat)
+    key = _seat_action_key(seat)
+    return {key: pk}
+
+
+def _dismissal_reason(game: Any, house: str, seat: CourtSeat) -> Optional[str]:
+    """Return a refusal reason if dismissing this seat is not allowed, else None."""
+    from gilded.ui.court_actions import _dismiss_seat_eligible
+    pk = _position_key(seat)
+    action = {"dismiss_seat": pk}
+    ok, reason = _dismiss_seat_eligible(game, house, action)
+    return reason if not ok else None
+
+
+def _appointment_reason(game: Any, house: str, seat: CourtSeat) -> Optional[str]:
+    """Return a refusal reason if appointing to this seat is not allowed, else None."""
+    from gilded.ui.court_actions import _open_appointment_picker_eligible
+    pk = _position_key(seat)
+    action = {"open_appointment_picker": pk}
+    ok, reason = _open_appointment_picker_eligible(game, house, action)
+    return reason if not ok else None
+
+
 def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                    report: CourtReport, view: Any = None) -> None:
     """Draw the House tab on *surface* within *content* rect.
 
-    When *view* is provided, draws interactive buttons for court seats.
+    When *view* is provided, draws interactive Region controls for court seats
+    at the top of the tab, so the text content follows below.
     """
     PAD = 12
     title = _font(TYPE_TITLE, bold=True).render(
@@ -166,14 +206,63 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     body = _font(TYPE_TEXT)
     lines = _house_tab_lines(report)
 
-    # Reserve space for court seat buttons (6 seats + picker area)
+    # Draw seat controls at the top (when view is provided)
     btn_h = body.get_height() + 8
-    reserve_for_buttons = 6 * (btn_h + 2) + 40 if view is not None else 0
-    text_bottom = content.bottom - reserve_for_buttons if view is not None else content.bottom
+    btn_w = 180
+
+    if view is not None:
+        game = getattr(view, 'game', None)
+        house = getattr(view, 'house', None)
+
+        # Draw 6 seat buttons in a 3x2 grid at the top
+        cols = 3
+        col_w = (content.width - PAD * 2) // cols
+        for idx, seat in enumerate(report.seats):
+            col = idx % cols
+            row = idx // cols
+            btn_x = PAD + col * col_w
+            btn_y = y + row * (btn_h + 2)
+
+            pk = _position_key(seat)
+
+            # Determine eligibility
+            refusal = None
+            if not seat.vacant and game is not None and house is not None:
+                refusal = _dismissal_reason(game, house, seat)
+            elif seat.vacant and game is not None and house is not None:
+                refusal = _appointment_reason(game, house, seat)
+
+            if seat.vacant:
+                btn_text = f"Appoint {seat.position}"
+            else:
+                btn_text = f"Dismiss {seat.holder_name}"
+
+            btn_rect = _draw_button(surface, btn_text, btn_x, btn_y, col_w - 4, btn_h, refusal is None)
+            hint = _seat_action_label(seat)
+
+            if refusal:
+                view.regions.add(Region(
+                    rect=btn_rect,
+                    action=None,
+                    state=RegionState.DISABLED,
+                    reason=refusal,
+                    hint=hint,
+                    group="court_seats",
+                ))
+            else:
+                action = _seat_action_payload(seat)
+                view.regions.add(Region(
+                    rect=btn_rect,
+                    action=action,
+                    hint=hint,
+                    group="court_seats",
+                ))
+
+        y += 2 * (btn_h + 2) + 8
 
     # Draw text lines
     for line in lines:
-        if y > text_bottom:
+        if y > content.bottom:
             break
         color = INK
         if line.startswith("  ?"):
@@ -184,50 +273,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             color = TONES.get("good", INK)
 
         surface.blit(body.render(line, True, color), (PAD, y))
-        y += body.get_height() + 4
-
-    # ── Interactive court seat buttons ──────────────────────────────────────
-    if view is not None:
-        y += 8
-        btn_w = 180
-
-        for seat in report.seats:
-            if y + btn_h > content.bottom:
-                break
-
-            pk = _position_key(seat)
-
-            if seat.vacant:
-                # Vacant seat -> "Appoint X" button
-                btn_text = f"Appoint {seat.position}"
-                btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, True)
-                if view is not None:
-                    view._court_hits.append((btn_rect, {"open_appointment_picker": pk}))
-            else:
-                # Occupied seat -> "Dismiss" button
-                btn_text = f"Dismiss {seat.holder_name}"
-                btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, True)
-                if view is not None:
-                    view._court_hits.append((btn_rect, {"dismiss_seat": pk}))
-
-            y += btn_h + 4
-
-        # If court picker is open, draw candidate picker
-        if view is not None and getattr(view, '_court_picker', None) is not None:
-            pk = view._court_picker
-            pos_name = pk.replace("_", " ").title()
-            y += 4
-            surface.blit(body.render(f"Select appointee for {pos_name}:", True, INK), (PAD, y))
-            y += body.get_height() + 4
-
-            # Back button
-            back_text = "Cancel"
-            back_rect = _draw_button(surface, back_text, PAD, y, btn_w, btn_h, True)
-            view._court_picker_hits.append((back_rect, {"close_appointment_picker": True}))
-            y += btn_h + 4
-
-            # Draw candidate buttons (from _court_picker_hits)
-            # Candidates are populated by the caller via view._court_picker_hits
+        y += body.get_height() + 2
 
 
 __all__ = ["draw_house_tab", "_house_tab_lines"]
