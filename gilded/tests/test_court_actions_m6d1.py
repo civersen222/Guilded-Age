@@ -212,54 +212,90 @@ def test_dismissal_cost_follows_succession_order():
 
 
 def test_dismissal_cost_with_reversed_succession():
-    """The cost rule holds when the succession order is reversed."""
+    """A dynasty member costs more to dismiss than a non-dynasty adult.
+
+    If the succession order were reversed (outsiders before blood),
+    the dynasty member would rank lower and cost less — this case would go red.
+    """
     game = _make_game()
     house = _first_realm_key(game)
     realm = _realm(game, house)
 
-    from gilded.society.succession import succession_order
-    original = succession_order(realm)
     ruler_id = realm.ruler.id
 
-    candidates = [c for c in original if (c.id if hasattr(c, 'id') else c.get('char_id')) != ruler_id]
-    assert len(candidates) >= 2
+    # Pick a living dynasty member (not the ruler) — expected to be early in line
+    dynasty_member = None
+    for c in realm.dynasty.all_characters.values():
+        if c.is_alive and c.id != ruler_id:
+            dynasty_member = c
+            break
+    assert dynasty_member is not None, "need a living dynasty member"
 
-    def cid(c):
-        return c.id if hasattr(c, 'id') else c.get('char_id')
+    # Pick a living adult NOT in the dynasty — expected to be late in line
+    outsider = None
+    for c in realm.characters:
+        if c.is_alive and c.id != ruler_id and c.id not in realm.dynasty.all_characters:
+            if c.age >= 16:
+                outsider = c
+                break
+    assert outsider is not None, "need a living non-dynasty adult"
 
-    # Original: candidates[0] is nearest, candidates[-1] is farthest
-    near_cost_orig = _dismissal_standing(cid(candidates[0]), realm)
-    far_cost_orig = _dismissal_standing(cid(candidates[-1]), realm)
-    assert near_cost_orig >= far_cost_orig, (
-        "nearest in original order should cost at least as much as farthest"
+    dynasty_cost = _dismissal_standing(dynasty_member.id, realm)
+    outsider_cost = _dismissal_standing(outsider.id, realm)
+
+    assert dynasty_cost > outsider_cost, (
+        f"dynasty member ({dynasty_member.name}, cost={dynasty_cost}) should cost "
+        f"more than outsider ({outsider.name}, cost={outsider_cost})"
     )
 
 
 def test_dismissal_cost_with_truncated_succession():
-    """The cost rule holds when succession is cut to just 2 men out of many."""
+    """A non-top non-dynasty adult costs more than the floor.
+
+    The highest-statecraft non-dynasty adult sits at rank 1 in succession
+    (cost 6).  The next-best adults sit at ranks 2-5 (costs 5-2).
+
+    If the succession line were truncated to just the first 2 men,
+    the rank-2+ men would be dropped from the line entirely and priced
+    at the floor (1).  This case finds a man whose cost is below the
+    top non-dynasty cost but above the floor — proving he depends on
+    a position that a short line would erase.
+    """
     game = _make_game()
     house = _first_realm_key(game)
     realm = _realm(game, house)
 
-    from gilded.society.succession import succession_order
-    original = succession_order(realm)
     ruler_id = realm.ruler.id
 
-    candidates = [c for c in original if (c.id if hasattr(c, 'id') else c.get('char_id')) != ruler_id]
-    assert len(candidates) >= 2
+    # Collect costs for all living non-dynasty adults
+    costs = []
+    for c in realm.characters:
+        if c.is_alive and c.id != ruler_id and c.id not in realm.dynasty.all_characters:
+            if c.age >= 16:
+                cost = _dismissal_standing(c.id, realm)
+                costs.append((c, cost))
 
-    def cid(c):
-        return c.id if hasattr(c, 'id') else c.get('char_id')
+    assert len(costs) > 0, "need non-dynasty adults"
 
-    # Just the first and last — the two extremes
-    near_id = cid(candidates[0])
-    far_id = cid(candidates[-1])
+    # The highest cost among non-dynasty adults is rank 1 (survives truncation to 2)
+    max_cost = max(cost for _, cost in costs)
 
-    near_cost = _dismissal_standing(near_id, realm)
-    far_cost = _dismissal_standing(far_id, realm)
+    # Find a man with cost < max but > 1 → must be at rank 2-5 (dropped by truncation to 2)
+    mid_man = None
+    for c, cost in costs:
+        if 1 < cost < max_cost:
+            mid_man = c
+            break
 
-    assert near_cost > far_cost, (
-        f"near ({near_id}, cost={near_cost}) must cost more than far ({far_id}, cost={far_cost})"
+    assert mid_man is not None, (
+        "need a non-dynasty adult with cost between floor and top — "
+        "proves he sits at rank 2-5, which truncation to 2 would erase"
+    )
+
+    mid_cost = _dismissal_standing(mid_man.id, realm)
+    assert mid_cost > 1, (
+        f"{mid_man.name} costs {mid_cost} — "
+        "must be > 1 to depend on a position truncation would erase"
     )
 
 
