@@ -56,11 +56,28 @@ def _rich_state():
 def _collect_emitted_keys(view):
     """Walk every tab, draw to a headless surface, collect all emitted action keys."""
     collected = set()
-    surf = pygame.Surface((800, 600))
-
+    surf = pygame.Surface((1200, 800))
     for tab_name in TABS:
         view.active_tab = tab_name
         view.draw(surf)
+
+        # Special case: House tab — collect court hits and open the appointment picker
+        if tab_name == "House":
+            for rect, payload in view._court_hits:
+                if isinstance(payload, dict):
+                    for k in payload:
+                        if k != "char_id":
+                            collected.add(k)
+            # Open the appointment picker if there is a vacant seat
+            if view._court_hits:
+                collected.add("open_appointment_picker")
+                _open_appointment_picker(view, surf)
+                for rect, payload in view._court_picker_hits:
+                    if isinstance(payload, dict):
+                        for k in payload:
+                            if k != "char_id":
+                                collected.add(k)
+            continue
 
         # Special case: Enterprises tab — collect both picker-open and picker-closed hits
         if tab_name == "Enterprises":
@@ -87,35 +104,9 @@ def _collect_emitted_keys(view):
                         for k in payload:
                             if k != "char_id":
                                 collected.add(k)
-
-            # Collect standard structures for this tab
-            _collect_standard(view, collected)
             continue
 
-        # Special case: House tab — collect court picker hits too
-        if tab_name == "House":
-            # Collect court seat hits (picker closed)
-            for rect, payload in view._court_hits:
-                if isinstance(payload, dict):
-                    for k in payload:
-                        if k != "char_id":
-                            collected.add(k)
-
-            # Open the appointment picker and collect its hits
-            if view._court_hits:
-                _open_appointment_picker(view, surf)
-                for rect, payload in view._court_picker_hits:
-                    if isinstance(payload, dict):
-                        for k in payload:
-                            if k != "char_id":
-                                collected.add(k)
-
-            _collect_standard(view, collected)
-            continue
-
-        # Standard collection for other tabs
         _collect_standard(view, collected)
-
     return collected
 
 

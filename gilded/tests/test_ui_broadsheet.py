@@ -36,7 +36,7 @@ EXPECTED_REGIONS = {
     "Enterprises": 22,    # venture x4, buy_shares x2, sell_shares x2, attack_takeover x1, found_enterprise x1, tab x10, end_turn, narrate
     "Atlas": 13,          # select_province x1, tab x10, end_turn, narrate
     "Powers": 19,         # place_informant x7, tab x10, end_turn, narrate
-    "House": 12,          # tab x10, end_turn, narrate
+    "House": 18,          # court seat x6, tab x10, end_turn, narrate
 }
 
 
@@ -4270,7 +4270,7 @@ def test_the_tooltip_follows_a_tab_switch():
 
 
 def test_every_control_on_every_tab_explains_itself():
-    """149 controls, ten tabs, and each one says something when pointed at,
+    """155 controls, ten tabs, and each one says something when pointed at,
     inside a panel that is on the screen and has actually been painted.
 
     The pixel check is what stops a tooltip that is computed and never
@@ -4308,7 +4308,7 @@ def test_every_control_on_every_tab_explains_itself():
                 f"painted -- the pixel inside {v.tooltip_rect} is {fill}, "
                 f"expected the INK fill {INK}")
             checked += 1
-    assert checked == 149, (
-        f"expected to point at 149 controls across the ten tabs, pointed at "
+    assert checked == 155, (
+        f"expected to point at 155 controls across the ten tabs, pointed at "
         f"{checked}. The census moved; EXPECTED_REGIONS should have caught "
         f"this first.")

@@ -2248,6 +2248,7 @@ class BroadsheetView:
         """Draw the appointment picker for a vacant court seat using Regions."""
         from gilded.ui.court_actions import _get_appointment_pool
         from gilded.ui.widgets import font as _font, TYPE_TEXT, INK
+        from gilded.ui.house_tab import _draw_button
         PAD = 12
         body = _font(TYPE_TEXT)
         pk = self._court_picker
@@ -2261,6 +2262,7 @@ class BroadsheetView:
 
         # Back button
         back_rect = _draw_button(surface, "Cancel", PAD, y, btn_w, btn_h, True)
+        self._court_picker_hits.append((back_rect, {"close_appointment_picker": True}))
         self.regions.add(Region(
             rect=back_rect,
             action={"close_appointment_picker": True},
@@ -2277,6 +2279,7 @@ class BroadsheetView:
                 break
             btn_text = f"{ch.name}"
             btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, True)
+            self._court_picker_hits.append((btn_rect, {"appoint_to_seat": pk, "char_id": ch.id}))
             self.regions.add(Region(
                 rect=btn_rect,
                 action={"appoint_to_seat": pk, "char_id": ch.id},
