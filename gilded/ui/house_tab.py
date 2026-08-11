@@ -241,7 +241,6 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             hint = _seat_action_label(seat)
 
             if refusal:
-                view._court_hits.append((btn_rect, {"char_id": seat.holder_id}))
                 view.regions.add(Region(
                     rect=btn_rect,
                     action=None,
@@ -252,7 +251,6 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                 ))
             else:
                 action = _seat_action_payload(seat)
-                view._court_hits.append((btn_rect, action))
                 view.regions.add(Region(
                     rect=btn_rect,
                     action=action,

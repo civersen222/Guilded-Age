@@ -61,20 +61,21 @@ def _collect_emitted_keys(view):
         view.active_tab = tab_name
         view.draw(surf)
 
-        # Special case: House tab — collect court hits and open the appointment picker
+        # Special case: House tab — collect court regions and open the appointment picker
         if tab_name == "House":
-            for rect, payload in view._court_hits:
-                if isinstance(payload, dict):
-                    for k in payload:
+            for region in view.regions._regions:
+                if region.group == "court_seats" and region.action:
+                    for k in region.action:
                         if k != "char_id":
                             collected.add(k)
             # Open the appointment picker if there is a vacant seat
-            if view._court_hits:
+            court_regions = [r for r in view.regions._regions if r.group == "court_seats"]
+            if court_regions:
                 collected.add("open_appointment_picker")
                 _open_appointment_picker(view, surf)
-                for rect, payload in view._court_picker_hits:
-                    if isinstance(payload, dict):
-                        for k in payload:
+                for region in view.regions._regions:
+                    if region.group == "picker" and region.action:
+                        for k in region.action:
                             if k != "char_id":
                                 collected.add(k)
             continue
@@ -138,14 +139,14 @@ def _collect_standard(view, collected):
             for k in payload:
                 if k != "char_id":
                     collected.add(k)
-    for rect, payload in view._court_hits:
-        if isinstance(payload, dict):
-            for k in payload:
+    for region in view.regions._regions:
+        if region.group == "court_seats" and region.action:
+            for k in region.action:
                 if k != "char_id":
                     collected.add(k)
-    for rect, payload in view._court_picker_hits:
-        if isinstance(payload, dict):
-            for k in payload:
+    for region in view.regions._regions:
+        if region.group == "picker" and region.action:
+            for k in region.action:
                 if k != "char_id":
                     collected.add(k)
     for rect, key in view._dial_hits:
@@ -175,12 +176,11 @@ def _open_director_picker(view, surf):
 
 def _open_appointment_picker(view, surf):
     """Open the appointment picker for a vacant court seat."""
-    for rect, payload in view._court_hits:
-        if isinstance(payload, dict):
-            action = payload.get("open_appointment_picker")
+    for region in view.regions._regions:
+        if region.group == "court_seats" and region.action:
+            action = region.action.get("open_appointment_picker")
             if action is not None:
                 view._court_picker = action
-                view._court_picker_hits.clear()
                 view.draw(surf)
                 return
 

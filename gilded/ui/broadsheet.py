@@ -799,10 +799,9 @@ class BroadsheetView:
         self._enterprise_hits: List[Tuple[pygame.Rect, dict]] = []
         self._appoint_hits: List[Tuple[pygame.Rect, dict]] = []
         self._informant_hits: List[Tuple[pygame.Rect, dict]] = []
-        self._court_hits: List[Tuple[pygame.Rect, dict]] = []
+
         # court appointment picker state: None or position_key
         self._court_picker: Optional[str] = None
-        self._court_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         # director picker state: None or eid whose picker is open
         self._director_picker: Optional[int] = None
         self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
@@ -851,8 +850,7 @@ class BroadsheetView:
         self._appoint_hits = []
         self._share_picker_hits = []
         self._informant_hits = []
-        self._court_hits = []
-        self._court_picker_hits = []
+
         self._director_picker_hits = []
         self._found_picker_hits = []
         surface.fill(PAPER_BG)
@@ -2262,7 +2260,6 @@ class BroadsheetView:
 
         # Back button
         back_rect = _draw_button(surface, "Cancel", PAD, y, btn_w, btn_h, True)
-        self._court_picker_hits.append((back_rect, {"close_appointment_picker": True}))
         self.regions.add(Region(
             rect=back_rect,
             action={"close_appointment_picker": True},
@@ -2279,7 +2276,7 @@ class BroadsheetView:
                 break
             btn_text = f"{ch.name}"
             btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, True)
-            self._court_picker_hits.append((btn_rect, {"appoint_to_seat": pk, "char_id": ch.id}))
+
             self.regions.add(Region(
                 rect=btn_rect,
                 action={"appoint_to_seat": pk, "char_id": ch.id},
@@ -2315,6 +2312,12 @@ class BroadsheetView:
                     self.selected_pid = pid
                     return {"select_province": pid}
                 return None
+            if "open_appointment_picker" in action:
+                pk = action["open_appointment_picker"]
+                self._court_picker = pk
+                return {"open_appointment_picker": pk}
+            if "close_appointment_picker" in action:
+                self._court_picker = None
             if "appoint_director" in action:
                 if "char_id" not in action:
                     eid = action["appoint_director"]
@@ -2374,24 +2377,6 @@ class BroadsheetView:
                     if "close_share_picker" in action:
                         self._share_picker = None
                         self._share_picker_hits.clear()
-                    return action
-        # Court picker hit detection — must be reachable regardless of active tab
-        if self._court_picker is not None:
-            for rect, action in self._court_picker_hits:
-                if rect.collidepoint(pos):
-                    if "close_appointment_picker" in action:
-                        self._court_picker = None
-                        self._court_picker_hits.clear()
-                    return action
-        if self.active_tab == "House":
-            for rect, act in self._court_hits:
-                if rect.collidepoint(pos):
-                    action = act.get("action", act)
-                    if "open_appointment_picker" in action:
-                        pk = action["open_appointment_picker"]
-                        self._court_picker = pk
-                        self._court_picker_hits.clear()
-                        return {"open_appointment_picker": pk}
                     return action
         if self.active_tab == "Enterprises":
             for rect, act in self._enterprise_hits:

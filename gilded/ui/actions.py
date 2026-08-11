@@ -816,7 +816,7 @@ ACTIONS: dict[str, PlayerAction] = {
     # court verbs (House tab)
     "dismiss_seat": PlayerAction(
         key="dismiss_seat", label="Dismiss from Court", domain="house",
-        attention_cost=1, gold_cost=0,
+        attention_cost=0, gold_cost=0,
         eligible=_dismiss_seat_eligible, dispatch=_dismiss_seat_dispatch,
     ),
     "open_appointment_picker": PlayerAction(
@@ -831,7 +831,7 @@ ACTIONS: dict[str, PlayerAction] = {
     ),
     "appoint_to_seat": PlayerAction(
         key="appoint_to_seat", label="Appoint to Court", domain="house",
-        attention_cost=1, gold_cost=0,
+        attention_cost=0, gold_cost=0,
         eligible=_appoint_to_seat_eligible, dispatch=_appoint_to_seat_dispatch,
     ),
 }

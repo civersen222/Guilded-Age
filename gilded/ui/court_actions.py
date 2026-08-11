@@ -74,10 +74,15 @@ def _dismiss_seat_eligible(game, house, action):
     if game.attention.get(house, 0) <= 0:
         return False, "You have no attention left this turn."
 
+    if getattr(game, "court_verbs_used", 0) >= 1:
+        return False, "You have already used your court action this turn."
+
     return True, ""
 
 
 def _dismiss_seat_dispatch(game, house, view, action):
+    if getattr(game, "court_verbs_used", 0) >= 1:
+        return ["You have already used your court action this turn."]
     position_key = action["dismiss_seat"]
     realm = game.realms[house]
     position = _POSITION_KEYS[position_key]
@@ -87,6 +92,8 @@ def _dismiss_seat_dispatch(game, house, view, action):
         return [f"{position.value} is already vacant."]
 
     standing_cost = _dismissal_standing(char.id, realm)
+    game.attention[house] = game.attention.get(house, 0) - standing_cost
+    game.court_verbs_used = 1
     modify_opinion(char, realm.ruler, -standing_cost,
                    f"Dismissed from {position.value}")
 
@@ -116,10 +123,20 @@ def _open_appointment_picker_eligible(game, house, action):
     if existing is not None:
         return False, f"{position.value} is already held by {existing.name}."
 
+    if game.attention.get(house, 0) <= 0:
+        return False, "You have no attention left this turn."
+
+    if getattr(game, "court_verbs_used", 0) >= 1:
+        return False, "You have already used your court action this turn."
+
     return True, ""
 
 
 def _open_appointment_picker_dispatch(game, house, view, action):
+    """Open the appointment picker — sets view._court_picker so the picker is drawn."""
+    if view is not None:
+        pk = action.get("open_appointment_picker")
+        view._court_picker = pk
     return []
 
 
@@ -130,6 +147,9 @@ def _close_appointment_picker_eligible(game, house, action):
 
 
 def _close_appointment_picker_dispatch(game, house, view, action):
+    """Close the appointment picker — clears view._court_picker."""
+    if view is not None:
+        view._court_picker = None
     return []
 
 
@@ -168,6 +188,9 @@ def _appoint_to_seat_eligible(game, house, action):
     if game.attention.get(house, 0) <= 0:
         return False, "You have no attention left this turn."
 
+    if getattr(game, "court_verbs_used", 0) >= 1:
+        return False, "You have already used your court action this turn."
+
     return True, ""
 
 
@@ -184,6 +207,8 @@ def _appoint_to_seat_dispatch(game, house, view, action):
             char = c
             break
 
+    game.attention[house] = game.attention.get(house, 0) - 1
+    game.court_verbs_used = 1
     realm.court.appoint(position, char, game.turn)
     return [f"{char.name} appointed {position.value}."]
 
@@ -192,8 +217,6 @@ def _appoint_to_seat_dispatch(game, house, view, action):
 
 def court_appointment_candidates(game, house, position_key):
     """Return eligible characters who could take the given court seat."""
-    if position_key not in _POSITION_KEYS:
-        return []
     realm = game.realms[house]
     court = realm.court
     court_ids = {ch.id for ch in court.positions.values() if ch}
