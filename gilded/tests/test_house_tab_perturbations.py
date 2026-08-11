@@ -33,6 +33,7 @@ _HOUSE_TAB_TEST_FILES = [
     "test_house_tab_loyalty.py",
     "test_house_tab_succession_order.py",
     "test_house_opinion_ui.py",
+    "test_house_tab_pixel_visual.py",
 ]
 
 
