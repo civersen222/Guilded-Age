@@ -10,6 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from gilded.ui.court_actions import (
+    _dismiss_seat_eligible, _dismiss_seat_dispatch,
+    _open_appointment_picker_eligible, _open_appointment_picker_dispatch,
+    _close_appointment_picker_eligible, _close_appointment_picker_dispatch,
+    _appoint_to_seat_eligible, _appoint_to_seat_dispatch,
+)
+
 
 # ── dataclass ────────────────────────────────────────────────────────────────
 
@@ -805,5 +812,26 @@ ACTIONS: dict[str, PlayerAction] = {
         key="cycle_exec", label="Choose Executor", domain="view",
         attention_cost=0, gold_cost=0,
         eligible=_noop_eligible, dispatch=_noop_dispatch,
+    ),
+    # court verbs (House tab)
+    "dismiss_seat": PlayerAction(
+        key="dismiss_seat", label="Dismiss from Court", domain="house",
+        attention_cost=1, gold_cost=0,
+        eligible=_dismiss_seat_eligible, dispatch=_dismiss_seat_dispatch,
+    ),
+    "open_appointment_picker": PlayerAction(
+        key="open_appointment_picker", label="Open Appointment Picker", domain="house",
+        attention_cost=0, gold_cost=0,
+        eligible=_open_appointment_picker_eligible, dispatch=_open_appointment_picker_dispatch,
+    ),
+    "close_appointment_picker": PlayerAction(
+        key="close_appointment_picker", label="Close Appointment Picker", domain="house",
+        attention_cost=0, gold_cost=0,
+        eligible=_close_appointment_picker_eligible, dispatch=_close_appointment_picker_dispatch,
+    ),
+    "appoint_to_seat": PlayerAction(
+        key="appoint_to_seat", label="Appoint to Court", domain="house",
+        attention_cost=1, gold_cost=0,
+        eligible=_appoint_to_seat_eligible, dispatch=_appoint_to_seat_dispatch,
     ),
 }

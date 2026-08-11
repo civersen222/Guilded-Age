@@ -799,6 +799,10 @@ class BroadsheetView:
         self._enterprise_hits: List[Tuple[pygame.Rect, dict]] = []
         self._appoint_hits: List[Tuple[pygame.Rect, dict]] = []
         self._informant_hits: List[Tuple[pygame.Rect, dict]] = []
+        self._court_hits: List[Tuple[pygame.Rect, dict]] = []
+        # court appointment picker state: None or position_key
+        self._court_picker: Optional[str] = None
+        self._court_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         # director picker state: None or eid whose picker is open
         self._director_picker: Optional[int] = None
         self._director_picker_hits: List[Tuple[pygame.Rect, dict]] = []
@@ -847,6 +851,8 @@ class BroadsheetView:
         self._appoint_hits = []
         self._share_picker_hits = []
         self._informant_hits = []
+        self._court_hits = []
+        self._court_picker_hits = []
         self._director_picker_hits = []
         self._found_picker_hits = []
         surface.fill(PAPER_BG)
@@ -2231,8 +2237,44 @@ class BroadsheetView:
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         from gilded.peerage import report as peerage_report
+        from gilded.ui.court_actions import _get_appointment_pool
         rpt = peerage_report(self.game, self.house)
-        draw_house_tab(surface, content, rpt)
+        draw_house_tab(surface, content, rpt, self)
+        # If court picker is open, draw candidates
+        if self._court_picker is not None:
+            self._draw_court_picker(surface, content, rpt)
+
+    def _draw_court_picker(self, surface, content, report):
+        """Draw the appointment picker for a vacant court seat."""
+        from gilded.ui.court_actions import _get_appointment_pool
+        from gilded.ui.widgets import font as _font, TYPE_TEXT, INK, BUTTON_BG, BUTTON_EDGE, BUTTON_TEXT
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        pk = self._court_picker
+        pos_name = pk.replace("_", " ").title()
+        y = content.y + 100
+        btn_h = body.get_height() + 8
+        btn_w = 200
+
+        surface.blit(body.render(f"Select appointee for {pos_name}:", True, INK), (PAD, y))
+        y += body.get_height() + 8
+
+        # Back button
+        from gilded.ui.house_tab import _draw_button
+        back_rect = _draw_button(surface, "Cancel", PAD, y, btn_w, btn_h, True)
+        self._court_picker_hits.append((back_rect, {"close_appointment_picker": True}))
+        y += btn_h + 8
+
+        # Draw candidate buttons
+        realm = self.game.realms[self.house]
+        pool = _get_appointment_pool(realm)
+        for ch in pool:
+            if y + btn_h > content.bottom:
+                break
+            btn_text = f"{ch.name}"
+            btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, True)
+            self._court_picker_hits.append((btn_rect, {"appoint_to_seat": pk, "char_id": ch.id}))
+            y += btn_h + 4
 
     # --- clicking ------------------------------------------------------------
 
@@ -2333,5 +2375,23 @@ class BroadsheetView:
                         self._director_picker = eid
                         self._director_picker_hits.clear()
                         return {"open_director_picker": eid}
+                    return action
+        # Court picker hit detection
+        if self._court_picker is not None:
+            for rect, action in self._court_picker_hits:
+                if rect.collidepoint(pos):
+                    if "close_appointment_picker" in action:
+                        self._court_picker = None
+                        self._court_picker_hits.clear()
+                    return action
+        if self.active_tab == "House":
+            for rect, act in self._court_hits:
+                if rect.collidepoint(pos):
+                    action = act.get("action", act)
+                    if "open_appointment_picker" in action:
+                        pk = action["open_appointment_picker"]
+                        self._court_picker = pk
+                        self._court_picker_hits.clear()
+                        return {"open_appointment_picker": pk}
                     return action
         return None

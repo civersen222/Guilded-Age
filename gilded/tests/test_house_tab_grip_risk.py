@@ -79,13 +79,13 @@ def test_grip_risk_pixel_change():
     if target_char is None:
         pytest.skip("Target character not found")
 
-    surf1 = pygame.Surface((1280, 900))
+    surf1 = pygame.Surface((1280, 2000))
     v.draw(surf1)
     pixels1 = pygame.image.tobytes(surf1, "RGBA")
 
     modify_opinion(target_char, realm.ruler, -20, "grip risk")
 
-    surf2 = pygame.Surface((1280, 900))
+    surf2 = pygame.Surface((1280, 2000))
     v.draw(surf2)
     pixels2 = pygame.image.tobytes(surf2, "RGBA")
 

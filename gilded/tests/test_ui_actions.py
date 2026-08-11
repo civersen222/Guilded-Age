@@ -35,9 +35,15 @@ def _offered_keys(view):
 def _rich_state():
     """Seed 99 at turn 1 — the only fixture that offers all seven
     enterprise verbs, including defend_buyout (needs an outside
-    holder, which seed 42 never acquires)."""
+    holder, which seed 42 never acquires).  One court seat is
+    vacated so the House tab's appointment picker can be exercised."""
     state = app.new_app_state(seed=99)
     state.game.end_turn()
+    # Vacate one court seat so the appointment picker path is reachable
+    from gilded.society.court import CourtPosition
+    realm = state.game.realms[state.house]
+    if realm.court.positions.get(CourtPosition.MARSHAL) is not None:
+        realm.court.dismiss(CourtPosition.MARSHAL)
     offered = _offered_keys(state.view)
     assert offered == {
         "appoint_director", "attack_takeover", "buy_shares",
@@ -86,6 +92,27 @@ def _collect_emitted_keys(view):
             _collect_standard(view, collected)
             continue
 
+        # Special case: House tab — collect court picker hits too
+        if tab_name == "House":
+            # Collect court seat hits (picker closed)
+            for rect, payload in view._court_hits:
+                if isinstance(payload, dict):
+                    for k in payload:
+                        if k != "char_id":
+                            collected.add(k)
+
+            # Open the appointment picker and collect its hits
+            if view._court_hits:
+                _open_appointment_picker(view, surf)
+                for rect, payload in view._court_picker_hits:
+                    if isinstance(payload, dict):
+                        for k in payload:
+                            if k != "char_id":
+                                collected.add(k)
+
+            _collect_standard(view, collected)
+            continue
+
         # Standard collection for other tabs
         _collect_standard(view, collected)
 
@@ -120,6 +147,16 @@ def _collect_standard(view, collected):
             for k in payload:
                 if k != "char_id":
                     collected.add(k)
+    for rect, payload in view._court_hits:
+        if isinstance(payload, dict):
+            for k in payload:
+                if k != "char_id":
+                    collected.add(k)
+    for rect, payload in view._court_picker_hits:
+        if isinstance(payload, dict):
+            for k in payload:
+                if k != "char_id":
+                    collected.add(k)
     for rect, key in view._dial_hits:
         collected.add("set_stance")
     if view._end_turn_rect is not None:
@@ -145,6 +182,18 @@ def _open_director_picker(view, surf):
                 return
 
 
+def _open_appointment_picker(view, surf):
+    """Open the appointment picker for a vacant court seat."""
+    for rect, payload in view._court_hits:
+        if isinstance(payload, dict):
+            action = payload.get("open_appointment_picker")
+            if action is not None:
+                view._court_picker = action
+                view._court_picker_hits.clear()
+                view.draw(surf)
+                return
+
+
 # ── CHECK 1a — DRAWN ⊆ ACTIONS (passes) ──────────────────────────────────────
 
 
@@ -154,8 +203,10 @@ def test_every_drawn_key_is_registered():
     drawn = _collect_emitted_keys(state.view)
 
     assert drawn == {
-        "appoint_director", "close_director_picker", "defend_buyout",
-        "end_turn", "expand_enterprise", "open_director_picker",
+        "appoint_director", "appoint_to_seat", "close_appointment_picker",
+        "close_director_picker", "defend_buyout",
+        "dismiss_seat", "end_turn", "expand_enterprise",
+        "open_appointment_picker", "open_director_picker",
         "place_informant", "rule", "select_province", "set_stance",
         "tab", "toggle_narrate",
     }, f"the drawn set moved: {sorted(drawn)}"
@@ -389,6 +440,50 @@ def _build_action_for_key(key, game, house, view=None):
         return {"tab": TABS[0]}
     elif key == "select_province":
         return {"select_province": 0}
+    elif key == "dismiss_seat":
+        from gilded.society.court import CourtPosition
+        realm = game.realms[house]
+        for pos in CourtPosition:
+            holder = realm.court.positions.get(pos)
+            if holder is not None:
+                return {"dismiss_seat": pos.value.lower().replace(" ", "_")}
+        return None
+    elif key == "open_appointment_picker":
+        from gilded.society.court import CourtPosition
+        realm = game.realms[house]
+        for pos in CourtPosition:
+            if realm.court.positions.get(pos) is None:
+                return {"open_appointment_picker": pos.value.lower().replace(" ", "_")}
+        # All seats filled — dismiss the first one to create a vacancy
+        for pos in CourtPosition:
+            holder = realm.court.positions.get(pos)
+            if holder is not None:
+                realm.court.positions[pos] = None
+                pk = pos.value.lower().replace(" ", "_")
+                return {"open_appointment_picker": pk}
+        return None
+    elif key == "close_appointment_picker":
+        return {"close_appointment_picker": True}
+    elif key == "appoint_to_seat":
+        from gilded.society.court import CourtPosition
+        from gilded.ui.court_actions import court_appointment_candidates
+        realm = game.realms[house]
+        for pos in CourtPosition:
+            pk = pos.value.lower().replace(" ", "_")
+            if realm.court.positions.get(pos) is None:
+                pool = court_appointment_candidates(game, house, pk)
+                if pool:
+                    return {"appoint_to_seat": pk, "char_id": pool[0].id}
+        # All seats filled — dismiss the first one to create a vacancy
+        for pos in CourtPosition:
+            holder = realm.court.positions.get(pos)
+            if holder is not None:
+                realm.court.positions[pos] = None
+                pk = pos.value.lower().replace(" ", "_")
+                pool = court_appointment_candidates(game, house, pk)
+                if pool:
+                    return {"appoint_to_seat": pk, "char_id": pool[0].id}
+        return None
     return None
 
 
