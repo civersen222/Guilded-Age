@@ -36,13 +36,11 @@ def test_succession_order_shown():
     """
     g, v = _view()
     realm = g.realms.get(v.house)
-    if realm is None:
-        pytest.skip("No realm")
+    assert realm is not None, "Game must have a realm"
 
     # Independent source — the simulation's succession order
     sim_order = succession_order(realm)
-    if len(sim_order) < 2:
-        pytest.skip("Not enough succession candidates")
+    assert len(sim_order) >= 2, "Game must have at least 2 succession candidates"
 
     lines = v.house_lines()
     text = "\n".join(lines)
@@ -78,13 +76,11 @@ def test_succession_order_matches_simulation():
 
     g, v = _view()
     realm = g.realms.get(v.house)
-    if realm is None:
-        pytest.skip("No realm")
+    assert realm is not None, "Game must have a realm"
 
     # Independent source — the simulation's succession order
     sim_order = succession_order(realm)
-    if len(sim_order) < 2:
-        pytest.skip("Not enough succession candidates")
+    assert len(sim_order) >= 2, "Game must have at least 2 succession candidates"
 
     # Draw the tab to a surface and parse the #N rows
     rpt = peerage_report(g, v.house)
@@ -143,13 +139,11 @@ def test_succession_order_pixel_change():
     """
     g, v = _view()
     realm = g.realms.get(v.house)
-    if realm is None:
-        pytest.skip("No realm")
+    assert realm is not None, "Game must have a realm"
 
     # Independent source — who the simulation would actually crown
     heir_char = resolve_succession(realm)
-    if heir_char is None:
-        pytest.skip("No heir from simulation")
+    assert heir_char is not None, "Simulation must resolve an heir"
 
     rpt = peerage_report(g, v.house)
     surf = pygame.Surface((1600, 1000))
