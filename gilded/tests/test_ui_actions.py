@@ -504,6 +504,80 @@ def _build_action_for_key(key, game, house, view=None):
         return {"close_heir_picker": True}
     elif key == "open_heir_picker":
         return {"open_heir_picker": True}
+    elif key == "declare_war":
+        targets = [h for h in game.houses if h != house]
+        if targets:
+            return {"declare_war": targets[0]}
+        return None
+    elif key == "negotiate_peace":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if wars:
+            target = wars[0].defender if wars[0].aggressor == house else wars[0].aggressor
+            return {"negotiate_peace": target}
+        return None
+    elif key == "propose_marriage":
+        targets = [h for h in game.houses if h != house]
+        if targets:
+            return {"propose_marriage": targets[0]}
+        return None
+    elif key == "muster":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        # Ensure there's an active war — create one if needed (must share a border)
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+        procs = [p for p in game.atlas.provinces.values() if p.owner == house]
+        if procs:
+            return {"muster": procs[0].pid}
+        return None
+    elif key == "commit":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        # Ensure there's an active war with fronts (must share a border)
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+            wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if wars and wars[0].fronts:
+            f = wars[0].fronts[0]
+            # Ensure uncommitted regiments exist
+            pool = getattr(game, "_raised_regiments", {})
+            if pool.get(house, 0) <= 0:
+                pool[house] = pool.get(house, 0) + 1
+                game._raised_regiments = pool
+            war_idx = wars.index(wars[0])
+            return {"commit": {"war_id": war_idx, "front_fid": f.fid}}
+        return None
+    elif key == "appoint_commander":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        # Ensure there's an active war with fronts (must share a border)
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+            wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if wars and wars[0].fronts:
+            f = wars[0].fronts[0]
+            realm = game.realms.get(house)
+            chars = [c for c in realm.characters if c.is_alive] if realm else []
+            if chars:
+                war_idx = wars.index(wars[0])
+                return {"appoint_commander": {"war_id": war_idx, "front_fid": f.fid, "char_id": chars[0].id}}
+        return None
     return None
 
 

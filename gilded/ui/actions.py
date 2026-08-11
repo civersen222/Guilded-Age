@@ -603,6 +603,204 @@ def _noop_dispatch(game, house, view, action):
     return []
 
 
+# ── war & diplomacy verbs ───────────────────────────────────────────────────
+
+def _declare_war_eligible(game, house, action):
+    target = action.get("declare_war")
+    if not target or target == house:
+        return False, "Select a House to declare war on"
+    if target not in game.houses:
+        return False, f"There is no House {target} to declare against"
+    h = game.houses[house]
+    if target in h.at_war_with:
+        return False, f"The House is already at war with House {target}"
+    truce = h.truces.get(target, 0)
+    if truce > game.turn:
+        return False, f"A truce with House {target} holds until turn {truce}"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _declare_war_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    target = action["declare_war"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    initiative(game, house, "declare_war", executor, target_house=target)
+    return []
+
+
+def _negotiate_peace_eligible(game, house, action):
+    target = action.get("negotiate_peace")
+    if not target:
+        return False, "Select a House to negotiate peace with"
+    war = next((w for w in getattr(game, "wars", [])
+                if {w.aggressor, w.defender} == {house, target}), None)
+    if war is None:
+        return False, f"There is no war with House {target} to end"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _negotiate_peace_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    target = action["negotiate_peace"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "diplomacy")
+    game.attention[house] -= 1
+    initiative(game, house, "negotiate_peace", executor, target_house=target)
+    return []
+
+
+def _propose_marriage_eligible(game, house, action):
+    target = action.get("propose_marriage")
+    if not target or target == house:
+        return False, "Select a House to propose marriage to"
+    if target not in game.houses:
+        return False, f"No such House {target}"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _propose_marriage_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    target = action["propose_marriage"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "diplomacy")
+    game.attention[house] -= 1
+    initiative(game, house, "propose_marriage", executor, target_house=target)
+    return []
+
+
+def _muster_eligible(game, house, action):
+    province_pid = action.get("muster")
+    if province_pid is None:
+        return False, "Select a province to muster from"
+    province = game.atlas.provinces.get(province_pid)
+    if province is None:
+        return False, "No such province"
+    if province.owner != house:
+        return False, f"The {house} House does not own {province.name}"
+    # Check if the house has any wars to muster for
+    wars = [w for w in getattr(game, "wars", [])
+            if house in (w.aggressor, w.defender)]
+    if not wars:
+        return False, f"The {house} House is at peace and has no fronts to garrison"
+    # Check costs — steel is gated only once capacity is tallied (after turn 0)
+    from gilded.fronts import REGIMENT_POP_COST, REGIMENT_STEEL_COST
+    pop_available = province.population // REGIMENT_POP_COST
+    cap = game.capacity.get(house)
+    if pop_available <= 0:
+        return False, f"Cannot muster: {province.name} population ({province.population}) below cost ({REGIMENT_POP_COST} per regiment)"
+    if cap is not None and "steel" in cap:
+        steel_available = int(cap["steel"] // REGIMENT_STEEL_COST)
+        if steel_available <= 0:
+            steel_val = cap.get('steel', 0)
+            return False, f"Cannot muster: House steel ({steel_val}) below cost ({REGIMENT_STEEL_COST} per regiment)"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _muster_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    province_pid = action["muster"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    initiative(game, house, "adjust_garrison", executor, province_pid=province_pid, count=1)
+    return []
+
+
+def _commit_eligible(game, house, action):
+    war_id = action.get("commit", {}).get("war_id") if isinstance(action.get("commit"), dict) else None
+    front_fid = action.get("commit", {}).get("front_fid") if isinstance(action.get("commit"), dict) else None
+    if war_id is None or front_fid is None:
+        return False, "Select a war and front to commit to"
+    wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+    if war_id >= len(wars):
+        return False, "No such war"
+    war = wars[war_id]
+    front = next((f for f in war.fronts if f.fid == front_fid), None)
+    if front is None:
+        return False, "No such front"
+    # Check for uncommitted regiments
+    pool = getattr(game, "_raised_regiments", {})
+    if pool.get(house, 0) <= 0:
+        return False, f"The {house} House has no uncommitted regiments to deploy"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _commit_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    c = action["commit"]
+    war_id = c["war_id"]
+    front_fid = c["front_fid"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    initiative(game, house, "adjust_garrison", executor, war_id=war_id, front_id=front_fid, count=1)
+    return []
+
+
+def _appoint_commander_eligible(game, house, action):
+    c = action.get("appoint_commander", {})
+    war_id = c.get("war_id") if isinstance(c, dict) else None
+    front_fid = c.get("front_fid") if isinstance(c, dict) else None
+    char_id = c.get("char_id") if isinstance(c, dict) else None
+    if war_id is None or front_fid is None or char_id is None:
+        return False, "Select a war, front and commander"
+    wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+    if war_id >= len(wars):
+        return False, "No such war"
+    war = wars[war_id]
+    front = next((f for f in war.fronts if f.fid == front_fid), None)
+    if front is None:
+        return False, "No such front"
+    # Check character belongs to this house and is alive
+    realm = game.realms[house]
+    ch = next((c for c in realm.characters if c.id == char_id and c.is_alive), None)
+    if ch is None:
+        return False, "No such living character"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _appoint_commander_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    from gilded.fronts import allocate, appoint as front_appoint
+    c = action["appoint_commander"]
+    war_id = c["war_id"]
+    front_fid = c["front_fid"]
+    char_id = c["char_id"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    # Find the character
+    ch = next((c for c in realm.characters if c.id == char_id and c.is_alive), None)
+    if ch is not None:
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if war_id < len(wars):
+            war = wars[war_id]
+            front = next((f for f in war.fronts if f.fid == front_fid), None)
+            if front is not None:
+                front_appoint(war, front, house, ch)
+    return []
+
+
 # ── registry ─────────────────────────────────────────────────────────────────
 
 # ── share trade helpers (I4d2b1) ──────────────────────────────────────────────
@@ -857,5 +1055,36 @@ ACTIONS: dict[str, PlayerAction] = {
         key="close_heir_picker", label="Close Heir Picker", domain="view",
         attention_cost=0, gold_cost=0,
         eligible=_close_heir_picker_eligible, dispatch=_close_heir_picker_dispatch,
+    ),
+    # war & diplomacy
+    "declare_war": PlayerAction(
+        key="declare_war", label="Declare War", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_declare_war_eligible, dispatch=_declare_war_dispatch,
+    ),
+    "negotiate_peace": PlayerAction(
+        key="negotiate_peace", label="Negotiate Peace", domain="diplomacy",
+        attention_cost=1, gold_cost=0,
+        eligible=_negotiate_peace_eligible, dispatch=_negotiate_peace_dispatch,
+    ),
+    "propose_marriage": PlayerAction(
+        key="propose_marriage", label="Propose Marriage", domain="diplomacy",
+        attention_cost=1, gold_cost=0,
+        eligible=_propose_marriage_eligible, dispatch=_propose_marriage_dispatch,
+    ),
+    "muster": PlayerAction(
+        key="muster", label="Raise Regiments", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_muster_eligible, dispatch=_muster_dispatch,
+    ),
+    "commit": PlayerAction(
+        key="commit", label="Commit Regiments", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_commit_eligible, dispatch=_commit_dispatch,
+    ),
+    "appoint_commander": PlayerAction(
+        key="appoint_commander", label="Appoint Commander", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_appoint_commander_eligible, dispatch=_appoint_commander_dispatch,
     ),
 }

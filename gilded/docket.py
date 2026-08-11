@@ -21,7 +21,7 @@ from gilded.enterprises import (
 from gilded.directives import DIRECTIVE_CONVICTION, friction
 from gilded.fronts import (ENTRENCH_MAX, PeaceTerms, WarGoal, ai_acceptable,
                            allocate, declare_war, negotiate_peace,
-                           raise_regiments)
+                           raise_regiments, REGIMENT_POP_COST, REGIMENT_STEEL_COST)
 from gilded.society.court import Court, CourtPosition
 from gilded.society.characters import modify_opinion
 from gilded.society.dispositions import apply_drift
@@ -685,7 +685,115 @@ def _init_tour_province(ctx, province_pid=None, **kw) -> List[str]:
 
 
 def _init_adjust_garrison(ctx, **kw) -> List[str]:
-    return ["The Marshal has no active war to garrison against (fronts arrive in G16)"]
+    """Adjust garrison: raise regiments from a province and commit them to a front.
+
+    Accepts optional kwargs:
+      - province_pid: int (province to raise from)
+      - war_id: int (index into game.wars, or we pick the first war the house is in)
+      - front_id: int (front.fid to commit to)
+      - count: int (number of regiments to raise/commit)
+      - side: str ('attacker' | 'defender' — inferred from war if not given)
+
+    If only province_pid and count are given, raises regiments into a uncommitted pool.
+    If only war_id/front_id and count are given, commits from the pool.
+    If all are given, raises and commits in one step.
+    """
+    game = ctx.game
+    house = ctx.house
+    province_pid = kw.get("province_pid")
+    war_id = kw.get("war_id")
+    front_id = kw.get("front_id")
+    count = kw.get("count", 1)
+    count = max(1, int(count))
+
+    wars = _wars_of(game, house)
+
+    # If no wars at all, refuse
+    if not wars:
+        return [f"The Marshal has no active war to garrison against (fronts arrive in G16)"]
+
+    # Ensure we have a uncommitted pool
+    pool_attr = "_raised_regiments"
+    if not hasattr(game, pool_attr):
+        setattr(game, pool_attr, {})
+
+    pool = getattr(game, pool_attr)
+    if house not in pool:
+        pool[house] = 0
+
+    msgs: List[str] = []
+
+    # Raise regiments from a province
+    if province_pid is not None:
+        province = game.atlas.provinces.get(province_pid)
+        if province is None:
+            return [f"No such province {province_pid}"]
+        if province.owner != house:
+            return [f"The {house} House does not own {province.name}"]
+
+        # Check costs before raising — steel gated only once capacity is tallied
+        pop_available = province.population // REGIMENT_POP_COST
+        if pop_available <= 0:
+            return [f"Cannot muster: {province.name} population ({province.population}) is below the cost ({REGIMENT_POP_COST} per regiment)"]
+        cap = game.capacity.get(house)
+        if cap is not None and "steel" in cap:
+            steel_available = int(cap["steel"] // REGIMENT_STEEL_COST)
+            if steel_available <= 0:
+                return [f"Cannot muster: House steel capacity ({cap.get('steel', 0)}) is below the cost ({REGIMENT_STEEL_COST} per regiment)"]
+            max_raise = min(pop_available, steel_available)
+        else:
+            max_raise = pop_available
+
+        actual = min(count, max_raise)
+        raised = raise_regiments(game, house, province_pid, actual)
+        pool[house] = pool.get(house, 0) + raised
+        msgs.append(f"Raised {raised} regiment(s) from {province.name} ({REGIMENT_POP_COST * raised} population, {REGIMENT_STEEL_COST * raised} steel)")
+
+    # Commit regiments to a front
+    if war_id is not None and front_id is not None:
+        war = wars[war_id] if war_id < len(wars) else None
+        if war is None:
+            return [f"No such war (index {war_id})"]
+        front = next((f for f in war.fronts if f.fid == front_id), None)
+        if front is None:
+            return [f"No front {front_id} in that war"]
+
+        available = pool.get(house, 0)
+        if available <= 0:
+            return [f"The {house} House has no uncommitted regiments to deploy"]
+
+        commit = min(count, available)
+        pool[house] = available - commit
+        allocate(war, front, house, commit)
+        msgs.append(f"Committed {commit} regiment(s) to front {front.fid}")
+    elif war_id is not None:
+        # Commit to first front of the war
+        war = wars[war_id] if war_id < len(wars) else None
+        if war is None:
+            return [f"No such war (index {war_id})"]
+        if not war.fronts:
+            return [f"That war has no fronts"]
+        front = war.fronts[0]
+        available = pool.get(house, 0)
+        if available <= 0:
+            return [f"The {house} House has no uncommitted regiments to deploy"]
+        commit = min(count, available)
+        pool[house] = available - commit
+        allocate(war, front, house, commit)
+        msgs.append(f"Committed {commit} regiment(s) to front {front.fid}")
+
+    # If nothing was specified, just report current status
+    if not msgs:
+        pool_count = pool.get(house, 0)
+        war_summaries = []
+        for i, war in enumerate(wars):
+            role = "aggressor" if war.aggressor == house else "defender"
+            other = war.defender if war.aggressor == house else war.aggressor
+            war_summaries.append(f"War vs {other} ({role}, {len(war.fronts)} front(s), score {war.war_score:+.1f})")
+        status = f"{house} has {pool_count} uncommitted regiment(s). Active wars: " + "; ".join(war_summaries)
+        msgs.append(status)
+
+    return msgs
 
 
 def _init_declare_war(ctx, target_house=None, goal=None, **kw) -> List[str]:
