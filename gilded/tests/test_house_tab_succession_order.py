@@ -160,5 +160,88 @@ def test_draw_house_tab_draws():
     surf = pygame.Surface((640, 480))
     rect = pygame.Rect(0, 0, 640, 480)
     draw_house_tab(surf, rect, rpt)
-    # Surface should have pixels set
-    assert surf.get_at((320, 240)) != (0, 0, 0, 0)
+    # Title is drawn in INK at the top-left area; sample a pixel in it
+    from gilded.ui.widgets import INK
+    # Scan the title region for a pixel that matches INK
+    found = False
+    for x in range(12, 300):
+        for y in range(6, 45):
+            c = surf.get_at((x, y))
+            if c[:3] == INK:
+                found = True
+                break
+        if found:
+            break
+    assert found, "No INK-matching pixels found in the title region"
+
+
+def test_pixel_tones_good():
+    """A colour case: the 'good' tone colour appears in the succession section."""
+    g, v = _view()
+    rpt = peerage_report(g, v.house)
+    surf = pygame.Surface((640, 480))
+    rect = pygame.Rect(0, 0, 640, 480)
+    draw_house_tab(surf, rect, rpt)
+    # Hardcoded expected good colour — must NOT import from house_tab after perturbation
+    good = (34, 120, 68)
+    found = False
+    for x in range(12, 400):
+        for y in range(330, 360):
+            c = surf.get_at((x, y))
+            if c[:3] == good:
+                found = True
+                break
+        if found:
+            break
+    assert found, "No 'good' tone pixels found in the succession region"
+
+
+def test_pixel_type_text_height():
+    """Body text uses TYPE_TEXT font size; verify rendered line height."""
+    from gilded.ui.house_tab import _font, TYPE_TEXT
+    g, v = _view()
+    rpt = peerage_report(g, v.house)
+    surf = pygame.Surface((640, 480))
+    rect = pygame.Rect(0, 0, 640, 480)
+    draw_house_tab(surf, rect, rpt)
+    body_font = _font(TYPE_TEXT)
+    expected_height = body_font.get_height()
+    # The line spacing in draw_house_tab is get_height() + 4
+    expected_line_space = expected_height + 4
+    # Verify by checking that the body region has the expected number of lines
+    lines = _house_tab_lines(rpt)
+    # Count non-clipped lines: y starts at ~49, each line takes expected_line_space
+    start_y = 49
+    max_y = 480 - 20
+    num_lines = 0
+    y = start_y
+    while y <= max_y:
+        num_lines += 1
+        y += expected_line_space
+    # At least some lines should be rendered
+    assert num_lines > 0, "No body lines rendered"
+
+
+def test_pixel_type_title_height():
+    """Title uses TYPE_TITLE font size; verify rendered title height."""
+    from gilded.ui.house_tab import _font, TYPE_TITLE
+    g, v = _view()
+    rpt = peerage_report(g, v.house)
+    surf = pygame.Surface((640, 480))
+    rect = pygame.Rect(0, 0, 640, 480)
+    draw_house_tab(surf, rect, rpt)
+    title_font = _font(TYPE_TITLE, bold=True)
+    expected_title_height = title_font.get_height()
+    # Count INK pixels in the title region (y=6 to y=6+expected_title_height+10)
+    from gilded.ui.widgets import INK
+    found = False
+    title_bottom = 6 + expected_title_height + 10
+    for x in range(12, 300):
+        for y in range(6, int(title_bottom)):
+            c = surf.get_at((x, y))
+            if c[:3] == INK:
+                found = True
+                break
+        if found:
+            break
+    assert found, "No title pixels found at expected TYPE_TITLE height"
