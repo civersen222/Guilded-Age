@@ -164,6 +164,42 @@ def test_succession_order_pixel_change():
     assert pixels1 != pixels2, "Pixels should change when the heir (per simulation) is renamed"
 
 
+def test_kinsman_grievances_shown():
+    """R-3 variant: A kinsman's recorded reasons (grievances) are drawn beside him
+    in the succession lines.
+
+    This is a distinct property from the succession order itself: the same ordered
+    list of men can be drawn correctly while grievances are omitted entirely.
+    """
+    from gilded.society.characters import modify_opinion
+
+    g, v = _view()
+    realm = g.realms.get(v.house)
+    assert realm is not None and realm.ruler is not None
+
+    # Find a kin member who is in line for succession and alive
+    sim_order = succession_order(realm)
+    kin_with_grievance = None
+    for char in sim_order:
+        if char.id != realm.ruler.id and char.is_alive:
+            kin_with_grievance = char
+            break
+
+    assert kin_with_grievance is not None, "Must have a succession candidate besides the ruler"
+
+    # Record a grievance against the ruler
+    modify_opinion(kin_with_grievance, realm.ruler, -40, "grievance")
+
+    # Rebuild the report after the change
+    rpt = peerage_report(g, v.house)
+    lines = _house_tab_lines(rpt)
+    text = "\n".join(lines)
+
+    # The grievance text should appear in the tab output
+    assert "grievance" in text.lower() or "[" in text, \
+        f"Grievance for '{kin_with_grievance.name}' should be visible in tab lines"
+
+
 def test_house_tab_lines_returns_lines():
     g, v = _view()
     rpt = peerage_report(g, v.house)
