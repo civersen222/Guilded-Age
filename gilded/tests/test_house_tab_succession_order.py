@@ -66,47 +66,73 @@ def test_succession_order_shown():
 def test_succession_order_matches_simulation():
     """R-2: The order shown on the tab matches the simulation's succession order.
 
-    Independent source: succession_order(realm) — not the peerage report.
+    Independent source: succession_order(realm) from gilded.society.succession.
+
+    R-1: This case MUST go red when the tab draws fewer succession rows than it
+    owes — including when it draws none, and including when the rows are drawn
+    correctly but marked differently (e.g. wrong marker character). The number of
+    rows owed comes from the simulation (succession_order) and the documented page
+    size (10), NOT from what was parsed.
     """
+    import re
+
     g, v = _view()
     realm = g.realms.get(v.house)
     if realm is None:
         pytest.skip("No realm")
 
-    # Independent source — simulation's full succession order
+    # Independent source — the simulation's succession order
     sim_order = succession_order(realm)
-    if len(sim_order) < 3:
+    if len(sim_order) < 2:
         pytest.skip("Not enough succession candidates")
 
+    # Draw the tab to a surface and parse the #N rows
     rpt = peerage_report(g, v.house)
+    surf = pygame.Surface((640, 480))
+    rect = pygame.Rect(0, 0, 640, 480)
+    draw_house_tab(surf, rect, rpt)
+
+    # Parse the drawn succession rows using _house_tab_lines
     lines = _house_tab_lines(rpt)
     text = "\n".join(lines)
 
-    # Find SUCCESSION section to avoid matching names in COURT SEATS
-    succ_start = text.find("SUCCESSION")
-    if succ_start < 0:
-        pytest.skip("No SUCCESSION section")
-    succ_text = text[succ_start:]
+    # Find the succession section
+    succ_start = None
+    for i, line in enumerate(lines):
+        if "SUCCESSION" in line:
+            succ_start = i
+            break
 
-    # Check that at least the first 3 simulation candidates appear in order
-    # Use char_id to match unique characters (names can be duplicated)
-    shown_count = min(len(sim_order), 10)
-    positions = []
-    search_start = 0
-    for i in range(shown_count):
-        ch = sim_order[i]
-        name = ch.name
-        # Search from after the previous match to handle duplicate names
-        idx = succ_text.find(name, search_start)
-        if idx >= 0:
-            positions.append((idx, name, ch.id))
-            search_start = idx + len(name)
+    assert succ_start is not None, "Succession section should be drawn"
 
-    assert len(positions) >= 3, f"Expected at least 3 succession names on tab, found {len(positions)}"
+    # How many rows does the tab owe? The page holds min(sim_count, 10) rows.
+    # This comes from the simulation + documented page size, NOT from parsing.
+    owed = min(len(sim_order), 10)
 
-    for i in range(len(positions) - 1):
-        assert positions[i][0] < positions[i + 1][0], \
-            f"Succession order wrong: '{positions[i][1]} ({positions[i][2]})' should appear before '{positions[i+1][1]} ({positions[i+1][2]})'"
+    # Build rank -> char_id map from the report's Kin data (avoids duplicate-name ambiguity)
+    rank_to_id = {k.succession_rank: k.char_id for k in rpt.kin if k.succession_rank is not None}
+
+    # Parse #N rows — these are the succession rank markers
+    drawn_ids = []
+    for line in lines[succ_start + 1:]:
+        m = re.search(r'#(\d+)\s+(.+?)\s+loyalty\s+(\d+)', line)
+        if m:
+            rank = int(m.group(1))
+            char_id = rank_to_id.get(rank)
+            if char_id is not None:
+                drawn_ids.append((rank, char_id))
+
+    # R-1: Assert the count BEFORE comparing order.
+    # If the parse found fewer rows than owed (or none at all), the tab is defective.
+    assert len(drawn_ids) >= owed, \
+        f"Tab drew {len(drawn_ids)} succession rows but owes {owed} " \
+        f"(simulation has {len(sim_order)} candidates, page size 10)"
+
+    # Now compare the drawn order to the simulation order (position by position)
+    sim_ids = [c.id for c in sim_order]
+    for i in range(owed):
+        assert drawn_ids[i][1] == sim_ids[i], \
+            f"Row {i}: drawn {drawn_ids[i][1]} but simulation says {sim_ids[i]}"
 
 
 def test_succession_order_pixel_change():

@@ -31,16 +31,14 @@ def test_pixel_change_on_loyalty_loss():
     g = GildedGame(seed=42)
     house_name = list(g.houses.keys())[0]
     realm = g.realms.get(house_name)
-    if realm is None or realm.ruler is None:
-        pytest.skip("No realm or ruler")
+    assert realm is not None and realm.ruler is not None, "Game must have a realm with a ruler"
 
     pixels1 = _draw_tab(g, house_name)
 
     # Find a non-ruler court holder and change their loyalty
     holders = [h for h in realm.court.positions.values()
                if h is not None and h.id != realm.ruler.id]
-    if not holders:
-        pytest.skip("No non-ruler court holders")
+    assert holders, "Realm must have non-ruler court holders"
     holder = holders[0]
     holder.loyalty = 10.0
 
@@ -53,14 +51,12 @@ def test_pixel_change_on_heir_rename():
     g = GildedGame(seed=42)
     house_name = list(g.houses.keys())[0]
     realm = g.realms.get(house_name)
-    if realm is None:
-        pytest.skip("No realm")
+    assert realm is not None, "Game must have a realm"
 
     rpt = peerage_report(g, house_name)
     in_line = [k for k in rpt.kin if k.succession_rank is not None and k.is_alive]
     in_line.sort(key=lambda k: k.succession_rank)
-    if not in_line:
-        pytest.skip("No succession line")
+    assert in_line, "Tab should publish a line of succession"
 
     heir = in_line[0]
     pixels1 = _draw_tab(g, house_name)
@@ -71,8 +67,7 @@ def test_pixel_change_on_heir_rename():
         if c.id == heir.char_id:
             ch = c
             break
-    if ch is None:
-        pytest.skip("Heir not found in realm characters")
+    assert ch is not None, "Heir must exist in realm characters"
 
     ch.name = "RENAME_TEST_XYZ"
     pixels2 = _draw_tab(g, house_name)
@@ -85,8 +80,7 @@ def test_pixel_change_on_grievance_by_in_line_kin():
     g = GildedGame(seed=42)
     house_name = list(g.houses.keys())[0]
     realm = g.realms.get(house_name)
-    if realm is None or realm.ruler is None:
-        pytest.skip("No realm or ruler")
+    assert realm is not None and realm.ruler is not None, "Game must have a realm with a ruler"
 
     rpt = peerage_report(g, house_name)
     # Find a kinsman in line for succession who holds no seat
@@ -105,8 +99,7 @@ def test_pixel_change_on_grievance_by_in_line_kin():
                 in_line_no_seat = k
                 break
 
-    if in_line_no_seat is None:
-        pytest.skip("No in-line kin without seat")
+    assert in_line_no_seat is not None, "Tab should have an in-line kin without seat"
 
     pixels1 = _draw_tab(g, house_name)
 
@@ -116,8 +109,7 @@ def test_pixel_change_on_grievance_by_in_line_kin():
         if c.id == in_line_no_seat.char_id:
             ch = c
             break
-    if ch is None:
-        pytest.skip("Kin not found in realm characters")
+    assert ch is not None, "Kin character must exist in realm"
     modify_opinion(ch, realm.ruler, -40, "grievance")
 
     pixels2 = _draw_tab(g, house_name)
@@ -130,13 +122,11 @@ def test_pixel_unchanged_on_different_house_move():
     house_name = list(g.houses.keys())[0]
     # Find a different house
     other_houses = [h for h in g.houses.keys() if h != house_name]
-    if not other_houses:
-        pytest.skip("No other houses")
+    assert other_houses, "Game must have more than one house"
 
     other_house = other_houses[0]
     other_realm = g.realms.get(other_house)
-    if other_realm is None or not other_realm.characters:
-        pytest.skip("No characters in other house")
+    assert other_realm is not None and other_realm.characters, "Other house must have characters"
 
     pixels1 = _draw_tab(g, house_name)
 
