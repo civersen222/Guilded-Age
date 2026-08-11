@@ -81,8 +81,9 @@ def _dismiss_seat_eligible(game, house, action):
 
 
 def _dismiss_seat_dispatch(game, house, view, action):
-    if getattr(game, "court_verbs_used", 0) >= 1:
-        return ["You have already used your court action this turn."]
+    ok, reason = _dismiss_seat_eligible(game, house, action)
+    if not ok:
+        return [reason]
     position_key = action["dismiss_seat"]
     realm = game.realms[house]
     position = _POSITION_KEYS[position_key]
@@ -192,6 +193,9 @@ def _appoint_to_seat_eligible(game, house, action):
 
 
 def _appoint_to_seat_dispatch(game, house, view, action):
+    ok, reason = _appoint_to_seat_eligible(game, house, action)
+    if not ok:
+        return [reason]
     position_key = action["appoint_to_seat"]
     char_id = action["char_id"]
 
@@ -248,6 +252,9 @@ def _designate_heir_eligible(game, house, action):
 
 
 def _designate_heir_dispatch(game, house, view, action):
+    ok, reason = _designate_heir_eligible(game, house, action)
+    if not ok:
+        return [reason]
     char_id = action["char_id"]
 
     realm = game.realms[house]
@@ -310,6 +317,9 @@ def _clear_heir_eligible(game, house, action):
 
 
 def _clear_heir_dispatch(game, house, view, action):
+    ok, reason = _clear_heir_eligible(game, house, action)
+    if not ok:
+        return [reason]
     realm = game.realms[house]
 
     # Clear any existing heir designation
