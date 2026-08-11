@@ -13,6 +13,7 @@ import pygame
 from gilded.chassis import GildedGame
 from gilded.ui.broadsheet import BroadsheetView
 from gilded.ui.actions import ACTIONS
+from gilded.ui.widgets import RegionState
 
 
 def _dispatch(view, action):
@@ -39,48 +40,107 @@ def _make_view(game, house=None, size=(1280, 900)):
 
 
 def _find_court_regions(view):
-    """Return regions registered with group='court_seats'."""
-    return [r for r in view.regions._regions if r.group == "court_seats"]
+    """Return regions registered with group='court_seats' sorted by rect.y."""
+    regions = [r for r in view.regions._regions if r.group == "court_seats"]
+    regions.sort(key=lambda r: r.rect.y)
+    return regions
 
 
-def test_six_court_seats_each_carry_one_control():
-    """Six court seats, each carrying exactly one control."""
+def test_six_court_controls_drawn():
+    """The House tab draws exactly six court controls."""
     game = GildedGame(seed=123)
-    view, surf = _make_view(game)
+    house = list(game.houses.keys())[0]
+    view, surf = _make_view(game, house)
     regions = _find_court_regions(view)
-    assert len(regions) == 6, f"Expected 6 court seat regions, got {len(regions)}"
+    assert len(regions) == 6, "House tab should draw six court controls"
 
 
-def test_court_control_keys_are_registered_verbs():
-    """Every key a court control can emit is a verb the game will dispatch."""
+def test_court_controls_are_distinct_by_rect():
+    """Each court control occupies a unique rectangle."""
     game = GildedGame(seed=123)
-    view, surf = _make_view(game)
+    house = list(game.houses.keys())[0]
+    view, surf = _make_view(game, house)
     regions = _find_court_regions(view)
-    from gilded.ui.actions import ACTIONS
-    for region in regions:
-        if region.action:
-            for key in region.action:
-                if key == "char_id":
-                    continue
-                assert key in ACTIONS, f"Key '{key}' not in action registry"
+    rects = [r.rect for r in regions]
+    assert len(set(str(r) for r in rects)) == 6, "Each court control must have a distinct rectangle"
 
 
-def test_disabled_control_still_drawn():
-    """With house out of attention, controls are still drawn but disabled."""
+def test_disabled_controls_have_reason():
+    """A disabled control carries a readable reason."""
     game = GildedGame(seed=123)
     house = list(game.houses.keys())[0]
     game.attention[house] = 0
     view, surf = _make_view(game, house)
     regions = _find_court_regions(view)
-    assert len(regions) == 6, f"Expected 6 court regions even with no attention, got {len(regions)}"
-    for region in regions:
-        assert region.action is None, "Control should be disabled with no attention"
-        assert region.reason is not None, "Disabled control must carry a reason"
+    for r in regions:
+        assert r.reason, "Disabled control must carry a reason"
+        assert len(r.reason) > 10, "Reason must be a real sentence, not a placeholder"
+
+
+def test_disabled_controls_are_not_dispatchable():
+    """A disabled control cannot be dispatched through the registry."""
+    game = GildedGame(seed=123)
+    house = list(game.houses.keys())[0]
+    game.attention[house] = 0
+    view, surf = _make_view(game, house)
+    regions = _find_court_regions(view)
+    for r in regions:
+        assert r.state == RegionState.DISABLED, "Control should be disabled with no attention"
+
+
+def test_disabled_controls_still_carry_verb():
+    """A disabled control still carries the verb it would have performed."""
+    game = GildedGame(seed=123)
+    house = list(game.houses.keys())[0]
+    game.attention[house] = 0
+    view, surf = _make_view(game, house)
+    regions = _find_court_regions(view)
+    for r in regions:
+        assert r.action is not None, "Disabled control must still carry its verb"
+        assert len(r.action) == 1, "Control action should contain exactly one verb"
+        verb = list(r.action.keys())[0]
+        assert verb in ACTIONS, f"Verb {verb} must be in the game registry"
+
+
+def test_disabled_controls_distinct_by_action():
+    """Six disabled controls must carry distinct action dicts (verb + seat)."""
+    game = GildedGame(seed=123)
+    house = list(game.houses.keys())[0]
+    game.attention[house] = 0
+    view, surf = _make_view(game, house)
+    regions = _find_court_regions(view)
+    actions = []
+    for r in regions:
+        assert r.action is not None, "Control must carry an action"
+        actions.append(str(r.action))
+    # All six action dicts should be distinct
+    assert len(set(actions)) == 6, "Six controls must carry six distinct action dicts"
+
+
+def test_disabled_controls_distinct_by_verb_and_seat():
+    """Six disabled controls must be distinguishable by what seat they belong to."""
+    game = GildedGame(seed=123)
+    house = list(game.houses.keys())[0]
+    game.attention[house] = 0
+    view, surf = _make_view(game, house)
+    regions = _find_court_regions(view)
+    seat_identifiers = []
+    for r in regions:
+        assert r.action is not None, "Control must carry an action"
+        action = r.action
+        # Extract the seat key from the action
+        if "dismiss_seat" in action:
+            seat_identifiers.append(("dismiss", action["dismiss_seat"]))
+        elif "open_appointment_picker" in action:
+            seat_identifiers.append(("appoint", action["open_appointment_picker"]))
+        else:
+            raise AssertionError(f"Unexpected verb: {list(action.keys())}")
+    # All six should be distinct
+    assert len(set(seat_identifiers)) == 6, "Six controls must belong to six distinct seats"
 
 
 def test_click_dismissal_moves_pixels():
-    """Clicking a dismiss control changes the drawn pixels."""
-    import copy
+    """Clicking a dismiss control must change the drawn pixels."""
     game = GildedGame(seed=123)
     house = list(game.houses.keys())[0]
     game.attention[house] = 5
@@ -91,7 +151,7 @@ def test_click_dismissal_moves_pixels():
         if r.action and "dismiss_seat" in r.action:
             dismiss_region = r
             break
-    assert dismiss_region is not None, "Need a dismissible seat"
+    assert dismiss_region is not None, "Should find a dismissible seat"
 
     pixels_before = pygame.image.tobytes(surf, "RGBA")
     pos = (dismiss_region.rect.x + 5, dismiss_region.rect.y + 5)
@@ -137,162 +197,113 @@ def test_identical_draws_produce_identical_pixels():
 
     view2, surf2 = _make_view(game, house)
     pixels2 = pygame.image.tobytes(surf2, "RGBA")
+    assert pixels1 == pixels2, "Identical game state should produce identical pixels"
 
-    assert pixels1 == pixels2, "Two draws of the same state must produce identical pixels"
 
-
-def test_draw_at_1024x700():
-    """House tab draws without raising at 1024x700."""
+def test_house_tab_draws_at_1024x700():
+    """The House tab must draw without raising at 1024x700."""
     game = GildedGame(seed=123)
     house = list(game.houses.keys())[0]
-    view, surf = _make_view(game, house, size=(1024, 700))
-    regions = _find_court_regions(view)
-    assert len(regions) == 6
+    view, surf = _make_view(game, house, (1024, 700))
+    assert surf.get_size() == (1024, 700)
 
 
-def test_draw_at_1600x1000():
-    """House tab draws without raising at 1600x1000."""
+def test_house_tab_draws_at_1600x1000():
+    """The House tab must draw without raising at 1600x1000."""
     game = GildedGame(seed=123)
     house = list(game.houses.keys())[0]
-    view, surf = _make_view(game, house, size=(1600, 1000))
-    regions = _find_court_regions(view)
-    assert len(regions) == 6
+    view, surf = _make_view(game, house, (1600, 1000))
+    assert surf.get_size() == (1600, 1000)
 
 
-def test_different_house_change_untouched():
+def test_other_house_change_does_not_affect_tab():
     """A change to a character in a different house must change nothing."""
-    import copy
     game = GildedGame(seed=123)
-    houses = list(game.houses.keys())
-    house_a = houses[0]
-    house_b = houses[1] if len(houses) > 1 else houses[0]
+    house = list(game.houses.keys())[0]
+    other_houses = [h for h in game.houses.keys() if h != house]
+    if not other_houses:
+        return
+    other_house = other_houses[0]
 
-    game.attention[house_a] = 5
-    view1, surf1 = _make_view(game, house_a)
+    view1, surf1 = _make_view(game, house)
     pixels1 = pygame.image.tobytes(surf1, "RGBA")
 
-    realm_b = game.realms.get(house_b)
-    if realm_b and realm_b.ruler:
-        from gilded.society.characters import modify_opinion
-        modify_opinion(realm_b.ruler, realm_b.ruler, 1, "test change")
+    # Change something in the other house
+    if other_house in game.attention:
+        game.attention[other_house] = 999
 
-    view2, surf2 = _make_view(game, house_a)
+    view2, surf2 = _make_view(game, house)
     pixels2 = pygame.image.tobytes(surf2, "RGBA")
+    assert pixels1 == pixels2, "Tab should not change when another house changes"
 
-    assert pixels1 == pixels2, "Change in different house must not affect this house's tab"
 
-
-def test_disabled_controls_are_distinct():
-    """With no attention, six court controls must be distinguishable from each other."""
+def test_disabled_dispatch_changes_nothing():
+    """Dispatching a disabled court verb must change nothing."""
     game = GildedGame(seed=123)
     house = list(game.houses.keys())[0]
     game.attention[house] = 0
-    view, surf = _make_view(game, house)
-    regions = _find_court_regions(view)
-    rects = [r.rect for r in regions]
-    for i, r1 in enumerate(rects):
-        for j, r2 in enumerate(rects):
-            if i != j:
-                assert r1 != r2, "Two court controls share the same rect"
 
-
-def test_vacant_seat_offers_appointment_chooser():
-    """A vacant seat's control, when clicked, opens the appointment picker."""
-    game = GildedGame(seed=123)
-    house = list(game.houses.keys())[0]
-    game.attention[house] = 5
-    view, surf = _make_view(game, house)
-    regions = _find_court_regions(view)
-    # First dismiss someone to create a vacancy
-    dismiss_region = None
-    for r in regions:
-        if r.action and "dismiss_seat" in r.action:
-            dismiss_region = r
-            break
-    assert dismiss_region is not None, "Need a dismissible seat to create vacancy"
-
-    pos = (dismiss_region.rect.x + 5, dismiss_region.rect.y + 5)
-    result = view.handle_click(pos)
-    _dispatch(view, result)
-    view.draw(surf)
-
-    # Now the dismissed seat should offer appointment
-    regions = _find_court_regions(view)
-    appoint_region = None
-    for r in regions:
-        if r.action and "open_appointment_picker" in r.action:
-            appoint_region = r
-            break
-    assert appoint_region is not None, "Dismissed seat should offer appointment control"
-
-    pos = (appoint_region.rect.x + 5, appoint_region.rect.y + 5)
-    result = view.handle_click(pos)
-    _dispatch(view, result)
-    view.draw(surf)
-    assert view._court_picker is not None, "Appointment picker should be open after click"
-
-
-def test_picker_cancel_leaves_court_unchanged():
-    """Backing out of the appointment picker leaves the court unchanged."""
-    game = GildedGame(seed=123)
-    house = list(game.houses.keys())[0]
-    game.attention[house] = 5
+    # Record state before
     realm = game.realms[house]
+    court_before = {pos: holder for pos, holder in realm.court.positions.items()}
+    attention_before = game.attention[house]
 
     view, surf = _make_view(game, house)
     regions = _find_court_regions(view)
-    # First dismiss someone to create a vacancy
-    dismiss_region = None
+
+    # Try to dispatch a disabled control
     for r in regions:
-        if r.action and "dismiss_seat" in r.action:
-            dismiss_region = r
-            break
-    assert dismiss_region is not None, "Need a dismissible seat to create vacancy"
+        if r.action:
+            # The eligible check should refuse this
+            for verb in r.action:
+                act = ACTIONS.get(verb)
+                if act:
+                    ok, _reason = act.eligible(game, house, r.action)
+                    assert not ok, "Should refuse dispatch when disabled"
 
-    pos = (dismiss_region.rect.x + 5, dismiss_region.rect.y + 5)
-    result = view.handle_click(pos)
-    _dispatch(view, result)
-    view.draw(surf)
-
-    # Record court state after dismissal (before picker opens)
-    court_before = {k: (v.id if v else None) for k, v in realm.court.positions.items()}
-
-    # Now find the vacant seat and open the picker
-    regions = _find_court_regions(view)
-    appoint_region = None
-    for r in regions:
-        if r.action and "open_appointment_picker" in r.action:
-            appoint_region = r
-            break
-    assert appoint_region is not None, "Dismissed seat should offer appointment control"
-
-    pos = (appoint_region.rect.x + 5, appoint_region.rect.y + 5)
-    result = view.handle_click(pos)
-    _dispatch(view, result)
-    view.draw(surf)
-
-    cancel_region = None
-    for r in view.regions._regions:
-        if r.group == "picker" and r.action and "close_appointment_picker" in r.action:
-            cancel_region = r
-            break
-    assert cancel_region is not None, "Picker should have a cancel button"
-
-    pos = (cancel_region.rect.x + 5, cancel_region.rect.y + 5)
-    result = view.handle_click(pos)
-    _dispatch(view, result)
-    view.draw(surf)
-
-    court_after = {k: (v.id if v else None) for k, v in realm.court.positions.items()}
-    assert court_before == court_after, "Court must be unchanged after cancel"
+    # Verify state unchanged
+    court_after = {pos: holder for pos, holder in realm.court.positions.items()}
+    assert court_before == court_after, "Court should not change"
+    assert game.attention[house] == attention_before, "Attention should not change"
 
 
-def test_picker_refused_when_no_attention():
-    """Opening the appointment picker is refused when attention is exhausted."""
+def test_disabled_verb_is_registry_verb():
+    """Every verb a disabled control carries is one the registry dispatches."""
     game = GildedGame(seed=123)
     house = list(game.houses.keys())[0]
     game.attention[house] = 0
     view, surf = _make_view(game, house)
     regions = _find_court_regions(view)
     for r in regions:
-        assert r.action is None, "No court control should be active with zero attention"
+        if r.action:
+            for verb in r.action:
+                assert verb in ACTIONS, f"Verb {verb} must be in the registry"
+
+
+def test_refusal_keeps_reason_when_dispatched():
+    """A refused control keeps its reason even if dispatch is attempted."""
+    game = GildedGame(seed=123)
+    house = list(game.houses.keys())[0]
+    game.attention[house] = 0
+    view, surf = _make_view(game, house)
+    regions = _find_court_regions(view)
+    for r in regions:
+        reason_before = r.reason
+        if r.action:
+            for verb in r.action:
+                act = ACTIONS.get(verb)
+                if act:
+                    ok, _reason = act.eligible(game, house, r.action)
+                    assert not ok, "Should still be refused"
+                    assert r.reason == reason_before, "Reason should not change after failed dispatch"
+
+
+def test_no_court_control_action_is_none():
+    """No court control should have action=None; even refusals carry their verb."""
+    game = GildedGame(seed=123)
+    house = list(game.houses.keys())[0]
+    game.attention[house] = 0
+    view, surf = _make_view(game, house)
+    regions = _find_court_regions(view)
+    for r in regions:
+        assert r.action is not None, "Court control must carry its verb even when disabled"

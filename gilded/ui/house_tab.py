@@ -241,9 +241,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             hint = _seat_action_label(seat)
 
             if refusal:
+                action = _seat_action_payload(seat)
                 view.regions.add(Region(
                     rect=btn_rect,
-                    action=None,
+                    action=action,
                     state=RegionState.DISABLED,
                     reason=refusal,
                     hint=hint,

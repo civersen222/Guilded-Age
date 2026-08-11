@@ -37,16 +37,6 @@ def _realm(game, house=None):
     return game.realms[house]
 
 
-def _a_vacant_seat(realm):
-    """Return (position, key) for any vacant seat."""
-    from gilded.society.court import CourtPosition
-    for pos in CourtPosition:
-        if realm.court.positions.get(pos) is None:
-            key = pos.value.lower().replace(" ", "_")
-            return pos, key
-    raise AssertionError("no vacant seat found")
-
-
 def _a_seated_seat(realm):
     """Return (position, char, key) for any occupied seat."""
     from gilded.society.court import CourtPosition
@@ -56,12 +46,6 @@ def _a_seated_seat(realm):
             key = pos.value.lower().replace(" ", "_")
             return pos, holder, key
     raise AssertionError("no seated seat found")
-
-
-def _a_dismissible_char(realm):
-    """Return a character who holds a court seat (not the ruler)."""
-    pos, holder, key = _a_seated_seat(realm)
-    return holder, pos, key
 
 
 # ═══════════════════════════════════════════════════════════════════════════

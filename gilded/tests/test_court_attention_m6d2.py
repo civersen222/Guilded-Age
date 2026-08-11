@@ -46,15 +46,6 @@ def _a_seated_seat(realm):
     raise AssertionError("no seated seat found")
 
 
-def _a_vacant_seat(realm):
-    """Return (position, key) for any vacant seat."""
-    from gilded.society.court import CourtPosition
-    for pos in CourtPosition:
-        if realm.court.positions.get(pos) is None:
-            key = pos.value.lower().replace(" ", "_")
-            return pos, key
-    raise AssertionError("no vacant seat found")
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Dismissal refuses for want of attention
