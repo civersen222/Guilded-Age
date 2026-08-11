@@ -475,6 +475,31 @@ def _build_action_for_key(key, game, house, view=None):
                 if pool:
                     return {"appoint_to_seat": pk, "char_id": pool[0].id}
         return None
+    elif key == "designate_heir":
+        realm = game.realms[house]
+        ruler_id = realm.ruler.id if realm.ruler else None
+        # Find a living non-ruler character
+        for c in realm.dynasty.all_characters.values():
+            if c.is_alive and c.id != ruler_id:
+                return {"designate_heir": True, "char_id": c.id}
+        for c in realm.characters:
+            if c.is_alive and c.id != ruler_id:
+                return {"designate_heir": True, "char_id": c.id}
+        return None
+    elif key == "clear_heir":
+        realm = game.realms[house]
+        # First designate an heir so we can clear it
+        ruler_id = realm.ruler.id if realm.ruler else None
+        for c in realm.dynasty.all_characters.values():
+            if c.is_alive and c.id != ruler_id:
+                c.is_heir = True
+                break
+        if not any(getattr(c, "is_heir", False) for c in realm.dynasty.all_characters.values()):
+            for c in realm.characters:
+                if c.is_alive and c.id != ruler_id:
+                    c.is_heir = True
+                    break
+        return {"clear_heir": True}
     return None
 
 

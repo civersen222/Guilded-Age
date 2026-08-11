@@ -207,7 +207,123 @@ def _appoint_to_seat_dispatch(game, house, view, action):
     game.attention[house] = game.attention.get(house, 0) - 1
     game.court_verbs_used = 1
     realm.court.appoint(position, char, game.turn)
-    return [f"{char.name} appointed {position.value}."]
+    modify_opinion(char, realm.ruler, 5, f"Appointed to {position.value}")
+
+    return [f"{char.name} appointed to {position.value}."]
+
+
+# ── designate heir verb ───────────────────────────────────────────────────────
+
+def _designate_heir_eligible(game, house, action):
+    char_id = action.get("char_id")
+    if char_id is None:
+        return False, "No character selected."
+
+    realm = game.realms[house]
+
+    # Find the character
+    char = None
+    for c in realm.dynasty.all_characters.values():
+        if c.id == char_id:
+            char = c
+            break
+    if char is None:
+        for c in realm.characters:
+            if c.id == char_id:
+                char = c
+                break
+    if char is None or not char.is_alive:
+        return False, "That person cannot be designated heir."
+
+    if char.id == realm.ruler.id:
+        return False, "The ruler cannot be designated heir."
+
+    if game.attention.get(house, 0) <= 0:
+        return False, "You have no attention left this turn."
+
+    if getattr(game, "court_verbs_used", 0) >= 1:
+        return False, "You have already used your court action this turn."
+
+    return True, ""
+
+
+def _designate_heir_dispatch(game, house, view, action):
+    char_id = action["char_id"]
+
+    realm = game.realms[house]
+
+    # Find the character
+    char = None
+    for c in realm.dynasty.all_characters.values():
+        if c.id == char_id:
+            char = c
+            break
+    if char is None:
+        for c in realm.characters:
+            if c.id == char_id:
+                char = c
+                break
+
+    # Clear any existing heir designation
+    for c in realm.dynasty.all_characters.values():
+        if hasattr(c, "is_heir"):
+            c.is_heir = False
+    for c in realm.characters:
+        if hasattr(c, "is_heir"):
+            c.is_heir = False
+
+    # Set the new heir
+    char.is_heir = True
+
+    game.attention[house] = game.attention.get(house, 0) - 1
+    game.court_verbs_used = 1
+
+    return [f"{char.name} designated as heir."]
+
+
+# ── Clear heir designation (clear_heir verb) ────────────────────────────────
+
+def _clear_heir_eligible(game, house, action):
+    realm = game.realms[house]
+
+    # Check if there's an heir to clear
+    has_heir = False
+    for c in realm.dynasty.all_characters.values():
+        if getattr(c, "is_heir", False):
+            has_heir = True
+            break
+    if not has_heir:
+        for c in realm.characters:
+            if getattr(c, "is_heir", False):
+                has_heir = True
+                break
+    if not has_heir:
+        return False, "No heir currently designated."
+
+    if game.attention.get(house, 0) <= 0:
+        return False, "You have no attention left this turn."
+
+    if getattr(game, "court_verbs_used", 0) >= 1:
+        return False, "You have already used your court action this turn."
+
+    return True, ""
+
+
+def _clear_heir_dispatch(game, house, view, action):
+    realm = game.realms[house]
+
+    # Clear any existing heir designation
+    for c in realm.dynasty.all_characters.values():
+        if hasattr(c, "is_heir"):
+            c.is_heir = False
+    for c in realm.characters:
+        if hasattr(c, "is_heir"):
+            c.is_heir = False
+
+    game.attention[house] = game.attention.get(house, 0) - 1
+    game.court_verbs_used = 1
+
+    return ["Heir designation cleared."]
 
 
 # ── candidate pool helper ─────────────────────────────────────────────────────

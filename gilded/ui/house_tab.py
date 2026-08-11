@@ -55,6 +55,13 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
             rows.append(line)
     rows.append("")
 
+    # ── Heir designation ───────────────────────────────────────────────────
+    if report.heir_designated:
+        rows.append(f"Designated Heir: {report.heir_designated}")
+    else:
+        rows.append("Designated Heir: None")
+    rows.append("")
+
     # ── Heir information ───────────────────────────────────────────────────
     if report.heir_if_ruler_died_now:
         heir_name = None

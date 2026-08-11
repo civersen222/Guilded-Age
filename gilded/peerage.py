@@ -218,10 +218,16 @@ def report(game, house: str) -> CourtReport:
 
     # ── Heir designated ────────────────────────────────────────────────────
     heir_designated = None
+    # Scan dynasty members first, then all realm characters
     for c in realm.dynasty.all_characters.values():
-        if c.is_alive and c.is_heir:
+        if c.is_alive and getattr(c, "is_heir", False):
             heir_designated = c.name
             break
+    if heir_designated is None:
+        for c in realm.characters:
+            if c.is_alive and getattr(c, "is_heir", False):
+                heir_designated = c.name
+                break
 
     return CourtReport(
         house=house,

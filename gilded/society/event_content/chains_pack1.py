@@ -49,7 +49,7 @@ def _trig_heir_radicalization(game: Any) -> Optional[Dict[str, Any]]:
     for realm, ch in _characters(game):
         if (ch.is_alive and getattr(ch, "is_heir", False)
                 and ch.dispositions.get("labor_capital", 0.0) <= -30.0):
-            return {"heir": ch.name, "house": realm.civ_name, "_char": ch}
+            return {"heir": ch.name, "house": realm.house_name, "_char": ch}
     return None
 
 
@@ -77,7 +77,7 @@ def _trig_tabloid_war(game: Any) -> Optional[Dict[str, Any]]:
                 continue
             if (a._society.opinions.get((a.id, b.id), 0) <= -40
                     and b._society.opinions.get((b.id, a.id), 0) <= -40):
-                return {"house_a": ra.civ_name, "house_b": rb.civ_name,
+                return {"house_a": ra.house_name, "house_b": rb.house_name,
                         "a": a.name, "b": b.name}
     return None
 
@@ -123,7 +123,7 @@ def _trig_succession_vultures(game: Any) -> Optional[Dict[str, Any]]:
         kin = [c for c in realm.characters
                if c.is_alive and c is not ruler and c.age >= 16]
         if len(kin) >= 2:
-            return {"ruler": ruler.name, "house": realm.civ_name,
+            return {"ruler": ruler.name, "house": realm.house_name,
                     "_kin": (kin[0], kin[1])}
     return None
 
