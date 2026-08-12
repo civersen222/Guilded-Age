@@ -184,10 +184,15 @@ def draw_war_tab(
             btn_txt = font_text.render(label, True,
                                        BUTTON_TEXT if not truce_active else DISABLED_BUTTON_EDGE)
             surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+            if truce_active:
+                reason = f"A truce with House {target} holds until turn {truce_until}"
+            else:
+                reason = ""
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
                 action={"declare_war": target},
                 state=RegionState.DISABLED if truce_active else RegionState.ENABLED,
+                reason=reason,
                 hint=label,
                 group="war_actions",
             ))

@@ -67,7 +67,14 @@ def _apply_action(state: AppState, action: dict) -> None:
         ok, _reason = act.eligible(state.game, state.house, action)
         if not ok:
             return
-        act.dispatch(state.game, state.house, state.view, action)
+        result = act.dispatch(state.game, state.house, state.view, action)
+        if result:
+            if isinstance(result, dict):
+                for key, value in result.items():
+                    if isinstance(value, str):
+                        state.view._action_messages.append(f"{key}: {value}")
+            elif isinstance(result, str):
+                state.view._action_messages.append(result)
         return
 
 

@@ -629,8 +629,8 @@ def _declare_war_dispatch(game, house, view, action):
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
-    initiative(game, house, "declare_war", executor, target_house=target)
-    return []
+    result = initiative(game, house, "declare_war", executor, target_house=target)
+    return result or []
 
 
 def _negotiate_peace_eligible(game, house, action):
@@ -653,8 +653,8 @@ def _negotiate_peace_dispatch(game, house, view, action):
     realm = game.realms[house]
     executor = _executor_for(game, realm, "diplomacy")
     game.attention[house] -= 1
-    initiative(game, house, "negotiate_peace", executor, target_house=target)
-    return []
+    result = initiative(game, house, "negotiate_peace", executor, target_house=target)
+    return result or []
 
 
 def _propose_marriage_eligible(game, house, action):
@@ -675,8 +675,8 @@ def _propose_marriage_dispatch(game, house, view, action):
     realm = game.realms[house]
     executor = _executor_for(game, realm, "diplomacy")
     game.attention[house] -= 1
-    initiative(game, house, "propose_marriage", executor, target_house=target)
-    return []
+    result = initiative(game, house, "propose_marriage", executor, target_house=target)
+    return result or []
 
 
 def _muster_eligible(game, house, action):
@@ -716,8 +716,8 @@ def _muster_dispatch(game, house, view, action):
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
-    initiative(game, house, "adjust_garrison", executor, province_pid=province_pid, count=1)
-    return []
+    result = initiative(game, house, "adjust_garrison", executor, province_pid=province_pid, count=1)
+    return result or []
 
 
 def _commit_eligible(game, house, action):
@@ -750,8 +750,8 @@ def _commit_dispatch(game, house, view, action):
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
-    initiative(game, house, "adjust_garrison", executor, war_id=war_id, front_id=front_fid, count=1)
-    return []
+    result = initiative(game, house, "adjust_garrison", executor, war_id=war_id, front_id=front_fid, count=1)
+    return result or []
 
 
 def _appoint_commander_eligible(game, house, action):
@@ -781,7 +781,6 @@ def _appoint_commander_eligible(game, house, action):
 def _appoint_commander_dispatch(game, house, view, action):
     from gilded.docket import initiative
     from gilded.ai import _executor_for
-    from gilded.fronts import allocate, appoint as front_appoint
     c = action["appoint_commander"]
     war_id = c["war_id"]
     front_fid = c["front_fid"]
@@ -789,16 +788,9 @@ def _appoint_commander_dispatch(game, house, view, action):
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
-    # Find the character
-    ch = next((c for c in realm.characters if c.id == char_id and c.is_alive), None)
-    if ch is not None:
-        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
-        if war_id < len(wars):
-            war = wars[war_id]
-            front = next((f for f in war.fronts if f.fid == front_fid), None)
-            if front is not None:
-                front_appoint(war, front, house, ch)
-    return []
+    result = initiative(game, house, "appoint_commander", executor,
+                        war_id=war_id, front_id=front_fid, char_id=char_id)
+    return result or []
 
 
 # ── registry ─────────────────────────────────────────────────────────────────

@@ -812,6 +812,7 @@ class BroadsheetView:
         # share picker state: None or {"direction": "buy"/"sell", "eid": int}
         self._share_picker: Optional[dict] = None
         self._share_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        self._action_messages: List[str] = []
         self.hover_pos: Tuple[int, int] | None = None
         self.regions = RegionSet()
         self.hovered: Optional[Region] = None
