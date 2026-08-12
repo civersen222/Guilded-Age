@@ -616,10 +616,22 @@ def director_candidates(game, house, eid) -> List:
 
 
 def _init_propose_marriage(ctx, target_house=None, **kw) -> List[str]:
-    msg = ctx.game.marriages.arrange_match_between(
-        ctx.house, target_house, ctx.game.realms, ctx.game.houses,
-        _ents_by_house(ctx.game), ctx.rng)
-    return [msg] if msg else [f"House {target_house} declines the proposal"]
+    game = ctx.game
+    h = game.houses.get(ctx.house)
+    t = game.houses.get(target_house)
+    if h and t:
+        if ctx.house in getattr(t, 'at_war_with', set()) or target_house in getattr(h, 'at_war_with', set()):
+            return [f"Cannot propose marriage to House {target_house} while at war"]
+    msg = game.marriages.arrange_match_between(
+        ctx.house, target_house, game.realms, game.houses,
+        _ents_by_house(game), ctx.rng)
+    if msg is None:
+        h = game.houses.get(ctx.house)
+        t = game.houses.get(target_house)
+        if h and t and (ctx.house in getattr(t, 'at_war_with', set()) or target_house in getattr(h, 'at_war_with', set())):
+            return [f"Cannot propose marriage to House {target_house} while at war"]
+        return [f"House {target_house} has no eligible candidates for marriage"]
+    return [msg]
 
 
 def _init_found_enterprise(ctx, kind=None, province_pid=None, **kw) -> List[str]:
@@ -933,7 +945,7 @@ def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, **kw
     if char_id is None:
         realm = game.realms[house]
         pool = [ch for ch in realm.characters
-                if ch.is_loyal and ch.opinion_of_ruler >= 50 and not ch.has_seat]
+                if ch.is_alive and getattr(ch, 'loyalty', 40.0) >= 40.0 and not getattr(ch, 'has_seat', False)]
         if not pool:
             return [f"No eligible commander available"]
         char = pool[0]
