@@ -557,8 +557,7 @@ def _build_action_for_key(key, game, house, view=None):
             if pool.get(house, 0) <= 0:
                 pool[house] = pool.get(house, 0) + 1
                 game._raised_regiments = pool
-            war_idx = wars.index(wars[0])
-            return {"commit": {"war_id": war_idx, "front_fid": f.fid}}
+            return {"commit": {"war_id": 0, "front_fid": f.fid}}
         return None
     elif key == "appoint_commander":
         from gilded.fronts import declare_war, WarGoal, _contested_pairs

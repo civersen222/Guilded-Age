@@ -886,6 +886,8 @@ class BroadsheetView:
 
         self._draw_tab_bar(surface)
         self._draw_hud(surface)
+        self._draw_action_messages(surface)
+        self._action_messages.clear()
         self._draw_bottom_bar(surface)
 
         # ── I3e: re-resolve hover and draw tooltip ──────────────────────────
@@ -1025,6 +1027,33 @@ class BroadsheetView:
         intent_rect = layout["intent"]
         intent_surf = fs.render(intent_text, True, HUD_INK)
         surface.blit(intent_surf, (intent_rect.left, intent_rect.centery - intent_surf.get_height() // 2))
+
+    def _draw_action_messages(self, surface) -> None:
+        """Draw action result messages in the bottom bar area above the turn button."""
+        msgs = list(self._action_messages) if self._action_messages else []
+        if not msgs:
+            return
+        font = _font(TYPE_TEXT)
+        y = self._h - BOTTOM_H - 10
+        max_w = self._w - 2 * PAD
+        for msg in reversed(msgs):
+            parts = []
+            current = ""
+            for word in msg.split():
+                test = (current + " " + word).strip() if current else word
+                if font.size(test)[0] <= max_w:
+                    current = test
+                else:
+                    if current:
+                        parts.append(current)
+                    current = word
+            if current:
+                parts.append(current)
+            for line in reversed(parts):
+                surf = font.render(line, True, INK)
+                surface.blit(surf, (PAD, y - surf.get_height()))
+                y -= surf.get_height() + 2
+            break  # Show only the most recent message
 
     def _draw_bottom_bar(self, surface) -> None:
         y = self._h - BOTTOM_H

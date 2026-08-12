@@ -70,11 +70,15 @@ def _apply_action(state: AppState, action: dict) -> None:
         result = act.dispatch(state.game, state.house, state.view, action)
         if result:
             if isinstance(result, dict):
-                for key, value in result.items():
+                for k, value in result.items():
                     if isinstance(value, str):
-                        state.view._action_messages.append(f"{key}: {value}")
+                        state.view._action_messages.append(f"{k}: {value}")
             elif isinstance(result, str):
                 state.view._action_messages.append(result)
+            elif isinstance(result, list):
+                for item in result:
+                    if isinstance(item, str):
+                        state.view._action_messages.append(item)
         return
 
 

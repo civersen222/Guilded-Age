@@ -722,7 +722,7 @@ def _init_adjust_garrison(ctx, **kw) -> List[str]:
 
     # If no wars at all, refuse
     if not wars:
-        return [f"The Marshal has no active war to garrison against (fronts arrive in G16)"]
+        return [f"The {house} House has no active war to garrison (fronts arrive in G16)"]
 
     # Ensure we have a uncommitted pool
     pool_attr = "_raised_regiments"
@@ -917,7 +917,12 @@ def _init_commit(ctx, war_id=None, front_fid=None, count=1, **kw) -> List[str]:
     wars = _wars_of(game, house)
     if not wars:
         return [f"The {house} House has no active war to commit to"]
-    war = wars[0] if war_id is None else next((w for w in wars if w.war_score == war_id), None)
+    if war_id is not None and isinstance(war_id, int) and 0 <= war_id < len(wars):
+        war = wars[war_id]
+    elif war_id is not None:
+        war = next((w for w in wars if w.war_score == war_id), None)
+    else:
+        war = wars[0]
     if war is None:
         return [f"No matching war found"]
     front = next((f for f in war.fronts if f.fid == front_fid), None) if front_fid else (war.fronts[0] if war.fronts else None)
@@ -936,9 +941,15 @@ def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, **kw
     wars = _wars_of(game, house)
     if not wars:
         return [f"The {house} House has no active war to appoint a commander for"]
-    war = wars[0] if war_id is None else next((w for w in wars if w.war_score == war_id), None)
-    if war is None:
-        return [f"No matching war found"]
+    if war_id is not None:
+        if isinstance(war_id, int) and 0 <= war_id < len(wars):
+            war = wars[war_id]
+        else:
+            war = next((w for w in wars if w.war_score == war_id), None)
+        if war is None:
+            return [f"No matching war found"]
+    else:
+        war = wars[0]
     front = next((f for f in war.fronts if f.fid == front_fid), None) if front_fid else (war.fronts[0] if war.fronts else None)
     if front is None:
         return [f"No matching front found"]
@@ -960,13 +971,11 @@ def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, **kw
                 break
         if char is None:
             return [f"Character {char_id} not found"]
-    if hasattr(front, 'attacker_commander') and war.aggressor == house:
-        front.attacker_commander = char.id
-    elif hasattr(front, 'defender_commander') and war.defender == house:
-        front.defender_commander = char.id
+    # Write to the fields Front actually has: commander_a_id / commander_d_id
+    if war.aggressor == house:
+        front.commander_a_id = char.id
     else:
-        if hasattr(front, 'attacker_commander'):
-            front.attacker_commander = char.id
+        front.commander_d_id = char.id
     return [f"{char.name} appointed commander on front {front.fid}"]
 
 

@@ -721,14 +721,22 @@ def _muster_dispatch(game, house, view, action):
 
 
 def _commit_eligible(game, house, action):
-    war_id = action.get("commit", {}).get("war_id") if isinstance(action.get("commit"), dict) else None
-    front_fid = action.get("commit", {}).get("front_fid") if isinstance(action.get("commit"), dict) else None
+    c = action.get("commit", {})
+    if not isinstance(c, dict):
+        return False, "Select a war and front to commit to"
+    war_id = c.get("war_id")
+    front_fid = c.get("front_fid")
     if war_id is None or front_fid is None:
         return False, "Select a war and front to commit to"
     wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
-    if war_id >= len(wars):
+    if war_id is not None and isinstance(war_id, int) and 0 <= war_id < len(wars):
+        war = wars[war_id]
+    elif war_id is not None:
+        war = next((w for w in wars if w.war_score == war_id), None)
+    else:
+        war = wars[0] if wars else None
+    if war is None:
         return False, "No such war"
-    war = wars[war_id]
     front = next((f for f in war.fronts if f.fid == front_fid), None)
     if front is None:
         return False, "No such front"
@@ -745,12 +753,12 @@ def _commit_dispatch(game, house, view, action):
     from gilded.docket import initiative
     from gilded.ai import _executor_for
     c = action["commit"]
-    war_id = c["war_id"]
+    war_id = c.get("war_id", 0)
     front_fid = c["front_fid"]
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
-    result = initiative(game, house, "adjust_garrison", executor, war_id=war_id, front_id=front_fid, count=1)
+    result = initiative(game, house, "commit", executor, war_id=war_id, front_fid=front_fid, count=1)
     return result or []
 
 
