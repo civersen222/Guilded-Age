@@ -297,7 +297,7 @@ def test_declaration_refusal_opens_no_war():
     assert len(wars) == 1
 
 
-def test_muster_costs_the_house():
+def test_muster_costs_the_house_m6a():
     """A muster must cost the House population or steel."""
     g = _game()
     war = _war(g)
@@ -337,7 +337,7 @@ def test_commit_lands_on_one_front():
     assert result is not None
 
 
-def test_appointment_puts_named_man_on_front():
+def test_appointment_puts_named_man_on_front_m6a():
     """An appointment must put a named character on a front."""
     g = _game()
     war = _war(g)
