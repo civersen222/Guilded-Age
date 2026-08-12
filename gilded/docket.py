@@ -822,6 +822,142 @@ def _init_negotiate_peace(ctx, target_house=None, **kw) -> List[str]:
     return _try_peace(ctx.game, ctx.house, war)
 
 
+def _init_muster(ctx, province_pid=None, war_id=None, front_fid=None, count=1, **kw) -> List[str]:
+    """Muster regiments: raise from a province, optionally commit to a front."""
+    game = ctx.game
+    house = ctx.house
+    count = max(1, int(count))
+
+    # Need a war to muster for
+    wars = _wars_of(game, house)
+    if not wars:
+        return [f"The {house} House has no active war to muster for"]
+
+    # Ensure pool exists
+    pool_attr = "_raised_regiments"
+    if not hasattr(game, pool_attr):
+        setattr(game, pool_attr, {})
+    pool = getattr(game, pool_attr)
+    if house not in pool:
+        pool[house] = 0
+
+    msgs: List[str] = []
+
+    # Raise from province if specified
+    if province_pid is not None:
+        province = game.atlas.provinces.get(province_pid)
+        if province is None:
+            return [f"No such province {province_pid}"]
+        if province.owner != house:
+            return [f"The {house} House does not own {province.name}"]
+        pop_available = province.population // REGIMENT_POP_COST
+        if pop_available <= 0:
+            return [f"Cannot muster: {province.name} population ({province.population}) below cost ({REGIMENT_POP_COST}/regiment)"]
+        cap = game.capacity.get(house)
+        if cap is not None and "steel" in cap:
+            steel_available = int(cap["steel"] // REGIMENT_STEEL_COST)
+            if steel_available <= 0:
+                return [f"Cannot muster: House steel capacity ({cap.get('steel', 0)}) below cost ({REGIMENT_STEEL_COST}/regiment)"]
+            max_raise = min(pop_available, steel_available)
+        else:
+            max_raise = pop_available
+        actual = min(count, max_raise)
+        raised = raise_regiments(game, house, province_pid, actual)
+        pool[house] = pool.get(house, 0) + raised
+        msgs.append(f"Raised {raised} regiment(s) from {province.name}")
+    else:
+        # No province — must have pool to commit from
+        available = pool.get(house, 0)
+        if available <= 0:
+            return [f"The {house} House has no uncommitted regiments (raise from a province first)"]
+
+    # Commit to a front if specified
+    if front_fid is not None:
+        war = wars[0] if war_id is None else next((w for w in wars if w.war_score == war_id), None)
+        if war is None:
+            war = wars[0]
+        front = next((f for f in war.fronts if f.fid == front_fid), None)
+        if front is None:
+            return [f"No matching front found"]
+        available = pool.get(house, 0)
+        if available <= 0:
+            return [f"The {house} House has no uncommitted regiments to deploy"]
+        commit = min(count, available)
+        pool[house] = available - commit
+        allocate(war, front, house, commit)
+        msgs.append(f"Committed {commit} regiment(s) to front {front.fid}")
+
+    return msgs if msgs else [f"The {house} House musters {count} regiment(s)"]
+
+
+def _init_commit(ctx, war_id=None, front_fid=None, count=1, **kw) -> List[str]:
+    """Commit uncommitted regiments to a front."""
+    game = ctx.game
+    house = ctx.house
+    count = max(1, int(count))
+    pool_attr = "_raised_regiments"
+    if not hasattr(game, pool_attr):
+        setattr(game, pool_attr, {})
+    pool = getattr(game, pool_attr)
+    available = pool.get(house, 0)
+    if available <= 0:
+        return [f"The {house} House has no uncommitted regiments to deploy"]
+    wars = _wars_of(game, house)
+    if not wars:
+        return [f"The {house} House has no active war to commit to"]
+    war = wars[0] if war_id is None else next((w for w in wars if w.war_score == war_id), None)
+    if war is None:
+        return [f"No matching war found"]
+    front = next((f for f in war.fronts if f.fid == front_fid), None) if front_fid else (war.fronts[0] if war.fronts else None)
+    if front is None:
+        return [f"No matching front found"]
+    commit = min(count, available)
+    pool[house] = available - commit
+    allocate(war, front, house, commit)
+    return [f"Committed {commit} regiment(s) to front {front.fid}"]
+
+
+def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, **kw) -> List[str]:
+    """Appoint a character as commander on a front."""
+    game = ctx.game
+    house = ctx.house
+    wars = _wars_of(game, house)
+    if not wars:
+        return [f"The {house} House has no active war to appoint a commander for"]
+    war = wars[0] if war_id is None else next((w for w in wars if w.war_score == war_id), None)
+    if war is None:
+        return [f"No matching war found"]
+    front = next((f for f in war.fronts if f.fid == front_fid), None) if front_fid else (war.fronts[0] if war.fronts else None)
+    if front is None:
+        return [f"No matching front found"]
+    if char_id is None:
+        realm = game.realms[house]
+        pool = [ch for ch in realm.characters
+                if ch.is_loyal and ch.opinion_of_ruler >= 50 and not ch.has_seat]
+        if not pool:
+            return [f"No eligible commander available"]
+        char = pool[0]
+    else:
+        char = None
+        for r in game.realms.values():
+            for c in r.characters:
+                if c.id == char_id:
+                    char = c
+                    break
+            if char is not None:
+                break
+        if char is None:
+            return [f"Character {char_id} not found"]
+    if hasattr(front, 'attacker_commander') and war.aggressor == house:
+        front.attacker_commander = char.id
+    elif hasattr(front, 'defender_commander') and war.defender == house:
+        front.defender_commander = char.id
+    else:
+        if hasattr(front, 'attacker_commander'):
+            front.attacker_commander = char.id
+    return [f"{char.name} appointed commander on front {front.fid}"]
+
+
 def _init_acquire_minor(ctx, province_pid=None, **kw) -> List[str]:
     province = ctx.game.atlas.provinces[province_pid]
     if province.owner != MINOR_OWNER:
@@ -983,6 +1119,9 @@ INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "buy_shares": ("capital", _init_buy_shares),
     "sell_shares": ("capital", _init_sell_shares),
     "appoint_director": ("capital", _init_appoint_director),
+    "muster": ("war", _init_muster),
+    "commit": ("war", _init_commit),
+    "appoint_commander": ("war", _init_appoint_commander),
 }
 
 
