@@ -69,7 +69,7 @@ from gilded.ui.widgets import (
     PICKER_SUBTITLE, PICKER_ROW_ALT_BG, OFFERABLE_BG, OFFERABLE_EDGE,
 )
 
-TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
+TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House", "War")
 
 TAB_H = 40
 BOTTOM_H = 56
@@ -880,6 +880,8 @@ class BroadsheetView:
             self._draw_enterprises(surface, content)
         elif self.active_tab == "House":
             self._draw_house(surface, content)
+        elif self.active_tab == "War":
+            self._draw_war(surface, content)
 
         self._draw_tab_bar(surface)
         self._draw_hud(surface)
@@ -966,6 +968,7 @@ class BroadsheetView:
             "Atlas": "Survey the realm's map and your territory.",
             "Powers": "See the other houses, their axes, and their moves.",
             "House": "Your court, your people, and your standing.",
+            "War": "Conduct your wars — muster, commit, and seek peace.",
         }
         for i, name in enumerate(TABS):
             rect = pygame.Rect(i * tabw, 0, tabw, TAB_H)
@@ -2243,6 +2246,13 @@ class BroadsheetView:
         # If court picker is open, draw candidates
         if self._court_picker is not None:
             self._draw_court_picker(surface, content, rpt)
+
+    def _draw_war(self, surface, content: pygame.Rect) -> None:
+        from gilded.ui.war_tab import draw_war_tab
+        draw_war_tab(surface, self.game, self.house,
+                     content.x, content.y, content.w, content.h,
+                     self.regions,
+                     font_text=None)
 
     def _draw_court_picker(self, surface, content, report):
         """Draw the appointment picker for a vacant court seat using Regions."""
