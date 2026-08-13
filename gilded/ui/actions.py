@@ -716,7 +716,7 @@ def _muster_dispatch(game, house, view, action):
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
-    result = initiative(game, house, "adjust_garrison", executor, province_pid=province_pid, count=1)
+    result = initiative(game, house, "muster", executor, province_pid=province_pid)
     return result or []
 
 
