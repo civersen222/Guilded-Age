@@ -767,8 +767,8 @@ def _appoint_commander_eligible(game, house, action):
     war_id = c.get("war_id") if isinstance(c, dict) else None
     front_fid = c.get("front_fid") if isinstance(c, dict) else None
     char_id = c.get("char_id") if isinstance(c, dict) else None
-    if war_id is None or front_fid is None or char_id is None:
-        return False, "Select a war, front and commander"
+    if war_id is None or front_fid is None:
+        return False, "Select a war and front"
     wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
     if war_id >= len(wars):
         return False, "No such war"
@@ -776,11 +776,16 @@ def _appoint_commander_eligible(game, house, action):
     front = next((f for f in war.fronts if f.fid == front_fid), None)
     if front is None:
         return False, "No such front"
-    # Check character belongs to this house and is alive
+    # Check character belongs to this house and is alive (or auto-pick if char_id is None)
     realm = game.realms[house]
-    ch = next((c for c in realm.characters if c.id == char_id and c.is_alive), None)
-    if ch is None:
-        return False, "No such living character"
+    if char_id is not None:
+        ch = next((c for c in realm.characters if c.id == char_id and c.is_alive), None)
+        if ch is None:
+            return False, "No such living character"
+    else:
+        pool = [c for c in realm.characters if c.is_alive and getattr(c, 'loyalty', 40.0) >= 40.0 and not getattr(c, 'has_seat', False)]
+        if not pool:
+            return False, "No eligible commander available"
     if _no_attention(game, house):
         return False, _attention_reason()
     return True, ""
@@ -797,7 +802,7 @@ def _appoint_commander_dispatch(game, house, view, action):
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
     result = initiative(game, house, "appoint_commander", executor,
-                        war_id=war_id, front_id=front_fid, char_id=char_id)
+                        war_id=war_id, front_fid=front_fid, char_id=char_id)
     return result or []
 
 

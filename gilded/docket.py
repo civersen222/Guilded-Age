@@ -934,7 +934,7 @@ def _init_commit(ctx, war_id=None, front_fid=None, count=1, **kw) -> List[str]:
     return [f"Committed {commit} regiment(s) to front {front.fid}"]
 
 
-def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, **kw) -> List[str]:
+def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, character_id=None, **kw) -> List[str]:
     """Appoint a character as commander on a front."""
     game = ctx.game
     house = ctx.house
@@ -953,7 +953,9 @@ def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, **kw
     front = next((f for f in war.fronts if f.fid == front_fid), None) if front_fid else (war.fronts[0] if war.fronts else None)
     if front is None:
         return [f"No matching front found"]
-    if char_id is None:
+    # Accept both char_id and character_id (legacy compatibility)
+    cid = char_id if char_id is not None else character_id
+    if cid is None:
         realm = game.realms[house]
         pool = [ch for ch in realm.characters
                 if ch.is_alive and getattr(ch, 'loyalty', 40.0) >= 40.0 and not getattr(ch, 'has_seat', False)]
@@ -964,13 +966,13 @@ def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, **kw
         char = None
         for r in game.realms.values():
             for c in r.characters:
-                if c.id == char_id:
+                if c.id == cid:
                     char = c
                     break
             if char is not None:
                 break
         if char is None:
-            return [f"Character {char_id} not found"]
+            return [f"Character {cid} not found"]
     # Write to the fields Front actually has: commander_a_id / commander_d_id
     if war.aggressor == house:
         front.commander_a_id = char.id
