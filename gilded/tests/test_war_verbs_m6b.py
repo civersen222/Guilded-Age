@@ -238,15 +238,18 @@ def test_negotiate_peace_ends_war_and_sets_truce():
 # ── garrison stub tests ────────────────────────────────────────────────────
 
 def test_garrison_stub_returns_no_milestone():
-    """The garrison verb must return no string carrying a milestone identifier."""
+    """The garrison verb called on a House that IS at war must not raise,
+    must return no string carrying a milestone identifier, and must either
+    move the fronts or say why it cannot."""
     state = _state(42)
     g, h = state.game, state.house
+    _ensure_war(state)
     realm = g.realms[h]
     executor = _executor_for(g, realm, "war")
     msgs = initiative(g, h, "adjust_garrison", executor)
-    assert msgs
+    assert isinstance(msgs, list) and len(msgs) > 0
     for m in msgs:
-        assert "G16" not in m or True  # garrison stub may reference G16
+        assert "G16" not in m, f"garrison returned milestone identifier in message: {m!r}"
 
 
 def test_garrison_refuses_when_no_war():

@@ -55,7 +55,7 @@ def _war_lines(game, house_name: str) -> List[str]:
     for war in wars:
         enemy = war.defender if war.aggressor == house_name else war.aggressor
         side = "attacker" if war.aggressor == house_name else "defender"
-        lines.append(f"At war with House {enemy} ({side})")
+        lines.append(f"{house_name} vs {enemy} ({side})")
         for front in war.fronts:
             a = front.attacker_regiments
             d = front.defender_regiments
@@ -71,14 +71,14 @@ def _war_report_lines(game, house_name: str) -> List[str]:
             if w.aggressor == house_name or w.defender == house_name]
 
     if not wars:
-        lines.append("The House is at peace.")
+        lines.append(f"The {house_name} House is at peace.")
         lines.append("")
         return lines
 
     for war in wars:
         enemy = war.defender if war.aggressor == house_name else war.aggressor
         side = "attacker" if war.aggressor == house_name else "defender"
-        lines.append(f"War with House {enemy} ({side})")
+        lines.append(f"{house_name} vs {enemy} ({side})")
         for front in war.fronts:
             a = front.attacker_regiments
             d = front.defender_regiments
