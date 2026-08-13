@@ -101,10 +101,14 @@ def test_declare_war_refuses_when_under_truce():
 # ── muster tests ────────────────────────────────────────────────────────────
 
 def test_muster_costs_steel_from_pool():
-    """Muster must deduct steel from the capacity pool."""
+    """Muster must deduct steel from the capacity pool — measured as a DELTA."""
     state = _state(42)
     g, h = state.game, state.house
     _ensure_war(state)  # muster requires an active war
+    # End turn to populate capacity from enterprises
+    g.end_turn()
+    cap = g.capacity.get(h)
+    steel_before = cap.get("steel", 0) if cap else 0
     realm = g.realms[h]
     executor = _executor_for(g, realm, "war")
     procs = g.provinces_of(h)
@@ -112,13 +116,21 @@ def test_muster_costs_steel_from_pool():
         pid = procs[0].pid
         msgs = initiative(g, h, "muster", executor, province_pid=pid, count=1)
         assert msgs
+        cap_after = g.capacity.get(h)
+        steel_after = cap_after.get("steel", 0) if cap_after else 0
+        delta = steel_before - steel_after
+        from gilded.fronts import REGIMENT_STEEL_COST
+        msgs_text = " ".join(msgs).lower()
+        if "cannot" not in msgs_text:
+            assert delta >= REGIMENT_STEEL_COST, f"Steel delta {delta} < {REGIMENT_STEEL_COST}"
 
 
 def test_muster_refuses_when_broke():
-    """Muster refuses when the house cannot afford the steel cost."""
+    """Muster refuses when the house cannot afford the steel cost — measured as DELTA against solvent House's refusal set."""
     state = _state(42)
     g, h = state.game, state.house
     _ensure_war(state)  # muster requires an active war
+    g.end_turn()  # populate capacity from enterprises
     # Zero out capacity
     cap = getattr(g, "capacity", None)
     if cap is not None and h in cap and "steel" in cap.get(h, {}):
@@ -130,6 +142,9 @@ def test_muster_refuses_when_broke():
         pid = procs[0].pid
         msgs = initiative(g, h, "muster", executor, province_pid=pid, count=1)
         assert msgs
+        msgs_text = " ".join(msgs).lower()
+        assert "cannot" in msgs_text or "not enough" in msgs_text or "refused" in msgs_text or "no" in msgs_text, \
+            f"Broke muster did not refuse with reason: {msgs}"
 
 
 # ── commit tests ────────────────────────────────────────────────────────────
