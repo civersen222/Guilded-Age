@@ -179,8 +179,17 @@ def draw_war_tab(
         surface.blit(war_title, (margin_x, cur_y))
         cur_y += LINE_H + 2
 
-        # Muster button (per front)
-        for front in war.fronts:
+        # Muster button — one per war, uses first border province owned by the house
+        for front in war.fronts[:1]:
+            province_pid = None
+            for attacker_pid, defender_pid in front.border:
+                if war.aggressor == house_name:
+                    province_pid = attacker_pid
+                else:
+                    province_pid = defender_pid
+                break
+            if province_pid is None:
+                continue
             btn_x = margin_x + 20
             btn_w = w - 2 * PAD - 20
             btn_y = cur_y
@@ -191,7 +200,7 @@ def draw_war_tab(
             surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-                action={"muster": {"war_id": war.war_score, "front_fid": front.fid}},
+                action={"muster": province_pid},
                 state=RegionState.ENABLED,
                 hint=label,
                 group="war_actions",
@@ -248,7 +257,7 @@ def draw_war_tab(
             surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-                action={"appoint_commander": {"war_id": war.war_score, "front_fid": front.fid}},
+                action={"appoint_commander": {"war_id": war.war_score, "front_fid": front.fid, "char_id": None}},
                 state=RegionState.ENABLED,
                 hint=label,
                 group="war_actions",
