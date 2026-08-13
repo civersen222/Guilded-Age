@@ -657,6 +657,91 @@ def _negotiate_peace_dispatch(game, house, view, action):
     return result or []
 
 
+def _acquire_minor_eligible(game, house, action):
+    from gilded.world import MINOR_OWNER
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    province_pid = action.get("acquire_minor")
+    if province_pid is None:
+        return False, "Select a province to acquire"
+    province = game.atlas.provinces.get(province_pid)
+    if province is None:
+        return False, "No such province"
+    if province.owner != MINOR_OWNER:
+        return False, f"{province.name} already flies a Great House's colors"
+    owned = {p.pid for p in game.atlas.provinces.values() if p.owner == house}
+    if not (province.neighbors & owned):
+        return False, f"{province.name} shares no border with the House's lands"
+    from gilded.docket import RAIL_COST
+    richness = sum(province.endowments.values())
+    cost = 300.0 * province.development + 100.0 * richness
+    house_obj = game.houses[house]
+    if house_obj.treasury < cost:
+        return False, f"{province.name} would cost {cost:.0f} gold; the vault says no"
+    return True, ""
+
+
+def _acquire_minor_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "expansion")
+    game.attention[house] -= 1
+    result = initiative(game, house, "acquire_minor", executor, province_pid=action["acquire_minor"])
+    return result or []
+
+
+def _build_rail_eligible(game, house, action):
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    a = action.get("build_rail_a")
+    b = action.get("build_rail_b")
+    if a is None or b is None:
+        return False, "Select a link to build rail on"
+    link = game.atlas.link(a, b)
+    if link is None or link.rail:
+        return False, "No track to lay there"
+    from gilded.docket import RAIL_COST
+    house_obj = game.houses[house]
+    if house_obj.treasury < RAIL_COST:
+        return False, f"The line wants {RAIL_COST:.0f} gold the House lacks"
+    return True, ""
+
+
+def _build_rail_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "expansion")
+    game.attention[house] -= 1
+    result = initiative(game, house, "build_rail", executor, a=action["build_rail_a"], b=action["build_rail_b"])
+    return result or []
+
+
+def _tour_province_eligible(game, house, action):
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    province_pid = action.get("tour_province")
+    if province_pid is None:
+        return False, "Select a province to tour"
+    province = game.atlas.provinces.get(province_pid)
+    if province is None:
+        return False, "No such province"
+    if province.owner != house:
+        return False, f"The {house} House does not own {province.name}"
+    return True, ""
+
+
+def _tour_province_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "family")
+    game.attention[house] -= 1
+    result = initiative(game, house, "tour_province", executor, province_pid=action["tour_province"])
+    return result or []
+
+
 def _adjust_garrison_eligible(game, house, action):
     wars = [w for w in getattr(game, "wars", [])
             if house in (w.aggressor, w.defender)]
@@ -1121,5 +1206,20 @@ ACTIONS: dict[str, PlayerAction] = {
         key="adjust_garrison", label="Adjust Garrison", domain="war",
         attention_cost=1, gold_cost=0,
         eligible=_adjust_garrison_eligible, dispatch=_adjust_garrison_dispatch,
+    ),
+    "acquire_minor": PlayerAction(
+        key="acquire_minor", label="Acquire Minor Province", domain="expansion",
+        attention_cost=1, gold_cost=0,
+        eligible=_acquire_minor_eligible, dispatch=_acquire_minor_dispatch,
+    ),
+    "build_rail": PlayerAction(
+        key="build_rail", label="Build Railway", domain="expansion",
+        attention_cost=1, gold_cost=0,
+        eligible=_build_rail_eligible, dispatch=_build_rail_dispatch,
+    ),
+    "tour_province": PlayerAction(
+        key="tour_province", label="Tour Province", domain="family",
+        attention_cost=1, gold_cost=0,
+        eligible=_tour_province_eligible, dispatch=_tour_province_dispatch,
     ),
 }

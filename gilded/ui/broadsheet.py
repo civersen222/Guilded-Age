@@ -1560,6 +1560,157 @@ class BroadsheetView:
         if self.selected_pid is not None:
             self._draw_panel(surface,
                              province_panel_lines(self.game, self.selected_pid))
+        # Draw action rows on the right side panel
+        self._draw_atlas_actions(surface, rect)
+
+    def _draw_atlas_actions(self, surface, rect: pygame.Rect) -> None:
+        """Draw interactive rows for acquire_minor, build_rail, tour_province on the atlas tab."""
+        from gilded.world import MINOR_OWNER
+        from gilded.docket import RAIL_COST
+        from gilded.ui.actions import ACTIONS
+        BUTTON_H = 28
+        game = self.game
+        house = self.house
+        atlas = game.atlas
+        house_obj = game.houses[house]
+
+        def _draw_btn(surf, text, btn_rect, enabled):
+            if enabled:
+                bg, edge = BUTTON_BG, BUTTON_EDGE
+            else:
+                bg, edge = DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE
+            pygame.draw.rect(surf, bg, btn_rect)
+            pygame.draw.rect(surf, edge, btn_rect, 2)
+            f = _font(TYPE_TEXT)
+            t = f.render(text, True, BUTTON_TEXT)
+            surf.blit(t, (btn_rect.x + 8, btn_rect.y + 4))
+
+        panel_x = rect.right - 260
+        panel_w = 250
+        y = rect.top + 10
+
+        body = _font(TYPE_TEXT)
+        title = _font(TYPE_CAPTION, bold=True)
+
+        # Title
+        title_surf = title.render("PEACE TIME ACTIONS", True, INK)
+        surface.blit(title_surf, (panel_x + 4, y))
+        y += title_surf.get_height() + 6
+
+        # Separator
+        pygame.draw.line(surface, INK, (panel_x, y), (panel_x + panel_w, y))
+        y += 8
+
+        # --- Acquire Minor section ---
+        sec_title = body.render("Acquire Minor:", True, INK)
+        surface.blit(sec_title, (panel_x + 4, y))
+        y += body.get_height() + 2
+
+        # Find bordering minors
+        owned = {p.pid for p in atlas.provinces.values() if p.owner == house}
+        bordering_minors = []
+        for pid, prov in atlas.provinces.items():
+            if prov.owner == MINOR_OWNER and prov.neighbors & owned:
+                bordering_minors.append(pid)
+        bordering_minors.sort(key=lambda pid: atlas.provinces[pid].name)
+
+        for pid in bordering_minors:
+            if y + BUTTON_H > rect.bottom:
+                break
+            prov = atlas.provinces[pid]
+            richness = sum(prov.endowments.values())
+            cost = 300.0 * prov.development + 100.0 * richness
+            action_dict = {"acquire_minor": pid}
+            act = ACTIONS.get("acquire_minor")
+            ok, reason = act.eligible(game, house, action_dict) if act else (False, "Unknown action")
+
+            btn_label = f"{prov.name} ({cost:.0f}g)"
+            btn_rect = pygame.Rect(panel_x + 4, y, panel_w - 8, BUTTON_H)
+            _draw_btn(surface, btn_label, btn_rect, ok)
+
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+            self.regions.add(Region(
+                rect=btn_rect,
+                action=action_dict,
+                hint=btn_label if ok else reason,
+                reason=reason if not ok else None,
+                state=state,
+                group="atlas_actions",
+            ))
+            y += BUTTON_H + 2
+
+        y += 4
+
+        # --- Build Rail section ---
+        sec_title = body.render("Build Rail:", True, INK)
+        surface.blit(sec_title, (panel_x + 4, y))
+        y += body.get_height() + 2
+
+        # Find rail-less links between owned provinces
+        rail_links = []
+        for link in atlas.links.values():
+            if not link.rail and link.a in owned and link.b in owned:
+                pa = atlas.provinces[link.a].name
+                pb = atlas.provinces[link.b].name
+                rail_links.append((link.a, link.b, pa, pb))
+        rail_links.sort(key=lambda t: t[2] + t[3])
+
+        for a, b, pa, pb in rail_links:
+            if y + BUTTON_H > rect.bottom:
+                break
+            action_dict = {"build_rail_a": a, "build_rail_b": b}
+            act = ACTIONS.get("build_rail")
+            ok, reason = act.eligible(game, house, action_dict) if act else (False, "Unknown action")
+
+            btn_label = f"{pa}-{pb} ({RAIL_COST:.0f}g)"
+            btn_rect = pygame.Rect(panel_x + 4, y, panel_w - 8, BUTTON_H)
+            _draw_btn(surface, btn_label, btn_rect, ok)
+
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+            self.regions.add(Region(
+                rect=btn_rect,
+                action=action_dict,
+                hint=btn_label if ok else reason,
+                reason=reason if not ok else None,
+                state=state,
+                group="atlas_actions",
+            ))
+            y += BUTTON_H + 2
+
+        y += 4
+
+        # --- Tour Province section ---
+        sec_title = body.render("Tour Province:", True, INK)
+        surface.blit(sec_title, (panel_x + 4, y))
+        y += body.get_height() + 2
+
+        # Find owned provinces
+        owned_provinces = [(pid, atlas.provinces[pid])
+                           for pid in owned]
+        owned_provinces.sort(key=lambda t: t[1].name)
+
+        for pid, prov in owned_provinces:
+            if y + BUTTON_H > rect.bottom:
+                break
+            action_dict = {"tour_province": pid}
+            act = ACTIONS.get("tour_province")
+            ok, reason = act.eligible(game, house, action_dict) if act else (False, "Unknown action")
+
+            unrest_str = f"unrest={prov.unrest:.1f}"
+            btn_label = f"{prov.name} ({unrest_str})"
+            btn_rect = pygame.Rect(panel_x + 4, y, panel_w - 8, BUTTON_H)
+            _draw_btn(surface, btn_label, btn_rect, ok)
+
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+            self.regions.add(Region(
+                rect=btn_rect,
+                action=action_dict,
+                hint=btn_label if ok else reason,
+                reason=reason if not ok else None,
+                state=state,
+                group="atlas_actions",
+            ))
+            y += BUTTON_H + 2
 
     def _draw_panel(self, surface, lines: List[str]) -> None:
         font = _font(TYPE_TEXT)

@@ -107,6 +107,20 @@ def _collect_emitted_keys(view):
                                 collected.add(k)
             continue
 
+        # Special case: Atlas tab — collect atlas action keys from regions
+        if tab_name == "Atlas":
+            for region in view.regions._regions:
+                if region.group == "atlas_actions" and region.action:
+                    for k in region.action:
+                        if k not in ("acquire_minor", "build_rail_a", "build_rail_b", "tour_province", "reason"):
+                            continue
+                        # Map build_rail_a/build_rail_b to build_rail
+                        if k.startswith("build_rail_"):
+                            collected.add("build_rail")
+                        else:
+                            collected.add(k)
+            continue
+
         _collect_standard(view, collected)
     return collected
 
@@ -194,12 +208,12 @@ def test_every_drawn_key_is_registered():
     drawn = _collect_emitted_keys(state.view)
 
     assert drawn == {
-        "appoint_director", "appoint_to_seat", "close_appointment_picker",
-        "close_director_picker", "defend_buyout",
-        "dismiss_seat", "end_turn", "expand_enterprise",
+        "acquire_minor", "appoint_director", "appoint_to_seat",
+        "build_rail", "close_appointment_picker", "close_director_picker",
+        "defend_buyout", "dismiss_seat", "end_turn", "expand_enterprise",
         "open_appointment_picker", "open_director_picker",
         "place_informant", "rule", "select_province", "set_stance",
-        "tab", "toggle_narrate",
+        "tab", "toggle_narrate", "tour_province",
     }, f"the drawn set moved: {sorted(drawn)}"
 
     unhandled = sorted(drawn - set(act.ACTIONS))
@@ -587,6 +601,27 @@ def _build_action_for_key(key, game, house, view=None):
                     declare_war(game, house, target, WarGoal(kind="seize"))
                     break
         return {"adjust_garrison": True}
+    elif key == "acquire_minor":
+        from gilded.world import MINOR_OWNER
+        atlas = game.atlas
+        house_provinces = [pid for pid, p in atlas.provinces.items() if p.owner == house]
+        for hp in house_provinces:
+            for n in atlas.provinces[hp].neighbors:
+                if atlas.provinces[n].owner == MINOR_OWNER:
+                    return {"acquire_minor": n}
+        return None
+    elif key == "build_rail":
+        atlas = game.atlas
+        for link in atlas.links.values():
+            if not link.rail:
+                return {"build_rail_a": link.a, "build_rail_b": link.b}
+        return None
+    elif key == "tour_province":
+        atlas = game.atlas
+        owned = [pid for pid, p in atlas.provinces.items() if p.owner == house]
+        if owned:
+            return {"tour_province": owned[0]}
+        return None
     return None
 
 
