@@ -314,7 +314,9 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
         opinion_str = f"{opinion:+d}"
         row_text = f"{candidate.name}  loyalty {loyalty_str}  opinion {opinion_str}"
 
-        btn_rect = _draw_button(surface, row_text, PAD, y, btn_w, btn_h, True)
+        needed_w = body.size(row_text)[0] + 24
+        row_w = max(btn_w, needed_w)
+        btn_rect = _draw_button(surface, row_text, PAD, y, row_w, btn_h, True)
         view.regions.add(Region(
             rect=btn_rect,
             action={"designate_heir": True, "char_id": candidate.id},
