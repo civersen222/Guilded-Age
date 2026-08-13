@@ -45,9 +45,9 @@ def _war_lines(game, house_name: str) -> List[str]:
                 continue
             truce_until = h.truces.get(other_name, 0)
             if truce_until > game.turn:
-                lines.append(f"  House {other_name} — truce until turn {truce_until}")
+                lines.append(f"  {other_name} — truce until turn {truce_until}")
             else:
-                lines.append(f"  House {other_name} — no truce")
+                lines.append(f"  {other_name} — no truce")
         return lines
 
     lines.append("WAR & DIPLOMACY")
@@ -55,35 +55,38 @@ def _war_lines(game, house_name: str) -> List[str]:
     for war in wars:
         enemy = war.defender if war.aggressor == house_name else war.aggressor
         side = "attacker" if war.aggressor == house_name else "defender"
-        total_a = sum(f.attacker_regiments for f in war.fronts)
-        total_d = sum(f.defender_regiments for f in war.fronts)
-        lines.append(
-            f"War with House {enemy}: {house_name} is {side} · "
-            f"Strength: {total_a} vs {total_d} · Score {war.war_score:+.1f}"
-        )
+        lines.append(f"At war with House {enemy} ({side})")
+        for front in war.fronts:
+            a = front.attacker_regiments
+            d = front.defender_regiments
+            lines.append(f"  Front {front.fid}: {a} vs {d} regiments")
     return lines
 
 
 def _war_report_lines(game, house_name: str) -> List[str]:
-    """Build text lines showing war status for the House."""
+    """Build the war report lines for the War tab."""
     lines: List[str] = []
     h = game.houses[house_name]
     wars = [w for w in getattr(game, "wars", [])
             if w.aggressor == house_name or w.defender == house_name]
 
     if not wars:
-        lines.append(f"The {house_name} House is at peace.")
+        lines.append("The House is at peace.")
+        lines.append("")
         return lines
 
     for war in wars:
         enemy = war.defender if war.aggressor == house_name else war.aggressor
         side = "attacker" if war.aggressor == house_name else "defender"
-        total_a = sum(f.attacker_regiments for f in war.fronts)
-        total_d = sum(f.defender_regiments for f in war.fronts)
-        lines.append(
-            f"War with House {enemy}: {house_name} is {side} · "
-            f"Strength: {total_a} vs {total_d} · Score {war.war_score:+.1f}"
-        )
+        lines.append(f"War with House {enemy} ({side})")
+        for front in war.fronts:
+            a = front.attacker_regiments
+            d = front.defender_regiments
+            line_val = front.line
+            lines.append(
+                f"  Front {front.fid}: {a} vs {d} regiments · Line: {line_val:+.2f}"
+            )
+    lines.append("")
     return lines
 
 
@@ -194,14 +197,27 @@ def draw_war_tab(
             btn_w = w - 2 * PAD - 20
             btn_y = cur_y
             label = f"Muster (Front {front.fid})"
-            pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
-            pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            action = {"muster": province_pid}
+
+            # Consult eligible
+            from gilded.ui.actions import ACTIONS
+            ok, reason = ACTIONS["muster"].eligible(game, house_name, action)
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+
+            if ok:
+                pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+                pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+                btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            else:
+                pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+                pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+                btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
             surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-                action={"muster": province_pid},
-                state=RegionState.ENABLED,
+                action=action,
+                state=state,
+                reason=reason if not ok else "",
                 hint=label,
                 group="war_actions",
             ))
@@ -222,25 +238,32 @@ def draw_war_tab(
             surface.blit(txt, (margin_x + 20, cur_y))
             cur_y += LINE_H
 
-            # Commander info
-            cmd_line = f"  Commander: {cmd_a} vs {cmd_d}"
-            txt = font_text.render(cmd_line, True, INK)
-            surface.blit(txt, (margin_x + 20, cur_y))
-            cur_y += LINE_H
-
             # Commit button
             btn_x = margin_x + 20
             btn_w = w - 2 * PAD - 20
             btn_y = cur_y
-            label = f"Commit (Front {front.fid})"
-            pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
-            pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            label = f"Commit to Front {front.fid}"
+            action = {"commit": {"war_id": war_idx, "front_fid": front.fid}}
+
+            # Consult eligible
+            from gilded.ui.actions import ACTIONS
+            ok, reason = ACTIONS["commit"].eligible(game, house_name, action)
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+
+            if ok:
+                pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+                pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+                btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            else:
+                pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+                pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+                btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
             surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-                action={"commit": {"war_id": war_idx, "front_fid": front.fid}},
-                state=RegionState.ENABLED,
+                action=action,
+                state=state,
+                reason=reason if not ok else "",
                 hint=label,
                 group="war_actions",
             ))
@@ -251,34 +274,56 @@ def draw_war_tab(
             btn_w = w - 2 * PAD - 20
             btn_y = cur_y
             label = f"Appoint Commander (Front {front.fid})"
-            pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
-            pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            action = {"appoint_commander": {"war_id": war_idx, "front_fid": front.fid}}
+
+            # Consult eligible
+            ok, reason = ACTIONS["appoint_commander"].eligible(game, house_name, action)
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+
+            if ok:
+                pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+                pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+                btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            else:
+                pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+                pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+                btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
             surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-                action={"appoint_commander": {"war_id": war_idx, "front_fid": front.fid, "char_id": None}},
-                state=RegionState.ENABLED,
+                action=action,
+                state=state,
+                reason=reason if not ok else "",
                 hint=label,
                 group="war_actions",
             ))
-            cur_y += BUTTON_H + 8
+            cur_y += BUTTON_H + 4
 
-    # ── Negotiate peace ───────────────────────────────────────────────────
-    for war in wars:
-        enemy = war.defender if war.aggressor == house_name else war.aggressor
+        # Negotiate peace button
         btn_x = margin_x + 20
         btn_w = w - 2 * PAD - 20
         btn_y = cur_y
         label = f"Negotiate Peace with House {enemy}"
-        pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
-        pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-        btn_txt = font_text.render(label, True, BUTTON_TEXT)
+        action = {"negotiate_peace": enemy}
+
+        # Consult eligible
+        ok, reason = ACTIONS["negotiate_peace"].eligible(game, house_name, action)
+        state = RegionState.ENABLED if ok else RegionState.DISABLED
+
+        if ok:
+            pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+            pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+        else:
+            pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+            pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+            btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
         surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
         regions.add(Region(
             rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-            action={"negotiate_peace": enemy},
-            state=RegionState.ENABLED,
+            action=action,
+            state=state,
+            reason=reason if not ok else "",
             hint=label,
             group="war_actions",
         ))

@@ -748,10 +748,14 @@ def _init_adjust_garrison(ctx, **kw) -> List[str]:
         if pop_available <= 0:
             return [f"Cannot muster: {province.name} population ({province.population}) is below the cost ({REGIMENT_POP_COST} per regiment)"]
         cap = game.capacity.get(house)
-        if cap is not None and "steel" in cap:
-            steel_available = int(cap["steel"] // REGIMENT_STEEL_COST)
+        has_steel_economy = any(e.kind == "ironworks" for e in game.ents_of(house))
+        if cap is not None and "steel" in cap and has_steel_economy:
+            steel_val = cap.get("steel", 0)
+            if steel_val == 0:
+                return [f"Cannot muster: House steel capacity ({steel_val}) is below the cost ({REGIMENT_STEEL_COST} per regiment)"]
+            steel_available = int(steel_val // REGIMENT_STEEL_COST)
             if steel_available <= 0:
-                return [f"Cannot muster: House steel capacity ({cap.get('steel', 0)}) is below the cost ({REGIMENT_STEEL_COST} per regiment)"]
+                return [f"Cannot muster: House steel capacity ({steel_val}) is below the cost ({REGIMENT_STEEL_COST} per regiment)"]
             max_raise = min(pop_available, steel_available)
         else:
             max_raise = pop_available
@@ -866,10 +870,14 @@ def _init_muster(ctx, province_pid=None, war_id=None, front_fid=None, count=1, *
         if pop_available <= 0:
             return [f"Cannot muster: {province.name} population ({province.population}) below cost ({REGIMENT_POP_COST}/regiment)"]
         cap = game.capacity.get(house)
-        if cap is not None and "steel" in cap:
-            steel_available = int(cap["steel"] // REGIMENT_STEEL_COST)
+        has_steel_economy = any(e.kind == "ironworks" for e in game.ents_of(house))
+        if cap is not None and "steel" in cap and has_steel_economy:
+            steel_val = cap.get("steel", 0)
+            if steel_val == 0:
+                return [f"Cannot muster: House steel capacity ({steel_val}) below cost ({REGIMENT_STEEL_COST}/regiment)"]
+            steel_available = int(steel_val // REGIMENT_STEEL_COST)
             if steel_available <= 0:
-                return [f"Cannot muster: House steel capacity ({cap.get('steel', 0)}) below cost ({REGIMENT_STEEL_COST}/regiment)"]
+                return [f"Cannot muster: House steel capacity ({steel_val}) below cost ({REGIMENT_STEEL_COST}/regiment)"]
             max_raise = min(pop_available, steel_available)
         else:
             max_raise = pop_available

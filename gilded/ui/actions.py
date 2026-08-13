@@ -700,9 +700,13 @@ def _muster_eligible(game, house, action):
     if pop_available <= 0:
         return False, f"Cannot muster: {province.name} population ({province.population}) below cost ({REGIMENT_POP_COST} per regiment)"
     if cap is not None and "steel" in cap:
-        steel_available = int(cap["steel"] // REGIMENT_STEEL_COST)
-        if steel_available <= 0:
-            steel_val = cap.get('steel', 0)
+        steel_val = cap.get("steel", 0)
+        has_steel_economy = any(e.kind == "ironworks" for e in game.ents_of(house))
+        if has_steel_economy and steel_val > 0:
+            steel_available = int(steel_val // REGIMENT_STEEL_COST)
+            if steel_available <= 0:
+                return False, f"Cannot muster: House steel ({steel_val}) below cost ({REGIMENT_STEEL_COST} per regiment)"
+        elif has_steel_economy and steel_val == 0:
             return False, f"Cannot muster: House steel ({steel_val}) below cost ({REGIMENT_STEEL_COST} per regiment)"
     if _no_attention(game, house):
         return False, _attention_reason()
