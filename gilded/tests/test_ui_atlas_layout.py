@@ -504,8 +504,9 @@ def test_glyphs_no_collision_with_labels():
 
 def test_atlas_transform_imported_in_test_atlas():
     """atlas_transform must be imported in test_ui_atlas.py."""
-    import gilded.tests.test_ui_atlas as t
-    assert hasattr(t, "atlas_transform")
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), "test_ui_atlas.py")).read()
+    assert "atlas_transform" in src
 
 
 # ── Rule 15: render never changes game ──────────────────────────────────────
@@ -650,18 +651,16 @@ def test_atlas_glyph_rects_function_exists():
 
 def test_no_multiply_8_in_test_atlas():
     """Rule 14: no * 8 in test_ui_atlas.py."""
-    import gilded.tests.test_ui_atlas as t
-    src = inspect.getsource(t)
-    import re
+    import os, re
+    src = open(os.path.join(os.path.dirname(__file__), "test_ui_atlas.py")).read()
     matches = re.findall(r"\*\s*8\b", src)
     assert len(matches) == 0, f"Found {len(matches)} instances of '* 8' in test_ui_atlas.py"
 
 
 def test_no_multiply_8_in_test_broadsheet():
     """Rule 14: no * 8 in test_ui_broadsheet.py."""
-    import gilded.tests.test_ui_broadsheet as t
-    src = inspect.getsource(t)
-    import re
+    import os, re
+    src = open(os.path.join(os.path.dirname(__file__), "test_ui_broadsheet.py"), encoding='utf-8').read()
     matches = re.findall(r"\*\s*8\b", src)
     assert len(matches) == 0, f"Found {len(matches)} instances of '* 8' in test_ui_broadsheet.py"
 

@@ -1148,7 +1148,7 @@ def test_D1_existing_charter_not_offered():
     Measured against enterprises the PLAYER owns. Seed 42 turn 0, house Vantrell:
     owned enterprises are estate@13 (Quillvess) and mill@18 (Ulmdale).
     Removing the uniqueness filter would cause estate@13 and mill@18 to reappear."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.tests._fixtures import _enterprises_view
     from gilded.ui.actions import _get_available_charters
     
     g, v = _enterprises_view(seed=42, turns=0)
@@ -1172,7 +1172,7 @@ def test_D3_header_shows_charter_count():
     
     Substitutes a wrapper for _font to capture every string passed to .render().
     Restores the real _font in a finally block."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.tests._fixtures import _enterprises_view
     from gilded.ui import broadsheet
     from gilded.ui.actions import _get_available_charters
     import sys
@@ -1218,7 +1218,7 @@ def test_D4_row_label_names_province_title_price():
     
     The label is f"{province_name} {title} — {cost:.0f} gold".
     Refused rows included. Collects drawn strings via _font wrapper."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.tests._fixtures import _enterprises_view
     from gilded.ui import broadsheet
     from gilded.ui.actions import _get_available_charters
     from gilded.enterprises import KIND_TITLES
@@ -1268,7 +1268,7 @@ def test_D7_no_charters_refuses_button():
     
     Seed 42 turn 0, house Vantrell: 9 charters available.
     Appending 9 Enterprise objects empties the list, then the button refuses."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.tests._fixtures import _enterprises_view
     from gilded.ui.actions import _get_available_charters
     from gilded.enterprises import Enterprise, KIND_TITLES
     
