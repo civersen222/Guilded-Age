@@ -120,12 +120,13 @@ def raise_regiments(game, house: str, province_pid: int, count: int) -> int:
         return 0
     n = min(int(count), province.population // REGIMENT_POP_COST)
     cap = game.capacity.get(house)
-    if cap is not None and "steel" in cap:
+    has_steel_economy = any(e.kind == "ironworks" for e in game.ents_of(house))
+    if cap is not None and "steel" in cap and has_steel_economy:
         n = min(n, int(cap["steel"] // REGIMENT_STEEL_COST))
     if n <= 0:
         return 0
     province.population -= n * REGIMENT_POP_COST
-    if cap is not None and "steel" in cap:
+    if cap is not None and "steel" in cap and has_steel_economy:
         cap["steel"] -= n * REGIMENT_STEEL_COST
     return n
 
