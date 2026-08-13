@@ -577,6 +577,16 @@ def _build_action_for_key(key, game, house, view=None):
                 war_idx = wars.index(wars[0])
                 return {"appoint_commander": {"war_id": war_idx, "front_fid": f.fid, "char_id": chars[0].id}}
         return None
+    elif key == "adjust_garrison":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        # Ensure there's an active war
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+        return {"adjust_garrison": True}
     return None
 
 

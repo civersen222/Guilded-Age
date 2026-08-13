@@ -172,6 +172,40 @@ def draw_war_tab(
         ))
         cur_y += BUTTON_H + 4
 
+    # ── Marriage proposals ────────────────────────────────────────────────
+    from gilded.ui.actions import ACTIONS
+    diplomacy_title = font_text.render("MARRIAGE PROPOSALS", True, INK)
+    surface.blit(diplomacy_title, (margin_x, cur_y))
+    cur_y += LINE_H + 2
+    for other_name in game.houses:
+        if other_name == house_name:
+            continue
+        btn_x = margin_x + 20
+        btn_w = w - 2 * PAD - 20
+        btn_y = cur_y
+        label = f"Propose Marriage to House {other_name}"
+        action = {"propose_marriage": other_name}
+        ok, reason = ACTIONS["propose_marriage"].eligible(game, house_name, action)
+        state = RegionState.ENABLED if ok else RegionState.DISABLED
+        if ok:
+            pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+            pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+        else:
+            pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+            pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+            btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
+        surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+        regions.add(Region(
+            rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
+            action=action,
+            state=state,
+            reason=reason if not ok else "",
+            hint=label,
+            group="war_actions",
+        ))
+        cur_y += BUTTON_H + 4
+
     # ── Active war controls ───────────────────────────────────────────────
     for war_idx, war in enumerate(wars):
         enemy = war.defender if war.aggressor == house_name else war.aggressor
@@ -197,7 +231,7 @@ def draw_war_tab(
             btn_w = w - 2 * PAD - 20
             btn_y = cur_y
             label = f"Muster (Front {front.fid})"
-            action = {"muster": province_pid}
+            action = {"muster": province_pid, "war_id": war_idx, "front_fid": front.fid}
 
             # Consult eligible
             from gilded.ui.actions import ACTIONS
@@ -274,7 +308,7 @@ def draw_war_tab(
             btn_w = w - 2 * PAD - 20
             btn_y = cur_y
             label = f"Appoint Commander (Front {front.fid})"
-            action = {"appoint_commander": {"war_id": war_idx, "front_fid": front.fid}}
+            action = {"appoint_commander": {"war_id": war_idx, "front_fid": front.fid, "char_id": None}}
 
             # Consult eligible
             ok, reason = ACTIONS["appoint_commander"].eligible(game, house_name, action)
@@ -310,6 +344,33 @@ def draw_war_tab(
         ok, reason = ACTIONS["negotiate_peace"].eligible(game, house_name, action)
         state = RegionState.ENABLED if ok else RegionState.DISABLED
 
+        if ok:
+            pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+            pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+        else:
+            pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
+            pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
+            btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
+        surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+        regions.add(Region(
+            rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
+            action=action,
+            state=state,
+            reason=reason if not ok else "",
+            hint=label,
+            group="war_actions",
+        ))
+        cur_y += BUTTON_H + 4
+
+        # Garrison button
+        btn_x = margin_x + 20
+        btn_w = w - 2 * PAD - 20
+        btn_y = cur_y
+        label = f"Adjust Garrison"
+        action = {"adjust_garrison": True}
+        ok, reason = ACTIONS["adjust_garrison"].eligible(game, house_name, action)
+        state = RegionState.ENABLED if ok else RegionState.DISABLED
         if ok:
             pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
             pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)

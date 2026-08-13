@@ -657,6 +657,26 @@ def _negotiate_peace_dispatch(game, house, view, action):
     return result or []
 
 
+def _adjust_garrison_eligible(game, house, action):
+    wars = [w for w in getattr(game, "wars", [])
+            if house in (w.aggressor, w.defender)]
+    if not wars:
+        return False, f"The {house} House has no active war to garrison"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _adjust_garrison_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    result = initiative(game, house, "adjust_garrison", executor)
+    return result or []
+
+
 def _propose_marriage_eligible(game, house, action):
     target = action.get("propose_marriage")
     if not target or target == house:
@@ -699,10 +719,14 @@ def _muster_eligible(game, house, action):
     cap = game.capacity.get(house)
     if pop_available <= 0:
         return False, f"Cannot muster: {province.name} population ({province.population}) below cost ({REGIMENT_POP_COST} per regiment)"
-    if cap is not None and "steel" in cap:
-        steel_available = int(cap["steel"] // REGIMENT_STEEL_COST)
+    has_steel_economy = any(e.kind == "ironworks" for e in game.ents_of(house))
+    if cap is not None and "steel" in cap and has_steel_economy:
+        steel_val = cap.get("steel", 0)
+        if steel_val == 0:
+            return False, f"Cannot muster: House steel capacity ({steel_val}) below cost ({REGIMENT_STEEL_COST} per regiment)"
+        steel_available = int(steel_val // REGIMENT_STEEL_COST)
         if steel_available <= 0:
-            return False, f"Cannot muster: House steel ({cap.get('steel', 0)}) below cost ({REGIMENT_STEEL_COST} per regiment)"
+            return False, f"Cannot muster: House steel capacity ({steel_val}) below cost ({REGIMENT_STEEL_COST} per regiment)"
     if _no_attention(game, house):
         return False, _attention_reason()
     return True, ""
@@ -712,10 +736,12 @@ def _muster_dispatch(game, house, view, action):
     from gilded.docket import initiative
     from gilded.ai import _executor_for
     province_pid = action["muster"]
+    war_id = action.get("war_id")
+    front_fid = action.get("front_fid")
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
-    result = initiative(game, house, "muster", executor, province_pid=province_pid, count=1)
+    result = initiative(game, house, "muster", executor, province_pid=province_pid, war_id=war_id, front_fid=front_fid, count=1)
     return result or []
 
 
@@ -796,7 +822,7 @@ def _appoint_commander_dispatch(game, house, view, action):
     c = action["appoint_commander"]
     war_id = c["war_id"]
     front_fid = c["front_fid"]
-    char_id = c["char_id"]
+    char_id = c.get("char_id")
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
@@ -1090,5 +1116,10 @@ ACTIONS: dict[str, PlayerAction] = {
         key="appoint_commander", label="Appoint Commander", domain="war",
         attention_cost=1, gold_cost=0,
         eligible=_appoint_commander_eligible, dispatch=_appoint_commander_dispatch,
+    ),
+    "adjust_garrison": PlayerAction(
+        key="adjust_garrison", label="Adjust Garrison", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_adjust_garrison_eligible, dispatch=_adjust_garrison_dispatch,
     ),
 }
