@@ -170,7 +170,7 @@ def draw_war_tab(
         cur_y += BUTTON_H + 4
 
     # ── Active war controls ───────────────────────────────────────────────
-    for war in wars:
+    for war_idx, war in enumerate(wars):
         enemy = war.defender if war.aggressor == house_name else war.aggressor
         side = "attacker" if war.aggressor == house_name else "defender"
 
@@ -239,7 +239,7 @@ def draw_war_tab(
             surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-                action={"commit": {"war_id": war.war_score, "front_fid": front.fid}},
+                action={"commit": {"war_id": war_idx, "front_fid": front.fid}},
                 state=RegionState.ENABLED,
                 hint=label,
                 group="war_actions",
@@ -257,7 +257,7 @@ def draw_war_tab(
             surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-                action={"appoint_commander": {"war_id": war.war_score, "front_fid": front.fid, "char_id": None}},
+                action={"appoint_commander": {"war_id": war_idx, "front_fid": front.fid, "char_id": None}},
                 state=RegionState.ENABLED,
                 hint=label,
                 group="war_actions",
