@@ -812,6 +812,9 @@ class BroadsheetView:
         # share picker state: None or {"direction": "buy"/"sell", "eid": int}
         self._share_picker: Optional[dict] = None
         self._share_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        # garrison picker state: None or True (picker open)
+        self._garrison_picker: Optional[bool] = None
+        self._garrison_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         self._action_messages: List[str] = []
         self.hover_pos: Tuple[int, int] | None = None
         self.regions = RegionSet()
@@ -2434,6 +2437,8 @@ class BroadsheetView:
                      content.x, content.y, content.w, content.h,
                      self.regions,
                      font_text=None)
+        if self._garrison_picker is not None:
+            self._draw_garrison_picker(surface, content)
 
     def _draw_court_picker(self, surface, content, report):
         """Draw the appointment picker for a vacant court seat using Regions."""
@@ -2479,6 +2484,79 @@ class BroadsheetView:
             y += btn_h + 4
 
     # --- clicking ------------------------------------------------------------
+
+    def _draw_garrison_picker(self, surface, content: pygame.Rect) -> None:
+        """Draw the garrison picker: one row per owned province with population to spare."""
+        from gilded.ui.widgets import font as _font, TYPE_TEXT, INK, CARD_BG, BUTTON_BG, BUTTON_EDGE, BUTTON_TEXT, DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE
+        from gilded.ui.house_tab import _draw_button
+        from gilded.fronts import REGIMENT_POP_COST
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        y = content.y + 100
+        btn_h = body.get_height() + 8
+        btn_w = content.w - 2 * PAD
+
+        # Background overlay
+        overlay_h = content.bottom - y - 20
+        if overlay_h > 0:
+            surface.fill(CARD_BG, (content.x, y, content.w, overlay_h))
+
+        surface.blit(body.render("Select province to raise regiments from:", True, INK), (content.x + PAD, y))
+        y += body.get_height() + 8
+
+        # Back button
+        back_rect = _draw_button(surface, "Cancel", content.x + PAD, y, btn_w, btn_h, True)
+        self.regions.add(Region(
+            rect=back_rect,
+            action={"close_garrison_picker": True},
+            hint="Cancel garrison adjustment",
+            group="picker",
+        ))
+        self._garrison_picker_hits.append((back_rect, {"close_garrison_picker": True}))
+        y += btn_h + 8
+
+        # Province rows
+        realm = self.game.realms[self.house]
+        provinces = [p for p in realm.provinces if p.owner == self.house]
+        for prov in provinces:
+            if y + btn_h > content.bottom:
+                break
+            pop_available = prov.population // REGIMENT_POP_COST
+            enabled = pop_available > 0
+            label = f"{prov.name} (pop {prov.population}, {pop_available} regiment{'s' if pop_available != 1 else ''})"
+            if not enabled:
+                label += f" — insufficient population (need {REGIMENT_POP_COST})"
+
+            if enabled:
+                btn_rect = _draw_button(surface, label, content.x + PAD, y, btn_w, btn_h, True)
+                action = {"adjust_garrison": {"province_pid": prov.pid, "count": 1}}
+            else:
+                btn_rect = pygame.Rect(content.x + PAD, y, btn_w, btn_h)
+                pygame.draw.rect(surface, DISABLED_BUTTON_BG, btn_rect)
+                pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, btn_rect, 1)
+                txt = body.render(label, True, DISABLED_BUTTON_EDGE)
+                surface.blit(txt, (btn_rect.x + 4, btn_rect.y + 4))
+                action = None
+
+            if action is not None:
+                self._garrison_picker_hits.append((btn_rect, action))
+                self.regions.add(Region(
+                    rect=btn_rect,
+                    action=action,
+                    state=RegionState.ENABLED,
+                    hint=label,
+                    group="picker",
+                ))
+            else:
+                self.regions.add(Region(
+                    rect=btn_rect,
+                    action=action or {"adjust_garrison": {"province_pid": prov.pid, "count": 1}},
+                    state=RegionState.DISABLED,
+                    reason=f"Insufficient population (need {REGIMENT_POP_COST})",
+                    hint=label,
+                    group="picker",
+                ))
+            y += btn_h + 4
 
     def handle_click(self, pos: Tuple[int, int]) -> Optional[dict]:
         region = self.regions.at(pos)
@@ -2528,22 +2606,32 @@ class BroadsheetView:
             if "close_director_picker" in action:
                 self._director_picker = None
                 self._director_picker_hits.clear()
-            if "buy_shares" in action and "char_id" not in action:
+            if "buy_shares" in action:
                 eid = action["buy_shares"]
-                self._share_picker = {"direction": "buy", "eid": eid}
-                self._share_picker_hits.clear()
-                return {"open_share_picker": eid}
-            if "sell_shares" in action and "char_id" not in action:
+                if isinstance(eid, int):
+                    self._share_picker = {"direction": "buy", "eid": eid}
+                    self._share_picker_hits.clear()
+                    return {"open_share_picker": eid}
+            if "sell_shares" in action:
                 eid = action["sell_shares"]
-                self._share_picker = {"direction": "sell", "eid": eid}
-                self._share_picker_hits.clear()
-                return {"open_share_picker": eid}
+                if isinstance(eid, int):
+                    self._share_picker = {"direction": "sell", "eid": eid}
+                    self._share_picker_hits.clear()
+                    return {"open_share_picker": eid}
             if "close_found_picker" in action:
                 self._found_picker = None
                 self._found_picker_hits.clear()
             if "close_share_picker" in action:
                 self._share_picker = None
                 self._share_picker_hits.clear()
+            if "open_garrison_picker" in action:
+                self._garrison_picker = True
+                self._garrison_picker_hits.clear()
+                return None
+            if "close_garrison_picker" in action:
+                self._garrison_picker = None
+                self._garrison_picker_hits.clear()
+                return None
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):

@@ -363,28 +363,16 @@ def draw_war_tab(
         ))
         cur_y += BUTTON_H + 4
 
-        # Garrison button
+        # Garrison button — opens picker
         btn_x = margin_x + 20
         btn_w = w - 2 * PAD - 20
         btn_y = cur_y
         label = f"Adjust Garrison"
-        action = {"adjust_garrison": True}
-        ok, reason = ACTIONS["adjust_garrison"].eligible(game, house_name, action)
-        state = RegionState.ENABLED if ok else RegionState.DISABLED
-        if ok:
-            pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
-            pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, BUTTON_TEXT)
-        else:
-            pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
-            pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
-        surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+        action = {"open_garrison_picker": True}
         regions.add(Region(
             rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
             action=action,
-            state=state,
-            reason=reason if not ok else "",
+            state=RegionState.ENABLED,
             hint=label,
             group="war_actions",
         ))
