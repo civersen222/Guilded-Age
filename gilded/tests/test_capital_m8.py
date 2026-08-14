@@ -17,35 +17,50 @@ from gilded.ui.broadsheet import BroadsheetView
 from gilded.chassis import GildedGame
 
 
-def _capital_view(seed=42, turns=0):
-    """Game + view on Enterprises tab, advanced `turns` turns."""
+def _house_with_most_enterprises(game):
+    """Return the house with the most enterprise stakes (by character ownership)."""
+    from collections import Counter
+    char_to_house = {}
+    for h in game.houses:
+        realm = game.realms[h]
+        for c in realm.characters:
+            char_to_house[c.id] = h
+    house_ent_count = Counter()
+    for e in game.enterprises:
+        for char_id in e.ledger:
+            h = char_to_house.get(char_id)
+            if h:
+                house_ent_count[h] += 1
+    return house_ent_count.most_common(1)[0][0]
+
+
+def _capital_view(seed=42, turns=1):
+    """Game + view on Enterprises tab, advanced `turns` turns, player = house with most enterprises."""
     from gilded import agenda
     pygame.init()
     g = GildedGame(seed=seed)
-    player = next(iter(g.houses))
-    g.houses[player].is_player = True
     for h in g.houses:
-        if h != player:
-            agenda.ensure_agenda(g, h)
+        agenda.ensure_agenda(g, h)
     for _ in range(turns):
         g.end_turn()
+    player = _house_with_most_enterprises(g)
+    g.houses[player].is_player = True
     v = BroadsheetView(g, player)
     v.active_tab = "Enterprises"
     return g, v
 
 
-def _war_view(seed=42, turns=0):
-    """Game + view on War tab, advanced `turns` turns."""
+def _war_view(seed=42, turns=1):
+    """Game + view on War tab, advanced `turns` turns, player = house with most enterprises."""
     from gilded import agenda
     pygame.init()
     g = GildedGame(seed=seed)
-    player = next(iter(g.houses))
-    g.houses[player].is_player = True
     for h in g.houses:
-        if h != player:
-            agenda.ensure_agenda(g, h)
+        agenda.ensure_agenda(g, h)
     for _ in range(turns):
         g.end_turn()
+    player = _house_with_most_enterprises(g)
+    g.houses[player].is_player = True
     v = BroadsheetView(g, player)
     v.active_tab = "War"
     return g, v
