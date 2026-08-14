@@ -1658,7 +1658,7 @@ class BroadsheetView:
         for a, b, pa, pb in rail_links:
             if y + BUTTON_H > rect.bottom:
                 break
-            action_dict = {"build_rail_a": a, "build_rail_b": b}
+            action_dict = {"build_rail": True, "build_rail_a": a, "build_rail_b": b}
             act = ACTIONS.get("build_rail")
             ok, reason = act.eligible(game, house, action_dict) if act else (False, "Unknown action")
 

@@ -144,3 +144,23 @@ def test_m7_actions_in_initiative():
     assert "acquire_minor" in INITIATIVES
     assert "build_rail" in INITIATIVES
     assert "tour_province" in INITIATIVES
+
+
+# ── PRESS TEST ──────────────────────────────────────────────────────────────
+
+def test_m7_build_rail_press_through_apply_action():
+    """Press build_rail through _apply_action from the drawn rail row — link.rail flips, treasury falls by RAIL_COST."""
+    from gilded.docket import RAIL_COST
+    pygame.init()
+    state = app.new_app_state(seed=42)
+    game = state.game
+    house = state.house
+    # find a rail-less link between two owned provinces
+    for link in game.atlas.links.values():
+        if not link.rail and link.a in [pid for pid, p in game.atlas.provinces.items() if p.owner == house] and link.b in [pid for pid, p in game.atlas.provinces.items() if p.owner == house]:
+            break
+    treasury_before = game.houses[house].treasury
+    action = {"build_rail": True, "build_rail_a": link.a, "build_rail_b": link.b}
+    app._apply_action(state, action)
+    assert link.rail, "link.rail must be True after pressing build_rail"
+    assert game.houses[house].treasury == treasury_before - RAIL_COST

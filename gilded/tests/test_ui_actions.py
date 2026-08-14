@@ -614,7 +614,7 @@ def _build_action_for_key(key, game, house, view=None):
         atlas = game.atlas
         for link in atlas.links.values():
             if not link.rail:
-                return {"build_rail_a": link.a, "build_rail_b": link.b}
+                return {"build_rail": True, "build_rail_a": link.a, "build_rail_b": link.b}
         return None
     elif key == "tour_province":
         atlas = game.atlas
