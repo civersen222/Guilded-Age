@@ -72,6 +72,10 @@ def test_steel_capacity_gates_the_muster():
     g = _game()
     a, _ = _adjacent_pair(g)
     prov = g.provinces_of(a)[0]
+    # Steel gating requires an ironworks enterprise
+    from gilded.enterprises import Enterprise
+    g.enterprises = [Enterprise(eid=1, kind="ironworks", name="Test Ironworks",
+                                house=a, province=prov.pid, tier=1)]
     g.capacity = {a: {"coal": 0.0, "steel": 3.0, "freight": 0.0}}
     raised = raise_regiments(g, a, prov.pid, 5)
     assert raised == 3.0 // 2 == 1  # REGIMENT_STEEL_COST = 2
