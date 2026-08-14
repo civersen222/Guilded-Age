@@ -758,7 +758,14 @@ def _adjust_garrison_dispatch(game, house, view, action):
     realm = game.realms[house]
     executor = _executor_for(game, realm, "war")
     game.attention[house] -= 1
-    result = initiative(game, house, "adjust_garrison", executor)
+    payload = action.get("adjust_garrison")
+    if isinstance(payload, dict):
+        province_pid = payload.get("province_pid")
+        count = payload.get("count", 1)
+        result = initiative(game, house, "adjust_garrison", executor,
+                            province_pid=province_pid, count=count)
+    else:
+        result = initiative(game, house, "adjust_garrison", executor)
     return result or []
 
 

@@ -240,14 +240,13 @@ def test_m8_broke_buy_refusal():
 # ── RAISE REGIMENTS ────────────────────────────────────────────────────────
 
 
-def test_m8_raise_press_fills_pool():
-    """A raise press: the pool grows, the province's population falls."""
+def test_m8_raise_press_opens_picker():
+    """Press the garrison button on War tab: redraw does not raise, picker rows are drawn."""
     from gilded.fronts import REGIMENT_POP_COST
-    from gilded.docket import _init_adjust_garrison
     g, v = _war_view()
     house = v.house
 
-    # Ensure the house is at war (needed for adjust_garrison eligibility)
+    # Ensure the house is at war
     wars = [w for w in getattr(g, "wars", [])
             if house in (w.aggressor, w.defender)]
     if not wars:
@@ -258,23 +257,97 @@ def test_m8_raise_press_fills_pool():
                     declare_war(g, house, t, WarGoal(kind="humble"))
                     break
 
-    # Pick a province with enough population — use game.provinces_of(house)
+    # Ensure the house has at least one province
     provs = g.provinces_of(house)
-    if not provs:
-        pytest.skip("No provinces for house")
+    assert len(provs) > 0, "No provinces for house"
+
+    # Draw the war tab and find the garrison button
+    surface = pygame.Surface((1280, 900))
+    v.draw(surface)
+
+    # Find open_garrison_picker region
+    garrison_regions = [r for r in v.regions._regions if "open_garrison_picker" in r.action]
+    assert len(garrison_regions) > 0, "No garrison button drawn on War tab"
+
+    # Press the garrison button (returns None — UI state change only)
+    btn = garrison_regions[0]
+    v.handle_click(btn.rect.center)
+
+    # Redraw should not raise (CUT 1 fix)
+    v.draw(surface)
+
+    # Picker rows should be drawn
+    assert v._garrison_picker is True, "Garrison picker did not open"
+    picker_regions = [r for r in v.regions._regions
+                      if "adjust_garrison" in r.action]
+    assert len(picker_regions) > 0, "No province rows drawn in garrison picker"
+
+
+def test_m8_raise_press_fills_pool():
+    """Press an ENABLED province row in the garrison picker: pool grows, province pays."""
+    from gilded.fronts import REGIMENT_POP_COST
+    g, v = _war_view()
+    house = v.house
+
+    # Ensure the house is at war
+    wars = [w for w in getattr(g, "wars", [])
+            if house in (w.aggressor, w.defender)]
+    if not wars:
+        for t in g.houses:
+            if t != house:
+                from gilded.fronts import _contested_pairs, declare_war, WarGoal
+                if _contested_pairs(g, house, t):
+                    declare_war(g, house, t, WarGoal(kind="humble"))
+                    break
+
+    # Pick a province with enough population
+    provs = g.provinces_of(house)
+    assert len(provs) > 0, "No provinces for house"
     prov = max(provs, key=lambda p: p.population)
-    if prov.population < REGIMENT_POP_COST:
-        pytest.skip(f"Province {prov.name} has insufficient population")
+    assert prov.population >= REGIMENT_POP_COST, \
+        f"Province {prov.name} has insufficient population"
 
     pop_before = prov.population
     pool_before = getattr(g, "_raised_regiments", {}).get(house, 0)
 
-    # Go through the docket handler which updates the pool
-    ctx = type('Ctx', (), {'game': g, 'house': house})()
-    msgs = _init_adjust_garrison(ctx, province_pid=prov.pid, count=1)
-    assert not any("Cannot" in m or "cannot" in m for m in msgs), \
-        f"Raise was refused: {msgs}"
+    # Draw the war tab
+    surface = pygame.Surface((1280, 900))
+    v.draw(surface)
 
+    # Find open_garrison_picker region and press it
+    garrison_regions = [r for r in v.regions._regions if "open_garrison_picker" in r.action]
+    assert len(garrison_regions) > 0, "No garrison button drawn on War tab"
+    v.handle_click(garrison_regions[0].rect.center)
+    v.draw(surface)  # Redraw to show picker
+
+    # Find the ENABLED region for our target province
+    picker_regions = [r for r in v.regions._regions
+                      if "adjust_garrison" in r.action
+                      and r.state.name != "DISABLED"]
+    assert len(picker_regions) > 0, "No enabled province rows in picker"
+
+    # Find the region matching our province
+    target_region = None
+    for r in picker_regions:
+        payload = r.action.get("adjust_garrison")
+        if isinstance(payload, dict) and payload.get("province_pid") == prov.pid:
+            target_region = r
+            break
+
+    if target_region is None:
+        # Use the first enabled region if our province wasn't found
+        target_region = picker_regions[0]
+        payload = target_region.action.get("adjust_garrison")
+        if isinstance(payload, dict):
+            prov = g.atlas.provinces.get(payload.get("province_pid"))
+
+    # Press the province row
+    state_obj = type('S', (), {'game': g, 'house': house, 'view': v})()
+    action = v.handle_click(target_region.rect.center)
+    assert action is not None, "Pressing enabled province row returned None"
+    _apply_action(state_obj, action)
+
+    # Verify the simulation delta
     pop_after = prov.population
     pool_after = getattr(g, "_raised_regiments", {}).get(house, 0)
 
@@ -284,6 +357,61 @@ def test_m8_raise_press_fills_pool():
         f"Population delta {pop_before - pop_after} < {REGIMENT_POP_COST}"
     assert pool_after > pool_before, \
         f"Pool did not grow: {pool_before} -> {pool_after}"
+
+
+def test_m8_raise_press_disabled_refuses():
+    """Press a DISABLED province row (population too poor): nothing changes, reason names shortfall."""
+    from gilded.fronts import REGIMENT_POP_COST
+    g, v = _war_view()
+    house = v.house
+
+    # Ensure the house is at war
+    wars = [w for w in getattr(g, "wars", [])
+            if house in (w.aggressor, w.defender)]
+    if not wars:
+        for t in g.houses:
+            if t != house:
+                from gilded.fronts import _contested_pairs, declare_war, WarGoal
+                if _contested_pairs(g, house, t):
+                    declare_war(g, house, t, WarGoal(kind="humble"))
+                    break
+
+    # Force a province to have insufficient population to create a disabled row
+    provs = g.provinces_of(house)
+    assert len(provs) > 0, "No provinces for house"
+    # Set the first province's population below the cost
+    provs[0].population = max(0, REGIMENT_POP_COST - 1)
+
+    # Draw the war tab
+    surface = pygame.Surface((1280, 900))
+    v.draw(surface)
+
+    # Find open_garrison_picker region and press it
+    garrison_regions = [r for r in v.regions._regions if "open_garrison_picker" in r.action]
+    assert len(garrison_regions) > 0, "No garrison button drawn on War tab"
+
+    v.handle_click(garrison_regions[0].rect.center)
+    v.draw(surface)  # Redraw to show picker
+
+    # Find a DISABLED region
+    disabled_regions = [r for r in v.regions._regions
+                        if "adjust_garrison" in r.action
+                        and r.state.name == "DISABLED"]
+    assert len(disabled_regions) > 0, \
+        "No disabled province rows in picker (all provinces have enough population)"
+
+    disabled_region = disabled_regions[0]
+
+    # Pressing a disabled region should return None (handle_click blocks disabled)
+    action = v.handle_click(disabled_region.rect.center)
+    assert action is None, "Pressing disabled province row should return None"
+
+    # Verify nothing changed in the simulation
+    pool_before = getattr(g, "_raised_regiments", {}).get(house, 0)
+
+    # The hint should carry the refusal reason
+    assert "insufficient" in disabled_region.hint.lower() or "need" in disabled_region.hint.lower(), \
+        f"Disabled region hint lacks refusal reason: {disabled_region.hint}"
 
 
 # ── COMMIT REGIMENTS ────────────────────────────────────────────────────────

@@ -2516,8 +2516,7 @@ class BroadsheetView:
         y += btn_h + 8
 
         # Province rows
-        realm = self.game.realms[self.house]
-        provinces = [p for p in realm.provinces if p.owner == self.house]
+        provinces = self.game.provinces_of(self.house)
         for prov in provinces:
             if y + btn_h > content.bottom:
                 break
