@@ -305,6 +305,7 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
 
     # Candidate buttons — in succession order
     from gilded.peerage import _get_loyalty
+    from gilded.ui.court_actions import _designate_heir_eligible
     for candidate in candidates:
         if y + btn_h > content.bottom:
             break
@@ -316,13 +317,26 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
 
         needed_w = body.size(row_text)[0] + 24
         row_w = max(btn_w, needed_w)
-        btn_rect = _draw_button(surface, row_text, PAD, y, row_w, btn_h, True)
-        view.regions.add(Region(
-            rect=btn_rect,
-            action={"designate_heir": True, "char_id": candidate.id},
-            hint=row_text,
-            group="heir_picker",
-        ))
+        ok, reason = _designate_heir_eligible(game, house, {
+            "char_id": candidate.id
+        })
+        btn_rect = _draw_button(surface, row_text, PAD, y, row_w, btn_h, ok)
+        if ok:
+            view.regions.add(Region(
+                rect=btn_rect,
+                action={"designate_heir": True, "char_id": candidate.id},
+                hint=row_text,
+                group="heir_picker",
+            ))
+        else:
+            view.regions.add(Region(
+                rect=btn_rect,
+                action={"designate_heir": True, "char_id": candidate.id},
+                state=RegionState.DISABLED,
+                reason=reason,
+                hint=row_text,
+                group="heir_picker",
+            ))
         y += btn_h + 2
 
     return y

@@ -222,12 +222,12 @@ def test_start_scheme_refused_when_no_attention():
 
 
 def test_open_scheme_picker_refused_when_no_attention():
-    """Opening the scheme picker is also refused when attention is spent."""
+    """Opening the scheme picker is unconditional — it spends no attention."""
     game = _game_with_schemes()
     game.attention["Vantrell"] = 0
     ok, reason = _open_scheme_picker_eligible(game, "Vantrell", {})
-    assert ok is False
-    assert reason
+    assert ok is True, "Opening the picker should not be refused"
+    assert reason == "", "Unconditional opener carries no reason"
 
 
 def test_refusal_reason_is_not_empty():
@@ -261,14 +261,33 @@ def test_dispatch_refused_start_scheme_changes_nothing():
 
 
 def test_refused_open_scheme_picker_changes_nothing():
-    """Pressing a refused open_scheme_picker changes nothing."""
+    """With attention spent: picker OPENS, rows are DISABLED with reason,
+    and pressing a row starts nothing — scheme_mgr holds exactly what it held before."""
     game = _game_with_schemes()
     game.attention["Vantrell"] = 0
     before_count = len(game.scheme_mgr.schemes)
-    result = _open_scheme_picker_dispatch(game, "Vantrell", None, {})
+    view, surf = _make_view(game, "Vantrell")
+    # Open picker — should be allowed (opens unconditionally)
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    assert len(btn_regions) >= 1
+    _press(view, btn_regions[0].rect.center)
+    # Redraw — picker should be open
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    assert view._scheme_picker is True
+    # Find start_scheme rows
+    scheme_regions = [r for r in view.regions._regions if r.action.get("start_scheme")]
+    assert len(scheme_regions) >= 1, "Should have at least one start_scheme row"
+    # All rows should be DISABLED with a reason
+    for r in scheme_regions:
+        assert r.state == RegionState.DISABLED, f"Row should be DISABLED: {r.hint}"
+        assert r.reason, f"DISABLED row should carry a reason: {r.hint}"
+    # Pressing a row starts nothing
+    if scheme_regions:
+        _press(view, scheme_regions[0].rect.center)
     after_count = len(game.scheme_mgr.schemes)
-    assert after_count == before_count
-    assert result == []
+    assert after_count == before_count, "Pressing a DISABLED row should start nothing"
 
 
 # ------------------------------------------------------------------ R8: all 8 sub-claims stand
@@ -449,21 +468,151 @@ def test_press_row_of_other_kind():
 
 
 def test_attention_spent_rows_drawn_disabled_with_reason():
-    """Attention spent: the scheme picker button is DISABLED, and rows that start plots are refused with reasons."""
+    """Attention spent: the scheme picker button is ENABLED (opening costs nothing),
+    but picker rows are DISABLED with a reason."""
     game = _game_with_schemes()
     game.attention["Vantrell"] = 0  # spend attention
     view, surf = _make_view(game, "Vantrell")
-    # The open_scheme_picker button should be DISABLED when attention is spent
+    # The open_scheme_picker button should be ENABLED (opening costs nothing)
     regions = _find_intrigue_regions(view)
     btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
     assert len(btn_regions) >= 1, "Should have open_scheme_picker button"
     for r in btn_regions:
-        assert r.state == RegionState.DISABLED, "Picker button should be DISABLED when attention is spent"
-        assert r.reason, "DISABLED button should carry a reason"
-    # start_scheme rows are also refused when attention is spent
+        assert r.state == RegionState.ENABLED, "Picker button should be ENABLED — opening costs nothing"
+    # Open the picker to see the rows
+    _press(view, btn_regions[0].rect.center)
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    # start_scheme rows should be DISABLED with a reason
+    scheme_regions = [r for r in view.regions._regions if r.action.get("start_scheme")]
+    assert len(scheme_regions) >= 1, "Should have at least one start_scheme row"
+    for r in scheme_regions:
+        assert r.state == RegionState.DISABLED, f"Row should be DISABLED: {r.hint}"
+        assert r.reason, f"DISABLED row should carry a reason: {r.hint}"
+    # start_scheme eligible also returns refused when attention is spent
     ok, reason = _start_scheme_eligible(game, "Vantrell", {
         "target_id": game.realms["Karsgate"].ruler.id,
         "scheme_type": "coup",
     })
     assert ok is False, "start_scheme should be refused when attention is spent"
     assert reason, "Refusal should carry a reason"
+
+
+# ------------------------------------------------------------------ New tests for STAGE 9C
+
+def test_scheme_button_enabled_when_attention_spent():
+    """Attention spent: the 'Start Scheme' button is drawn ENABLED, and pressing it opens the picker on the redraw."""
+    game = _game_with_schemes()
+    game.attention["Vantrell"] = 0
+    view, surf = _make_view(game, "Vantrell")
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    assert len(btn_regions) >= 1, "Should have open_scheme_picker button"
+    btn = btn_regions[0]
+    assert btn.state == RegionState.ENABLED, "Button should be ENABLED when attention is spent"
+    # Press the button center
+    action = _press(view, btn.rect.center)
+    assert action is not None
+    assert "open_scheme_picker" in action
+    # Redraw — picker should be open
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    assert view._scheme_picker is True, "Picker should be open after pressing button"
+
+
+def test_scheme_picker_rows_disabled_when_attention_spent():
+    """Attention spent: every plot row in the opened picker is DISABLED and each carries a non-empty reason."""
+    game = _game_with_schemes()
+    game.attention["Vantrell"] = 0
+    view, surf = _make_view(game, "Vantrell")
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    _press(view, btn_regions[0].rect.center)
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    scheme_regions = [r for r in view.regions._regions if r.action.get("start_scheme")]
+    assert len(scheme_regions) >= 1, "Should have at least one start_scheme row"
+    for r in scheme_regions:
+        assert r.state == RegionState.DISABLED, f"Row should be DISABLED: {r.hint}"
+        assert r.reason, f"DISABLED row should carry a non-empty reason: {r.hint}"
+
+
+def test_scheme_picker_row_press_starts_nothing_when_attention_spent():
+    """Attention spent: pressing a plot row starts nothing — scheme_mgr holds exactly what it held before."""
+    game = _game_with_schemes()
+    game.attention["Vantrell"] = 0
+    view, surf = _make_view(game, "Vantrell")
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    _press(view, btn_regions[0].rect.center)
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    scheme_regions = [r for r in view.regions._regions if r.action.get("start_scheme")]
+    assert len(scheme_regions) >= 1
+    before_count = len(game.scheme_mgr.schemes)
+    _press(view, scheme_regions[0].rect.center)
+    after_count = len(game.scheme_mgr.schemes)
+    assert after_count == before_count, "Pressing a DISABLED row should start nothing"
+
+
+def test_scheme_row_starts_when_attention_restored():
+    """Attention restored: the same row now starts its scheme, proving rows refuse for the reason claimed and not permanently."""
+    game = _game_with_schemes()
+    game.attention["Vantrell"] = 0
+    view, surf = _make_view(game, "Vantrell")
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    _press(view, btn_regions[0].rect.center)
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    scheme_regions = [r for r in view.regions._regions if r.action.get("start_scheme")]
+    assert len(scheme_regions) >= 1
+    row = scheme_regions[0]
+    # With no attention, pressing starts nothing
+    before_count = len(game.scheme_mgr.schemes)
+    _press(view, row.rect.center)
+    assert len(game.scheme_mgr.schemes) == before_count, "Should start nothing with attention=0"
+    # Restore attention
+    game.attention["Vantrell"] = 3
+    # Redraw to update row states
+    surf3 = pygame.Surface((1280, 900))
+    view.draw(surf3)
+    # Find the same row (same target_id and scheme_type)
+    action = row.action
+    matching = [r for r in view.regions._regions
+                if r.action.get("target_id") == action.get("target_id")
+                and r.action.get("scheme_type") == action.get("scheme_type")]
+    assert len(matching) >= 1, "Should have a matching row after redraw"
+    new_row = matching[0]
+    assert new_row.state == RegionState.ENABLED, "Row should be ENABLED when attention is restored"
+    # Press it — should start a scheme
+    _press(view, new_row.rect.center)
+    after_count = len(game.scheme_mgr.schemes)
+    assert after_count == before_count + 1, "Should start a scheme when attention is restored"
+
+
+def test_heir_picker_opens_with_attention_spent():
+    """The heir picker opens with attention spent, and its designate rows are the things drawn refused."""
+    game = _game_with_schemes()
+    game.attention["Vantrell"] = 0
+    view, surf = _make_view(game, "Vantrell")
+    # Find open_heir_picker button
+    heir_btn_regions = [r for r in view.regions._regions if "open_heir_picker" in r.action]
+    assert len(heir_btn_regions) >= 1, "Should have open_heir_picker button"
+    btn = heir_btn_regions[0]
+    assert btn.state == RegionState.ENABLED, "Heir picker button should be ENABLED when attention is spent"
+    # Press to open
+    action = _press(view, btn.rect.center)
+    assert action is not None
+    assert "open_heir_picker" in action
+    # Redraw — picker should be open
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    assert view._heir_picker is True, "Heir picker should be open after pressing button"
+    # Find designate_heir rows
+    designate_regions = [r for r in view.regions._regions if r.action.get("designate_heir")]
+    assert len(designate_regions) >= 1, "Should have at least one designate_heir row"
+    # All rows should be DISABLED with a reason when attention is spent
+    for r in designate_regions:
+        assert r.state == RegionState.DISABLED, f"Designate row should be DISABLED: {r.hint}"
+        assert r.reason, f"DISABLED designate row should carry a reason: {r.hint}"

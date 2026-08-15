@@ -795,8 +795,6 @@ def _start_scheme_dispatch(game, house, view, action):
 
 
 def _open_scheme_picker_eligible(game, house, action):
-    if _no_attention(game, house):
-        return False, _attention_reason()
     return True, ""
 
 

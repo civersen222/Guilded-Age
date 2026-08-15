@@ -340,12 +340,6 @@ def _clear_heir_dispatch(game, house, view, action):
 
 def _open_heir_picker_eligible(game, house, action):
     """Check if the house can open the heir designation picker."""
-    if game.attention.get(house, 0) <= 0:
-        return False, "You have no attention left this turn."
-
-    if getattr(game, "court_verbs_used", 0) >= 1:
-        return False, "You have already used your court action this turn."
-
     return True, ""
 
 
