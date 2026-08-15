@@ -1165,10 +1165,6 @@ def initiative(game, house_name: str, verb: str, executor, **kwargs) -> List[str
     if verb not in INITIATIVES:
         return [f"No such initiative '{verb}'"]
     domain, handler = INITIATIVES[verb]
-    # Resolve Realm executor to a Character
-    if hasattr(executor, 'ruler') and hasattr(executor, 'characters'):
-        # executor is a Realm — pick the ruler as the acting character
-        executor = executor.ruler
     msgs: List[str] = []
     chance = 0.5 + executor.get_effective_stat(_domain_stat(domain)) / 40.0
     chance = max(0.2, min(0.95, chance))

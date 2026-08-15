@@ -11,10 +11,18 @@ Covers all 8 aspects of assertion 1:
   8. All 8 sub-claims stand
 """
 
+import os
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
 import random
 
+import pygame
 from gilded.chassis import GildedGame
+from gilded.houses import House
 from gilded.society.realm import create_house_realm
+from gilded.society.ideology import IdeologicalTide
+from gilded.saga.director import Director
+from gilded.world import generate_atlas
 from gilded.society.schemes import SchemeManager
 from gilded.society.characters import SocietyState
 from gilded.docket import initiative
@@ -22,30 +30,17 @@ from gilded.ui.actions import (
     ACTIONS, _start_scheme_eligible, _start_scheme_dispatch,
     _open_scheme_picker_eligible, _open_scheme_picker_dispatch,
 )
+from gilded.ui.broadsheet import BroadsheetView
+from gilded.ui.widgets import RegionState
 
 
 # ------------------------------------------------------------------ helpers
 
 def _game_with_schemes():
     """Build a game with two houses and a scheme manager."""
-    random.seed(42)
-    rng = random.Random(42)
-    society = SocietyState(rng)
-    ra = create_house_realm("Vantrell", society)
-    rb = create_house_realm("Karsgate", society)
-    realms = {"Vantrell": ra, "Karsgate": rb}
-
-    game = GildedGame.__new__(GildedGame)
-    game.realms = realms
-    game.houses = ["Vantrell", "Karsgate"]
-    game.scheme_mgr = SchemeManager()
-    game.attention = {"Vantrell": 3, "Karsgate": 3}
-    game.turn = 0
-    game.legitimacy = {"Vantrell": 50, "Karsgate": 50}
-    game.treasury = {"Vantrell": 1000, "Karsgate": 1000}
-    game.gold = {"Vantrell": 1000, "Karsgate": 1000}
-    game.press = {"Vantrell": 0, "Karsgate": 0}
-    game.rng = rng
+    game = GildedGame(seed=42)
+    game.attention = {h: 3 for h in game.houses}
+    game.press = {h: 0 for h in game.houses}
     return game
 
 
@@ -120,7 +115,7 @@ def test_start_scheme_goes_through_initiative():
     ra = game.realms["Vantrell"]
     rb = game.realms["Karsgate"]
     target = rb.ruler
-    executor = ra  # press role
+    executor = ra.ruler  # executor must be a Character
 
     before_count = len(game.scheme_mgr.schemes)
     result = initiative(game, "Vantrell", "start_scheme", executor,
@@ -137,7 +132,7 @@ def test_start_scheme_agent_is_from_played_house():
     ra = game.realms["Vantrell"]
     rb = game.realms["Karsgate"]
     target = rb.ruler
-    executor = ra
+    executor = ra.ruler  # executor must be a Character
 
     initiative(game, "Vantrell", "start_scheme", executor,
                target=target, scheme_type="assassination", target_house="Karsgate")
@@ -152,7 +147,7 @@ def test_row_decides_target_coup():
     game = _game_with_schemes()
     rb = game.realms["Karsgate"]
     target = rb.ruler
-    executor = game.realms["Vantrell"]
+    executor = game.realms["Vantrell"].ruler
 
     initiative(game, "Vantrell", "start_scheme", executor,
                target=target, scheme_type="coup", target_house="Karsgate")
@@ -165,7 +160,7 @@ def test_row_decides_kind_assassination():
     game = _game_with_schemes()
     rb = game.realms["Karsgate"]
     target = rb.ruler
-    executor = game.realms["Vantrell"]
+    executor = game.realms["Vantrell"].ruler
 
     initiative(game, "Vantrell", "start_scheme", executor,
                target=target, scheme_type="assassination", target_house="Karsgate")
@@ -179,7 +174,7 @@ def test_two_distinct_targets_both_types():
     rb = game.realms["Karsgate"]
     target1 = rb.ruler
     target2 = rb.characters[10]
-    executor = game.realms["Vantrell"]
+    executor = game.realms["Vantrell"].ruler
 
     initiative(game, "Vantrell", "start_scheme", executor,
                target=target1, scheme_type="coup", target_house="Karsgate")
@@ -295,7 +290,7 @@ def test_all_eight_intrigue_claims_stand():
     assert s_outgoing.target.name is not None
 
     # R3: press path through initiative
-    executor = ra
+    executor = ra.ruler
     target = rb.ruler
     initiative(game, "Vantrell", "start_scheme", executor,
                target=target, scheme_type="coup", target_house="Karsgate")
@@ -321,3 +316,154 @@ def test_all_eight_intrigue_claims_stand():
 
     # R8: all 8 claims verified
     assert True
+
+
+# ------------------------------------------------------------------ Press tests through the drawn page
+
+
+def _make_view(game, house=None, size=(1280, 900)):
+    """Create a BroadsheetView, switch to House tab, and draw."""
+    view = BroadsheetView(game, house or list(game.houses.keys())[0])
+    view.active_tab = "House"
+    surf = pygame.Surface(size)
+    view.draw(surf)
+    return view, surf
+
+
+def _find_intrigue_regions(view):
+    """Find intrigue regions from the view's region set."""
+    return [r for r in view.regions._regions if r.group == "intrigue"]
+
+
+def _press(view, pos):
+    """Simulate a press at the given position and return the action dict."""
+    return view.handle_click(pos)
+
+
+def test_start_scheme_button_drawn_with_no_plots():
+    """The 'Start Scheme' control is drawn on a page with NO plot running."""
+    game = _game_with_schemes()
+    game.scheme_mgr.schemes.clear()  # no plots
+    view, surf = _make_view(game, "Vantrell")
+    regions = _find_intrigue_regions(view)
+    # Should have the open_scheme_picker button
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    assert len(btn_regions) >= 1, "Start Scheme button should be drawn even with no plots"
+
+
+def test_press_start_scheme_button_opens_picker():
+    """Pressing the 'Start Scheme' button rect.center opens the picker on redraw."""
+    game = _game_with_schemes()
+    view, surf = _make_view(game, "Vantrell")
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    assert len(btn_regions) >= 1
+    btn = btn_regions[0]
+    # Press the button center
+    action = _press(view, btn.rect.center)
+    assert action is not None
+    assert "open_scheme_picker" in action
+    # Redraw — picker should be open
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    assert view._scheme_picker is True
+
+
+def test_press_enabled_row_starts_scheme():
+    """Pressing an enabled plot row starts a scheme: scheme_mgr holds one it did not hold before."""
+    game = _game_with_schemes()
+    rb = game.realms["Karsgate"]
+    view, surf = _make_view(game, "Vantrell")
+    # Open picker first
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    _press(view, btn_regions[0].rect.center)
+    # Redraw to show picker
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    # Find start_scheme regions
+    scheme_regions = [r for r in view.regions._regions if r.action.get("start_scheme")]
+    assert len(scheme_regions) >= 1, "Should have at least one start_scheme row in the picker"
+    row = scheme_regions[0]
+    before_count = len(game.scheme_mgr.schemes)
+    # Press the row
+    action = _press(view, row.rect.center)
+    assert action is not None
+    assert "start_scheme" in action
+    after_count = len(game.scheme_mgr.schemes)
+    assert after_count == before_count + 1
+    s = game.scheme_mgr.schemes[-1]
+    ra = game.realms["Vantrell"]
+    assert s.agent in ra.characters, "Agent should belong to the played House"
+
+
+def test_press_different_row_different_target():
+    """A second press on a different row starts a scheme against a different target."""
+    game = _game_with_schemes()
+    game.attention["Vantrell"] = 5  # enough attention for multiple schemes
+    view, surf = _make_view(game, "Vantrell")
+    # Open picker
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    _press(view, btn_regions[0].rect.center)
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    scheme_regions = [r for r in view.regions._regions if r.action.get("start_scheme")]
+    # Each target gets 2 rows (coup + assassination), so we need 4+ rows for 2 distinct targets
+    assert len(scheme_regions) >= 4, "Need at least 4 rows (2 targets × 2 kinds)"
+    # Pick rows for different targets (indices 0 and 2 = first target coup, second target coup)
+    r1 = scheme_regions[0]
+    r2 = scheme_regions[2]
+    assert r1.action["target_id"] != r2.action["target_id"], "Rows should have different targets"
+    # Press first row
+    _press(view, r1.rect.center)
+    s1 = game.scheme_mgr.schemes[-1]
+    # Press second row (different target)
+    _press(view, r2.rect.center)
+    s2 = game.scheme_mgr.schemes[-1]
+    assert s2.target.id != s1.target.id, "Different row should target a different character"
+
+
+def test_press_row_of_other_kind():
+    """A press on a row of the other kind starts the other scheme_type."""
+    game = _game_with_schemes()
+    game.attention["Vantrell"] = 5
+    view, surf = _make_view(game, "Vantrell")
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    _press(view, btn_regions[0].rect.center)
+    surf2 = pygame.Surface((1280, 900))
+    view.draw(surf2)
+    scheme_regions = [r for r in view.regions._regions if r.action.get("start_scheme")]
+    # Find coup and assassination rows
+    coup_rows = [r for r in scheme_regions if r.action.get("scheme_type") == "coup"]
+    assas_rows = [r for r in scheme_regions if r.action.get("scheme_type") == "assassination"]
+    assert len(coup_rows) >= 1, "Should have at least one coup row"
+    assert len(assas_rows) >= 1, "Should have at least one assassination row"
+    # Press coup row
+    _press(view, coup_rows[0].rect.center)
+    assert game.scheme_mgr.schemes[-1].scheme_type == "coup"
+    # Press assassination row
+    _press(view, assas_rows[0].rect.center)
+    assert game.scheme_mgr.schemes[-1].scheme_type == "assassination"
+
+
+def test_attention_spent_rows_drawn_disabled_with_reason():
+    """Attention spent: the scheme picker button is DISABLED, and rows that start plots are refused with reasons."""
+    game = _game_with_schemes()
+    game.attention["Vantrell"] = 0  # spend attention
+    view, surf = _make_view(game, "Vantrell")
+    # The open_scheme_picker button should be DISABLED when attention is spent
+    regions = _find_intrigue_regions(view)
+    btn_regions = [r for r in regions if "open_scheme_picker" in r.action]
+    assert len(btn_regions) >= 1, "Should have open_scheme_picker button"
+    for r in btn_regions:
+        assert r.state == RegionState.DISABLED, "Picker button should be DISABLED when attention is spent"
+        assert r.reason, "DISABLED button should carry a reason"
+    # start_scheme rows are also refused when attention is spent
+    ok, reason = _start_scheme_eligible(game, "Vantrell", {
+        "target_id": game.realms["Karsgate"].ruler.id,
+        "scheme_type": "coup",
+    })
+    assert ok is False, "start_scheme should be refused when attention is spent"
+    assert reason, "Refusal should carry a reason"

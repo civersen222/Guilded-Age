@@ -2462,24 +2462,24 @@ class BroadsheetView:
                 lines.append(f"⚠ {s.agent.name} plots a {s.scheme_type} against {s.target.name}")
             elif agent_is_ours:
                 lines.append(f"→ {s.agent.name} schemes against {s.target.name} ({s.scheme_type})")
-        if not lines:
-            return
-        # Draw section
+        # Draw section — button is unconditional (conduct), lines are conditional (sight)
         y = content.bottom - 20
-        section_h = len(lines) * (body.get_height() + 2) + 30
+        header_h = body.get_height() + 4
+        btn_h = body.get_height() + 8
+        line_h = body.get_height() + 2
+        section_h = len(lines) * line_h + header_h + btn_h
         section_y = max(content.y + 10, y - section_h)
         # Header
         header = body.render("INTRIGUE", True, TONES.get("bad", INK))
         surface.blit(header, (PAD, section_y))
-        sy = section_y + body.get_height() + 4
+        sy = section_y + header_h
         for line in lines:
             if sy > content.bottom - 10:
                 break
             color = TONES.get("warn", INK) if line.startswith("⚠") else INK
             surface.blit(body.render(line, True, color), (PAD, sy))
-            sy += body.get_height() + 2
-        # Button to open scheme picker
-        btn_h = body.get_height() + 8
+            sy += line_h
+        # Button to open scheme picker — always drawn (conduct, not sight)
         btn_w = 160
         if sy + btn_h <= content.bottom - 10:
             ok, reason = _open_scheme_picker_eligible(game, house, {})
@@ -2631,6 +2631,7 @@ class BroadsheetView:
         """Draw the scheme picker overlay with target+kind buttons."""
         from gilded.ui.widgets import INK, Region, RegionState, TONES
         from gilded.ui.house_tab import _draw_button
+        from gilded.ui.actions import _start_scheme_eligible
         PAD = 12
         body = _font(TYPE_TEXT)
         btn_h = body.get_height() + 8
@@ -2770,11 +2771,19 @@ class BroadsheetView:
             if "open_scheme_picker" in action:
                 self._scheme_picker = True
                 self._scheme_picker_hits.clear()
-                return None
+                return action
             if "close_scheme_picker" in action:
                 self._scheme_picker = None
                 self._scheme_picker_hits.clear()
                 return None
+            if "start_scheme" in action:
+                from gilded.ui.actions import ACTIONS
+                act = ACTIONS.get("start_scheme")
+                if act is not None:
+                    ok, _ = act.eligible(self.game, self.house, action)
+                    if ok:
+                        act.dispatch(self.game, self.house, self, action)
+                return action
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):
