@@ -215,7 +215,7 @@ def test_no_treasury_arithmetic_outside_houses():
 # ── Rule 11 — label set is closed ─────────────────────────────────────
 
 def test_treasury_labels_count():
-    assert len(TREASURY_LABELS) == 12
+    assert len(TREASURY_LABELS) == 14
 
 
 def test_treasury_labels_contains_expected():
@@ -223,6 +223,7 @@ def test_treasury_labels_contains_expected():
         "dividends", "trade", "expansion", "strike buyoff", "heir allowance",
         "compensation", "railway", "charter", "province purchase",
         "reparations paid", "reparations received", "share purchase",
+        "honorarium", "investment",
     }
     assert TREASURY_LABELS == expected
 
@@ -295,13 +296,13 @@ def test_refactor_value_neutral_seed7():
     for _ in range(12):
         game.end_turn()
     expected = {
-        "Ashworth": 3053.033633,
-        "Brandtner": 2192.336897,
-        "Duval-Corse": 2741.886954,
-        "Ferrenholt": 3573.843487,  # L4.7 re-baselined: removed COAL_STRIKE_PRICE global
-        "Karsgate": 917.255057,    # L4.7 re-baselined: removed COAL_STRIKE_PRICE global
-        "Mordaine": 2434.660956,
-        "Vantrell": 1833.962996,
+        "Ashworth": 1933.773619,
+        "Brandtner": 1506.956092,
+        "Duval-Corse": 2754.094453,
+        "Ferrenholt": 3565.138609,  # L4.7 re-baselined: removed COAL_STRIKE_PRICE global
+        "Karsgate": 2740.954681,    # L4.7 re-baselined: removed COAL_STRIKE_PRICE global
+        "Mordaine": 3069.005935,
+        "Vantrell": 1686.180223,
     }
     for name, val in expected.items():
         assert game.houses[name].treasury == pytest.approx(val, abs=1e-6)
@@ -544,7 +545,7 @@ def test_multiple_houses_independent_journals():
 
 
 def test_treasury_frozenset_immutable():
-    assert len(TREASURY_LABELS) == 12
+    assert len(TREASURY_LABELS) == 14
     try:
         TREASURY_LABELS.add("fake")
         assert False, "frozenset should not allow addition"
