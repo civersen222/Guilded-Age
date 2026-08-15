@@ -59,6 +59,7 @@ from gilded.ui.ledger import (
 )
 from gilded.ui.figures import figure
 from gilded.ui.house_tab import draw_house_tab, _house_tab_lines
+from gilded.endings import judge as _judge_ending
 from gilded.ui.widgets import (
     INK, Region, RegionSet, RegionState,
     BLACK, PANEL_BG, TAB_BG, TAB_ACTIVE, TAB_TEXT, HUD_BG, HUD_INK,
@@ -407,12 +408,21 @@ class PowersTable(Table):
                     row_text_rects.append(text_rect)
                 text_rects.append(row_text_rects)
 
+        header_text_rects = []
+        for col_idx in range(len(self.cols)):
+            align = self._resolve_align(col_idx)
+            h_rect = header_rects[col_idx]
+            header_text = self.cols[col_idx].header
+            text_rect = _place_text(header_text, f_header, h_rect, align, header_h)
+            header_text_rects.append(text_rect)
+
         return TableLayout(
             header_rects=header_rects,
             rule_y=rule_y,
             row_rects=row_rects,
             cell_rects=cell_rects,
             text_rects=text_rects,
+            header_text_rects=header_text_rects,
         )
 
     @staticmethod
@@ -826,6 +836,8 @@ class BroadsheetView:
         self.tooltip_rect: pygame.Rect | None = None
         self._w = 0
         self._h = 0
+        # epilogue cache — computed once when game_over is set
+        self._epilogue = None
 
     # --- executor candidates -------------------------------------------------
 
@@ -889,6 +901,13 @@ class BroadsheetView:
             self._draw_house(surface, content)
         elif self.active_tab == "War":
             self._draw_war(surface, content)
+
+        # ── Ending overlay when the age closes ──────────────────────────────
+        if self.game.game_over is not None:
+            if self._epilogue is None:
+                self._epilogue = _judge_ending(self.game, self.house)
+            self._draw_ending_overlay(surface, content)
+            return  # skip tab bar, hud, bottom bar — ending is the page
 
         self._draw_tab_bar(surface)
         self._draw_hud(surface)
@@ -1060,6 +1079,61 @@ class BroadsheetView:
                 surface.blit(surf, (PAD, y - surf.get_height()))
                 y -= surf.get_height() + 2
             break  # Show only the most recent message
+
+    def _draw_ending_overlay(self, surface, content) -> None:
+        """Draw the ending overlay when the age closes."""
+        epilogue = self._epilogue
+        PAD = 40
+        w, h = self._w, self._h
+
+        # Semi-transparent overlay
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((245, 240, 230, 200))
+        surface.blit(overlay, (0, 0))
+
+        # Border
+        pygame.draw.rect(surface, INK, (0, 0, w, h), 3)
+
+        y = TAB_H + 20
+        f_title = _font(TYPE_TITLE, bold=True)
+        ending_name = epilogue.ending_key
+        title_surf = f_title.render(ending_name, True, INK)
+        surface.blit(title_surf, (PAD, y))
+        y += title_surf.get_height() + 30
+
+        # Four axis scores
+        f_axis = _font(TYPE_SUBTITLE, bold=True)
+        for axis_name in ("capital", "standing", "blood", "world"):
+            score = epilogue.axes[axis_name]
+            label = f"{axis_name.title()}: {score:.2f}"
+            surf = f_axis.render(label, True, INK)
+            surface.blit(surf, (PAD, y))
+            y += surf.get_height() + 6
+
+        # Divider
+        y += 10
+        pygame.draw.line(surface, INK, (PAD, y), (w - PAD, y))
+        y += 20
+
+        # Epilogue paragraphs
+        f_body = _font(TYPE_BODY)
+        line_h = f_body.get_linesize()
+        max_w = w - 2 * PAD
+        paragraphs = epilogue.text.strip().split("\n\n")
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            wrapped = _wrap(para, f_body, max_w)
+            for line in wrapped:
+                if y + line_h > h - BOTTOM_H - 20:
+                    break
+                surf = f_body.render(line, True, INK)
+                surface.blit(surf, (PAD, y))
+                y += line_h
+            y += 10  # paragraph gap
+            if y + line_h > h - BOTTOM_H - 20:
+                break
 
     def _draw_bottom_bar(self, surface) -> None:
         y = self._h - BOTTOM_H
@@ -1306,7 +1380,7 @@ class BroadsheetView:
             f_h = _font(tbl.size, bold=True)
             for i, col in enumerate(tbl.cols):
                 txt = f_h.render(col.header, True, INK)
-                text_rect = tbl_layout.text_rects[0][i]
+                text_rect = tbl_layout.header_text_rects[i]
                 surface.blit(txt, text_rect)
 
             # Draw rule
@@ -1359,7 +1433,7 @@ class BroadsheetView:
             f_h = _font(h_tbl.size, bold=True)
             for i, col in enumerate(h_tbl.cols):
                 txt = f_h.render(col.header, True, INK)
-                text_rect = h_tbl_layout.text_rects[0][i]
+                text_rect = h_tbl_layout.header_text_rects[i]
                 surface.blit(txt, text_rect)
 
             pygame.draw.line(surface, INK,
@@ -1405,7 +1479,7 @@ class BroadsheetView:
             f_h = _font(s_tbl.size, bold=True)
             for i, col in enumerate(s_tbl.cols):
                 txt = f_h.render(col.header, True, INK)
-                text_rect = s_tbl_layout.text_rects[0][i]
+                text_rect = s_tbl_layout.header_text_rects[i]
                 surface.blit(txt, text_rect)
 
             pygame.draw.line(surface, INK,
@@ -1771,7 +1845,7 @@ class BroadsheetView:
             if i < len(tbl_layout.header_rects):
                 h_rect = tbl_layout.header_rects[i]
                 txt = f_h.render(col.header, True, INK)
-                text_rect = tbl_layout.text_rects[0][i] if i < len(tbl_layout.text_rects[0]) else h_rect
+                text_rect = tbl_layout.header_text_rects[i]
                 surface.blit(txt, text_rect)
 
         # Draw rule
@@ -2025,7 +2099,7 @@ class BroadsheetView:
         for i, col in enumerate(tbl.cols):
             if i < len(tbl_layout.header_rects):
                 h_rect = tbl_layout.header_rects[i]
-                text_rect = tbl_layout.text_rects[0][i] if i < len(tbl_layout.text_rects[0]) else h_rect
+                text_rect = tbl_layout.header_text_rects[i]
                 txt = f_h.render(col.header, True, INK)
                 surface.blit(txt, text_rect)
 

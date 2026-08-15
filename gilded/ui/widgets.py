@@ -382,6 +382,7 @@ class TableLayout:
     row_rects: list[pygame.Rect]
     cell_rects: list[list[pygame.Rect]]
     text_rects: list[list[pygame.Rect]]
+    header_text_rects: list[pygame.Rect]
 
 
 class Table:
@@ -405,7 +406,7 @@ class Table:
         body_h = f_body.get_linesize()
         row_count = len(self.data)
         gap = 2
-        rule_h = 1 if self.row_rule else 0
+        rule_h = 1 if self.row_rule else 1
         return header_h + rule_h + gap + row_count * (body_h + gap)
 
     def _resolve_align(self, col_idx: int) -> str:
@@ -447,41 +448,44 @@ class Table:
             cell_rects: list[list[pygame.Rect]] = []
             text_rects: list[list[pygame.Rect]] = []
         else:
-            row_h = available_data_h // row_count
-            row_gap = 2
+            row_h = (available_data_h - (row_count - 1) * gap) // row_count
             row_rects = []
-            y = data_top
-            for i in range(row_count):
-                h = row_h
-                if i == row_count - 1:
-                    h = data_bottom - y
-                row_rects.append(pygame.Rect(rect.left, y, rect.width, h))
-                y += h + row_gap
-
-            # cell rects & text rects
             cell_rects = []
             text_rects = []
-            for row_idx, row_rect in enumerate(row_rects):
-                row = self.data[row_idx] if row_idx < len(self.data) else []
+            for row_idx in range(row_count):
+                row_top = data_top + row_idx * (row_h + gap)
+                row_rect = pygame.Rect(rect.left, row_top, rect.width, row_h)
+                row_rects.append(row_rect)
+                row_data = self.data[row_idx] if row_idx < len(self.data) else []
                 weights = [c.width for c in self.cols]
                 row_cells = _weighted_columns(row_rect, weights, gap=0)
                 cell_rects.append(list(row_cells))
                 row_text_rects: list[pygame.Rect] = []
                 for col_idx in range(len(self.cols)):
-                    cell = row[col_idx] if col_idx < len(row) else ""
-                    align = self._resolve_align(col_idx)
-                    text_rect = _place_text(
-                        cell, f_body, row_cells[col_idx], align, body_h
-                    )
-                    row_text_rects.append(text_rect)
+                    if col_idx < len(row_cells):
+                        align = self._resolve_align(col_idx)
+                        cell_rect = row_cells[col_idx]
+                        cell_text = row_data[col_idx] if col_idx < len(row_data) else ""
+                        text_rect = _place_text(cell_text, f_body, cell_rect, align, body_h)
+                        row_text_rects.append(text_rect)
+                    else:
+                        row_text_rects.append(row_cells[col_idx].copy())
                 text_rects.append(row_text_rects)
 
+        header_text_rects = []
+        for col_idx in range(len(self.cols)):
+            align = self._resolve_align(col_idx)
+            h_rect = header_rects[col_idx]
+            header_text = self.cols[col_idx].header
+            text_rect = _place_text(header_text, f_header, h_rect, align, header_h)
+            header_text_rects.append(text_rect)
         return TableLayout(
             header_rects=header_rects,
             rule_y=rule_y,
             row_rects=row_rects,
             cell_rects=cell_rects,
             text_rects=text_rects,
+            header_text_rects=header_text_rects,
         )
 
     def draw(self, surface: pygame.Surface, rect: pygame.Rect) -> TableLayout:
