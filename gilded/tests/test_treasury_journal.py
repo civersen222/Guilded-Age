@@ -215,7 +215,7 @@ def test_no_treasury_arithmetic_outside_houses():
 # ── Rule 11 — label set is closed ─────────────────────────────────────
 
 def test_treasury_labels_count():
-    assert len(TREASURY_LABELS) == 14
+    assert len(TREASURY_LABELS) == 19
 
 
 def test_treasury_labels_contains_expected():
@@ -223,7 +223,9 @@ def test_treasury_labels_contains_expected():
         "dividends", "trade", "expansion", "strike buyoff", "heir allowance",
         "compensation", "railway", "charter", "province purchase",
         "reparations paid", "reparations received", "share purchase",
-        "honorarium", "investment",
+        "tax farm lease", "trade concession", "military grant",
+        "diplomatic summit", "press compliance", "reform endorsement",
+        "courtier appeasement",
     }
     assert TREASURY_LABELS == expected
 
@@ -295,14 +297,20 @@ def test_refactor_value_neutral_seed7():
     game = GildedGame(seed=7, player_house="Vantrell")
     for _ in range(12):
         game.end_turn()
+    # Re-baselined at STAGE 11E: six new petition kinds (courtier_grievance,
+    # diplomatic_summit, military_grant, press_ultimatum, reform_petition,
+    # tax_farm_lease, trade_concession) debit/credit houses during end_turn,
+    # shifting treasury balances. Notable movers: Duval-Corse (-2403, tax_farm
+    # lease debitor), Ferrenholt (-2093, trade_concession debitor), Mordaine
+    # (-2471, reform_petition debitor), Vantrell (-1283, multiple debits).
     expected = {
-        "Ashworth": 1933.773619,
-        "Brandtner": 1506.956092,
-        "Duval-Corse": 2754.094453,
-        "Ferrenholt": 3565.138609,  # L4.7 re-baselined: removed COAL_STRIKE_PRICE global
-        "Karsgate": 2740.954681,    # L4.7 re-baselined: removed COAL_STRIKE_PRICE global
-        "Mordaine": 3069.005935,
-        "Vantrell": 1686.180223,
+        "Ashworth": 2443.0320898896434,
+        "Brandtner": 1939.7531850871449,
+        "Duval-Corse": 351.4582734924056,
+        "Ferrenholt": 1471.6787450915892,
+        "Karsgate": 2664.659374544915,
+        "Mordaine": 598.3348169158294,
+        "Vantrell": 403.2554083137338,
     }
     for name, val in expected.items():
         assert game.houses[name].treasury == pytest.approx(val, abs=1e-6)
@@ -545,7 +553,7 @@ def test_multiple_houses_independent_journals():
 
 
 def test_treasury_frozenset_immutable():
-    assert len(TREASURY_LABELS) == 14
+    assert len(TREASURY_LABELS) == 19
     try:
         TREASURY_LABELS.add("fake")
         assert False, "frozenset should not allow addition"
