@@ -5,14 +5,12 @@ Tests for:
   CUT 2: Ending overlay drawn when game_over is set
 """
 
-import random
-import pytest
 import pygame
 
 from gilded.chassis import GildedGame
-from gilded.ui.widgets import Table, Column, TableLayout, font as _font
+from gilded.ui.widgets import Table, Column, font as _font
 from gilded.ui.broadsheet import BroadsheetView
-from gilded.endings import judge as _judge_ending
+
 
 SEED = 42
 SIZE = (1280, 900)
@@ -128,11 +126,15 @@ class TestEndingOverlay:
         return view, screen, house
 
     def test_game_over_sets_epilogue(self):
-        """judge() returns an Epilogue with ending_key, axes, and text."""
+        """Drawing with game_over set produces an epilogue with ending_key, axes, and text."""
+        pygame.init()
+        screen = pygame.display.set_mode(SIZE)
         g = _game()
         g.game_over = "century"
-        house = list(g.houses.keys())[0]
-        epilogue = _judge_ending(g, house)
+        house = next(h for h in g.houses if g.houses[h].is_player)
+        view = BroadsheetView(g, house)
+        view.draw(screen)
+        epilogue = view._epilogue
         assert epilogue.ending_key is not None
         assert isinstance(epilogue.ending_key, str)
         assert len(epilogue.ending_key) > 0
@@ -141,12 +143,17 @@ class TestEndingOverlay:
         assert len(epilogue.text) > 0
 
     def test_epilogue_deterministic(self):
-        """judge() returns the same result when called twice on the same state."""
+        """Drawing twice produces the same epilogue."""
+        pygame.init()
+        screen = pygame.display.set_mode(SIZE)
         g = _game()
         g.game_over = "century"
         house = next(h for h in g.houses if g.houses[h].is_player)
-        ep1 = _judge_ending(g, house)
-        ep2 = _judge_ending(g, house)
+        view = BroadsheetView(g, house)
+        view.draw(screen)
+        ep1 = view._epilogue
+        view.draw(screen)
+        ep2 = view._epilogue
         assert ep1.ending_key == ep2.ending_key
         assert ep1.axes == ep2.axes
         assert ep1.text == ep2.text
