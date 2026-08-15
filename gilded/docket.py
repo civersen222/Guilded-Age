@@ -9,6 +9,7 @@ domain; matters with no seat fester and resolve themselves badly.
 The docket never imports the chassis - it only receives the game object
 (anything with atlas/houses/realms/enterprises/rng/... attributes)."""
 
+import hashlib
 import random
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
@@ -99,7 +100,6 @@ def _next_pid(game) -> int:
 
 def _gen_seed(game, kind: str, house: str) -> int:
     """Deterministic seed for a per-call sub-stream (seed, turn, house, kind)."""
-    import hashlib
     seed_str = f"{getattr(game, 'seed', 0)}|{game.turn}|{house}|{kind}"
     return int(hashlib.sha256(seed_str.encode()).hexdigest()[:8], 16)
 
@@ -278,48 +278,53 @@ def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
 
     # Name the proposed pair for the petition text using a sub-stream
     other_realm = game.realms.get(other)
-    our_candidates = []
-    their_candidates = []
-    if other_realm is not None:
-        our_candidates = game.marriages._eligible(realm)
-        their_candidates = game.marriages._eligible(other_realm)
-    our_name = "(our candidate)"
-    their_name = "(their candidate)"
-    actors = {"other_house": other}
-    if our_candidates and their_candidates:
-        sub = random.Random(_gen_seed(game, "betrothal_offer", house_name))
-        our_pick = sub.choice(our_candidates)
-        want_gender = "Female" if our_pick.gender == "Male" else "Male"
-        their_opposite = [c for c in their_candidates if c.gender == want_gender]
-        if their_opposite:
-            their_pick = sub.choice(their_opposite)
-        else:
-            their_pick = sub.choice(their_candidates)
-        our_name = our_pick.name
-        their_name = their_pick.name
-        actors["our_person"] = our_pick
-        actors["their_person"] = their_pick
+    if other_realm is None:
+        return None
+    our_candidates = game.marriages._eligible(realm)
+    their_candidates = game.marriages._eligible(other_realm)
+    if not our_candidates or not their_candidates:
+        return None
+
+    sub = random.Random(_gen_seed(game, "betrothal_offer", house_name))
+    our_pick = sub.choice(our_candidates)
+    want_gender = "Female" if our_pick.gender == "Male" else "Male"
+    their_opposite = [c for c in their_candidates if c.gender == want_gender]
+    if their_opposite:
+        their_pick = sub.choice(their_opposite)
+    else:
+        their_pick = sub.choice(their_candidates)
+
+    actors = {
+        "other_house": other,
+        "our_person": our_pick,
+        "their_person": their_pick,
+    }
 
     def _accept(ctx) -> List[str]:
-        msg = ctx.game.marriages.arrange_match_between(
-            ctx.house, other, ctx.game.realms, ctx.game.houses,
+        our_person = actors["our_person"]
+        their_person = actors["their_person"]
+        msg = ctx.game.marriages.wed_match(
+            ctx.house, other, our_person, their_person,
+            ctx.game.realms, ctx.game.houses,
             _ents_by_house(ctx.game), ctx.rng)
-        return [msg] if msg else [f"The match with {other} falls through at the altar"]
+        if msg is None:
+            return [f"The match with {other} falls through at the altar"]
+        return [msg]
 
     def _decline(ctx) -> List[str]:
         a, b = ctx.game.houses[ctx.house], ctx.game.houses[other]
         a.relations[other] = a.relations.get(other, 0) - int(5 * ctx.scale)
         b.relations[ctx.house] = b.relations.get(ctx.house, 0) - int(5 * ctx.scale)
-        return [f"{other}'s envoy is sent home without a bride"]
+        return [f"{other}'s envoy is sent home; {actors['their_person'].name} is refused"]
 
     return Petition(
         pid=_next_pid(game), kind="betrothal_offer", domain="diplomacy",
         house=house_name,
-        text=f"House {other} proposes a marriage: {our_name} marries {their_name}",
+        text=f"House {other} proposes a marriage: {actors['our_person'].name} ({actors['our_person'].current_age}) marries {actors['their_person'].name} ({actors['their_person'].current_age})",
         actors=actors,
         options=[
             PetitionOption("accept", "Accept the match", -30, _accept),
-            PetitionOption("decline", "Decline politely", 30, _decline),
+            PetitionOption("decline", f"Refuse {actors['their_person'].name}", 30, _decline),
         ])
 
 
