@@ -320,7 +320,7 @@ def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
     return Petition(
         pid=_next_pid(game), kind="betrothal_offer", domain="diplomacy",
         house=house_name,
-        text=f"House {other} proposes a marriage: {actors['our_person'].name} ({actors['our_person'].current_age}) marries {actors['their_person'].name} ({actors['their_person'].current_age})",
+        text=f"House {other} proposes a marriage: {actors['our_person'].name} ({actors['our_person'].age}) marries {actors['their_person'].name} ({actors['their_person'].age})",
         actors=actors,
         options=[
             PetitionOption("accept", "Accept the match", -30, _accept),
