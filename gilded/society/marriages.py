@@ -206,6 +206,39 @@ class MarriageRegistry:
         return self._wed(house_a, house_b, ra, rb, a, b, houses,
                          enterprises_by_house, rng)
 
+    def wed_match(self, house_a: str, house_b: str, a, b, realms, houses,
+                  enterprises_by_house, rng) -> Optional[str]:
+        """Wed two specific Characters chosen at petition time.
+
+        `a` is from house_a's realm, `b` is from house_b's realm.
+        Falls back to arbitrary eligible picks if the named pair is
+        unavailable (dead, already married, etc).
+        """
+        ra, rb = realms.get(house_a), realms.get(house_b)
+        if ra is None or rb is None:
+            return None
+        if _at_war(houses, house_a, house_b):
+            return None
+        # Try the named pair first
+        if (a and b and a.is_alive and b.is_alive
+                and a.id not in self.married_ids
+                and b.id not in self.married_ids):
+            result = self._wed(house_a, house_b, ra, rb, a, b, houses,
+                               enterprises_by_house, rng)
+            if result:
+                return result
+        # Fall back to arbitrary eligible picks
+        cand_a = self._eligible(ra)
+        cand_b = self._eligible(rb)
+        if not cand_a or not cand_b:
+            return None
+        a = max(cand_a, key=bloodline_quality)
+        want = "Female" if a.gender == "Male" else "Male"
+        opp_b = [c for c in cand_b if c.gender == want]
+        b = max(opp_b if opp_b else cand_b, key=bloodline_quality)
+        return self._wed(house_a, house_b, ra, rb, a, b, houses,
+                         enterprises_by_house, rng)
+
     def _blood_ties(self, realms, houses, rng) -> List[str]:
         """Living cross-house couples slowly pull their houses together."""
         msgs = []
