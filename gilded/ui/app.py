@@ -61,13 +61,20 @@ def new_app_state(seed: int, player_house: Optional[str] = None,
 def _apply_action(state: AppState, action: dict) -> None:
     """Turn one view action into a move on the game (the UI stays a client)."""
     for key in action:
-        act = ACTIONS.get(key)
-        if act is None:
-            continue
-        ok, _reason = act.eligible(state.game, state.house, action)
-        if not ok:
-            return
-        result = act.dispatch(state.game, state.house, state.view, action)
+        if key == "adjust_garrison":
+            from gilded.ui.actions import _adjust_garrison_eligible, _adjust_garrison_dispatch
+            ok, _reason = _adjust_garrison_eligible(state.game, state.house, action)
+            if not ok:
+                return
+            result = _adjust_garrison_dispatch(state.game, state.house, state.view, action)
+        else:
+            act = ACTIONS.get(key)
+            if act is None:
+                continue
+            ok, _reason = act.eligible(state.game, state.house, action)
+            if not ok:
+                return
+            result = act.dispatch(state.game, state.house, state.view, action)
         if result:
             if isinstance(result, dict):
                 for k, value in result.items():

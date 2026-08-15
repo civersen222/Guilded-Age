@@ -140,7 +140,7 @@ def test_goal_initiative_dynasty_skips_when_already_tied():
     g = GildedGame(seed=5)
     while g.turn < 13:
         g.end_turn()
-    a, b = "Ferrenholt", "Mordaine"
+    a, b = "Ferrenholt", "Karsgate"  # no marriage tie at this point (rebalanced costs changed ties)
     goal = Goal("Dynasty", b, g.turn, 10, "wed")
     proposed = goal_initiative(g, a, goal)          # no tie yet
     assert proposed is not None
@@ -156,7 +156,7 @@ def test_goal_initiative_conquest_acts_only_on_declared_target():
         g.end_turn()
     h = "Ferrenholt"
     tgt = _weakest_neighbor(g, h)
-    assert tgt == "Karsgate"
+    assert tgt == "Ashworth"
     out = goal_initiative(g, h, Goal("Conquest", tgt, g.turn, 10, "war"))
     assert out is not None
     verb, kw = out
@@ -179,7 +179,7 @@ def _fixture_game():
     """Return a game at seed 5, advanced to turn 13, plus Ferrenholt house.
 
     At this state every target helper returns a STRICTLY unique value-winner:
-      _weakest_neighbor -> Karsgate
+      _weakest_neighbor -> Ashworth (rebalanced costs changed treasury trajectories)
       _richest_rival    -> Duval-Corse  (3 enterprises, all others 2)
       _best_relations   -> Brandtner    (28, next best Ashworth 26)
       _strongest_rival  -> Vantrell     (2809.4, next Duval-Corse 1606.3)
@@ -258,10 +258,10 @@ def test_r4_truce_at_turn_not_blocking():
     """Truce recorded at exactly g.turn has expired — target is eligible."""
     g = _fixture_game()
     h = "Ferrenholt"
-    # Set truce with Karsgate expiring exactly at current turn
-    g.houses[h].truces["Karsgate"] = g.turn
-    # Karsgate should still be eligible (truce expired)
-    assert _weakest_neighbor(g, h) == "Karsgate"
+    # Set truce with Ashworth expiring exactly at current turn
+    g.houses[h].truces["Ashworth"] = g.turn
+    # Ashworth should still be eligible (truce expired) — weakest neighbor
+    assert _weakest_neighbor(g, h) == "Ashworth"
 
 
 def test_r4_truce_after_turn_blocking():
@@ -409,7 +409,7 @@ def test_r9_target_for_conquest():
     """Conquest -> weakest neighbour."""
     g = _fixture_game()
     h = "Ferrenholt"
-    assert _target_for(g, h, "Conquest") == "Karsgate"
+    assert _target_for(g, h, "Conquest") == "Ashworth"
 
 
 def test_r9_target_for_buyout():

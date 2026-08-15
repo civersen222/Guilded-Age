@@ -816,14 +816,15 @@ def test_s17_the_smallest_works_is_expanded_first():
 
 def test_s17_expanding_needs_more_gold_than_the_price():
     """B10-afford: expanding needs treasury > price (strict), not >=.
-    One works at tier 2 (expand to tier 3 costs 500). Other parked at tier 5 (cap).
-    Gold 500 → correct None (not strictly greater), broken expands.
-    Gold 501 → correct expands. Both sides bracket the threshold."""
+    One works at tier 4 (expand to tier 5 costs 600). Other parked at tier 5 (cap).
+    Treasury set to 600 to avoid sell_shares trigger (< 500).
+    Gold 600 → correct None (not strictly greater than 600), broken expands.
+    Gold 601 → correct expands. Both sides bracket the threshold."""
     g = _game()
     realm = g.realms[HOUSE]
     a, b = _works(g)
     assert a.eid < b.eid
-    a.tier = 2
+    a.tier = 4  # expand to tier 5 costs 350
     b.tier = 5
     a.under_construction = 0
     b.under_construction = 0
@@ -837,12 +838,12 @@ def test_s17_expanding_needs_more_gold_than_the_price():
     ruler = realm.ruler
     ruler.dispositions["ambitious_content"] = 80.0
     ruler.dispositions["militarist_pacifist"] = 0.0
-    # Gold exactly 500 — the expand price for tier 2→3
-    g.houses[HOUSE].treasury = 500
+    # Gold exactly 350 — the expand price for tier 4→5 (not strictly greater)
+    g.houses[HOUSE].treasury = 350
     result = _pick_initiative(g, HOUSE, realm)
     assert result is None
-    # Gold 501 — strictly more than 500
-    g.houses[HOUSE].treasury = 501
+    # Gold 351 — strictly more than 350
+    g.houses[HOUSE].treasury = 351
     result = _pick_initiative(g, HOUSE, realm)
     assert result is not None
     assert result[0] == "expand_enterprise"

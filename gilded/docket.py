@@ -34,9 +34,9 @@ FESTER_TURNS = 2                  # unattended + no seat -> auto-resolution afte
 MAX_PETITIONS = 6                 # per house per turn
 BETROTHAL_CHANCE = 0.25
 HEIR_DEMAND_CHANCE = 0.2
-RAIL_COST = 250.0
-BUYOFF_COST = 150.0
-COMPENSATE_COST = 100.0
+RAIL_COST = 120.0
+BUYOFF_COST = 80.0
+COMPENSATE_COST = 60.0
 HEIR_ALLOWANCE = 100.0
 TOUR_UNREST_RELIEF = 10.0
 TOUR_STRESS = 8
@@ -485,7 +485,7 @@ def _gen_courtier_grievance(game, house_name, realm, rng) -> Optional[Petition]:
 
     def _appease(ctx) -> List[str]:
         house = ctx.game.houses[ctx.house]
-        cost = 75.0
+        cost = 25.0
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold to appease {char.name}"]
         house.debit(ctx.game.turn, "courtier appeasement", cost)
@@ -658,7 +658,7 @@ def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
     if not provinces:
         return None
     prov = provinces[sub.randint(0, len(provinces) - 1)]
-    cost = 200 + sub.randint(0, 300)
+    cost = 50 + sub.randint(0, 100)
 
     def _accept_lease(ctx) -> List[str]:
         house = ctx.game.houses[ctx.house]
@@ -696,7 +696,7 @@ def _gen_trade_concession(game, house_name, realm, rng) -> Optional[Petition]:
     if not house_names:
         return None
     rival_name = house_names[sub.randint(0, len(house_names) - 1)]
-    revenue = 50 + sub.randint(0, 100)
+    revenue = 20 + sub.randint(0, 30)
 
     def _grant_concession(ctx) -> List[str]:
         house = ctx.game.houses[ctx.house]
@@ -728,7 +728,7 @@ def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
     marshal = realm.court.positions.get(CourtPosition.MARSHAL)
     if marshal is None or not marshal.is_alive:
         return None
-    cost = 150 + sub.randint(0, 250)
+    cost = 25 + sub.randint(0, 50)
 
     def _approve_grant(ctx) -> List[str]:
         house = ctx.game.houses[ctx.house]
@@ -766,7 +766,7 @@ def _gen_diplomatic_summit(game, house_name, realm, rng) -> Optional[Petition]:
     if not house_names:
         return None
     rival_name = house_names[sub.randint(0, len(house_names) - 1)]
-    cost = 100 + sub.randint(0, 150)
+    cost = 20 + sub.randint(0, 30)
 
     def _attend_summit(ctx) -> List[str]:
         house = ctx.game.houses[ctx.house]
@@ -803,7 +803,7 @@ def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
         return None
     topics = ["press freedom", "public order", "tax reform", "military spending"]
     topic = topics[sub.randint(0, len(topics) - 1)]
-    cost = 50 + sub.randint(0, 100)
+    cost = 25 + sub.randint(0, 50)
 
     def _comply(ctx) -> List[str]:
         house = ctx.game.houses[ctx.house]
@@ -836,7 +836,7 @@ def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
         return None
     reforms = ["education reform", "labor rights", "property reform", "religious freedom"]
     reform = reforms[sub.randint(0, len(reforms) - 1)]
-    cost = 75 + sub.randint(0, 150)
+    cost = 25 + sub.randint(0, 50)
 
     def _endorse_reform(ctx) -> List[str]:
         house = ctx.game.houses[ctx.house]
