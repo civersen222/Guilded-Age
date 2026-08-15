@@ -622,6 +622,20 @@ def _build_action_for_key(key, game, house, view=None):
         if owned:
             return {"tour_province": owned[0]}
         return None
+    elif key == "open_scheme_picker":
+        return {"open_scheme_picker": True}
+    elif key == "close_scheme_picker":
+        return {"close_scheme_picker": True}
+    elif key == "start_scheme":
+        # Find a target character from another house
+        for h in game.houses:
+            if h == house:
+                continue
+            realm = game.realms[h]
+            for c in realm.characters:
+                if c.is_alive:
+                    return {"start_scheme": True, "target_id": c.id, "scheme_type": "coup"}
+        return None
     return None
 
 

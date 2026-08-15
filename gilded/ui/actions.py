@@ -742,6 +742,80 @@ def _tour_province_dispatch(game, house, view, action):
     return result or []
 
 
+# ── start scheme helpers ────────────────────────────────────────────────────
+
+def _start_scheme_eligible(game, house, action):
+    target_id = action.get("target_id")
+    scheme_type = action.get("scheme_type")
+    if scheme_type not in ("coup", "assassination"):
+        return False, "Invalid scheme type."
+    if target_id is None:
+        return False, "No target selected."
+    target = None
+    for h in game.houses:
+        realm = game.realms[h]
+        for c in realm.characters:
+            if c.id == target_id and c.is_alive:
+                target = c
+                break
+        if target:
+            break
+    if target is None:
+        return False, "Target is not available."
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _start_scheme_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    target_id = action.get("target_id")
+    scheme_type = action.get("scheme_type")
+    realm = game.realms[house]
+    target = None
+    target_house = None
+    for h in game.houses:
+        r = game.realms[h]
+        for c in r.characters:
+            if c.id == target_id and c.is_alive:
+                target = c
+                target_house = h
+                break
+        if target:
+            break
+    if target is None:
+        return ["Target is not available."]
+    executor = _executor_for(game, realm, "press")
+    game.attention[house] -= 1
+    result = initiative(game, house, "start_scheme", executor,
+                        target=target, scheme_type=scheme_type,
+                        target_house=target_house)
+    return result or []
+
+
+def _open_scheme_picker_eligible(game, house, action):
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _open_scheme_picker_dispatch(game, house, view, action):
+    if view is not None:
+        view._scheme_picker = True
+    return []
+
+
+def _close_scheme_picker_eligible(game, house, action):
+    return True, ""
+
+
+def _close_scheme_picker_dispatch(game, house, view, action):
+    if view is not None:
+        view._scheme_picker = None
+    return []
+
+
 def _adjust_garrison_eligible(game, house, action):
     wars = [w for w in getattr(game, "wars", [])
             if house in (w.aggressor, w.defender)]
@@ -1228,5 +1302,21 @@ ACTIONS: dict[str, PlayerAction] = {
         key="tour_province", label="Tour Province", domain="family",
         attention_cost=1, gold_cost=0,
         eligible=_tour_province_eligible, dispatch=_tour_province_dispatch,
+    ),
+    # intrigue verbs
+    "start_scheme": PlayerAction(
+        key="start_scheme", label="Start Scheme", domain="press",
+        attention_cost=1, gold_cost=0,
+        eligible=_start_scheme_eligible, dispatch=_start_scheme_dispatch,
+    ),
+    "open_scheme_picker": PlayerAction(
+        key="open_scheme_picker", label="Open Scheme Picker", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_open_scheme_picker_eligible, dispatch=_open_scheme_picker_dispatch,
+    ),
+    "close_scheme_picker": PlayerAction(
+        key="close_scheme_picker", label="Close Scheme Picker", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_close_scheme_picker_eligible, dispatch=_close_scheme_picker_dispatch,
     ),
 }

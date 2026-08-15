@@ -815,6 +815,9 @@ class BroadsheetView:
         # garrison picker state: None or True (picker open)
         self._garrison_picker: Optional[bool] = None
         self._garrison_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        # scheme picker state: None or True (picker open)
+        self._scheme_picker: Optional[bool] = None
+        self._scheme_picker_hits: List[Tuple[pygame.Rect, dict]] = []
         self._action_messages: List[str] = []
         self.hover_pos: Tuple[int, int] | None = None
         self.regions = RegionSet()
@@ -2427,9 +2430,76 @@ class BroadsheetView:
         from gilded.ui.court_actions import _get_appointment_pool
         rpt = peerage_report(self.game, self.house)
         draw_house_tab(surface, content, rpt, self)
+        # Draw intrigue section (plot visibility)
+        self._draw_intrigue(surface, content)
         # If court picker is open, draw candidates
         if self._court_picker is not None:
             self._draw_court_picker(surface, content, rpt)
+        # If scheme picker is open, draw it
+        if self._scheme_picker is not None:
+            self._draw_scheme_picker(surface, content)
+
+    def _draw_intrigue(self, surface, content: pygame.Rect) -> None:
+        """Draw intrigue section: plots affecting the played House."""
+        from gilded.ui.widgets import INK, Region, RegionState, TONES
+        from gilded.ui.house_tab import _draw_button
+        from gilded.ui.actions import _open_scheme_picker_eligible, _start_scheme_eligible
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        game = self.game
+        house = self.house
+        realm = game.realms[house]
+        our_ids = {c.id for c in realm.characters}
+        # Find plots: against us (target is ours) and by us (agent is ours)
+        schemes = getattr(game, 'scheme_mgr', None)
+        if not schemes:
+            return
+        lines = []
+        for s in schemes.schemes:
+            target_is_ours = s.target.id in our_ids
+            agent_is_ours = s.agent.id in our_ids
+            if target_is_ours:
+                lines.append(f"⚠ {s.agent.name} plots a {s.scheme_type} against {s.target.name}")
+            elif agent_is_ours:
+                lines.append(f"→ {s.agent.name} schemes against {s.target.name} ({s.scheme_type})")
+        if not lines:
+            return
+        # Draw section
+        y = content.bottom - 20
+        section_h = len(lines) * (body.get_height() + 2) + 30
+        section_y = max(content.y + 10, y - section_h)
+        # Header
+        header = body.render("INTRIGUE", True, TONES.get("bad", INK))
+        surface.blit(header, (PAD, section_y))
+        sy = section_y + body.get_height() + 4
+        for line in lines:
+            if sy > content.bottom - 10:
+                break
+            color = TONES.get("warn", INK) if line.startswith("⚠") else INK
+            surface.blit(body.render(line, True, color), (PAD, sy))
+            sy += body.get_height() + 2
+        # Button to open scheme picker
+        btn_h = body.get_height() + 8
+        btn_w = 160
+        if sy + btn_h <= content.bottom - 10:
+            ok, reason = _open_scheme_picker_eligible(game, house, {})
+            btn_rect = _draw_button(surface, "Start Scheme", PAD, sy, btn_w, btn_h, ok)
+            if ok:
+                self.regions.add(Region(
+                    rect=btn_rect,
+                    action={"open_scheme_picker": True},
+                    hint="Open the intrigue picker",
+                    group="intrigue",
+                ))
+            else:
+                self.regions.add(Region(
+                    rect=btn_rect,
+                    action={"open_scheme_picker": True},
+                    state=RegionState.DISABLED,
+                    reason=reason,
+                    hint="Open the intrigue picker",
+                    group="intrigue",
+                ))
 
     def _draw_war(self, surface, content: pygame.Rect) -> None:
         from gilded.ui.war_tab import draw_war_tab
@@ -2557,6 +2627,72 @@ class BroadsheetView:
                 ))
             y += btn_h + 4
 
+    def _draw_scheme_picker(self, surface, content: pygame.Rect) -> None:
+        """Draw the scheme picker overlay with target+kind buttons."""
+        from gilded.ui.widgets import INK, Region, RegionState, TONES
+        from gilded.ui.house_tab import _draw_button
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        btn_h = body.get_height() + 8
+        btn_w = 280
+        y = content.y + 120
+        surface.blit(body.render("INTRIGUE — Select target and scheme type:", True, INK), (PAD, y))
+        y += body.get_height() + 10
+        # Collect potential targets (living characters not in played House's court)
+        game = self.game
+        house = self.house
+        realm = game.realms[house]
+        our_ids = {c.id for c in realm.characters}
+        targets = []
+        for h in game.houses:
+            if h == house:
+                continue
+            other_realm = game.realms[h]
+            for c in other_realm.characters:
+                if c.is_alive and c not in targets:
+                    targets.append((c, h))
+        if not targets:
+            targets = []
+        for c, target_house in targets[:6]:
+            if y + btn_h > content.bottom:
+                break
+            for scheme_type in ("coup", "assassination"):
+                if y + btn_h > content.bottom:
+                    return
+                label = f"{c.name} — {scheme_type}"
+                ok, reason = _start_scheme_eligible(game, house, {
+                    "target_id": c.id, "scheme_type": scheme_type
+                })
+                btn_rect = _draw_button(surface, label, PAD, y, btn_w, btn_h, ok)
+                if ok:
+                    self.regions.add(Region(
+                        rect=btn_rect,
+                        action={"start_scheme": True, "target_id": c.id,
+                                "scheme_type": scheme_type},
+                        hint=label,
+                        group="scheme_picker",
+                    ))
+                else:
+                    self.regions.add(Region(
+                        rect=btn_rect,
+                        action={"start_scheme": True, "target_id": c.id,
+                                "scheme_type": scheme_type},
+                        state=RegionState.DISABLED,
+                        reason=reason,
+                        hint=label,
+                        group="scheme_picker",
+                    ))
+                y += btn_h + 2
+        # Close button
+        if y + btn_h <= content.bottom:
+            close_rect = _draw_button(surface, "Cancel", PAD, y, btn_w, btn_h, True)
+            self.regions.add(Region(
+                rect=close_rect,
+                action={"close_scheme_picker": True},
+                hint="Cancel — spends nothing",
+                group="scheme_picker",
+            ))
+
     def handle_click(self, pos: Tuple[int, int]) -> Optional[dict]:
         region = self.regions.at(pos)
         if region is not None:
@@ -2631,6 +2767,14 @@ class BroadsheetView:
                 self._garrison_picker = None
                 self._garrison_picker_hits.clear()
                 return None
+            if "open_scheme_picker" in action:
+                self._scheme_picker = True
+                self._scheme_picker_hits.clear()
+                return None
+            if "close_scheme_picker" in action:
+                self._scheme_picker = None
+                self._scheme_picker_hits.clear()
+                return None
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):
@@ -2665,6 +2809,13 @@ class BroadsheetView:
                     if "close_share_picker" in action:
                         self._share_picker = None
                         self._share_picker_hits.clear()
+                    return action
+        if self._scheme_picker is not None:
+            for rect, action in self._scheme_picker_hits:
+                if rect.collidepoint(pos):
+                    if "close_scheme_picker" in action:
+                        self._scheme_picker = None
+                        self._scheme_picker_hits.clear()
                     return action
         if self.active_tab == "Enterprises":
             for rect, act in self._enterprise_hits:
