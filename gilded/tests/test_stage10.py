@@ -5,6 +5,9 @@ Tests for:
   CUT 2: Ending overlay drawn when game_over is set
 """
 
+import os
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
 import pygame
 
 from gilded.chassis import GildedGame
@@ -108,6 +111,27 @@ class TestPowersTableEmpty:
         rect = pygame.Rect(0, 0, 400, 80)
         layout = tbl.layout(rect)
         assert layout.text_rects == []
+
+    def test_powers_table_draws_on_page(self):
+        """Powers table with zero rows draws on a page without raising."""
+        game = _game()
+        house = next(h for h in game.houses if game.houses[h].is_player)
+        pygame.init()
+        pygame.font.init()
+        screen = pygame.display.set_mode(SIZE)
+        view = BroadsheetView(game, house)
+        view.active_tab = "powers"
+        view.draw(screen)
+
+    def test_empty_table_draws_on_page(self):
+        """A page with an empty table draws without raising."""
+        game = _game()
+        house = next(h for h in game.houses if game.houses[h].is_player)
+        pygame.init()
+        pygame.font.init()
+        screen = pygame.display.set_mode(SIZE)
+        view = BroadsheetView(game, house)
+        view.draw(screen)
 
 
 # ====================================================================
