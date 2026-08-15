@@ -119,8 +119,6 @@ def _house_provinces(game, house_name: str) -> List:
     return [p for p in game.atlas.provinces.values() if p.owner == house_name]
 
 
-# --- generators --------------------------------------------------------------
-
 def _gen_capital_request(game, house_name, realm, rng) -> Optional[Petition]:
     """A Director with an enterprise below top tier begs expansion capital."""
     by_id = {c.id: c for c in realm.characters}
@@ -861,6 +859,19 @@ def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
         ])
 
 
+# Mapping from new-generator functions -> kind string (used by generate_petitions)
+_GEN_KINDS: Dict[Callable, str] = {
+    _gen_stress_crisis: "stress_crisis",
+    _gen_courtier_grievance: "courtier_grievance",
+    _gen_tax_farm_lease: "tax_farm_lease",
+    _gen_trade_concession: "trade_concession",
+    _gen_military_grant: "military_grant",
+    _gen_diplomatic_summit: "diplomatic_summit",
+    _gen_press_ultimatum: "press_ultimatum",
+    _gen_reform_petition: "reform_petition",
+}
+
+
 def generate_petitions(game, house_name: str) -> List[Petition]:
     """The turn's paper for one House, most urgent first, at most six."""
     realm = game.realms.get(house_name)
@@ -869,14 +880,21 @@ def generate_petitions(game, house_name: str) -> List[Petition]:
     rng = game.rng
     pets: List[Petition] = []
     pets.extend(_gen_seat_vacancies(game, house_name, realm, rng))
+    # Original seven keep drawing from game.rng exactly as they always have
     for gen in (_gen_war_council, _gen_union_ultimatum, _gen_heir_demand,
                 _gen_capital_request, _gen_disaster_inquiry,
-                _gen_betrothal_offer, _gen_rail_proposal,
-                _gen_stress_crisis, _gen_courtier_grievance,
+                _gen_betrothal_offer, _gen_rail_proposal):
+        p = gen(game, house_name, realm, rng)
+        if p is not None:
+            pets.append(p)
+    # New generators use a deterministic per-call sub-stream
+    for gen in (_gen_stress_crisis, _gen_courtier_grievance,
                 _gen_tax_farm_lease, _gen_trade_concession,
                 _gen_military_grant, _gen_diplomatic_summit,
                 _gen_press_ultimatum, _gen_reform_petition):
-        p = gen(game, house_name, realm, rng)
+        kind = _GEN_KINDS[gen]
+        sub_rng = random.Random(_gen_seed(game, kind, house_name))
+        p = gen(game, house_name, realm, sub_rng)
         if p is not None:
             pets.append(p)
     pets.sort(key=lambda p: (DOMAIN_PRIORITY.get(p.domain, 9), p.pid))
