@@ -31,7 +31,7 @@ from gilded.society.realm import DIRECTOR_SALARY_PCT
 from gilded.society.shares import initial_ledger, transfer_shares
 
 FESTER_TURNS = 2                  # unattended + no seat -> auto-resolution after this
-MAX_PETITIONS = 14                # per house per turn — room for all 14 kinds
+MAX_PETITIONS = 10                # per house per turn
 BETROTHAL_CHANCE = 0.25
 HEIR_DEMAND_CHANCE = 0.2
 RAIL_COST = 250.0
@@ -394,7 +394,7 @@ def _gen_stress_crisis(game, house_name, realm, rng) -> Optional[Petition]:
     if game.turn < 15:
         return None
     sub = random.Random(_gen_seed(game, "stress_crisis", house_name))
-    if sub.random() < 0.75:
+    if sub.random() < 0.95:
         return None
     stressed = []
     for c in realm.characters:
@@ -440,7 +440,7 @@ def _gen_courtier_grievance(game, house_name, realm, rng) -> Optional[Petition]:
     if game.turn < 15:
         return None
     sub = random.Random(_gen_seed(game, "courtier_grievance", house_name))
-    if sub.random() < 0.75:
+    if sub.random() < 0.95:
         return None
     society = game.society
     ruler = realm.ruler
@@ -622,7 +622,7 @@ def _gen_war_council(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
     """A merchant offers to buy the right to collect a tax."""
     sub = random.Random(_gen_seed(game, "tax_farm_lease", house_name))
-    if sub.random() < 0.75:
+    if sub.random() < 0.95:
         return None
     treasurer = realm.court.positions.get(CourtPosition.BOARD_CHAIRMAN)
     if treasurer is None or not treasurer.is_alive:
@@ -667,7 +667,7 @@ def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_trade_concession(game, house_name, realm, rng) -> Optional[Petition]:
     """A foreign merchant house seeks trading rights."""
     sub = random.Random(_gen_seed(game, "trade_concession", house_name))
-    if sub.random() < 0.75:
+    if sub.random() < 0.95:
         return None
     treasurer = realm.court.positions.get(CourtPosition.BOARD_CHAIRMAN)
     if treasurer is None or not treasurer.is_alive:
@@ -709,7 +709,7 @@ def _gen_trade_concession(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
     """The marshal requests funds for military preparations."""
     sub = random.Random(_gen_seed(game, "military_grant", house_name))
-    if sub.random() < 0.75:
+    if sub.random() < 0.95:
         return None
     marshal = realm.court.positions.get(CourtPosition.MARSHAL)
     if marshal is None or not marshal.is_alive:
@@ -750,7 +750,7 @@ def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_diplomatic_summit(game, house_name, realm, rng) -> Optional[Petition]:
     """A foreign power invites the ruler to a diplomatic summit."""
     sub = random.Random(_gen_seed(game, "diplomatic_summit", house_name))
-    if sub.random() < 0.75:
+    if sub.random() < 0.95:
         return None
     chancellor = realm.court.positions.get(CourtPosition.FOREIGN_SECRETARY)
     if chancellor is None or not chancellor.is_alive:
@@ -795,7 +795,7 @@ def _gen_diplomatic_summit(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
     """The local press demands action on a matter of public concern."""
     sub = random.Random(_gen_seed(game, "press_ultimatum", house_name))
-    if sub.random() < 0.75:
+    if sub.random() < 0.95:
         return None
     chancellor = realm.court.positions.get(CourtPosition.MASTER_OF_PRESS)
     if chancellor is None or not chancellor.is_alive:
@@ -838,7 +838,7 @@ def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
     """A reform movement seeks changes to the social order."""
     sub = random.Random(_gen_seed(game, "reform_petition", house_name))
-    if sub.random() < 0.75:
+    if sub.random() < 0.95:
         return None
     chancellor = realm.court.positions.get(CourtPosition.MASTER_OF_PRESS)
     if chancellor is None or not chancellor.is_alive:

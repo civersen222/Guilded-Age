@@ -34,7 +34,7 @@ from gilded.society.relationships import tick_relationships
 from gilded.society.schemes import SchemeManager
 from gilded.society.shares import initial_ledger, partition_shares, pay_dividends
 
-ATTENTION_PER_TURN = 3
+ATTENTION_PER_TURN = 5
 STARTING_ENTERPRISES = 2          # seeded per house, on its best endowments
 
 CAPACITY_KINDS = ("coal", "steel", "freight")
