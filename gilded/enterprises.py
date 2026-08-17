@@ -28,7 +28,7 @@ KIND_TITLES = {
 }
 WORKFORCE_PER_TIER = 10          # thousands employed per capital tier
 TIER_MAX = 5
-EXPAND_COST = {2: 500.0, 3: 830.0, 4: 1330.0, 5: 2000.0}   # gold to reach tier
+EXPAND_COST = {2: 300.0, 3: 500.0, 4: 800.0, 5: 1200.0}   # gold to reach tier
 EXPAND_TURNS = {2: 2, 3: 2, 4: 3, 5: 3}
 
 

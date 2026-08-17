@@ -658,6 +658,13 @@ def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
     if not provinces:
         return None
     prov = provinces[sub.randint(0, len(provinces) - 1)]
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
     cost = 50 + sub.randint(0, 100)
 
     def _accept_lease(ctx) -> List[str]:
@@ -665,12 +672,10 @@ def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for the tax farm lease"]
         house.debit(ctx.game.turn, "tax farm lease", cost)
-        # Credit to other houses as tax farmers invest locally
-        others = [h for h in ctx.game.houses.values() if h.name != ctx.house]
-        if others:
-            recipient = others[0]
-            recipient.credit(ctx.game.turn, "tax farm lease", cost)
-        return [f"Tax farm on {prov.name} leased for {cost} gold"]
+        rival = ctx.game.houses.get(rival_name)
+        if rival:
+            rival.credit(ctx.game.turn, "tax farm lease", cost)
+        return [f"Tax farm on {prov.name} leased to {rival_name} for {cost} gold"]
 
     def _reject_lease(ctx) -> List[str]:
         return [f"Tax farm offer on {prov.name} declined"]
@@ -736,6 +741,13 @@ def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
     marshal = realm.court.positions.get(CourtPosition.MARSHAL)
     if marshal is None or not marshal.is_alive:
         return None
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
     cost = 25 + sub.randint(0, 50)
 
     def _approve_grant(ctx) -> List[str]:
@@ -743,12 +755,10 @@ def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for the military grant"]
         house.debit(ctx.game.turn, "military grant", cost)
-        # Military spending flows to contractors/suppliers in other Houses
-        others = [h for h in ctx.game.houses.values() if h.name != ctx.house]
-        if others:
-            recipient = others[0]
-            recipient.credit(ctx.game.turn, "military grant", cost)
-        return [f"Military grant of {cost} gold approved"]
+        rival = ctx.game.houses.get(rival_name)
+        if rival:
+            rival.credit(ctx.game.turn, "military grant", cost)
+        return [f"Military grant of {cost} gold approved for {rival_name}"]
 
     def _deny_grant(ctx) -> List[str]:
         return [f"Military grant denied by the ruler"]
@@ -819,6 +829,13 @@ def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
         return None
     topics = ["press freedom", "public order", "tax reform", "military spending"]
     topic = topics[sub.randint(0, len(topics) - 1)]
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
     cost = 25 + sub.randint(0, 50)
 
     def _comply(ctx) -> List[str]:
@@ -826,12 +843,10 @@ def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for press compliance"]
         house.debit(ctx.game.turn, "press compliance", cost)
-        # Press spending flows to publishers/printers in other Houses
-        others = [h for h in ctx.game.houses.values() if h.name != ctx.house]
-        if others:
-            recipient = others[0]
-            recipient.credit(ctx.game.turn, "press compliance", cost)
-        return [f"Complied with press demands on {topic} at cost of {cost} gold"]
+        rival = ctx.game.houses.get(rival_name)
+        if rival:
+            rival.credit(ctx.game.turn, "press compliance", cost)
+        return [f"Complied with press demands on {topic} at cost of {cost} gold for {rival_name}"]
 
     def _ignore(ctx) -> List[str]:
         return [f"Press demands on {topic} ignored"]
@@ -857,6 +872,13 @@ def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
         return None
     reforms = ["education reform", "labor rights", "property reform", "religious freedom"]
     reform = reforms[sub.randint(0, len(reforms) - 1)]
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
     cost = 25 + sub.randint(0, 50)
 
     def _endorse_reform(ctx) -> List[str]:
@@ -864,12 +886,10 @@ def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for reform endorsement"]
         house.debit(ctx.game.turn, "reform endorsement", cost)
-        # Reform spending flows to beneficiaries in other Houses
-        others = [h for h in ctx.game.houses.values() if h.name != ctx.house]
-        if others:
-            recipient = others[0]
-            recipient.credit(ctx.game.turn, "reform endorsement", cost)
-        return [f"Endorsed {reform} at cost of {cost} gold"]
+        rival = ctx.game.houses.get(rival_name)
+        if rival:
+            rival.credit(ctx.game.turn, "reform endorsement", cost)
+        return [f"Endorsed {reform} at cost of {cost} gold for {rival_name}"]
 
     def _suppress_reform(ctx) -> List[str]:
         return [f"{reform} movement suppressed"]
