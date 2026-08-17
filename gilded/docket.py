@@ -332,8 +332,7 @@ def _gen_heir_demand(game, house_name, realm, rng) -> Optional[Petition]:
     heirs = [c for c in realm.dynasty.all_characters.values()
              if c.is_alive and c.age >= 16 and c.id != realm.ruler.id
              and c.id not in seated]
-    sub = random.Random(_gen_seed(game, "heir_demand", house_name))
-    if not heirs or sub.random() >= HEIR_DEMAND_CHANCE:
+    if not heirs or rng.random() >= HEIR_DEMAND_CHANCE:
         return None
     heir = max(heirs, key=lambda c: c.age)
 
@@ -868,7 +867,7 @@ def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
     """A reform movement seeks changes to the social order."""
     sub = random.Random(_gen_seed(game, "reform_petition", house_name))
-    if sub.random() < 0.55:
+    if sub.random() < 0.95:
         return None
     chancellor = realm.court.positions.get(CourtPosition.MASTER_OF_PRESS)
     if chancellor is None or not chancellor.is_alive:
