@@ -31,7 +31,7 @@ from gilded.society.realm import DIRECTOR_SALARY_PCT
 from gilded.society.shares import initial_ledger, transfer_shares
 
 FESTER_TURNS = 2                  # unattended + no seat -> auto-resolution after this
-MAX_PETITIONS = 6                 # per house per turn
+MAX_PETITIONS = 14                # per house per turn — room for all 14 kinds
 BETROTHAL_CHANCE = 0.25
 HEIR_DEMAND_CHANCE = 0.2
 RAIL_COST = 250.0
@@ -262,9 +262,8 @@ def _gen_union_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
 
 
 def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
-    """Another House proposes a match, naming the two people who would wed."""
-    sub = random.Random(_gen_seed(game, "betrothal_offer", house_name))
-    if sub.random() >= BETROTHAL_CHANCE:
+    """Another House proposes a match, with the usual merger terms."""
+    if rng.random() >= BETROTHAL_CHANCE:
         return None
     house = game.houses[house_name]
     suitors = [n for n in game.houses
@@ -273,57 +272,28 @@ def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
                and house.relations.get(n, 0) > -50]
     if not suitors:
         return None
-    other = sub.choice(sorted(suitors))
-
-    # Name the proposed pair for the petition text using a sub-stream
-    other_realm = game.realms.get(other)
-    if other_realm is None:
-        return None
-    our_candidates = game.marriages._eligible(realm)
-    their_candidates = game.marriages._eligible(other_realm)
-    if not our_candidates or not their_candidates:
-        return None
-
-    sub = random.Random(_gen_seed(game, "betrothal_offer", house_name))
-    our_pick = sub.choice(our_candidates)
-    want_gender = "Female" if our_pick.gender == "Male" else "Male"
-    their_opposite = [c for c in their_candidates if c.gender == want_gender]
-    if their_opposite:
-        their_pick = sub.choice(their_opposite)
-    else:
-        their_pick = sub.choice(their_candidates)
-
-    actors = {
-        "other_house": other,
-        "our_person": our_pick,
-        "their_person": their_pick,
-    }
+    other = rng.choice(sorted(suitors))
 
     def _accept(ctx) -> List[str]:
-        our_person = actors["our_person"]
-        their_person = actors["their_person"]
-        msg = ctx.game.marriages.wed_match(
-            ctx.house, other, our_person, their_person,
-            ctx.game.realms, ctx.game.houses,
+        msg = ctx.game.marriages.arrange_match_between(
+            ctx.house, other, ctx.game.realms, ctx.game.houses,
             _ents_by_house(ctx.game), ctx.rng)
-        if msg is None:
-            return [f"The match with {other} falls through at the altar"]
-        return [msg]
+        return [msg] if msg else [f"The match with {other} falls through at the altar"]
 
     def _decline(ctx) -> List[str]:
         a, b = ctx.game.houses[ctx.house], ctx.game.houses[other]
         a.relations[other] = a.relations.get(other, 0) - int(5 * ctx.scale)
         b.relations[ctx.house] = b.relations.get(ctx.house, 0) - int(5 * ctx.scale)
-        return [f"{other}'s envoy is sent home; {actors['their_person'].name} is refused"]
+        return [f"{other}'s envoy is sent home without a bride"]
 
     return Petition(
         pid=_next_pid(game), kind="betrothal_offer", domain="diplomacy",
         house=house_name,
-        text=f"House {other} proposes a marriage: {actors['our_person'].name} ({actors['our_person'].age}) marries {actors['their_person'].name} ({actors['their_person'].age})",
-        actors=actors,
+        text=f"House {other} proposes a marriage between the houses",
+        actors={"other_house": other},
         options=[
             PetitionOption("accept", "Accept the match", -30, _accept),
-            PetitionOption("decline", f"Refuse {actors['their_person'].name}", 30, _decline),
+            PetitionOption("decline", "Decline politely", 30, _decline),
         ])
 
 
@@ -333,8 +303,7 @@ def _gen_heir_demand(game, house_name, realm, rng) -> Optional[Petition]:
     heirs = [c for c in realm.dynasty.all_characters.values()
              if c.is_alive and c.age >= 16 and c.id != realm.ruler.id
              and c.id not in seated]
-    sub = random.Random(_gen_seed(game, "heir_demand", house_name))
-    if not heirs or sub.random() >= HEIR_DEMAND_CHANCE:
+    if not heirs or rng.random() >= HEIR_DEMAND_CHANCE:
         return None
     heir = max(heirs, key=lambda c: c.age)
 
@@ -353,22 +322,26 @@ def _gen_heir_demand(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < HEIR_ALLOWANCE:
             return [f"The treasury cannot spare {heir.name}'s allowance"]
         house.debit(ctx.game.turn, "heir allowance", HEIR_ALLOWANCE)
-        modify_opinion(heir, realm.ruler, int(10 * ctx.scale), "given allowance")
-        return [f"{heir.name} receives an annual allowance of {HEIR_ALLOWANCE} gold"]
+        modify_opinion(heir, realm.ruler, int(10 * ctx.scale), "an allowance")
+        return [f"{heir.name} receives {HEIR_ALLOWANCE:.0f} gold per year"]
 
     def _refuse(ctx) -> List[str]:
-        modify_opinion(heir, realm.ruler, -int(12 * ctx.scale), "refused")
-        return [f"{heir.name} is refused; the family whispers"]
+        modify_opinion(heir, realm.ruler, -int(12 * ctx.scale), "refused their due")
+        d = apply_drift(heir, "ambitious_content", 5.0, "denied their due")
+        out = [f"{heir.name} is refused, and does not forget it"]
+        if d:
+            out.append(d)
+        return out
 
     return Petition(
         pid=_next_pid(game), kind="heir_demand", domain="family",
         house=house_name,
-        text=f"{heir.name} demands a position at court",
+        text=f"{heir.name} demands a seat at the table or capital of their own",
         actors={"heir": heir},
         options=[
-            PetitionOption("grant", "Grant a seat", -15, _grant_seat),
-            PetitionOption("allowance", "Grant an allowance instead", -5, _allowance),
-            PetitionOption("refuse", "Refuse the demand", 15, _refuse),
+            PetitionOption("grant_seat", "Give them a vacant seat", -20, _grant_seat),
+            PetitionOption("allowance", f"Grant an allowance ({HEIR_ALLOWANCE:.0f} gold)", 0, _allowance),
+            PetitionOption("refuse", "They will wait their turn", 40, _refuse),
         ])
 
 
@@ -421,7 +394,7 @@ def _gen_stress_crisis(game, house_name, realm, rng) -> Optional[Petition]:
     if game.turn < 15:
         return None
     sub = random.Random(_gen_seed(game, "stress_crisis", house_name))
-    if sub.random() < 0.5:
+    if sub.random() < 0.75:
         return None
     stressed = []
     for c in realm.characters:
@@ -467,7 +440,7 @@ def _gen_courtier_grievance(game, house_name, realm, rng) -> Optional[Petition]:
     if game.turn < 15:
         return None
     sub = random.Random(_gen_seed(game, "courtier_grievance", house_name))
-    if sub.random() < 0.3:
+    if sub.random() < 0.75:
         return None
     society = game.society
     ruler = realm.ruler
@@ -649,7 +622,7 @@ def _gen_war_council(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
     """A merchant offers to buy the right to collect a tax."""
     sub = random.Random(_gen_seed(game, "tax_farm_lease", house_name))
-    if sub.random() < 0.6:
+    if sub.random() < 0.75:
         return None
     treasurer = realm.court.positions.get(CourtPosition.BOARD_CHAIRMAN)
     if treasurer is None or not treasurer.is_alive:
@@ -694,7 +667,7 @@ def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_trade_concession(game, house_name, realm, rng) -> Optional[Petition]:
     """A foreign merchant house seeks trading rights."""
     sub = random.Random(_gen_seed(game, "trade_concession", house_name))
-    if sub.random() < 0.55:
+    if sub.random() < 0.75:
         return None
     treasurer = realm.court.positions.get(CourtPosition.BOARD_CHAIRMAN)
     if treasurer is None or not treasurer.is_alive:
@@ -736,7 +709,7 @@ def _gen_trade_concession(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
     """The marshal requests funds for military preparations."""
     sub = random.Random(_gen_seed(game, "military_grant", house_name))
-    if sub.random() < 0.55:
+    if sub.random() < 0.75:
         return None
     marshal = realm.court.positions.get(CourtPosition.MARSHAL)
     if marshal is None or not marshal.is_alive:
@@ -777,7 +750,7 @@ def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_diplomatic_summit(game, house_name, realm, rng) -> Optional[Petition]:
     """A foreign power invites the ruler to a diplomatic summit."""
     sub = random.Random(_gen_seed(game, "diplomatic_summit", house_name))
-    if sub.random() < 0.6:
+    if sub.random() < 0.75:
         return None
     chancellor = realm.court.positions.get(CourtPosition.FOREIGN_SECRETARY)
     if chancellor is None or not chancellor.is_alive:
@@ -822,7 +795,7 @@ def _gen_diplomatic_summit(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
     """The local press demands action on a matter of public concern."""
     sub = random.Random(_gen_seed(game, "press_ultimatum", house_name))
-    if sub.random() < 0.55:
+    if sub.random() < 0.75:
         return None
     chancellor = realm.court.positions.get(CourtPosition.MASTER_OF_PRESS)
     if chancellor is None or not chancellor.is_alive:
@@ -865,7 +838,7 @@ def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
     """A reform movement seeks changes to the social order."""
     sub = random.Random(_gen_seed(game, "reform_petition", house_name))
-    if sub.random() < 0.55:
+    if sub.random() < 0.75:
         return None
     chancellor = realm.court.positions.get(CourtPosition.MASTER_OF_PRESS)
     if chancellor is None or not chancellor.is_alive:
