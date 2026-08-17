@@ -262,8 +262,9 @@ def _gen_union_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
 
 
 def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
-    """Another House proposes a match, with the usual merger terms."""
-    if rng.random() >= BETROTHAL_CHANCE:
+    """Another House proposes a match, naming the two people who would wed."""
+    sub = random.Random(_gen_seed(game, "betrothal_offer", house_name))
+    if sub.random() >= BETROTHAL_CHANCE:
         return None
     house = game.houses[house_name]
     suitors = [n for n in game.houses
@@ -272,28 +273,57 @@ def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
                and house.relations.get(n, 0) > -50]
     if not suitors:
         return None
-    other = rng.choice(sorted(suitors))
+    other = sub.choice(sorted(suitors))
+
+    # Name the proposed pair for the petition text using a sub-stream
+    other_realm = game.realms.get(other)
+    if other_realm is None:
+        return None
+    our_candidates = game.marriages._eligible(realm)
+    their_candidates = game.marriages._eligible(other_realm)
+    if not our_candidates or not their_candidates:
+        return None
+
+    sub = random.Random(_gen_seed(game, "betrothal_offer", house_name))
+    our_pick = sub.choice(our_candidates)
+    want_gender = "Female" if our_pick.gender == "Male" else "Male"
+    their_opposite = [c for c in their_candidates if c.gender == want_gender]
+    if their_opposite:
+        their_pick = sub.choice(their_opposite)
+    else:
+        their_pick = sub.choice(their_candidates)
+
+    actors = {
+        "other_house": other,
+        "our_person": our_pick,
+        "their_person": their_pick,
+    }
 
     def _accept(ctx) -> List[str]:
-        msg = ctx.game.marriages.arrange_match_between(
-            ctx.house, other, ctx.game.realms, ctx.game.houses,
+        our_person = actors["our_person"]
+        their_person = actors["their_person"]
+        msg = ctx.game.marriages.wed_match(
+            ctx.house, other, our_person, their_person,
+            ctx.game.realms, ctx.game.houses,
             _ents_by_house(ctx.game), ctx.rng)
-        return [msg] if msg else [f"The match with {other} falls through at the altar"]
+        if msg is None:
+            return [f"The match with {other} falls through at the altar"]
+        return [msg]
 
     def _decline(ctx) -> List[str]:
         a, b = ctx.game.houses[ctx.house], ctx.game.houses[other]
         a.relations[other] = a.relations.get(other, 0) - int(5 * ctx.scale)
         b.relations[ctx.house] = b.relations.get(ctx.house, 0) - int(5 * ctx.scale)
-        return [f"{other}'s envoy is sent home without a bride"]
+        return [f"{other}'s envoy is sent home; {actors['their_person'].name} is refused"]
 
     return Petition(
         pid=_next_pid(game), kind="betrothal_offer", domain="diplomacy",
         house=house_name,
-        text=f"House {other} proposes a marriage between the houses",
-        actors={"other_house": other},
+        text=f"House {other} proposes a marriage: {actors['our_person'].name} ({actors['our_person'].age}) marries {actors['their_person'].name} ({actors['their_person'].age})",
+        actors=actors,
         options=[
             PetitionOption("accept", "Accept the match", -30, _accept),
-            PetitionOption("decline", "Decline politely", 30, _decline),
+            PetitionOption("decline", f"Refuse {actors['their_person'].name}", 30, _decline),
         ])
 
 
