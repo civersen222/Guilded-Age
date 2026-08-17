@@ -34,9 +34,9 @@ FESTER_TURNS = 2                  # unattended + no seat -> auto-resolution afte
 MAX_PETITIONS = 6                 # per house per turn
 BETROTHAL_CHANCE = 0.25
 HEIR_DEMAND_CHANCE = 0.2
-RAIL_COST = 120.0
-BUYOFF_COST = 80.0
-COMPENSATE_COST = 60.0
+RAIL_COST = 250.0
+BUYOFF_COST = 150.0
+COMPENSATE_COST = 100.0
 HEIR_ALLOWANCE = 100.0
 TOUR_UNREST_RELIEF = 10.0
 TOUR_STRESS = 8
@@ -665,6 +665,11 @@ def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for the tax farm lease"]
         house.debit(ctx.game.turn, "tax farm lease", cost)
+        # Credit to other houses as tax farmers invest locally
+        others = [h for h in ctx.game.houses.values() if h.name != ctx.house]
+        if others:
+            recipient = others[0]
+            recipient.credit(ctx.game.turn, "tax farm lease", cost)
         return [f"Tax farm on {prov.name} leased for {cost} gold"]
 
     def _reject_lease(ctx) -> List[str]:
@@ -704,6 +709,9 @@ def _gen_trade_concession(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < c:
             return [f"The treasury cannot spare {c:.0f} gold for the trade concession"]
         house.debit(ctx.game.turn, "trade concession", c)
+        rival = ctx.game.houses.get(rival_name)
+        if rival:
+            rival.credit(ctx.game.turn, "trade concession", c)
         return [f"Trade concession granted to {rival_name} for {c:.0f} gold"]
 
     def _deny_concession(ctx) -> List[str]:
@@ -735,6 +743,11 @@ def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for the military grant"]
         house.debit(ctx.game.turn, "military grant", cost)
+        # Military spending flows to contractors/suppliers in other Houses
+        others = [h for h in ctx.game.houses.values() if h.name != ctx.house]
+        if others:
+            recipient = others[0]
+            recipient.credit(ctx.game.turn, "military grant", cost)
         return [f"Military grant of {cost} gold approved"]
 
     def _deny_grant(ctx) -> List[str]:
@@ -773,6 +786,9 @@ def _gen_diplomatic_summit(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for the diplomatic summit"]
         house.debit(ctx.game.turn, "diplomatic summit", cost)
+        rival = ctx.game.houses.get(rival_name)
+        if rival:
+            rival.credit(ctx.game.turn, "diplomatic summit", cost)
         return [f"Diplomatic summit with {rival_name} attended at cost of {cost} gold"]
 
     def _send_proxy(ctx) -> List[str]:
@@ -810,6 +826,11 @@ def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for press compliance"]
         house.debit(ctx.game.turn, "press compliance", cost)
+        # Press spending flows to publishers/printers in other Houses
+        others = [h for h in ctx.game.houses.values() if h.name != ctx.house]
+        if others:
+            recipient = others[0]
+            recipient.credit(ctx.game.turn, "press compliance", cost)
         return [f"Complied with press demands on {topic} at cost of {cost} gold"]
 
     def _ignore(ctx) -> List[str]:
@@ -843,6 +864,11 @@ def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
         if house.treasury < cost:
             return [f"The treasury cannot spare {cost:.0f} gold for reform endorsement"]
         house.debit(ctx.game.turn, "reform endorsement", cost)
+        # Reform spending flows to beneficiaries in other Houses
+        others = [h for h in ctx.game.houses.values() if h.name != ctx.house]
+        if others:
+            recipient = others[0]
+            recipient.credit(ctx.game.turn, "reform endorsement", cost)
         return [f"Endorsed {reform} at cost of {cost} gold"]
 
     def _suppress_reform(ctx) -> List[str]:
