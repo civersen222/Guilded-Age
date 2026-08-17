@@ -263,8 +263,7 @@ def _gen_union_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
 
 def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
     """Another House proposes a match, naming the two people who would wed."""
-    sub = random.Random(_gen_seed(game, "betrothal_offer", house_name))
-    if sub.random() >= BETROTHAL_CHANCE:
+    if rng.random() >= BETROTHAL_CHANCE:
         return None
     house = game.houses[house_name]
     suitors = [n for n in game.houses
@@ -273,7 +272,7 @@ def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
                and house.relations.get(n, 0) > -50]
     if not suitors:
         return None
-    other = sub.choice(sorted(suitors))
+    other = rng.choice(sorted(suitors))
 
     # Name the proposed pair for the petition text using a sub-stream
     other_realm = game.realms.get(other)
@@ -333,7 +332,8 @@ def _gen_heir_demand(game, house_name, realm, rng) -> Optional[Petition]:
     heirs = [c for c in realm.dynasty.all_characters.values()
              if c.is_alive and c.age >= 16 and c.id != realm.ruler.id
              and c.id not in seated]
-    if not heirs or rng.random() >= HEIR_DEMAND_CHANCE:
+    sub = random.Random(_gen_seed(game, "heir_demand", house_name))
+    if not heirs or sub.random() >= HEIR_DEMAND_CHANCE:
         return None
     heir = max(heirs, key=lambda c: c.age)
 
@@ -868,7 +868,7 @@ def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
 def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
     """A reform movement seeks changes to the social order."""
     sub = random.Random(_gen_seed(game, "reform_petition", house_name))
-    if sub.random() < 0.95:
+    if sub.random() < 0.55:
         return None
     chancellor = realm.court.positions.get(CourtPosition.MASTER_OF_PRESS)
     if chancellor is None or not chancellor.is_alive:
