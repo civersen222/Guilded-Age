@@ -366,27 +366,30 @@ def test_sway_penalty():
 # 419 to 17,443 gold. Every OTHER spending verb -- charter, expansion, railway,
 # buyoff, allowance, compensation -- checks and debits house.treasury.
 #
-# Fixture: seed 47 at turn 2 is the smallest tree that discriminates. Ashworth's
+# Fixture: seed 47 at turn 4 is the smallest tree that discriminates. Ashworth's
 # capital executor is Ashoka Ashworth holding exactly 0.0 gold, the treasury
-# holds 2381.98, and House Vantrell has exactly one disloyal shareholder
-# (Alexios Vantrell, 20.0% of Yarehaven Ironworks).
+# holds 2589.8, and House Vantrell has exactly one disloyal shareholder
+# (Ashoka Vantrell, 10.0 shares of Ivargard Cross Estate).
 
 I4C1_BUYER_HOUSE = "Ashworth"
 I4C1_TARGET_HOUSE = "Vantrell"
 
 
 def _i4c1_fixture():
-    """seed 47, turn 2 -> (game, capital executor of Ashworth).
+    """seed 47, turn 4 -> (game, capital executor of Ashworth).
 
     Asserts its own premises, so a test built on it can never pass or fail for
     a reason that lives in the fixture rather than in the code under test.
+    Turn 4 is the first turn at which Vantrell has a disloyal shareholder:
+    Ashoka Vantrell's opinion of the ruler crosses the grudge line at turn 3,
+    and tick_loyalty at turn 4 records the first slip.
     """
     from gilded.ai import _executor_for
     from gilded.docket import INITIATIVES
     from gilded.society.realm import disloyal_shareholders
 
     game = GildedGame(seed=47)
-    for _ in range(2):
+    for _ in range(4):
         game.end_turn()
     realm = game.realms[I4C1_BUYER_HOUSE]
     executor = _executor_for(game, realm, INITIATIVES["start_takeover"][0])
