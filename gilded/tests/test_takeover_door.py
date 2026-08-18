@@ -18,7 +18,7 @@ def _run(seed=7, turns=12):
     call, whether the targeted House had at least one disloyal
     shareholder and which targeted Houses the door opened for.
     """
-    game = GildedGame(seed=seed, player_house="Vantrell")
+    game = GildedGame(seed=seed)
     track = {"calls": 0, "found": 0, "houses": set()}
     orig = realm_mod.disloyal_shareholders
 
