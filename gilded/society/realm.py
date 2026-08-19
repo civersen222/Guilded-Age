@@ -156,12 +156,11 @@ def tick_loyalty(realm: Realm, enterprises: List, rng: random.Random) -> List[st
 
 
 DISLOYAL_LOYALTY = 40.0   # sellers: loyalty below this...
-DISLOYAL_OPINION = -10    # ...or opinion of the ruler at or below this
+DISLOYAL_OPINION = -20    # ...or opinion of the ruler at or below this
 
 
 def disloyal_shareholders(realm: Realm, enterprises: List,
-                          house_only: bool = True,
-                          family_fallback: bool = False) -> List[Character]:
+                          house_only: bool = True) -> List[Character]:
     """Hostile takeover's door (spec 6): the siblings, widows and denied
     heirs who hold House shares but no love for the House. Low loyalty or
     a grudge against the ruler marks them ready to sell. The ruler is
@@ -179,34 +178,16 @@ def disloyal_shareholders(realm: Realm, enterprises: List,
     else:
         check_ents = list(enterprises)
     out: List[Character] = []
-    measured: List[Character] = []
-    family: List[Character] = []
     for ch in realm.characters:
         if not ch.is_alive or ch.id == ruler.id:
             continue
         if not any(ch.id in ent.ledger for ent in check_ents):
             continue
         opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
-        loyalty = getattr(ch, "loyalty", None)
-        if (loyalty is not None and loyalty < DISLOYAL_LOYALTY
+        loyalty = getattr(ch, "loyalty", LOYALTY_START)
+        if (loyalty < DISLOYAL_LOYALTY
                 or opinion <= DISLOYAL_OPINION):
-            measured.append(ch)
             out.append(ch)
-        elif loyalty is None:
-            # Family holders (siblings, widows, denied heirs) never get
-            # their loyalty measured. For a default caller the door opens
-            # on a measured grudge against the ruler - a negative opinion
-            # is evidence enough, while an absent measurement alone is
-            # not. A caller that asks for the fallback (the takeover)
-            # also gets the quiet holders when no measured disloyal
-            # seller exists.
-            if opinion < 0:
-                out.append(ch)
-                family.append(ch)
-            elif family_fallback:
-                family.append(ch)
-    if family_fallback and not measured:
-        return family
     return out
 
 
@@ -219,8 +200,8 @@ def director_is_disloyal(director, ruler) -> bool:
     if director is None:
         return False
     opinion = director._society.opinions.get((director.id, ruler.id), 0)
-    loyalty = getattr(director, "loyalty", None)
-    if loyalty is not None and loyalty < DISLOYAL_LOYALTY:
+    loyalty = getattr(director, "loyalty", LOYALTY_START)
+    if loyalty < DISLOYAL_LOYALTY:
         return True
     if opinion <= DISLOYAL_OPINION:
         return True
