@@ -156,7 +156,7 @@ def tick_loyalty(realm: Realm, enterprises: List, rng: random.Random) -> List[st
 
 
 DISLOYAL_LOYALTY = 40.0   # sellers: loyalty below this...
-DISLOYAL_OPINION = -20    # ...or opinion of the ruler at or below this
+DISLOYAL_OPINION = -10    # ...or opinion of the ruler at or below this
 
 
 def disloyal_shareholders(realm: Realm, enterprises: List,
