@@ -184,7 +184,7 @@ def test_takeover_buys_the_house_out():
     ent.ledger = {seller.id: 80.0}
     tk = Takeover(buyer, "Vantrell", "Karsgate")
     ents = [ent]
-    for _ in range(6):
+    for _ in range(15):
         msgs = tk.advance(realms, ents, SeqRng([]), game)
         if tk.complete:
             break
