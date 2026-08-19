@@ -110,14 +110,20 @@ def _marriageable(realm, ruler) -> bool:
 
 
 def _richest_rival(game, house_name: str) -> Optional[str]:
-    """Buyout target: the House with the most enterprises we could buy into."""
+    """Buyout target: the House with the most enterprises we could buy into,
+    preferring a rival that currently has a disloyal shareholder willing to
+    sell - a rich House with nobody to sell from is not a door."""
+    from gilded.society.realm import disloyal_shareholders
     counts = {}
     for e in game.enterprises:
         if e.house != house_name and e.house in game.houses:
             counts[e.house] = counts.get(e.house, 0) + 1
     if not counts:
         return None
-    return sorted(counts, key=lambda h: (-counts[h], h))[0]
+    def has_seller(h: str) -> int:
+        realm = game.realms.get(h)
+        return int(bool(realm and disloyal_shareholders(realm, game.enterprises)))
+    return sorted(counts, key=lambda h: (-has_seller(h), -counts[h], h))[0]
 
 
 def _best_relations(game, house_name: str) -> Optional[str]:

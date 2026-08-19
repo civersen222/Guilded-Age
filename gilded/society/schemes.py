@@ -328,7 +328,7 @@ def compromise(agent, target, rng=_random, legitimacy=None,
 
 TAKEOVER_THRESHOLD = 50.0   # average portfolio stake that flips the House
 TAKEOVER_PRICE = 2.0        # gold per 1% of one enterprise
-TAKEOVER_TRANCHE = 15.0     # max pct bought per enterprise, per seller, per turn
+TAKEOVER_TRANCHE = 5.0      # max pct bought per enterprise, per seller, per turn
 TAKEOVER_REFERENCE = 4.2    # median market value at base rate (seed 42, turn 3)
 BAND_LO = 0.25
 BAND_HI = 4.0
