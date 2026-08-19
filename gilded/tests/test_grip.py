@@ -821,11 +821,16 @@ def test_reported_dividend_matches_chassis_payment():
         g.directives[h].set_stance("capital", -100)  # output_mod = 1.0 + 0.15 * (-1) = 0.85
 
     # Run end_turn to let chassis compute dividends
-    # The chassis treasury change = dividends - input_costs.
+    # The chassis treasury change = dividends - input_costs - any share
+    # purchases made mid-turn (a live takeover can buy shares this turn).
     # Grip also subtracts input costs per enterprise, so compare directly.
-    before_treasury = g.houses[house_a].treasury
+    house_obj = g.houses[house_a]
+    before_treasury = house_obj.treasury
+    journal_len = len(house_obj.journal)
     g.end_turn()
-    chassis_dividend = g.houses[house_a].treasury - before_treasury
+    share_purchases = abs(sum(amt for _, label, amt in house_obj.journal[journal_len:]
+                              if label == "share purchase" and amt < 0))
+    chassis_dividend = (house_obj.treasury - before_treasury) + share_purchases
 
     # Now get the grip report dividend
     rep = grip.report(g, house_a)

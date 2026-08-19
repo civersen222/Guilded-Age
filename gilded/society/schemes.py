@@ -373,7 +373,9 @@ class Takeover:
         target_ents = [e for e in enterprises if e.house == self.target_house]
         from gilded.houses import House
         house: House = game.houses[self.buyer_house]
-        for seller in disloyal_shareholders(target_realm, enterprises, house_only=False):
+        for seller in disloyal_shareholders(target_realm, enterprises,
+                                            house_only=False,
+                                            family_fallback=True):
             for ent in target_ents:
                 price = share_price(ent, game)
                 want = min(TAKEOVER_TRANCHE, house.treasury / price)

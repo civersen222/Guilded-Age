@@ -160,7 +160,8 @@ DISLOYAL_OPINION = -10    # ...or opinion of the ruler at or below this
 
 
 def disloyal_shareholders(realm: Realm, enterprises: List,
-                          house_only: bool = True) -> List[Character]:
+                          house_only: bool = True,
+                          family_fallback: bool = False) -> List[Character]:
     """Hostile takeover's door (spec 6): the siblings, widows and denied
     heirs who hold House shares but no love for the House. Low loyalty or
     a grudge against the ruler marks them ready to sell. The ruler is
@@ -178,6 +179,8 @@ def disloyal_shareholders(realm: Realm, enterprises: List,
     else:
         check_ents = list(enterprises)
     out: List[Character] = []
+    measured: List[Character] = []
+    family: List[Character] = []
     for ch in realm.characters:
         if not ch.is_alive or ch.id == ruler.id:
             continue
@@ -185,14 +188,25 @@ def disloyal_shareholders(realm: Realm, enterprises: List,
             continue
         opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
         loyalty = getattr(ch, "loyalty", None)
-        # Family holders (siblings, widows, denied heirs) never get their
-        # loyalty measured, so for them the door opens on a measured grudge
-        # against the ruler - a negative opinion is evidence enough, while
-        # an absent measurement alone is not.
         if (loyalty is not None and loyalty < DISLOYAL_LOYALTY
-                or opinion <= DISLOYAL_OPINION
-                or (loyalty is None and opinion < 0)):
+                or opinion <= DISLOYAL_OPINION):
+            measured.append(ch)
             out.append(ch)
+        elif loyalty is None:
+            # Family holders (siblings, widows, denied heirs) never get
+            # their loyalty measured. For a default caller the door opens
+            # on a measured grudge against the ruler - a negative opinion
+            # is evidence enough, while an absent measurement alone is
+            # not. A caller that asks for the fallback (the takeover)
+            # also gets the quiet holders when no measured disloyal
+            # seller exists.
+            if opinion < 0:
+                out.append(ch)
+                family.append(ch)
+            elif family_fallback:
+                family.append(ch)
+    if family_fallback and not measured:
+        return family
     return out
 
 
