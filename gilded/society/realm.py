@@ -184,9 +184,14 @@ def disloyal_shareholders(realm: Realm, enterprises: List,
         if not any(ch.id in ent.ledger for ent in check_ents):
             continue
         opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
-        loyalty = getattr(ch, "loyalty", LOYALTY_START)
-        if (loyalty < DISLOYAL_LOYALTY
-                or opinion <= DISLOYAL_OPINION):
+        loyalty = getattr(ch, "loyalty", None)
+        # Family holders (siblings, widows, denied heirs) never get their
+        # loyalty measured, so for them the door opens on a measured grudge
+        # against the ruler - a negative opinion is evidence enough, while
+        # an absent measurement alone is not.
+        if (loyalty is not None and loyalty < DISLOYAL_LOYALTY
+                or opinion <= DISLOYAL_OPINION
+                or (loyalty is None and opinion < 0)):
             out.append(ch)
     return out
 
@@ -200,8 +205,8 @@ def director_is_disloyal(director, ruler) -> bool:
     if director is None:
         return False
     opinion = director._society.opinions.get((director.id, ruler.id), 0)
-    loyalty = getattr(director, "loyalty", LOYALTY_START)
-    if loyalty < DISLOYAL_LOYALTY:
+    loyalty = getattr(director, "loyalty", None)
+    if loyalty is not None and loyalty < DISLOYAL_LOYALTY:
         return True
     if opinion <= DISLOYAL_OPINION:
         return True
