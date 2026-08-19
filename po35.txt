@@ -1,0 +1,3 @@
+﻿--- turn 0 first_house=Vantrell target=Vantrell ruler=Roxana Vantrell 00000001 dyn=['00000001', '00000003']
+  Roxana Vantrell  00000001 age=31 loy=None opp=NONE shares={'Thalmere Estate': 60.0, 'Holmore Mill': 60.0} child=False sibs=[] grudge_in_house=[]
+  Ramses Vantrell  00000003 age= 0 loy=None opp=NONE shares={'Thalmere Estate': 40.0, 'Holmore Mill': 40.0} child=True sibs=[] grudge_in_house=[]

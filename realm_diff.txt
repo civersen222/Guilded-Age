@@ -1,0 +1,26 @@
+﻿diff --git a/gilded/society/realm.py b/gilded/society/realm.py
+index d53aa68..f6ebc15 100644
+--- a/gilded/society/realm.py
++++ b/gilded/society/realm.py
+@@ -184,8 +184,8 @@ def disloyal_shareholders(realm: Realm, enterprises: List,
+         if not any(ch.id in ent.ledger for ent in check_ents):
+             continue
+         opinion = ch._society.opinions.get((ch.id, ruler.id), 0)
+-        loyalty = getattr(ch, "loyalty", LOYALTY_START)
+-        if (loyalty < DISLOYAL_LOYALTY
++        loyalty = getattr(ch, "loyalty", None)
++        if (loyalty is not None and loyalty < DISLOYAL_LOYALTY
+                 or opinion <= DISLOYAL_OPINION):
+             out.append(ch)
+     return out
+@@ -200,8 +200,8 @@ def director_is_disloyal(director, ruler) -> bool:
+     if director is None:
+         return False
+     opinion = director._society.opinions.get((director.id, ruler.id), 0)
+-    loyalty = getattr(director, "loyalty", LOYALTY_START)
+-    if loyalty < DISLOYAL_LOYALTY:
++    loyalty = getattr(director, "loyalty", None)
++    if loyalty is not None and loyalty < DISLOYAL_LOYALTY:
+         return True
+     if opinion <= DISLOYAL_OPINION:
+         return True

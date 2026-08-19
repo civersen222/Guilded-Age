@@ -1,0 +1,15 @@
+﻿8b50a85 HEAD@{2026-08-19}: commit: chore: clean 11N's tree - keep load-bearing ensure_agenda, drop inert realm.py widening, delete 16 scratch files
+b0dde3a HEAD@{2026-08-18}: reset: moving to HEAD
+b0dde3a HEAD@{2026-08-18}: commit: schemes: fix house treasury debits for share purchases (test_schemes green)
+d20c9a9 HEAD@{2026-08-18}: checkout: moving from d7fa68fcf0e724b3d76dba29ca828fdcd3cdab58 to master
+d7fa68f HEAD@{2026-08-18}: checkout: moving from master to d7fa68f
+d20c9a9 HEAD@{2026-08-18}: reset: moving to HEAD
+d20c9a9 HEAD@{2026-08-18}: commit: test_takeover_door: build the sealed world - GildedGame(7) with no player_house, as the stage measurement does
+bee6dd9 HEAD@{2026-08-18}: reset: moving to HEAD
+bee6dd9 HEAD@{2026-08-17}: checkout: moving from d7fa68fcf0e724b3d76dba29ca828fdcd3cdab58 to master
+d7fa68f HEAD@{2026-08-17}: checkout: moving from master to d7fa68f
+bee6dd9 HEAD@{2026-08-17}: commit: A failing test for the takeover door: seed 7 buys no shares
+f40192d HEAD@{2026-08-17}: commit: Step 0b: put heir_demand back on the shared rng and reform back to 0.95
+80e1e06 HEAD@{2026-08-17}: commit: Step 0: inherit the previous run's uncommitted docket repair
+b1cb35e HEAD@{2026-08-17}: reset: moving to HEAD
+b1cb35e HEAD@{2026-08-17}: reset: moving to HEAD
