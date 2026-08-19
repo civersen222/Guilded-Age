@@ -216,10 +216,19 @@ def select_goal(game, house_name: str) -> Optional[Goal]:
 
 def ensure_agenda(game, house_name: str) -> Optional[Goal]:
     """Return the House's live goal, re-selecting when the commit window has
-    passed or the current target has vanished. The ONLY writer of game.agendas."""
+    passed or the current target has vanished. The ONLY writer of game.agendas.
+
+    A goal is re-evaluated EARLY (before its commit window closes) when its
+    target has vanished or when it is the takeover (Buyout) goal and the
+    targeted House now has live sellers - the door has opened and the House
+    should commit to it rather than sit out the rest of the window idle."""
     cur = game.agendas.get(house_name)
     if cur is not None and game.turn < cur.opened_turn + cur.commit_turns:
-        if cur.target is None or cur.target in game.houses:
+        target_gone = cur.target is not None and cur.target not in game.houses
+        target_shifted = (cur.family == "Buyout"
+                          and _target_for(game, house_name, "Buyout")
+                          != cur.target)
+        if not target_gone and not target_shifted:
             return cur
     goal = select_goal(game, house_name)
     if goal is not None:
