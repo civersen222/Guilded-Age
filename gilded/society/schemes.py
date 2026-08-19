@@ -356,6 +356,7 @@ class Takeover:
         self.buyer_house = buyer_house
         self.target_house = target_house
         self.complete = False
+        self.lapsed = False      # target House left nothing to buy: campaign is over
 
     def advance(self, realms, enterprises, rng, game) -> List[str]:
         """One turn of quiet buying: approach every disloyal holder and
@@ -371,6 +372,12 @@ class Takeover:
             return []
         msgs: List[str] = []
         target_ents = [e for e in enterprises if e.house == self.target_house]
+        if not target_ents:
+            # The House's portfolio is gone - there is nothing left to
+            # buy out of it. The campaign is over without ever reaching
+            # the threshold: it lapses.
+            self.lapsed = True
+            return []
         from gilded.houses import House
         house: House = game.houses[self.buyer_house]
         for seller in disloyal_shareholders(target_realm, enterprises, house_only=False):
