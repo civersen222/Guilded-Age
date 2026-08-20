@@ -280,13 +280,18 @@ class GildedGame:
         self._emit(self.scheme_mgr.advance_all(self.realms, self.legitimacy,
                                                self.rng), "gazette")
         for tk in list(self.takeovers):
-            self._emit(tk.advance(self.realms, self.enterprises, self.rng, self),
-                       "gazette")
             if tk.complete:
-                # A finished campaign leaves the live list (it can no longer
-                # buy) but stays observable as a record of what fell.
+                # A finished campaign stays in the list so the fall remains
+                # observable; it can no longer buy, so skip its advance.
                 if tk not in self.completed_takeovers:
                     self.completed_takeovers.append(tk)
+                continue
+            if tk.lapsed:
+                self.takeovers.remove(tk)
+                continue
+            self._emit(tk.advance(self.realms, self.enterprises, self.rng, self),
+                       "gazette")
+            if tk.lapsed:
                 self.takeovers.remove(tk)
         for _kind, h in self.scheme_mgr.pending_successions:
             self._emit([f"House {h}'s chair stands empty - the succession is unsettled"],
