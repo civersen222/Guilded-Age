@@ -91,6 +91,7 @@ class GildedGame:
         self.agendas: Dict[str, object] = {}   # house -> agenda.Goal (Stage 2)
         self.informants: set = set()           # (viewer_house, target_house) intel lever
         self.takeovers: List[object] = []      # society.schemes.Takeover in flight
+        self.completed_takeovers: List[object] = []  # campaigns that reached the threshold
         self._seed_enterprises()
         self.open_turn()
 
@@ -283,6 +284,8 @@ class GildedGame:
                        "gazette")
             if tk.complete or tk.lapsed:
                 self.takeovers.remove(tk)
+                if tk.complete:
+                    self.completed_takeovers.append(tk)
         for _kind, h in self.scheme_mgr.pending_successions:
             self._emit([f"House {h}'s chair stands empty - the succession is unsettled"],
                        "gazette", h)
