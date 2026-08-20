@@ -370,6 +370,11 @@ class Takeover:
         buyer_realm = realms.get(self.buyer_house)
         if target_realm is None or buyer_realm is None:
             return []
+        if not self.buyer.is_alive:
+            # The buyer is dead - the campaign dies with them. There is no
+            # heir to the scheme: it lapses and cannot be resurrected.
+            self.lapsed = True
+            return []
         msgs: List[str] = []
         target_ents = [e for e in enterprises if e.house == self.target_house]
         if not target_ents:

@@ -96,3 +96,35 @@ def test_completed_takeover_moves_the_enterprises():
     assert ent.house == "Vantrell", f"enterprise still under {ent.house}"
     # The seller was stripped of the portfolio.
     assert ent.ledger.get(seller.id, 0.0) == 0.0
+
+
+def test_dead_buyer_lapses_the_campaign():
+    """11R: a campaign dies with its buyer. A dead buyer cannot keep buying
+    shares turn after turn - the campaign lapses and stays closed."""
+    random.seed(47)
+    rng = random.Random(47)
+    society = SocietyState(rng)
+    buyer = _char(society, "Buyer")
+    ra = create_house_realm("Vantrell", society)
+    target = create_house_realm("Karsgate", society)
+    seller = _char(society, "Seller")
+    target.characters.append(seller)
+    seller.loyalty = 0.0  # disloyal: the door would stay open without this
+    ent = Enterprise(eid=10, kind="bank", name="K Mill",
+                     house=target.house_name, province=0)
+    ent.ledger = {seller.id: 100.0}
+    ent.director_id = seller.id
+
+    game = _Game(_House())
+    realms = {ra.house_name: ra, target.house_name: target}
+    tk = Takeover(buyer, "Vantrell", target.house_name)
+
+    buyer.is_alive = False
+    assert tk.advance(realms, [ent], rng, game) == []
+    assert tk.lapsed, "a dead buyer's campaign must lapse"
+    assert not tk.complete
+    # A later call cannot resurrect it - and nothing moved.
+    assert tk.advance(realms, [ent], rng, game) == []
+    assert tk.lapsed
+    assert ent.house == "Karsgate"
+    assert ent.ledger.get(seller.id, 0.0) == 100.0
