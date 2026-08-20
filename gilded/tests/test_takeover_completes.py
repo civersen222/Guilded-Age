@@ -46,6 +46,46 @@ def _char(society, name):
     return c
 
 
+def test_buyers_own_stake_below_threshold_but_coalition_completes():
+    """11R: the buyer alone may never clear the threshold - the House falls
+    to the buyer and the House's own defectors together. A buyer capped by
+    a thin treasury far below the threshold still completes the campaign
+    while the disloyal holders stand behind them; under the old
+    buyer-alone check this campaign could never finish."""
+    random.seed(47)
+    rng = random.Random(47)
+    society = SocietyState(rng)
+    buyer = _char(society, "Buyer")
+    ra = create_house_realm("Vantrell", society)
+    target = create_house_realm("Karsgate", society)
+    seller = _char(society, "Seller")
+    target.characters.append(seller)
+    seller.loyalty = 0.0  # disloyal: the door stays open
+    ent = Enterprise(eid=11, kind="bank", name="K Mill",
+                     house=target.house_name, province=0)
+    ent.ledger = {seller.id: 100.0}
+    ent.director_id = seller.id
+
+    class _Thin(_House):
+        def __init__(self):
+            # Enough for exactly two tranches: the buyer tops out at
+            # 10% of the portfolio - nowhere near the threshold alone.
+            self.treasury = 20.0
+
+    game = _Game(_Thin())
+    realms = {ra.house_name: ra, target.house_name: target}
+    tk = Takeover(buyer, "Vantrell", target.house_name)
+
+    for _ in range(60):
+        tk.advance(realms, [ent], rng, game)
+        if tk.complete:
+            break
+    assert tk.complete, (
+        f"the buyer alone holds far below {TAKEOVER_THRESHOLD} - the "
+        f"House must fall to the buyer and its defectors together")
+    assert ent.house == "Vantrell"
+
+
 def test_enterpriseless_campaign_does_not_stay_live():
     random.seed(47)
     rng = random.Random(47)
