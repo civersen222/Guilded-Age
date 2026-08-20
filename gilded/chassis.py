@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from gilded.world import generate_atlas
-from gilded.houses import STARTING_TREASURY, assign_houses
+from gilded.houses import assign_houses
 from gilded.enterprises import (Enterprise, capacity_out, director_skim,
                                 found_enterprise, tick_construction)
 from gilded.market import Market, tech_mod_for
@@ -44,7 +44,6 @@ ENDOWMENT_ENTERPRISE = {
 }
 TURN_BUDGET = 70                  # the century, at a year and a half a turn
 YEAR_START = 1900
-CAPITAL_LEVY_RATE = 0.35          # share of above-base treasury taken each turn
 
 
 def year_of(turn: int) -> int:
@@ -385,19 +384,7 @@ class GildedGame:
                 self.directives[h].set_stance("labor", -100)
             self._emit(msgs, "gazette", h)
 
-        # 8.5 the capital levy: the state takes a share of any treasury
-        #      wealth above the starting purse - the excess that the
-        #      enterprises minted this age is taxed, not kept
-        for h in sorted(self.houses):
-            excess = self.houses[h].treasury - STARTING_TREASURY
-            if excess > 0:
-                levy = CAPITAL_LEVY_RATE * excess
-                self.houses[h].debit(self.turn, "capital levy", levy)
-                self._emit([f"Capital levy: {levy:.0f} gold assessed on "
-                            f"{excess:.0f} of excess treasury"],
-                           "ledger", h)
-
-        # 8.6 the Director reads the resolved turn and chronicles it
+        # 8.5 the Director reads the resolved turn and chronicles it
         self.events.extend(self.director.observe(self))
 
         # 9. endings, then the next morning's paper

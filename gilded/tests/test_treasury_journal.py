@@ -215,7 +215,7 @@ def test_no_treasury_arithmetic_outside_houses():
 # ── Rule 11 — label set is closed ─────────────────────────────────────
 
 def test_treasury_labels_count():
-    assert len(TREASURY_LABELS) == 20
+    assert len(TREASURY_LABELS) == 19
 
 
 def test_treasury_labels_contains_expected():
@@ -225,7 +225,7 @@ def test_treasury_labels_contains_expected():
         "reparations paid", "reparations received", "share purchase",
         "tax farm lease", "trade concession", "military grant",
         "diplomatic summit", "press compliance", "reform endorsement",
-        "courtier appeasement", "capital levy",
+        "courtier appeasement",
     }
     assert TREASURY_LABELS == expected
 
@@ -553,7 +553,7 @@ def test_multiple_houses_independent_journals():
 
 
 def test_treasury_frozenset_immutable():
-    assert len(TREASURY_LABELS) == 20
+    assert len(TREASURY_LABELS) == 19
     try:
         TREASURY_LABELS.add("fake")
         assert False, "frozenset should not allow addition"

@@ -830,9 +830,7 @@ def test_reported_dividend_matches_chassis_payment():
     g.end_turn()
     share_purchases = abs(sum(amt for _, label, amt in house_obj.journal[journal_len:]
                               if label == "share purchase" and amt < 0))
-    capital_levy = abs(sum(amt for _, label, amt in house_obj.journal[journal_len:]
-                            if label == "capital levy" and amt < 0))
-    chassis_dividend = (house_obj.treasury - before_treasury) + share_purchases + capital_levy
+    chassis_dividend = (house_obj.treasury - before_treasury) + share_purchases
 
     # Now get the grip report dividend
     rep = grip.report(g, house_a)
