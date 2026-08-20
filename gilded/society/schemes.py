@@ -401,7 +401,17 @@ class Takeover:
         if stake > 0:
             msgs.append(f"{self.buyer.name} quietly holds {stake:.0f}% of "
                         f"House {self.target_house}")
-        if stake > TAKEOVER_THRESHOLD:
+        # The House falls when the buyer and the House's own defectors
+        # together hold past the threshold: the disloyal holders are the
+        # coalition the buyout walks the door in with - the ruler's
+        # dynasty never sells, so the buyer alone can rarely clear the
+        # threshold by purchase alone.
+        coalition = stake + sum(
+            house_stake(target_ents, s.id)
+            for s in disloyal_shareholders(target_realm, enterprises,
+                                           house_only=False)
+            if s.id != self.buyer.id)
+        if stake > 0 and coalition > TAKEOVER_THRESHOLD:
             n = seize_enterprises(enterprises, self.target_house,
                                   self.buyer_house, buyer_realm)
             self.complete = True
