@@ -26,8 +26,8 @@ def production_multiplier(dial: float) -> float:
 
 
 def dividend_multiplier(dial: float) -> float:
-    """0.6x at dial 0, 1.0x at 50, 1.4x at 100 - owners gain most from the squeeze."""
-    return 0.6 + 0.008 * clamp_dial(dial)
+    """0.6x at dial 0, 1.0x at 50. Capped at 1.0: dividends cannot exceed production."""
+    return min(1.0, 0.6 + 0.008 * clamp_dial(dial))
 
 
 def unrest_gain(dial: float) -> float:
