@@ -3,6 +3,7 @@
 
 import random
 
+from gilded.tests._fixtures import make_one_seller
 from gilded.enterprises import Enterprise
 from gilded.chassis import GildedGame
 from gilded.society.characters import Secret, SocietyState
@@ -281,6 +282,9 @@ def test_advance_uses_game_not_flat_rate():
     buyer_house = sorted(game.houses)[1]
     buyer = game.realms[buyer_house].ruler
     house = game.houses[buyer_house]
+    # Build exactly one seller in the target House instead of searching — a
+    # world that happens to have none is a fact about the dice, not the rule.
+    make_one_seller(game, target_house)
     house.treasury = 1000.0
     gold_before = house.treasury
     tk = Takeover(buyer, buyer_house, target_house)
@@ -400,6 +404,10 @@ def _i4c1_fixture():
     assert game.houses[I4C1_BUYER_HOUSE].treasury > 100.0, (
         f"premise: the buying House must be able to afford shares "
         f"(treasury {game.houses[I4C1_BUYER_HOUSE].treasury})")
+    # Whether a generated world happens to contain a shareholder willing to
+    # sell is a fact about the dice. Build exactly one instead of searching,
+    # so the tests below measure the takeover rule rather than the weather.
+    make_one_seller(game, I4C1_TARGET_HOUSE)
     sellers = disloyal_shareholders(game.realms[I4C1_TARGET_HOUSE],
                                     game.enterprises)
     assert len(sellers) == 1, (
