@@ -61,3 +61,19 @@ def make_one_seller(game, house_name):
         f"built {seller.id} but disloyal_shareholders says "
         f"{[c.id for c in got]}")
     return seller
+
+
+def no_sellers(game, house_name):
+    """Stand every shareholder of House `house_name` down so none is disloyal.
+
+    The mirror of make_one_seller: it clears the reach a test needs to be
+    zero (a House nobody will sell into), so a premise like 'the label
+    quotes the TARGET not the player's own' can be established rather than
+    hoped for.
+    """
+    realm = game.realms[house_name]
+    for ch in disloyal_shareholders(realm, game.enterprises):
+        ch.loyalty = 100.0
+        ch._society.opinions[(ch.id, realm.ruler.id)] = 0
+    assert not disloyal_shareholders(realm, game.enterprises), (
+        f"{house_name} still has a disloyal shareholder after standing down")

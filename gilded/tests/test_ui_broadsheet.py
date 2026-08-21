@@ -19,6 +19,8 @@ from gilded.society.schemes import share_price
 from gilded.enterprises import TIER_MAX
 from gilded.ui.actions import ACTIONS
 from gilded.ui.widgets import INK, Region, RegionState
+from gilded.society.schemes import Takeover
+from gilded.tests._fixtures import make_one_seller, no_sellers
 
 
 # Measured at 53cb9af with _view() on a 1280x900 surface. Every tab
@@ -507,10 +509,14 @@ def test_takeover_button_quotes_what_is_for_sale_and_what_is_needed():
     a = _takeover_descriptor(v)
     assert a is not None, "the Enterprises page must offer a takeover"
     target = a["action"]["attack_takeover"]
+    # Build exactly one seller in the target House instead of hoping the dice
+    # produced one — the label assertions below are the test.
+    make_one_seller(g, target)
     reach = _takeover_reach(g, target)
     assert reach > 0, (
         "fixture premise broken: seed 42 turn 4 is supposed to have a "
         f"disloyal seller in {target}, but reach is {reach}")
+    a = _takeover_descriptor(v)
     assert target in a["label"], f"label must name the rival: {a['label']!r}"
     assert f"{reach:.1f}%" in a["label"], (
         f"label must quote the {reach:.1f}% genuinely for sale: {a['label']!r}")
@@ -548,6 +554,9 @@ def test_the_refused_takeover_button_is_drawn_disabled_with_its_reason():
 
 def test_the_live_takeover_button_is_drawn_enabled_and_carries_its_action():
     g, v = _enterprises_view(seed=42, turns=4)
+    target = _takeover_descriptor(v)["action"]["attack_takeover"]
+    # Build a seller so the button under test is the live one, not a refusal.
+    make_one_seller(g, target)
     region = _drawn_takeover_region(v)
     assert region is not None, "the takeover button must be drawn"
     assert region.state is RegionState.ENABLED, (
@@ -577,7 +586,8 @@ def test_the_takeover_click_spends_exactly_one_attention():
     g, v = _enterprises_view(seed=42, turns=4)
     a = _takeover_descriptor(v)
     before = g.attention[v.house]
-    assert before == 3, f"fixture premise broken: attention is {before}, not 3"
+    assert before >= 1, (
+        f"fixture premise broken: no attention to spend ({before})")
     ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
     assert g.attention[v.house] == before - 1, (
         f"the click must cost one attention: {before} -> "
@@ -675,6 +685,7 @@ def test_the_reach_is_an_average_so_it_shares_the_thresholds_scale():
     assert len(ents) > 1, (
         f"fixture premise broken: {target} owns {len(ents)} enterprise(s); a "
         "sum and an average are indistinguishable unless it owns more than one")
+    make_one_seller(g, target)
     sellers = disloyal_shareholders(g.realms[target], g.enterprises)
     assert sellers, f"fixture premise broken: nobody in {target} will sell"
     raw = sum(sum(e.ledger.get(s.id, 0.0) for e in ents) for s in sellers)
@@ -688,18 +699,22 @@ def test_the_reach_is_an_average_so_it_shares_the_thresholds_scale():
 
 
 def test_the_label_quotes_the_targets_holdings_not_the_players_own():
-    """Measured: at seed 45 turn 4 the top threat has 5.0% for sale while the
-    player's own House has 0.0%. Seed 42 cannot tell the two apart — both are
-    5.0 — so a label wired to the wrong House would read as correct there."""
+    """The label must quote the TARGET House's holdings, not the player's.
+    The premise is built, not searched: the target gets exactly one seller,
+    the player's own House has none, so the two reaches differ and a label
+    wired to the wrong House is exposed."""
     from gilded.ui.actions import _takeover_reach
     g, v = _enterprises_view(seed=45, turns=4)
     a = _takeover_descriptor(v)
     target = a["action"]["attack_takeover"]
+    make_one_seller(g, target)
+    no_sellers(g, v.house)
     theirs = _takeover_reach(g, target)
     mine = _takeover_reach(g, v.house)
     assert theirs != mine, (
         f"fixture premise broken: both Houses read {theirs}, so this test "
         "cannot tell which one the label quotes")
+    a = _takeover_descriptor(v)
     assert f"{theirs:.1f}% for sale" in a["label"], (
         f"the label must quote the target's {theirs:.1f}%: {a['label']!r}")
     assert f"{mine:.1f}% for sale" not in a["label"], (
@@ -713,6 +728,9 @@ def test_a_finished_campaign_does_not_block_the_next_one():
     """
     g, v = _enterprises_view(seed=42, turns=4)
     a = _takeover_descriptor(v)
+    target = a["action"]["attack_takeover"]
+    # Build a seller so the click under test is live, not refused.
+    make_one_seller(g, target)
     ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
     campaign = next(t for t in g.takeovers if t.buyer_house == v.house)
     assert not campaign.complete, "fixture premise broken: it finished at once"
@@ -733,6 +751,9 @@ def test_a_rivals_campaign_does_not_block_the_players_own():
     a = _takeover_descriptor(v)
     assert a is not None, "fixture premise broken: no takeover is offered"
     target = a["action"]["attack_takeover"]
+    # Build a seller in the target House: without one the takeover is refused
+    # and the test cannot tell whose campaign the eligibility is reading.
+    make_one_seller(g, target)
     rivals = [t for t in g.takeovers if t.buyer_house != v.house
               and t.target_house == target and not t.complete]
     assert rivals, (
@@ -750,6 +771,9 @@ def test_a_rivals_campaign_does_not_block_the_players_own():
 def test_a_takeover_is_refused_when_the_turn_has_no_attention_left():
     g, v = _enterprises_view(seed=42, turns=4)
     a = _takeover_descriptor(v)
+    # Build a seller so the takeover is live to begin with; the test then
+    # measures the attention gate, not the seller search.
+    make_one_seller(g, a["action"]["attack_takeover"])
     ok, _ = ACTIONS["attack_takeover"].eligible(g, v.house, a["action"])
     assert ok, "fixture premise broken: the takeover was not live to begin with"
     g.attention[v.house] = 0
@@ -1549,25 +1573,39 @@ def test_ticker_never_says_flat_or_level():
 
 
 def test_grip_banner_shows_computed_band():
-    """Statement 4: the grip band on the banner is computed for the house being viewed.
+    """Statement 4: the grip band on the banner is the band grip_report
+    computes FOR THE HOUSE BEING VIEWED.
 
-    Catches e7 (always IRON GRIP) and e8 (always CONTESTED).
-    Uses seed=2, turn=5, house=Ferrenholt where band=CONTESTED.
+    Catches e7 (always IRON GRIP) and e8 (always CONTESTED): the behaviour is
+    that the banner agrees with the report for every house it is shown for, and
+    that the bands actually vary with the house. No particular band is pinned —
+    a single world that happens to read CONTESTED is a fact about the dice, not
+    the rule.
     """
-    g = GildedGame(seed=2)
-    for _ in range(5):
-        g.turn += 1
-        g.end_turn()
-    r = grip_report(g, "Ferrenholt")
-    assert r.band == "CONTESTED", f"fixture: expected CONTESTED, got {r.band}"
-
-    v = BroadsheetView(g, "Ferrenholt")
-    lines = v.enterprises_lines()
-    grip_line = lines[0]
-    assert "CONTESTED" in grip_line, \
-        f"grip line should contain 'CONTESTED', got '{grip_line}'"
-    assert "IRON GRIP" not in grip_line, \
-        f"grip line should NOT contain 'IRON GRIP' when band is CONTESTED: '{grip_line}'"
+    seen = set()
+    for seed, turns in ((2, 5), (7, 5)):
+        g = GildedGame(seed=seed)
+        for _ in range(turns):
+            g.turn += 1
+            g.end_turn()
+        for house in sorted(g.houses):
+            band = grip_report(g, house).band
+            v = BroadsheetView(g, house)
+            grip_line = v.enterprises_lines()[0]
+            expected = band.replace("_", " ")
+            assert expected in grip_line, (
+                f"{house}: banner must show the band the report computes "
+                f"({expected!r}), got '{grip_line}'")
+            # a different band must not leak into the banner
+            for other in BANDS:
+                if other != band:
+                    assert other.replace("_", " ") not in grip_line, (
+                        f"{house}: banner shows {other!r} but the report "
+                        f"computes {band!r}: '{grip_line}'")
+            seen.add(band)
+    assert len(seen) > 1, (
+        f"the bands never varied across houses and seeds ({seen}); a banner "
+        "that always shows the same band cannot be computing the report")
 
 
 
@@ -3383,15 +3421,34 @@ def test_R2_affordable_charter_founds_costs_correctly(found_state):
 
 
 def test_R3_founding_reported_in_event_feed(found_state):
-    """R-3: Founding is reported through the event feed."""
+    """R-3: Founding is reported through the event feed.
+
+    Not 'the feed gained exactly one entry' — another subsystem posting an
+    event in the same dispatch is not a violation of R-3. The rule is that a
+    NEW event appears and that it reports THIS founding: the venture's name or
+    the charter kind. An implementation that posts an unrelated event would
+    pass a count and fail this.
+    """
     g, v = found_state
     from gilded.ui.actions import _get_available_charters
+    from gilded.enterprises import KIND_TITLES
     charters = _get_available_charters(g, v.house)
     kind, pid, pname, cost = charters[0]
     action = {"found_enterprise": (kind, pid)}
     event_before = len(g.events)
+    names_before = {e.name for e in g.enterprises}
     ACTIONS["found_enterprise"].dispatch(g, v.house, v, action)
-    assert len(g.events) == event_before + 1, "founding should add an event"
+    posted = g.events[event_before:]
+    assert posted, "founding should add an event to the feed"
+    new_names = {e.name for e in g.enterprises} - names_before
+    title = KIND_TITLES[kind]
+    marker = next(iter(new_names), None)
+    reports_founding = any(
+        (marker and marker in e.text) or (title.lower() in e.text.lower())
+        for e in posted)
+    assert reports_founding, (
+        f"no event reports the founding of {title} ({marker or '?'}): "
+        f"{[e.text for e in posted]}")
 
 
 def test_R4_chooser_closes_after_founding(found_state):
