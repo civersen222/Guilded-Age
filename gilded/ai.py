@@ -11,8 +11,9 @@ from typing import Dict, List, Optional, Tuple
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
 from gilded.docket import DOMAIN_SEAT, INITIATIVES, _auto_terms, initiative, rule
 from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
-from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST, PeaceTerms,
-                           ai_acceptable)
+from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST,
+                           REGIMENT_STEEL_COST, PeaceTerms, ai_acceptable,
+                           allocate, raise_regiments)
 # opinion_matrix removed — reads through char._society.opinions now
 from gilded.agenda import ensure_agenda, goal_domain, goal_initiative
 
@@ -196,6 +197,54 @@ def _policy_targets(game, house_name) -> dict:
     return {k: max(-100, min(100, int(round(v)))) for k, v in targets.items()}
 
 
+MUSTER_FLOOR = 10          # never muster a province below this population
+MUSTER_CAP = 5             # regiments raised per war per turn
+MUSTER_LEAD = 2            # keep at least this many regiments ahead of the foe
+
+
+def _muster(game, house_name: str) -> None:
+    """Raise regiments while at war — the AI never musters unless somebody
+    is on its doorstep or it is marching. For each war it picks the front it
+    is losing, closes the regiment gap plus a lead, and draws them from the
+    most populous non-capital province that can spare the workforce, sparing
+    the steel stockpile when the house has one."""
+    house = game.houses[house_name]
+    if not house.at_war_with:
+        return
+    provs = game.provinces_of(house_name)
+    if not provs:
+        return
+    donor = max(provs, key=lambda p: p.population)
+    spares = [p for p in sorted(provs, key=lambda p: -p.population)
+              if p.pid != house.capital
+              and p.population >= MUSTER_FLOOR * REGIMENT_POP_COST]
+    # prefer a province that stays above the floor after the muster
+    if donor.population < MUSTER_FLOOR * REGIMENT_POP_COST and spares:
+        donor = spares[0]
+    cap = game.capacity.get(house_name)
+    has_steel = any(e.kind == "ironworks" for e in game.ents_of(house_name))
+    steel_room = (cap["steel"] // REGIMENT_STEEL_COST
+                  if has_steel and cap is not None and "steel" in cap
+                  else 10 ** 9)
+    for war in game.wars:
+        if house_name not in (war.aggressor, war.defender) or not war.fronts:
+            continue
+        if house_name == war.aggressor:
+            def _gap(fr): return fr.defender_regiments - fr.attacker_regiments
+        else:
+            def _gap(fr): return fr.attacker_regiments - fr.defender_regiments
+        front = max(war.fronts, key=_gap)
+        want = max(0, min(MUSTER_CAP, _gap(front) + MUSTER_LEAD, steel_room,
+                          (donor.population - MUSTER_FLOOR)
+                          // REGIMENT_POP_COST))
+        if want == 0:
+            continue
+        n = raise_regiments(game, house_name, donor.pid, want)
+        if n > 0:
+            allocate(war, front, house_name, n)
+
+
+
 def set_policy(game, house_name) -> None:
     """Drift each dial one bounded step toward its target, but only while the
     gap exceeds the dead-band. Converged dials are left untouched so their
@@ -222,6 +271,7 @@ def ai_turn(game, house_name: str) -> List[str]:
     goal = ensure_agenda(game, house_name)
     goal_dom = goal_domain(goal) if goal is not None else None
     set_policy(game, house_name)
+    _muster(game, house_name)
     docket = list(game.docket_by_house.get(house_name, []))
     docket.sort(key=lambda p: (-_score_petition(ruler, p, goal_dom), p.pid))
     for petition in docket:
