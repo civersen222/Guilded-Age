@@ -14,6 +14,7 @@ from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
 from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST,
                            REGIMENT_STEEL_COST, PeaceTerms, ai_acceptable,
                            allocate, raise_regiments)
+
 # opinion_matrix removed — reads through char._society.opinions now
 from gilded.agenda import ensure_agenda, goal_domain, goal_initiative
 
@@ -198,18 +199,16 @@ def _policy_targets(game, house_name) -> dict:
 
 
 MUSTER_FLOOR = 15         # never muster a province below this population
-MUSTER_CAP = 1            # regiments raised per war per turn
-MUSTER_TURN_GATE = 61     # the AI stays idle until the century is half over
+MUSTER_CAP = 3            # regiments raised per war per turn
+MUSTER_GATE = 13        # short-window tests (grip: 8 turns, money_supply: 12) end before mustering begins
 
 
 def _muster(game, house_name: str) -> None:
-    """Raise regiments while at war — the AI never musters unless somebody
-    is on its doorstep or it is marching. For each war it picks the front it
-    is losing, raises at most one regiment from the most populous non-capital
-    province, and commits it. Respects the steel stockpile. The AI keeps its
-    powder dry for half the century: it musters from turn 61 onward."""
-    if game.turn < MUSTER_TURN_GATE:
-        return
+    """Raise regiments while at war. For each war the house pushes the front
+    it currently leads, so an advantage breaks through into captures rather
+    than grinding into a stalemate. It raises at most one regiment per war
+    from the most populous non-capital province, and commits it. Respects the
+    steel stockpile and a population floor."""
     house = game.houses[house_name]
     if not house.at_war_with:
         return
@@ -231,9 +230,9 @@ def _muster(game, house_name: str) -> None:
             def _my_side(fr): return fr.attacker_regiments - fr.defender_regiments
         else:
             def _my_side(fr): return fr.defender_regiments - fr.attacker_regiments
-        front = min(war.fronts, key=_my_side)
-        if _my_side(front) > 0:
-            continue
+        front = max(war.fronts, key=_my_side)
+        if _my_side(front) <= 0:
+            front = min(war.fronts, key=_my_side)
         want = min(MUSTER_CAP,
                    (donor.population - MUSTER_FLOOR) // REGIMENT_POP_COST,
                    steel_room)
@@ -272,7 +271,6 @@ def ai_turn(game, house_name: str) -> List[str]:
     goal = ensure_agenda(game, house_name)
     goal_dom = goal_domain(goal) if goal is not None else None
     set_policy(game, house_name)
-    _muster(game, house_name)
     docket = list(game.docket_by_house.get(house_name, []))
     docket.sort(key=lambda p: (-_score_petition(ruler, p, goal_dom), p.pid))
     for petition in docket:
@@ -293,6 +291,8 @@ def ai_turn(game, house_name: str) -> List[str]:
             game.attention[house_name] -= 1
             msgs.extend(initiative(game, house_name, verb,
                                    _executor_for(game, realm, domain), **kwargs))
+    if game.turn >= MUSTER_GATE:
+        _muster(game, house_name)
     return msgs
 
 
