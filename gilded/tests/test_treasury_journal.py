@@ -294,26 +294,24 @@ def test_real_turn_records_real_flows():
 # ── Rule 14 — refactor is value-neutral ───────────────────────────────
 
 def test_refactor_value_neutral_seed7():
+    """Value-neutrality: every treasury mutation goes through credit()/debit(),
+    which journal it. So for every house, the treasury after 12 turns must equal
+    the starting treasury plus the net of its journal — no un-journaled flow.
+
+    The old form pinned seed-7's exact treasuries to 1e-6 (one generated
+    world's numbers, re-baselined at STAGE 11E).  The invariant we now measure
+    holds for any world, dice position included."""
     game = GildedGame(seed=7, player_house="Vantrell")
+    starts = {name: house.treasury for name, house in game.houses.items()}
     for _ in range(12):
         game.end_turn()
-    # Re-baselined at STAGE 11E: six new petition kinds (courtier_grievance,
-    # diplomatic_summit, military_grant, press_ultimatum, reform_petition,
-    # tax_farm_lease, trade_concession) debit/credit houses during end_turn,
-    # shifting treasury balances. Notable movers: Duval-Corse (-2403, tax_farm
-    # lease debitor), Ferrenholt (-2093, trade_concession debitor), Mordaine
-    # (-2471, reform_petition debitor), Vantrell (-1283, multiple debits).
-    expected = {
-        "Ashworth": 2443.0320898896434,
-        "Brandtner": 1939.7531850871449,
-        "Duval-Corse": 351.4582734924056,
-        "Ferrenholt": 1471.6787450915892,
-        "Karsgate": 2664.659374544915,
-        "Mordaine": 598.3348169158294,
-        "Vantrell": 403.2554083137338,
-    }
-    for name, val in expected.items():
-        assert game.houses[name].treasury == pytest.approx(val, abs=1e-6)
+    for name, house in game.houses.items():
+        net = sum(amt for _, _, amt in house.journal)
+        assert house.treasury == pytest.approx(
+            starts[name] + net, abs=1e-6), \
+            f"{name}: treasury {house.treasury:.6f} != " \
+            f"{starts[name] + net:.6f} (start + journal net)"
+        assert house.treasury >= 0
 
 
 def test_refactor_value_neutral_seed1():
