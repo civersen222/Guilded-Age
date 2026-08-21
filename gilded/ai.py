@@ -197,30 +197,28 @@ def _policy_targets(game, house_name) -> dict:
     return {k: max(-100, min(100, int(round(v)))) for k, v in targets.items()}
 
 
-MUSTER_FLOOR = 10          # never muster a province below this population
-MUSTER_CAP = 5             # regiments raised per war per turn
-MUSTER_LEAD = 2            # keep at least this many regiments ahead of the foe
+MUSTER_FLOOR = 15         # never muster a province below this population
+MUSTER_CAP = 1            # regiments raised per war per turn
+MUSTER_TURN_GATE = 61     # the AI stays idle until the century is half over
 
 
 def _muster(game, house_name: str) -> None:
     """Raise regiments while at war — the AI never musters unless somebody
     is on its doorstep or it is marching. For each war it picks the front it
-    is losing, closes the regiment gap plus a lead, and draws them from the
-    most populous non-capital province that can spare the workforce, sparing
-    the steel stockpile when the house has one."""
+    is losing, raises at most one regiment from the most populous non-capital
+    province, and commits it. Respects the steel stockpile. The AI keeps its
+    powder dry for half the century: it musters from turn 61 onward."""
+    if game.turn < MUSTER_TURN_GATE:
+        return
     house = game.houses[house_name]
     if not house.at_war_with:
         return
     provs = game.provinces_of(house_name)
     if not provs:
         return
-    donor = max(provs, key=lambda p: p.population)
     spares = [p for p in sorted(provs, key=lambda p: -p.population)
-              if p.pid != house.capital
-              and p.population >= MUSTER_FLOOR * REGIMENT_POP_COST]
-    # prefer a province that stays above the floor after the muster
-    if donor.population < MUSTER_FLOOR * REGIMENT_POP_COST and spares:
-        donor = spares[0]
+              if p.pid != house.capital]
+    donor = spares[0] if spares else max(provs, key=lambda p: p.population)
     cap = game.capacity.get(house_name)
     has_steel = any(e.kind == "ironworks" for e in game.ents_of(house_name))
     steel_room = (cap["steel"] // REGIMENT_STEEL_COST
@@ -230,18 +228,21 @@ def _muster(game, house_name: str) -> None:
         if house_name not in (war.aggressor, war.defender) or not war.fronts:
             continue
         if house_name == war.aggressor:
-            def _gap(fr): return fr.defender_regiments - fr.attacker_regiments
+            def _my_side(fr): return fr.attacker_regiments - fr.defender_regiments
         else:
-            def _gap(fr): return fr.attacker_regiments - fr.defender_regiments
-        front = max(war.fronts, key=_gap)
-        want = max(0, min(MUSTER_CAP, _gap(front) + MUSTER_LEAD, steel_room,
-                          (donor.population - MUSTER_FLOOR)
-                          // REGIMENT_POP_COST))
-        if want == 0:
+            def _my_side(fr): return fr.defender_regiments - fr.attacker_regiments
+        front = min(war.fronts, key=_my_side)
+        if _my_side(front) > 0:
+            continue
+        want = min(MUSTER_CAP,
+                   (donor.population - MUSTER_FLOOR) // REGIMENT_POP_COST,
+                   steel_room)
+        if want <= 0:
             continue
         n = raise_regiments(game, house_name, donor.pid, want)
         if n > 0:
             allocate(war, front, house_name, n)
+
 
 
 
