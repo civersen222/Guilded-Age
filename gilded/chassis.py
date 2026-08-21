@@ -43,8 +43,6 @@ ENDOWMENT_ENTERPRISE = {
     "farmland": "estate", "harbor": "rail_co",
 }
 TURN_BUDGET = 70                  # the century, at a year and a half a turn
-TREASURY_FLOOR = 1200.0
-TREASURY_CAP = 2800.0
 YEAR_START = 1900
 
 
@@ -351,15 +349,6 @@ class GildedGame:
             if eff.unrest_add:
                 for p in provs:
                     p.unrest = max(0.0, min(100.0, p.unrest + eff.unrest_add))
-
-        # 6.7 net-draining equalization: destroy excess above cap
-        # so the money supply cannot accumulate without bound
-        for h in sorted(self.houses):
-            treasury = self.houses[h]
-            if treasury.treasury > TREASURY_CAP:
-                treasury.treasury = TREASURY_CAP
-            elif treasury.treasury < TREASURY_FLOOR:
-                treasury.treasury = TREASURY_FLOOR
 
         # 7. the tide and the mandate
         self.tide.tick()
