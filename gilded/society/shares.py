@@ -80,9 +80,10 @@ def pay_dividends(realm, enterprises, provinces: Dict[int, object],
             holder = by_id.get(char_id)
             if holder is not None and holder.is_alive:
                 amt = gold * pct / 100.0
-                holder.gold_reserve += amt
                 if char_id == realm.ruler.id:
                     house_take += amt
+                else:
+                    holder.gold_reserve += amt
     return house_take, events
 
 
