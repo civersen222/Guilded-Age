@@ -93,6 +93,18 @@ class RulingContext:              # everything an option's apply() may touch
     scale: float = 1.0            # 0.5 when the executor fumbled the ruling
 
 
+# Petition kinds added after the base tree (d7fa68f). Their rulings draw from
+# per-kind sub-streams so they cannot inject draws into the main stream and
+# shift the base tree's downstream AI / dividend / labor draws. The base
+# kinds (betrothal_offer, capital_request, disaster_inquiry, heir_demand,
+# rail_proposal, seat_vacancy, union_ultimatum, war_council) stay on game.rng.
+_NEW_PETITION_KINDS = frozenset((
+    "courtier_grievance", "diplomatic_summit", "military_grant",
+    "press_ultimatum", "reform_petition", "stress_crisis",
+    "tax_farm_lease", "trade_concession",
+))
+
+
 def _next_pid(game) -> int:
     game._docket_pid = getattr(game, "_docket_pid", 0) + 1
     return game._docket_pid
@@ -985,15 +997,21 @@ def rule(game, petition, option_key, executor) -> List[str]:
     msgs: List[str] = []
     chance = 0.5 + executor.get_effective_stat(_domain_stat(petition.domain)) / 40.0
     chance = max(0.2, min(0.95, chance))
+    # New petition kinds rule on their own sub-stream so their extra draws
+    # never enter the core game.rng; base kinds rule on game.rng exactly as
+    # the base tree does, keeping the main draw sequence aligned.
+    rng = game.rng
+    if petition.kind in _NEW_PETITION_KINDS:
+        rng = random.Random(_gen_seed(game, f"rule|{petition.kind}", petition.house))
     scale = 1.0
-    if game.rng.random() >= chance:
+    if rng.random() >= chance:
         scale = 0.5
         m = executor.add_stress(FUMBLE_STRESS)
         msgs.append(f"{executor.name} botches the execution of the ruling")
         if m:
             msgs.append(m)
     msgs.extend(_conviction_grind(executor, petition.domain, option.stance_bias))
-    ctx = RulingContext(game, petition.house, executor, game.rng, scale)
+    ctx = RulingContext(game, petition.house, executor, rng, scale)
     msgs.extend(option.apply(ctx))
     return msgs
 
@@ -1023,7 +1041,10 @@ def resolve_unattended(game, house_name: str, petitions) -> List[str]:
             if p.turns_waiting >= FESTER_TURNS:
                 p.escalated = True
                 option = min(p.options, key=lambda o: o.stance_bias)
-                ctx = RulingContext(game, house_name, realm.ruler, game.rng, 0.5)
+                fester_rng = game.rng
+                if p.kind in _NEW_PETITION_KINDS:
+                    fester_rng = random.Random(_gen_seed(game, f"fester|{p.kind}", house_name))
+                ctx = RulingContext(game, house_name, realm.ruler, fester_rng, 0.5)
                 msgs.append(f"Left to fester, the {p.kind.replace('_', ' ')} resolves itself")
                 msgs.extend(option.apply(ctx))
     return msgs
