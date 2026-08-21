@@ -60,13 +60,10 @@ def initial_ledger(ent, realm) -> None:
 
 def pay_dividends(realm, enterprises, provinces: Dict[int, object],
                   tech_mod: float = 1.0) -> Tuple[float, List[str]]:
-    """Pay every enterprise's output to living holders.
+    """Pay every enterprise's output into living holders' gold_reserve.
 
-    Kin (non-ruler) holders receive their share into gold_reserve; the
-    ruler's share is NOT added to his personal purse — it is the house's
-    gold and is returned as house_take so the caller credits the treasury
-    exactly once (crediting it twice mints gold out of thin air).
-    Returns (house_take, events). Dead holders' shares do not pay out."""
+    Returns (house_take, events): house_take is the ruler's share — the gold
+    that lands in the House treasury. Dead holders' shares do not pay out."""
     events: List[str] = []
     by_id = {c.id: c for c in realm.characters}
     house_take = 0.0
@@ -83,10 +80,9 @@ def pay_dividends(realm, enterprises, provinces: Dict[int, object],
             holder = by_id.get(char_id)
             if holder is not None and holder.is_alive:
                 amt = gold * pct / 100.0
+                holder.gold_reserve += amt
                 if char_id == realm.ruler.id:
                     house_take += amt
-                else:
-                    holder.gold_reserve += amt
     return house_take, events
 
 
