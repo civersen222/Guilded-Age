@@ -976,16 +976,6 @@ def _conviction_grind(executor, domain: str, bias: int) -> List[str]:
     return out
 
 
-def _roll(game, kind: str, house: str, rng) -> float:
-    """Fumble draw: original kinds draw from the main stream exactly as
-    base does; post-base kinds draw from a deterministic sub-stream so
-    their extra rulings never shift the core dividend/labor/AI stream."""
-    if kind in _GEN_KINDS.values():
-        seed = f"{getattr(game, 'seed', 0)}|{game.turn}|{house}|{kind}|ruling"
-        return random.Random(int(hashlib.sha256(seed.encode()).hexdigest()[:8], 16)).random()
-    return rng.random()
-
-
 def rule(game, petition, option_key, executor) -> List[str]:
     """Execute one option through one person. The chassis spends the
     attention point; this spends the person."""
@@ -996,7 +986,7 @@ def rule(game, petition, option_key, executor) -> List[str]:
     chance = 0.5 + executor.get_effective_stat(_domain_stat(petition.domain)) / 40.0
     chance = max(0.2, min(0.95, chance))
     scale = 1.0
-    if _roll(game, petition.kind, petition.house, game.rng) >= chance:
+    if game.rng.random() >= chance:
         scale = 0.5
         m = executor.add_stress(FUMBLE_STRESS)
         msgs.append(f"{executor.name} botches the execution of the ruling")
