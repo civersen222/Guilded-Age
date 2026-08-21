@@ -13,7 +13,7 @@ from gilded.docket import DOMAIN_SEAT, INITIATIVES, _auto_terms, initiative, rul
 from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
 from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST,
                            REGIMENT_STEEL_COST, PeaceTerms, ai_acceptable,
-                           allocate, raise_regiments)
+                           allocate, raise_regiments, terms_cost)
 
 # opinion_matrix removed — reads through char._society.opinions now
 from gilded.agenda import ensure_agenda, goal_domain, goal_initiative
@@ -296,14 +296,35 @@ def ai_turn(game, house_name: str) -> List[str]:
     return msgs
 
 
+PEACE_DECAY_START = 55      # after this turn, losing houses grow less proud
+PEACE_DECAY_END = 68        # by this turn the wear is complete
+PEACE_DECAY_FLOOR = 5.0     # a grumpy AI will talk if it is 5 down
+
+
+def _peace_threshold(game) -> float:
+    """A long war wears down a losing house: the score needed to make it
+    sue for peace falls from ACCEPT_SCORE toward PEACE_DECAY_FLOOR across
+    the closing turns of the age, so wars still grinding at the halt
+    resolve into a truce rather than stalling at the century gate."""
+    if game.turn <= PEACE_DECAY_START:
+        return ACCEPT_SCORE
+    span = PEACE_DECAY_END - PEACE_DECAY_START
+    t = max(0.0, min(1.0, (game.turn - PEACE_DECAY_START) / span))
+    return ACCEPT_SCORE + (PEACE_DECAY_FLOOR - ACCEPT_SCORE) * t
+
+
 def ai_peace_check(game, war) -> Optional[PeaceTerms]:
-    """A beaten AI house sues for peace; the player is never signed for."""
+    """A beaten AI house sues for peace; the player is never signed for.
+    Once the war has worn the house down (the decayed threshold), it signs
+    any bill no heavier than its beating - no longer bound to ACCEPT_SCORE."""
     loser = war.defender if war.war_score >= 0.0 else war.aggressor
     if game.houses[loser].is_player:
         return None
-    if abs(war.war_score) < ACCEPT_SCORE:
+    threshold = _peace_threshold(game)
+    if abs(war.war_score) < threshold:
         return None
     terms = _auto_terms(game, war)
-    if ai_acceptable(game, war, terms, loser):
+    against = -war.war_score if loser == war.aggressor else war.war_score
+    if terms_cost(terms) <= against:
         return terms
     return None
