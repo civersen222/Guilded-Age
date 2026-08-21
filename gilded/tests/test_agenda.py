@@ -402,6 +402,27 @@ def test_r6_richest_rival_is_most_enterprises():
                      f"{counts[result]}, but a rival holds {max(counts.values())}")
 
 
+def test_r6_richest_rival_never_self():
+    """_richest_rival never names our own House, even when we hold the most
+    enterprises. The old form pinned a House NAME off one generated world, so
+    it went red whenever generation shifted. This floods the House with
+    synthetic enterprises so that counting self would return the House itself,
+    and asserts the pick is always a rival — kills the mutation that drops the
+    `e.house != house_name` self-exclusion."""
+    from gilded.enterprises import Enterprise
+    for seed in _SEEDS:
+        g = _game_at(seed, 13)
+        h = sorted(g.houses)[0]
+        rivals = [r for r in g.houses if r != h]
+        g.enterprises.extend(
+            Enterprise(eid=9000 + i, kind="estate", name=f"Synth {i}",
+                       house=h, province=0, tier=5) for i in range(9))
+        result = _richest_rival(g, h)
+        assert result in rivals, \
+            (f"at seed {seed}: named {result!r} for house {h}, "
+             f"expected one of {rivals}")
+
+
 # --- R7: _best_relations excludes Houses at war with -----------------------
 
 def test_r7_best_relations_excludes_at_war():
@@ -456,9 +477,8 @@ _ROUTES = [
 ]
 
 
-@pytest.mark.parametrize("family,helper", _ROUTES)
-def test_r9_target_for_routes_to_its_helper(family, helper):
-    """_target_for(family) IS the helper for that family, at every seed.
+def _r9_routing(family, helper):
+    """Assert _target_for(family) IS the helper for that family, every seed.
 
     The old form asserted a House NAME off one generated world, so it went
     red whenever generation shifted. This asserts the routing itself, which
@@ -469,6 +489,31 @@ def test_r9_target_for_routes_to_its_helper(family, helper):
         for h in g.houses:
             assert _target_for(g, h, family) == helper(g, h), \
                 f"{family} at seed {seed}, house {h}"
+
+
+def test_r9_target_for_conquest():
+    """Conquest -> the weakest neighbouring rival, at every seed."""
+    _r9_routing("Conquest", _weakest_neighbor)
+
+
+def test_r9_target_for_buyout():
+    """Buyout -> the richest rival, at every seed."""
+    _r9_routing("Buyout", _richest_rival)
+
+
+def test_r9_target_for_dynasty():
+    """Dynasty -> the best-relations rival, at every seed."""
+    _r9_routing("Dynasty", _best_relations)
+
+
+def test_r9_target_for_intrigue():
+    """Intrigue -> the strongest rival, at every seed."""
+    _r9_routing("Intrigue", _strongest_rival)
+
+
+def test_r9_target_for_glory():
+    """Glory -> the strongest rival, at every seed."""
+    _r9_routing("Glory", _strongest_rival)
 
 
 def test_r9_target_for_dominion():
