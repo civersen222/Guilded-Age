@@ -215,7 +215,8 @@ def hud_model(board, d: Delta) -> HudModel:
         )
 
     # Texts
-    texts["era"] = f"{board.era_title} · {board.year} ({board.century_pct * 100:.0f}%)"
+    texts["era"] = f"{board.era_title} ·"
+    texts["era_sub"] = f" {board.year} ({board.century_pct * 100:.0f}%)"
     texts["rank"] = f"Rank #{board.rank}"
     # intent placeholder — filled by _draw_hud when game object is available
     texts["intent"] = ""
@@ -262,8 +263,9 @@ def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
         w = surf.get_width() + 16
         chip_specs.append((key, w))
     surf_era = fs.render(model.texts["era"], True, INK)
-    era_w = surf_era.get_width() + 8
-    chip_specs.append(("era", era_w))
+    surf_era_sub = fs.render(model.texts["era_sub"], True, INK)
+    chip_specs.append(("era", surf_era.get_width() + 8))
+    chip_specs.append(("era_sub", surf_era_sub.get_width() + 4))
 
     n_items = len(chip_specs)
     total_gap = (n_items - 1) * 12
