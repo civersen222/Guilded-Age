@@ -3,27 +3,29 @@
 from typing import Any, Dict, List, Optional
 
 from gilded.society.event_chains import ChainDef, ChainStep
+from gilded.society.event_content.chains_pack1 import (
+    _cities_of, _dial_for, _provinces)
 
 
 def _drain_legitimacy(game: Any, house: str, amount: float) -> List[str]:
+    # A fallen House's mandate is settled, not draining.
+    if house in (getattr(game, "fallen", None) or {}):
+        return []
     legit = getattr(game, "legitimacy", None)
     if legit is not None:
         legit[house] = max(0.0, legit.get(house, 70.0) - amount)
     return []
 
 
-def _cities_of(game: Any, civ: str) -> List[Any]:
-    return [c for c in (getattr(game, "cities", None) or {}).values()
-            if c.owner == civ]
-
-
 # --- 1. The general strike -------------------------------------------------
 
 def _trig_general_strike(game: Any) -> Optional[Dict[str, Any]]:
-    for city in (getattr(game, "cities", None) or {}).values():
-        mv = getattr(city, "movement", None)
-        if mv is not None and mv.state == "striking" and mv.militancy >= 60.0:
-            return {"city": city.name, "house": city.owner, "_city": city}
+    for province in _provinces(game):
+        mv = getattr(province, "movement", None)
+        if (mv is not None and mv.state == "striking"
+                and mv.militancy >= 60.0):
+            return {"city": province.name, "house": province.owner,
+                    "_city": province}
     return None
 
 
@@ -37,10 +39,10 @@ def _strike_spreads(game: Any, ctx: Dict[str, Any]) -> List[str]:
 # --- 2. The martyr's ballad ------------------------------------------------
 
 def _trig_martyr_ballad(game: Any) -> Optional[Dict[str, Any]]:
-    for city in (getattr(game, "cities", None) or {}).values():
-        mv = getattr(city, "movement", None)
+    for province in _provinces(game):
+        mv = getattr(province, "movement", None)
         if mv is not None and mv.martyr:
-            return {"city": city.name, "martyr": mv.martyr, "_mv": mv}
+            return {"city": province.name, "martyr": mv.martyr, "_mv": mv}
     return None
 
 
@@ -56,10 +58,11 @@ def _ballad_banner(game: Any, ctx: Dict[str, Any]) -> List[str]:
 # --- 3. Strikebreakers -----------------------------------------------------
 
 def _trig_strikebreakers(game: Any) -> Optional[Dict[str, Any]]:
-    for city in (getattr(game, "cities", None) or {}).values():
-        if (getattr(city, "extraction_dial", 50.0) >= 80.0
-                and city.unrest >= 25.0):
-            return {"city": city.name, "house": city.owner, "_city": city}
+    for province in _provinces(game):
+        if (_dial_for(game, province) >= 80.0
+                and province.unrest >= 25.0):
+            return {"city": province.name, "house": province.owner,
+                    "_city": province}
     return None
 
 
@@ -71,10 +74,10 @@ def _skulls_photographed(game: Any, ctx: Dict[str, Any]) -> List[str]:
 # --- 4. The company paradise -----------------------------------------------
 
 def _trig_company_paradise(game: Any) -> Optional[Dict[str, Any]]:
-    for city in (getattr(game, "cities", None) or {}).values():
-        if (getattr(city, "extraction_dial", 50.0) <= 30.0
-                and city.unrest <= 10.0):
-            return {"city": city.name, "house": city.owner}
+    for province in _provinces(game):
+        if (_dial_for(game, province) <= 30.0
+                and province.unrest <= 10.0):
+            return {"city": province.name, "house": province.owner}
     return None
 
 
@@ -104,7 +107,7 @@ def _widows_not_whole(game: Any, ctx: Dict[str, Any]) -> List[str]:
 # --- 6. A conspiracy of equals ---------------------------------------------
 
 def _trig_conspiracy_of_equals(game: Any) -> Optional[Dict[str, Any]]:
-    mgr = getattr(game, "scheme_manager", None)
+    mgr = getattr(game, "scheme_mgr", None)
     for s in (getattr(mgr, "schemes", None) or []):
         if len(s.participants) >= 2:
             return {"target": s.target.name, "_target": s.target}

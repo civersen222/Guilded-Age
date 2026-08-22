@@ -79,6 +79,11 @@ class GildedGame:
         self.marriages = MarriageRegistry()
         self.pacts: List[object] = []                      # pacts.Pact, Stage 14B
         self.pact_pledges: Dict[str, tuple] = {}           # house -> (war, deadline)
+        # Signature chains (M72, spec 7): authored beats over the live state.
+        from gilded.society.event_chains import ChainManager
+        from gilded.society.event_content.chains_pack1 import build_pack1
+        from gilded.society.event_content.chains_pack2 import build_pack2
+        self.chain_manager = ChainManager(build_pack1() + build_pack2())
         self.pact_seen_wars: set = set()                   # wars already called to arms
         self.wars: List[object] = []                       # fronts.War from G15
         self.events: List[TurnEvent] = []                  # last resolved turn's record
@@ -388,6 +393,9 @@ class GildedGame:
                 self.fallen.setdefault(h, "revolution")
                 self.directives[h].set_stance("labor", -100)
             self._emit(msgs, "gazette", h)
+
+        # 8.4 signature chains (M72, spec 7): arms on the resolved state
+        self._emit(self.chain_manager.tick(self), "gazette")
 
         # 8.5 the Director reads the resolved turn and chronicles it
         self.events.extend(self.director.observe(self))

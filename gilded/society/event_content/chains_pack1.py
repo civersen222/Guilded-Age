@@ -7,15 +7,30 @@ from gilded.society.characters import Secret, modify_opinion
 
 
 def _drain_legitimacy(game: Any, house: str, amount: float) -> List[str]:
+    # A fallen House's mandate is settled, not draining.
+    if house in (getattr(game, "fallen", None) or {}):
+        return []
     legit = getattr(game, "legitimacy", None)
     if legit is not None:
         legit[house] = max(0.0, legit.get(house, 70.0) - amount)
     return []
 
 
+def _provinces(game: Any) -> List[Any]:
+    atlas = getattr(game, "atlas", None)
+    return list((getattr(atlas, "provinces", None) or {}).values())
+
+
+def _dial_for(game: Any, province: Any) -> float:
+    """The extraction dial on a place is carried by its enterprises."""
+    dials = [float(getattr(ent, "extraction_dial", 50.0))
+             for ent in (getattr(game, "enterprises", None) or [])
+             if ent.province == province.pid]
+    return max(dials) if dials else 50.0
+
+
 def _cities_of(game: Any, civ: str) -> List[Any]:
-    return [c for c in (getattr(game, "cities", None) or {}).values()
-            if c.owner == civ]
+    return [p for p in _provinces(game) if p.owner == civ]
 
 
 def _characters(game: Any) -> Iterator[Tuple[Any, Any]]:
@@ -27,10 +42,11 @@ def _characters(game: Any) -> Iterator[Tuple[Any, Any]]:
 # --- 1. The mine-disaster inquiry ------------------------------------------
 
 def _trig_mine_inquiry(game: Any) -> Optional[Dict[str, Any]]:
-    for city in (getattr(game, "cities", None) or {}).values():
-        if (city.unrest >= 35.0
-                and getattr(city, "extraction_dial", 50.0) >= 60.0):
-            return {"city": city.name, "house": city.owner, "_city": city}
+    for province in _provinces(game):
+        if (province.unrest >= 35.0
+                and _dial_for(game, province) >= 60.0):
+            return {"city": province.name, "house": province.owner,
+                    "_city": province}
     return None
 
 
