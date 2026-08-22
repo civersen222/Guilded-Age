@@ -5,12 +5,20 @@ game object, docket included. load_game never leaks pickle's own errors:
 every refusal is a SaveError with a message a player could read. It does
 NOT call open_turn() — the docket rides in the file."""
 
+import os
 import pickle
 
 from gilded.chassis import GildedGame
 
 HEADER_PREFIX = b"GILDEDSAVE "
 SUPPORTED_VERSIONS = {1}
+QUICKSAVE_NAME = "gilded_quicksave.gsave"
+
+
+def quicksave_path() -> str:
+    """Where the one-click save and load share their file: the current
+    working directory, so a sandboxed run keeps its save in the sandbox."""
+    return os.path.join(os.getcwd(), QUICKSAVE_NAME)
 
 
 class SaveError(Exception):

@@ -96,8 +96,7 @@ def _axis_blood(game, house_name: str) -> Tuple[float, List, int, float, bool]:
     ruler_id = realm.ruler.id if realm.ruler else None
     heir = any(c.id != ruler_id and c.age >= 16
                and getattr(c, "is_heir", False) for c in living)
-    axis = _clamp(8.0 * len(living) + 5.0 * (len(members) - len(living))
-                  - burden / 4.0 + (15.0 if heir else 0.0))
+    axis = _clamp(8.0 * len(living) - burden / 4.0 + (15.0 if heir else 0.0))
     return axis, living, len(members), burden, heir
 
 

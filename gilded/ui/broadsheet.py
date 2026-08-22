@@ -39,6 +39,8 @@ def _buyout_price(ent, owner_id, game):
     return stake_cost(ent, pct, game)
 
 
+import os
+
 from gilded.papers import compose
 from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
@@ -83,12 +85,15 @@ TIDE_DANGER = 70.0
 # S17: the guide strip — a teaching statement and one next-step button drawn
 # on every frame so a stranger's first click has a target. (GUIDE_BG and
 # GUIDE_EDGE live in widgets.py with the rest of the palette.)
-GUIDE_STATEMENT = (
-    "Your aim this century: raise your house to victory. "
-    "You win by keeping your standing high. "
-    "Your gold lives in the treasury; spend your attention wisely. "
-    "The century ends after a hundred turns, or sooner in ruin — then the game ends."
-)
+def guide_statement() -> str:
+    """The opening guide text, built from the live TURN_BUDGET constant."""
+    from gilded.chassis import TURN_BUDGET
+    return (
+        f"Your aim this century: raise your house to victory. "
+        f"You win by keeping your capital and your standing high. "
+        f"Your gold lives in the treasury; spend your attention wisely. "
+        f"The century ends after {TURN_BUDGET} turns, or sooner in ruin — then the game ends."
+    )
 
 # HUD geometry: 3 rows (axes + legitimacy/tide, chips + texts, rival row always reserved)
 _HUD_ROWS = 3
@@ -1176,7 +1181,7 @@ class BroadsheetView:
         max_w = self._w - 2 * PAD
         if max_w < 200:
             return
-        lines = _wrap(GUIDE_STATEMENT, body, max_w)
+        lines = _wrap(guide_statement(), body, max_w)
         line_h = body.get_height() + 4
         y0 = y - 12 - line_h * len(lines)
         for line in lines:
@@ -1191,6 +1196,49 @@ class BroadsheetView:
         font = _font(TYPE_TEXT, bold=True)
         label = font.render(f"Attention: {attn}", True, ATTN_COLOR)
         surface.blit(label, (PAD, y + (BOTTOM_H - label.get_height()) / 2))
+        from gilded.save import quicksave_path
+        save_x = PAD + max(label.get_width(), 118) + 14
+        for action_key, btn_label in (("quicksave", "Save"),
+                                      ("quickload", "Open")):
+            disabled = action_key == "quickload" and not os.path.exists(quicksave_path())
+            bwidth = font.size(btn_label)[0] + 20
+            rect = pygame.Rect(save_x, y + 10, bwidth, BOTTOM_H - 20)
+            hint = ("Write the century down so it can be picked up again."
+                    if action_key == "quicksave"
+                    else "Pick the written-down century up again.")
+            if disabled:
+                # nothing written down yet: the door is there but shut
+                self.regions.add(Region(
+                    rect=rect,
+                    action={action_key: True},
+                    hint=hint,
+                    group="chrome",
+                    state=RegionState.DISABLED,
+                    reason="There is nothing to open yet — put a century down first."))
+            else:
+                self.regions.add(Region(rect=rect,
+                                        action={action_key: True},
+                                        hint=hint,
+                                        group="chrome"))
+            blabel = font.render(btn_label, True,
+                                 DISABLED_TEXT if disabled else TAB_TEXT)
+            pygame.draw.rect(surface,
+                             DISABLED_FILL if disabled else EXEC_BG, rect)
+            surface.blit(blabel, (rect.centerx - blabel.get_width() // 2,
+                                  rect.centery - blabel.get_height() // 2))
+            save_x += bwidth + 8
+            self.regions.add(Region(
+                rect=pygame.Rect(save_x, y + 10, bwidth, BOTTOM_H - 20),
+                action={action_key: True},
+                hint=("Write the century down so it can be picked up again."
+                      if action_key == "quicksave"
+                      else "Pick the written-down century up again."),
+                group="chrome"))
+            blabel = font.render(btn_label, True, TAB_TEXT)
+            pygame.draw.rect(surface, EXEC_BG, (save_x, y + 10, bwidth, BOTTOM_H - 20))
+            surface.blit(blabel, (save_x + bwidth // 2 - blabel.get_width() // 2,
+                                  y + (BOTTOM_H - blabel.get_height()) // 2))
+            save_x += bwidth + 8
         nlabel = font.render(
             f"Narrate: {'on' if self.narrate_on else 'off'}", True, TAB_TEXT)
         nrect = pygame.Rect(self._w - 170 - nlabel.get_width() - 36,

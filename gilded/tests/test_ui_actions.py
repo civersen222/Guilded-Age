@@ -443,6 +443,15 @@ def _build_action_for_key(key, game, house, view=None):
         return {"close_found_picker": True}
     elif key == "tab":
         return {"tab": TABS[0]}
+    elif key == "quicksave":
+        return {"quicksave": True}
+    elif key == "quickload":
+        from gilded.save import quicksave_path
+        path = quicksave_path()
+        if not os.path.exists(path):
+            from gilded.save import save_game
+            save_game(game, path)
+        return {"quickload": True}
     elif key == "select_province":
         return {"select_province": 0}
     elif key == "dismiss_seat":

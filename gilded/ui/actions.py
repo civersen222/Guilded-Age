@@ -7,6 +7,7 @@ lines.  Neither imports the UI modules that call them.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Callable
 
@@ -61,6 +62,35 @@ def _end_turn_dispatch(game, house, view, action):
     view.prev_board = pre
     view.active_tab = "Briefing"
     return []
+
+
+def _quicksave_eligible(game, house, action):
+    if game.game_over is not None:
+        return False, "The game is over."
+    return True, ""
+
+
+def _quicksave_dispatch(game, house, view, action):
+    from gilded.save import save_game, quicksave_path
+    save_game(game, quicksave_path())
+    return ["The century is written down."]
+
+
+def _quickload_eligible(game, house, action):
+    from gilded.save import quicksave_path
+    if not os.path.exists(quicksave_path()):
+        return False, "There is nothing to open — put a century down first."
+    return True, ""
+
+
+def _quickload_dispatch(game, house, view, action):
+    from gilded.save import load_game, quicksave_path
+    loaded = load_game(quicksave_path())
+    view.prev_board = None
+    view.active_tab = "Briefing"
+    view._action_messages.append(
+        f"The century is picked up again at turn {loaded.turn}.")
+    return loaded
 
 
 def _place_informant_eligible(game, house, action):
@@ -1117,6 +1147,16 @@ ACTIONS: dict[str, PlayerAction] = {
         key="end_turn", label="End Turn", domain="view",
         attention_cost=0, gold_cost=0,
         eligible=_end_turn_eligible, dispatch=_end_turn_dispatch,
+    ),
+    "quicksave": PlayerAction(
+        key="quicksave", label="Save", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_quicksave_eligible, dispatch=_quicksave_dispatch,
+    ),
+    "quickload": PlayerAction(
+        key="quickload", label="Open", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_quickload_eligible, dispatch=_quickload_dispatch,
     ),
     "place_informant": PlayerAction(
         key="place_informant", label="Place Informant", domain="diplomacy",

@@ -90,6 +90,12 @@ def _apply_action(state: AppState, action: dict) -> None:
                 for item in result:
                     if isinstance(item, str):
                         state.view._action_messages.append(item)
+            elif key == "quickload":
+                # The dispatch returns the restored game; both the app and
+                # the view must point at it, or the next frame draws the
+                # century you just closed.
+                state.game = result
+                state.view.game = result
         return
 
 
@@ -98,25 +104,45 @@ def _quicksave(state: AppState) -> str:
     return state.save_path
 
 
+def _report_frame_failure(state: AppState) -> None:
+    """A frame raised: write the full traceback to a readable file under the
+    current working directory and say so on the next drawn frame. The window
+    must not simply vanish — the century stays in it."""
+    import traceback
+    report = traceback.format_exc()
+    path = os.path.join(os.getcwd(), "gilded_crash.log")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(report)
+    except OSError:
+        pass
+    state.view._action_messages.append(
+        f"The frame failed; the report is written to {os.path.basename(path)}.")
+
+
 def step_once(state: AppState) -> bool:
-    """Pump events, apply actions, draw one frame. False means quit."""
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return False
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
+    """Pump events, apply actions, draw one frame. False means quit.
+    A failure inside the frame is reported, not thrown: the loop survives."""
+    try:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
                 return False
-            if event.key == pygame.K_F5:
-                _quicksave(state)
-            if event.key == pygame.K_n:
-                state.view.narrate_on = not state.view.narrate_on
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            action = state.view.handle_click(event.pos)
-            if action:
-                _apply_action(state, action)
-        if event.type == pygame.MOUSEMOTION:
-            state.view.handle_hover(event.pos)
-    state.view.draw(state.screen)
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return False
+                if event.key == pygame.K_F5:
+                    _quicksave(state)
+                if event.key == pygame.K_n:
+                    state.view.narrate_on = not state.view.narrate_on
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                action = state.view.handle_click(event.pos)
+                if action:
+                    _apply_action(state, action)
+            if event.type == pygame.MOUSEMOTION:
+                state.view.handle_hover(event.pos)
+        state.view.draw(state.screen)
+    except Exception:
+        _report_frame_failure(state)
     pygame.display.flip()
     state.clock.tick(FPS)
     return True
