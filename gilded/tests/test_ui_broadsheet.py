@@ -29,17 +29,17 @@ from gilded.tests._fixtures import make_one_seller, no_sellers
 # floor is satisfied by a double registration, which is the specific
 # bug a census exists to catch.
 EXPECTED_REGIONS = {
-    "Briefing": 16,       # cycle_exec x1, rule x2, tab x11, end_turn, narrate
-    "Gazette": 13,        # tab x11, end_turn, narrate
-    "Ledger": 13,         # tab x11, end_turn, narrate
-    "Letters": 13,        # tab x11, end_turn, narrate
-    "Docket": 16,         # cycle_exec x1, rule x2, tab x11, end_turn, narrate
-    "Policies": 18,       # set_stance x5, tab x11, end_turn, narrate
-    "Enterprises": 23,    # venture x4, buy_shares x2, sell_shares x2, attack_takeover x1, found_enterprise x1, tab x11, end_turn, narrate
-    "Atlas": 33,          # select_province x1, atlas_actions x19, tab x11, end_turn, narrate
-    "Powers": 20,         # place_informant x7, tab x11, end_turn, narrate
-    "House": 22,          # court seat x6, heir x2, open_scheme_picker x1, tab x11, end_turn, narrate
-    "War": 25,            # declare_war x6, propose_marriage x6, tab x11, end_turn, narrate
+    "Briefing": 17,       # cycle_exec x1, rule x2, tab x11, end_turn, narrate, guide
+    "Gazette": 14,        # tab x11, end_turn, narrate, guide
+    "Ledger": 14,         # tab x11, end_turn, narrate, guide
+    "Letters": 14,        # tab x11, end_turn, narrate, guide
+    "Docket": 17,         # cycle_exec x1, rule x2, tab x11, end_turn, narrate, guide
+    "Policies": 19,       # set_stance x5, tab x11, end_turn, narrate, guide
+    "Enterprises": 24,    # venture x4, buy_shares x2, sell_shares x2, attack_takeover x1, found_enterprise x1, tab x11, end_turn, narrate, guide
+    "Atlas": 34,          # select_province x1, atlas_actions x19, tab x11, end_turn, narrate, guide
+    "Powers": 21,         # place_informant x7, tab x11, end_turn, narrate, guide
+    "House": 23,          # court seat x6, heir x2, open_scheme_picker x1, tab x11, end_turn, narrate, guide
+    "War": 26,            # declare_war x6, propose_marriage x6, tab x11, end_turn, narrate, guide
 }
 
 
@@ -3984,8 +3984,8 @@ def test_enterprises_picker_open_census():
     appoint = _region_with(v, "appoint_director")
     v.handle_click(appoint.rect.center)
     v.draw(pygame.Surface((1280, 900)))
-    assert len(v.regions) == 22, (
-        f"picker-open census moved: {len(v.regions)} regions, expected 22")
+    assert len(v.regions) == 23, (
+        f"picker-open census moved: {len(v.regions)} regions, expected 23")
 
 
 # ── I3d — a refused control is visible and says why ──────────────────────
@@ -4366,7 +4366,7 @@ def test_every_control_on_every_tab_explains_itself():
                 f"painted -- the pixel inside {v.tooltip_rect} is {fill}, "
                 f"expected the INK fill {INK}")
             checked += 1
-    assert checked == 212, (
-        f"expected to point at 212 controls across the eleven tabs, pointed at "
+    assert checked == 223, (
+        f"expected to point at 223 controls across the eleven tabs, pointed at "
         f"{checked}. The census moved; EXPECTED_REGIONS should have caught "
         f"this first.")

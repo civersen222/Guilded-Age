@@ -68,6 +68,7 @@ from gilded.ui.widgets import (
     SKIM_HIGHLIGHT, PICKER_BACK_BG, PICKER_ROW_BG,
     DISABLED_FILL, DISABLED_EDGE, DISABLED_TEXT,
     PICKER_SUBTITLE, PICKER_ROW_ALT_BG, OFFERABLE_BG, OFFERABLE_EDGE,
+    GUIDE_BG, GUIDE_EDGE,
 )
 
 TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House", "War")
@@ -78,6 +79,16 @@ BOTTOM_H = 56
 # Danger thresholds
 LEGIT_DANGER = 20.0
 TIDE_DANGER = 70.0
+
+# S17: the guide strip — a teaching statement and one next-step button drawn
+# on every frame so a stranger's first click has a target. (GUIDE_BG and
+# GUIDE_EDGE live in widgets.py with the rest of the palette.)
+GUIDE_STATEMENT = (
+    "Your aim this century: raise your house to victory. "
+    "You win by keeping your standing high. "
+    "Your gold lives in the treasury; spend your attention wisely. "
+    "The century ends after a hundred turns, or sooner in ruin — then the game ends."
+)
 
 # HUD geometry: 3 rows (axes + legitimacy/tide, chips + texts, rival row always reserved)
 _HUD_ROWS = 3
@@ -914,6 +925,7 @@ class BroadsheetView:
         self._draw_action_messages(surface)
         self._action_messages.clear()
         self._draw_bottom_bar(surface)
+        self._draw_guide(surface)
 
         # ── I3e: re-resolve hover and draw tooltip ──────────────────────────
         self.tooltip_text = None
@@ -1134,6 +1146,43 @@ class BroadsheetView:
             y += 10  # paragraph gap
             if y + line_h > h - BOTTOM_H - 20:
                 break
+
+    def _draw_guide(self, surface) -> None:
+        """Persistent guide strip above the bottom bar: a teaching statement
+        (objective, ender, attention, gold, standing) wrapped to fit, beside a
+        single next-step button (group="guide") that a stranger can click."""
+        from gilded.ui.actions import next_step
+        g, name = self.game, self.house
+        y = self._h - BOTTOM_H
+        body = _font(TYPE_BODY)
+        label, action, hint = next_step(g, name)
+        btn = pygame.Rect(self._w - 560, y + 8, 156, 40)
+        if btn.x < PAD:
+            return
+        # Fit the label into the button; trim from the right if too wide.
+        while body.size(label)[0] > 138:
+            label = label[:-6].rstrip(" ,.:") + "…"
+        nlabel = body.render(label, True, BUTTON_TEXT)
+        pygame.draw.rect(surface, GUIDE_BG, btn)
+        pygame.draw.rect(surface, GUIDE_EDGE, btn, 2)
+        surface.blit(nlabel, (btn.x + 10, btn.centery - nlabel.get_height() // 2))
+        self.regions.add(Region(rect=btn,
+                                action=action,
+                                hint=hint,
+                                group="guide",
+                                state=RegionState.ENABLED))
+        # Teaching statement wrapped within the full width, drawn above the
+        # bottom bar so every term stays on the opening frame.
+        max_w = self._w - 2 * PAD
+        if max_w < 200:
+            return
+        lines = _wrap(GUIDE_STATEMENT, body, max_w)
+        line_h = body.get_height() + 4
+        y0 = y - 12 - line_h * len(lines)
+        for line in lines:
+            surf = body.render(line, True, INK)
+            surface.blit(surf, (PAD, y0))
+            y0 += line_h
 
     def _draw_bottom_bar(self, surface) -> None:
         y = self._h - BOTTOM_H

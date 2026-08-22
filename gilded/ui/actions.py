@@ -98,6 +98,26 @@ def _set_stance_dispatch(game, house, view, action):
     return [f"Your {key} stance moves from {old} to {new}."]
 
 
+def next_step(game, house):
+    """S17: the one next step a stranger should take. Returns (label, action,
+    hint) — the action dict is the same shape the tabs emit, so clicking the
+    guide button applies a real verb through _apply_action."""
+    from gilded.ai import _executor_for
+    petitions = game.docket_by_house.get(house, [])
+    if petitions:
+        p = petitions[0]
+        ex = _executor_for(game, game.realms[house], p.domain)
+        exec_id = None if ex is None else ex.id
+        opt = p.options[0]
+        label = f"Rule: {p.kind.replace('_', ' ')}"
+        action = {"rule": (p.pid, opt.key, exec_id)}
+        hint = f"Rule on the {p.kind.replace('_', ' ')} petition — {opt.text}."
+        return label, action, hint
+    action = {"end_turn": True}
+    hint = "No petitions waiting — close the turn with End Turn."
+    return "End Turn", action, hint
+
+
 def _rule_eligible(game, house, action):
     if _no_attention(game, house):
         return False, _attention_reason()
