@@ -102,7 +102,8 @@ def _axis_world(game, house_name: str) -> Tuple[float, float]:
     welfare = (sum(max(0.0, WELFARE_DIAL - e.extraction_dial) for e in ents)
                / len(ents)) if ents else 0.0
     axis = _clamp(100.0 - game.tide.level
-                  - ATROCITY_WEIGHT * game.tide.atrocities
+                  - ATROCITY_WEIGHT
+                  * game.tide.house_atrocities.get(house_name, 0.0)
                   - unrest + welfare / 4.0)
     return axis, unrest
 
@@ -123,7 +124,9 @@ def judge(game, house_name: str) -> Epilogue:
         key = "A House of Ash"
     elif capital >= HEGEMON_CAPITAL and standing >= HEGEMON_STANDING:
         key = "Hegemon of the Age"
-    elif standing >= QUIET_STANDING and game.tide.atrocities <= QUIET_ATROCITIES:
+    elif (standing >= QUIET_STANDING
+          and game.tide.house_atrocities.get(house_name, 0.0)
+          <= QUIET_ATROCITIES):
         key = "The Quiet Throne"
     else:
         key = "The Long Ledger"
@@ -186,7 +189,7 @@ def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
     if paid is not None:
         p4 = (f"World: {axes['world']:.0f}. The bill was paid in "
               f"{paid.name}, where unrest stands at {paid.unrest:.0f} and "
-              f"the tide has counted {game.tide.atrocities:.0f} atrocities; "
+              f"the tide has counted {game.tide.house_atrocities.get(house_name, 0.0):.0f} atrocities on this House's own ledger; "
               f"the workers paid, as they always do.")
     else:
         p4 = (f"World: {axes['world']:.0f}. The House holds no province at "

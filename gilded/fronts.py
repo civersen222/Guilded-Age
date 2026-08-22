@@ -217,7 +217,7 @@ def _bleed(game, war: War, front: Front, house: str, regiments: int) -> Tuple[in
         provinces[min(home)].unrest += CASUALTY_UNREST * losses
     tide = getattr(game, "tide", None)
     if tide is not None and hasattr(tide, "record_atrocity"):
-        tide.record_atrocity("war")
+        tide.record_atrocity("war", house=house)
     return losses, f"House {house} loses {losses} regiments"
 
 
