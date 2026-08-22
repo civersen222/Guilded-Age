@@ -1227,18 +1227,6 @@ class BroadsheetView:
             surface.blit(blabel, (rect.centerx - blabel.get_width() // 2,
                                   rect.centery - blabel.get_height() // 2))
             save_x += bwidth + 8
-            self.regions.add(Region(
-                rect=pygame.Rect(save_x, y + 10, bwidth, BOTTOM_H - 20),
-                action={action_key: True},
-                hint=("Write the century down so it can be picked up again."
-                      if action_key == "quicksave"
-                      else "Pick the written-down century up again."),
-                group="chrome"))
-            blabel = font.render(btn_label, True, TAB_TEXT)
-            pygame.draw.rect(surface, EXEC_BG, (save_x, y + 10, bwidth, BOTTOM_H - 20))
-            surface.blit(blabel, (save_x + bwidth // 2 - blabel.get_width() // 2,
-                                  y + (BOTTOM_H - blabel.get_height()) // 2))
-            save_x += bwidth + 8
         nlabel = font.render(
             f"Narrate: {'on' if self.narrate_on else 'off'}", True, TAB_TEXT)
         nrect = pygame.Rect(self._w - 170 - nlabel.get_width() - 36,

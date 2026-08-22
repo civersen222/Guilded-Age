@@ -694,6 +694,13 @@ def test_dispatchability(key):
 
     # Dispatch and assert result type
     result = entry.dispatch(g, h, view, action)
+    if key == "quickload":
+        # quickload is the one dispatch that returns the restored game,
+        # not a list of lines: _apply_action swaps state.game for it.
+        from gilded.chassis import GildedGame
+        assert isinstance(result, GildedGame), \
+            f"dispatch for 'quickload' returned {type(result)}, expected GildedGame"
+        return
     assert isinstance(result, list), f"dispatch for '{key}' returned {type(result)}, expected list"
     assert all(isinstance(line, str) for line in result), \
         f"dispatch for '{key}' returned non-str elements: {[type(l) for l in result]}"
