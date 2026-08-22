@@ -104,6 +104,12 @@ def call_to_arms(game, war) -> List[str]:
     answer. The pledge is recorded so the pact tick resolves it within
     CALL_TO_ARMS_DEADLINE turns."""
     msgs: List[str] = []
+    seen = getattr(game, "pact_seen_wars", None)
+    if seen is None:
+        seen = game.pact_seen_wars = set()
+    if id(war) in seen:
+        return msgs
+    seen.add(id(war))
     for ally in sorted(allies_of(game, war.defender)):
         if ally in game.houses[war.defender].at_war_with:
             continue
@@ -149,6 +155,15 @@ def pact_tick(game) -> List[str]:
         msg = form_pact(game, ha, hb)
         if msg:
             msgs.append(msg)
+    # A war can open by any path (a docket motion, a constructed test world) -
+    # the call to arms must not depend on the opener having wired
+    # call_to_arms: any war that stands but has never been seen by the pact
+    # tick gets its defenders' allies pledged here.
+    seen = getattr(game, "pact_seen_wars", None)
+    if seen is None:
+        seen = game.pact_seen_wars = set()
+    for war in list(game.wars):
+        msgs.extend(call_to_arms(game, war))
     for house in sorted(list(game.pact_pledges)):
         war, deadline = game.pact_pledges[house]
         if war not in game.wars:

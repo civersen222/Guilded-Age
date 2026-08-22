@@ -79,6 +79,7 @@ class GildedGame:
         self.marriages = MarriageRegistry()
         self.pacts: List[object] = []                      # pacts.Pact, Stage 14B
         self.pact_pledges: Dict[str, tuple] = {}           # house -> (war, deadline)
+        self.pact_seen_wars: set = set()                   # wars already called to arms
         self.wars: List[object] = []                       # fronts.War from G15
         self.events: List[TurnEvent] = []                  # last resolved turn's record
         self.docket_by_house: Dict[str, List[Petition]] = {}
