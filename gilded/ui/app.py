@@ -3,7 +3,7 @@
 run_app() opens the window "The Gilded Machine", holds a live GildedGame and a
 BroadsheetView, and each frame turns the view's click-actions into moves on the
 game - rule a petition, end the turn - exactly the levers the AI plays. Esc
-quits; F5 drops a quicksave in the console's pickle format. step_once() is one
+quits; F5 drops a quicksave in gilded/save.py's format. step_once() is one
 frame factored out so the loop is testable headless (SDL_VIDEODRIVER=dummy).
 
 Importing this module must not open a display; all pygame surface work happens
@@ -13,13 +13,13 @@ inside the functions, never at import time.
 from __future__ import annotations
 
 import os
-import pickle
 from dataclasses import dataclass
 from typing import Optional
 
 import pygame
 
 from gilded.chassis import GildedGame
+from gilded.save import save_game
 from gilded.saga.narrator import select_narrator
 from gilded.ui.actions import ACTIONS
 from gilded.ui.broadsheet import BroadsheetView
@@ -53,7 +53,7 @@ def new_app_state(seed: int, player_house: Optional[str] = None,
     pygame.event.clear()
     narrator = select_narrator()            # LLM in play; templated under test
     view = BroadsheetView(game, house, narrator)
-    save_path = os.path.join(os.getcwd(), "gilded_quicksave.pkl")
+    save_path = os.path.join(os.getcwd(), "gilded_quicksave.gsave")
     return AppState(game, view, screen, house, pygame.time.Clock(), save_path,
                     narrator)
 
@@ -90,15 +90,7 @@ def _apply_action(state: AppState, action: dict) -> None:
 
 
 def _quicksave(state: AppState) -> str:
-    # The docket holds live closures that will not pickle; drop it for the
-    # write and let a load rebuild the morning's paper - the console's format.
-    saved = state.game.docket_by_house
-    state.game.docket_by_house = {}
-    try:
-        with open(state.save_path, "wb") as f:
-            pickle.dump(state.game, f)
-    finally:
-        state.game.docket_by_house = saved
+    save_game(state.game, state.save_path)
     return state.save_path
 
 
