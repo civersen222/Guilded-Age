@@ -90,3 +90,30 @@ def resolve_succession(realm) -> Optional[Character]:
     """
     order = succession_order(realm)
     return order[0] if order else None
+
+
+def name_heir(realm) -> Optional[str]:
+    """Designate this realm's heir if none is named, so that a living
+    designated heir stands ahead of all tiers in the line of succession.
+
+    The heir is the first dynasty member the three-tier order would pick
+    (the oldest living adult, else the oldest minor) - i.e. exactly who
+    the line names today, but named now, while the ruler still lives.
+    Returns a message when a designation is made.
+    """
+    if _designated_heir(realm) is not None:
+        return None
+    ruler = realm.ruler
+    ruler_id = ruler.id if ruler else None
+    for c in realm.dynasty.all_characters.values():
+        if getattr(c, "is_heir", False):
+            c.is_heir = False
+    for c in realm.dynasty.all_characters.values():
+        if c.is_alive and c.id != ruler_id and c.age >= 16:
+            c.is_heir = True
+            return f"{c.name} is named heir to the {realm.house_name} throne."
+    for c in realm.dynasty.all_characters.values():
+        if c.is_alive and c.id != ruler_id and c.age < 16:
+            c.is_heir = True
+            return f"{c.name} is named heir to the {realm.house_name} throne."
+    return None

@@ -30,6 +30,7 @@ from gilded.society.labor import STRIKE_OUTPUT_MULT, tick_extraction, tick_movem
 from gilded.society.characters import SocietyState
 from gilded.society.marriages import MarriageRegistry
 from gilded.society.realm import create_house_realm, tick_directors, tick_loyalty
+from gilded.society.succession import name_heir
 from gilded.society.relationships import tick_relationships
 from gilded.society.schemes import SchemeManager
 from gilded.society.shares import initial_ledger, partition_shares, pay_dividends
@@ -283,6 +284,8 @@ class GildedGame:
                 self._emit(partition_shares(realm, self.ents_of(h), old_ruler,
                                             realm.ruler, "PRIMOGENITURE"),
                            "letters", h)
+            if not self.houses[h].is_player:
+                self._emit([name_heir(realm)], "letters", h)
         self._emit(tick_relationships(self.realms, self.scheme_mgr,
                                       self.turn, self.rng), "gazette")
         self._emit(self.scheme_mgr.advance_all(self.realms, self.legitimacy,
