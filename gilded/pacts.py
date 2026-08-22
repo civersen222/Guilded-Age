@@ -18,6 +18,10 @@ from typing import Dict, List, Optional, Set
 MAX_PACTS = 8
 MAX_PACTS_PER_HOUSE = 2
 CALL_TO_ARMS_DEADLINE = 3
+# A founding bond does not ripen into a binding pact during the founding era
+# itself: the Houses must have had time to prove the bond. Natural sealing
+# therefore begins only from this turn on.
+SEAL_AFTER_TURN = 12
 
 
 @dataclass
@@ -107,9 +111,12 @@ def call_to_arms(game, war) -> List[str]:
     seen = getattr(game, "pact_seen_wars", None)
     if seen is None:
         seen = game.pact_seen_wars = set()
-    if id(war) in seen:
+    # A stable key: id(war) changes after a save/load round-trip and the
+    # loaded game would re-pledge wars, consuming RNG differently.
+    key = (war.aggressor, war.defender, war.started_turn)
+    if key in seen:
         return msgs
-    seen.add(id(war))
+    seen.add(key)
     for ally in sorted(allies_of(game, war.defender)):
         if ally in game.houses[war.defender].at_war_with:
             continue
@@ -132,29 +139,29 @@ def pact_tick(game) -> List[str]:
     A pledged House either joins its ally's war or records a refusal in the
     log naming both it and the aggressor it declined to face."""
     msgs: List[str] = []
-    marriages = getattr(game, "marriages", MarriageView()).marriages
-    contracts = getattr(game, "marriages", MarriageView()).contracts
-    seen_pairs: set = set()
-    for ca, ha, cb, hb in marriages:
-        if ha == hb:
-            continue
-        # The FOUNDBING marriage of a pair is its earliest one (marriages is
-        # chronological). A pact is SCARCE: it seals only when that founding
-        # bond carries a BOARD SEAT — a founding political alliance, not a
-        # later renewal wedding. This keeps pacts a handful per century rather
-        # than the majority of pairs, and leaves houses whose first wedding was
-        # a plain alliance free to make war.
-        pair_key = (ha, hb) if ha < hb else (hb, ha)
-        if pair_key in seen_pairs:
-            continue
-        seen_pairs.add(pair_key)
-        ckey = (ca, cb) if (ca, cb) in contracts else (cb, ca)
-        contract = contracts.get(ckey)
-        if contract is None or not contract.board_seat:
-            continue
-        msg = form_pact(game, ha, hb)
-        if msg:
-            msgs.append(msg)
+    if game.turn > SEAL_AFTER_TURN:
+        marriages = getattr(game, "marriages", MarriageView()).marriages
+        contracts = getattr(game, "marriages", MarriageView()).contracts
+        seen_pairs: set = set()
+        for ca, ha, cb, hb in marriages:
+            if ha == hb:
+                continue
+            # The FOUNDBING marriage of a pair is its earliest one (marriages
+            # is chronological). A pact is SCARCE: it seals only when that
+            # founding bond carries an ALLIANCE — a deliberate political tie,
+            # not a plain marriage. The caps are the scarcity: not every
+            # allied pair gets a seat.
+            pair_key = (ha, hb) if ha < hb else (hb, ha)
+            if pair_key in seen_pairs:
+                continue
+            seen_pairs.add(pair_key)
+            ckey = (ca, cb) if (ca, cb) in contracts else (cb, ca)
+            contract = contracts.get(ckey)
+            if contract is None or not contract.alliance:
+                continue
+            msg = form_pact(game, ha, hb)
+            if msg:
+                msgs.append(msg)
     # A war can open by any path (a docket motion, a constructed test world) -
     # the call to arms must not depend on the opener having wired
     # call_to_arms: any war that stands but has never been seen by the pact
@@ -164,7 +171,7 @@ def pact_tick(game) -> List[str]:
         seen = game.pact_seen_wars = set()
     for war in list(game.wars):
         msgs.extend(call_to_arms(game, war))
-    for house in sorted(list(game.pact_pledges)):
+    for house in sorted(list(getattr(game, "pact_pledges", {}))):
         war, deadline = game.pact_pledges[house]
         if war not in game.wars:
             del game.pact_pledges[house]
