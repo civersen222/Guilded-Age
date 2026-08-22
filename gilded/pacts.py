@@ -27,13 +27,18 @@ class Pact:
     formed_turn: int = 0
 
 
-def standing_pacts(game) -> List[Pact]:
-    """Every pact currently standing, in formation order."""
+def _pact_objects(game) -> List[Pact]:
+    """The underlying Pact records, in formation order."""
     return list(getattr(game, "pacts", []))
 
 
+def standing_pacts(game) -> Set[frozenset]:
+    """The House pairs that currently hold a pact, as a set of frozensets."""
+    return {frozenset((p.house_a, p.house_b)) for p in _pact_objects(game)}
+
+
 def _pact_between(game, house_a: str, house_b: str) -> Optional[Pact]:
-    for pact in standing_pacts(game):
+    for pact in _pact_objects(game):
         if {pact.house_a, pact.house_b} == {house_a, house_b}:
             return pact
     return None
@@ -42,17 +47,14 @@ def _pact_between(game, house_a: str, house_b: str) -> Optional[Pact]:
 def allies_of(game, house_name: str) -> Set[str]:
     """The Houses bound to house_name by a standing pact."""
     out: Set[str] = set()
-    for pact in standing_pacts(game):
-        if pact.house_a == house_name:
-            out.add(pact.house_b)
-        elif pact.house_b == house_name:
-            out.add(pact.house_a)
+    for pair in standing_pacts(game):
+        if house_name in pair:
+            out.update(pair - {house_name})
     return out
 
 
 def _count_for(game, house_name: str) -> int:
-    return sum(1 for p in standing_pacts(game)
-               if p.house_a == house_name or p.house_b == house_name)
+    return sum(1 for pair in standing_pacts(game) if house_name in pair)
 
 
 def are_allies(game, house_a: str, house_b: str) -> bool:

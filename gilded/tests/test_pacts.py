@@ -17,7 +17,7 @@ from gilded.pacts import (CALL_TO_ARMS_DEADLINE, MAX_PACTS,
 
 def test_exports_and_empty_game():
     g = GildedGame(seed=7)
-    assert standing_pacts(g) == []
+    assert standing_pacts(g) == set()
     assert allies_of(g, "Brandtner") == set()
     # a House may declare war on a House it is not at war with or allied to
     assert may_declare_war(g, "Brandtner", "Karsgate")
