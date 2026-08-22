@@ -83,16 +83,22 @@ def _axis_standing(game, house_name: str) -> float:
                   + 0.25 * (50.0 + mean_rel / 2.0))
 
 
-def _axis_blood(game, house_name: str) -> Tuple[float, List, int]:
+def _axis_blood(game, house_name: str) -> Tuple[float, List, int, float, bool]:
+    """The state of a line, not the fact that it exists: how many of the
+    century's members still draw breath, the burden of stress the court
+    carries, and whether an heir of age stands behind the ruler."""
     realm = game.realms.get(house_name)
     if realm is None:
-        return 0.0, [], 0
+        return 0.0, [], 0, 100.0, False
     members = list(realm.dynasty.all_characters.values())
     living = [c for c in members if c.is_alive]
     burden = (sum(c.stress for c in living) / len(living)) if living else 100.0
-    axis = _clamp(30.0 * len(living) + 5.0 * (len(members) - len(living))
-                  - burden / 2.0)
-    return axis, living, len(members)
+    ruler_id = realm.ruler.id if realm.ruler else None
+    heir = any(c.id != ruler_id and c.age >= 16
+               and getattr(c, "is_heir", False) for c in living)
+    axis = _clamp(8.0 * len(living) + 5.0 * (len(members) - len(living))
+                  - burden / 4.0 + (15.0 if heir else 0.0))
+    return axis, living, len(members), burden, heir
 
 
 def _axis_world(game, house_name: str) -> Tuple[float, float]:
@@ -114,7 +120,7 @@ def judge(game, house_name: str) -> Epilogue:
     fate = check_ending(game, house_name)
     capital = _axis_capital(game, house_name)
     standing = _axis_standing(game, house_name)
-    blood, living, ever = _axis_blood(game, house_name)
+    blood, living, ever, burden, heir = _axis_blood(game, house_name)
     world, _unrest = _axis_world(game, house_name)
     axes = {"capital": capital, "standing": standing,
             "blood": blood, "world": world}
@@ -131,7 +137,7 @@ def judge(game, house_name: str) -> Epilogue:
     else:
         key = "The Long Ledger"
     return Epilogue(key, axes, _epilogue_text(game, house_name, key, axes,
-                                              living, ever))
+                                              living, ever, burden, heir))
 
 
 def _saga_coda(game) -> str:
@@ -161,7 +167,8 @@ def _saga_coda(game) -> str:
 
 
 def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
-                   living: List, ever: int) -> str:
+                   living: List, ever: int, burden: float,
+                   heir: bool) -> str:
     year = year_of(game.turn)
     house = game.houses[house_name]
     ents = sorted((e for e in game.enterprises if e.house == house_name),
@@ -180,9 +187,12 @@ def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
           f"{game.tide.phase()}.")
     if living:
         eldest = max(living, key=lambda c: (c.age, c.name))
-        p3 = (f"Blood: {axes['blood']:.0f}. {len(living)} of the line still "
-              f"draw breath of the {ever} the century saw; {eldest.name}, "
-              f"{eldest.age}, carries the name onward.")
+        p3 = (f"Blood: {axes['blood']:.0f}. {len(living)} of the {ever} the "
+              f"century saw still draw breath; {eldest.name}, {eldest.age}, "
+              f"carries the name onward. The court carries "
+              f"{burden:.0f} of burden on its shoulders"
+              + (", and an heir of age stands ready behind the ruler."
+                 if heir else ", but no heir of age stands behind the ruler."))
     else:
         p3 = (f"Blood: {axes['blood']:.0f}. Of the {ever} the century saw, "
               f"none remain - the name is spoken only by strangers.")
