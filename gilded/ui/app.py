@@ -65,6 +65,8 @@ def _apply_action(state: AppState, action: dict) -> None:
             from gilded.ui.actions import _adjust_garrison_eligible, _adjust_garrison_dispatch
             ok, _reason = _adjust_garrison_eligible(state.game, state.house, action)
             if not ok:
+                if _reason:
+                    state.view._action_messages.append(str(_reason))
                 return
             result = _adjust_garrison_dispatch(state.game, state.house, state.view, action)
         else:
@@ -73,6 +75,8 @@ def _apply_action(state: AppState, action: dict) -> None:
                 continue
             ok, _reason = act.eligible(state.game, state.house, action)
             if not ok:
+                if _reason:
+                    state.view._action_messages.append(str(_reason))
                 return
             result = act.dispatch(state.game, state.house, state.view, action)
         if result:

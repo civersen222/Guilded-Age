@@ -76,35 +76,14 @@ def _place_informant_eligible(game, house, action):
 
 def _place_informant_dispatch(game, house, view, action):
     from gilded.docket import initiative
-    target = action["place_informant"]
-    realm = game.realms[house]
-    executor = _executor_for(game, realm, "diplomacy")
-    game.attention[house] -= 1
-    initiative(game, house, "establish_informant", executor, target_house=target)
-    return []
-
-
-# Cache for _executor_for import — lazy to avoid circular deps
-_executor_for = None
-
-def _get_executor_for():
-    global _executor_for
-    if _executor_for is None:
-        from gilded.ai import _executor_for as _ef
-        _executor_for = _ef
-    return _executor_for
-
-
-# Override the above — use the imported function directly
-def _place_informant_dispatch(game, house, view, action):
-    from gilded.docket import initiative
     from gilded.ai import _executor_for
     target = action["place_informant"]
     realm = game.realms[house]
     executor = _executor_for(game, realm, "diplomacy")
     game.attention[house] -= 1
     initiative(game, house, "establish_informant", executor, target_house=target)
-    return []
+    target_name = game.houses[target].name
+    return [f"An informant of yours goes to work at the {target_name} court."]
 
 
 def _set_stance_eligible(game, house, action):
@@ -113,8 +92,10 @@ def _set_stance_eligible(game, house, action):
 
 def _set_stance_dispatch(game, house, view, action):
     key, value = action["set_stance"]
+    old = game.directives[house].stances.get(key, 0)
     game.directives[house].set_stance(key, value)
-    return []
+    new = game.directives[house].stances[key]
+    return [f"Your {key} stance moves from {old} to {new}."]
 
 
 def _rule_eligible(game, house, action):
@@ -147,9 +128,9 @@ def _rule_dispatch(game, house, view, action):
         from gilded.ai import _executor_for
         executor = _executor_for(game, realm, petition.domain)
     game.attention[house] -= 1
-    docket_rule(game, petition, option_key, executor)
+    lines = docket_rule(game, petition, option_key, executor)
     game.docket_by_house[house].remove(petition)
-    return []
+    return list(lines)
 
 
 def _expand_enterprise_eligible(game, house, action):

@@ -864,6 +864,59 @@ def test_set_stance_updates_directives():
         f"cooperation stance must be 50, got {dirs.stances.get('cooperation')}"
 
 
+def test_rule_says_what_it_ruled():
+    """rule: the dispatch returns the docket's own narration, not silence."""
+    state = app.new_app_state(seed=42)
+    g, h = state.game, state.house
+    p = g.docket_by_house.get(h, [None])[0]
+    assert p is not None and p.options, "seed 42 turn 1 needs a petition"
+    action = {"rule": (p.pid, p.options[0].key, None)}
+    entry = act.ACTIONS["rule"]
+    ok, reason = entry.eligible(g, h, action)
+    assert ok, f"rule not eligible: {reason}"
+    lines = entry.dispatch(g, h, state.view, action)
+    assert lines, "rule must return narration, not []"
+    assert all(isinstance(x, str) and x.strip() for x in lines), \
+        f"narration must be non-empty strings, got {lines}"
+
+
+def test_set_stance_says_which_stance_moved():
+    """set_stance: the line the dispatch returns names the stance key."""
+    state = app.new_app_state(seed=42)
+    g, h = state.game, state.house
+    entry = act.ACTIONS["set_stance"]
+    lines = entry.dispatch(g, h, state.view, {"set_stance": ("war", -40)})
+    assert lines, "set_stance must return a line, not []"
+    assert "war" in lines[0].lower(), f"line must name the stance key: {lines}"
+    assert "-40" in lines[0], f"line must say where the stance landed: {lines}"
+
+
+def test_place_informant_says_who_went_where():
+    """place_informant: the line the dispatch returns names the target house."""
+    state = app.new_app_state(seed=42)
+    g, h = state.game, state.house
+    target = next(hh for hh in g.houses if hh != h)
+    entry = act.ACTIONS["place_informant"]
+    att_before = g.attention[h]
+    lines = entry.dispatch(g, h, state.view, {"place_informant": target})
+    assert lines, "place_informant must return a line, not []"
+    assert g.houses[target].name in lines[0], \
+        f"line must name the target house: {lines}"
+    assert g.attention[h] == att_before - 1
+
+
+def test_refused_action_tells_the_player_why():
+    """A refused click puts the eligible() reason onto view._action_messages."""
+    state = app.new_app_state(seed=42)
+    g, h = state.game, state.house
+    ok, reason = act.ACTIONS["buy_shares"].eligible(g, h, {"buy_shares": None})
+    assert not ok and str(reason).strip(), "premise: a refused action with a reason"
+    state.view._action_messages.clear()
+    app._apply_action(state, {"buy_shares": None})
+    assert reason in state.view._action_messages, \
+        f"the reason '{reason}' must land on _action_messages verbatim"
+
+
 # ── I4b — the buyout button: drawn, priced honestly, and it moves the shares ──
 #
 # `defend_buyout` is not a new engine verb. It is `buy_shares` with the

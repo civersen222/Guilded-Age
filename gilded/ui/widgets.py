@@ -188,22 +188,18 @@ def _word_groups(words: list[str], f: pygame.font.Font, width: int) -> list[list
     current: list[str] = []
     for word in words:
         test = current + [word]
-        surf = f.render(" ".join(test), False, (0, 0, 0))
-        if surf.get_width() <= width:
+        w = f.size(" ".join(test))[0]
+        if w <= width:
             current.append(word)
         else:
             if current:
                 groups.append(current)
-            # single word wider than width → it still goes in on its own line
-            if surf.get_width() <= width:
-                current = [word]
+                current = []
+            if f.size(word)[0] > width:
+                # single word wider than width → it still goes in on its own line
+                groups.append([word])
             else:
-                groups.append(current)
                 current = [word]
-                # force-break the long word if needed
-                if f.render(word, False, (0, 0, 0)).get_width() > width:
-                    groups.append([word])
-                    current = []
     if current:
         groups.append(current)
     return groups
