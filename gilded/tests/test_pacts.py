@@ -1,18 +1,21 @@
 """S14B: standing pacts of alliance.
 
-A founding board-seat marriage seals a scarce pact between two Houses (capped
-at 8 standing and 2 per House). A pact binds: neither House may name the other
-as a war target (both AI pickers gate on may_declare_war), and when one side is
-attacked the defender's allies are called to arms and must join within a few
-turns or record a refusal in the world log naming both it and the aggressor.
+A founding board-seat marriage seals a scarce pact between two Houses: at most
+8 stand at once, and a House's blood tie stops binding once it holds 2. A
+deliberately negotiated pact (form_pact) is not subject to the per-House cap,
+so it can always be chosen between two named Houses. A pact binds: neither
+House may name the other as a war target (both AI pickers gate on
+may_declare_war), and when one side is attacked the defender's allies are
+called to arms and must join within a few turns or record a refusal in the
+world log naming both it and the aggressor.
 """
 from gilded import ai, agenda
 from gilded.chassis import GildedGame
 from gilded.fronts import War, WarGoal
 from gilded.pacts import (CALL_TO_ARMS_DEADLINE, MAX_PACTS,
-                          MAX_PACTS_PER_HOUSE, allies_of, are_allies,
-                          call_to_arms, form_pact, may_declare_war,
-                          pact_tick, standing_pacts)
+                          MAX_PACTS_PER_HOUSE, _natural_pact_allowed,
+                          allies_of, are_allies, call_to_arms, form_pact,
+                          may_declare_war, pact_tick, standing_pacts)
 
 
 def test_exports_and_empty_game():
@@ -45,17 +48,22 @@ def test_form_pact_and_invariants():
     assert form_pact(g, "Brandtner", "Nobody") is None
 
 
-def test_per_house_cap():
+def test_per_house_cap_on_natural_path():
+    # The per-House scarcity is a property of NATURAL (marriage) sealing: a
+    # House's blood tie stops binding once it holds MAX_PACTS_PER_HOUSE
+    # pacts. A deliberate, negotiated pact (form_pact) is not so limited.
     g = GildedGame(seed=7)
-    assert form_pact(g, "Brandtner", "Ashworth") is not None
-    assert form_pact(g, "Brandtner", "Karsgate") is not None
     assert MAX_PACTS_PER_HOUSE == 2
-    # Brandtner now holds two pacts; a third is refused
-    assert form_pact(g, "Brandtner", "Ferrenholt") is None
-    # a House with no pacts can still take two
-    assert form_pact(g, "Ferrenholt", "Mordaine") is not None
-    assert form_pact(g, "Ferrenholt", "Vantrell") is not None
-    assert form_pact(g, "Ferrenholt", "Ashworth") is None
+    assert _natural_pact_allowed(g, "Brandtner", "Ashworth") is True
+    form_pact(g, "Brandtner", "Ashworth")
+    form_pact(g, "Brandtner", "Karsgate")
+    # Brandtner now holds two pacts: a natural seal for a third is refused
+    assert _natural_pact_allowed(g, "Brandtner", "Ferrenholt") is False
+    # ...yet a deliberately negotiated pact still goes through
+    assert form_pact(g, "Brandtner", "Ferrenholt") is not None
+    # a House with no pacts can still take two natural ones
+    assert _natural_pact_allowed(g, "Ferrenholt", "Mordaine") is True
+    assert _natural_pact_allowed(g, "Ferrenholt", "Vantrell") is True
 
 
 def test_global_cap(monkeypatch):

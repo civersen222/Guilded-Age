@@ -67,11 +67,15 @@ def are_allies(game, house_a: str, house_b: str) -> bool:
 
 
 def form_pact(game, house_a: str, house_b: str) -> Optional[str]:
-    """Seal a pact between two Houses, respecting the scarcity caps.
+    """Seal a pact between two Houses, respecting the global scarcity cap.
 
-    Returns a gazette message on success, or None when the pact could not be
-    formed (unknown House, already allied, or the standing/per-House caps
-    reached)."""
+    The per-House scarcity is enforced on the NATURAL sealing path (a
+    marriage's blood tie), not here: a deliberately negotiated pact between
+    two named Houses is allowed even if one of them already holds
+    MAX_PACTS_PER_HOUSE pacts, so the alliance remains something that can be
+    chosen at will. Returns a gazette message on success, or None when the
+    pact could not be formed (unknown House, already allied, or the standing
+    cap reached)."""
     if house_a not in game.houses or house_b not in game.houses:
         return None
     if house_a == house_b:
@@ -80,12 +84,21 @@ def form_pact(game, house_a: str, house_b: str) -> Optional[str]:
         return None
     if len(standing_pacts(game)) >= MAX_PACTS:
         return None
-    if _count_for(game, house_a) >= MAX_PACTS_PER_HOUSE:
-        return None
-    if _count_for(game, house_b) >= MAX_PACTS_PER_HOUSE:
-        return None
     game.pacts.append(Pact(house_a, house_b, game.turn))
     return f"House {house_a} and House {house_b} seal a pact of alliance"
+
+
+def _natural_pact_allowed(game, house_a: str, house_b: str) -> bool:
+    """Whether a NATURAL (marriage-sealed) pact may bind the two Houses.
+
+    The per-House scarcity cap: a House's blood tie seals a pact only while
+    it holds fewer than MAX_PACTS_PER_HOUSE standing pacts. This is what
+    keeps alliances scarce in a played century."""
+    if _count_for(game, house_a) >= MAX_PACTS_PER_HOUSE:
+        return False
+    if _count_for(game, house_b) >= MAX_PACTS_PER_HOUSE:
+        return False
+    return True
 
 
 def may_declare_war(game, house: str, target: str) -> bool:
@@ -158,6 +171,8 @@ def pact_tick(game) -> List[str]:
             ckey = (ca, cb) if (ca, cb) in contracts else (cb, ca)
             contract = contracts.get(ckey)
             if contract is None or not contract.alliance:
+                continue
+            if not _natural_pact_allowed(game, ha, hb):
                 continue
             msg = form_pact(game, ha, hb)
             if msg:
