@@ -35,3 +35,4 @@ commit_msg*.txt
 
 # Test artefacts
 gilded_quicksave.pkl
+*.gsave
