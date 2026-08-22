@@ -74,10 +74,13 @@ def _weaker_neighbor(game, house_name: str) -> Optional[str]:
             if o and o != house_name and o in game.houses:
                 neighbors.add(o)
     me = _strength(game, house_name)
+    from gilded import pacts
     for other in sorted(neighbors):
         if other in house.at_war_with:
             continue
         if house.truces.get(other, 0) > game.turn:
+            continue
+        if not pacts.may_declare_war(game, house_name, other):
             continue
         if _strength(game, other) < WEAKER * me:
             return other

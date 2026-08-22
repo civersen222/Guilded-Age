@@ -64,6 +64,7 @@ class War:
     fronts: List[Front]
     war_score: float = 0.0          # -100..100, + = aggressor winning
     started_turn: int = 0
+    allies: List[str] = field(default_factory=list)  # Houses answering a call to arms
 
 
 # --- raising and wiring ------------------------------------------------------
@@ -403,6 +404,11 @@ def negotiate_peace(game, war: War, terms: PeaceTerms) -> List[str]:
         game.wars.remove(war)
     game.houses[war.aggressor].at_war_with.discard(war.defender)
     game.houses[war.defender].at_war_with.discard(war.aggressor)
+    for ally in war.allies:
+        game.houses[ally].at_war_with.discard(war.aggressor)
+        game.houses[war.aggressor].at_war_with.discard(ally)
+    for house in [h for h, (w, _d) in game.pact_pledges.items() if w is war]:
+        del game.pact_pledges[house]
     expiry = game.turn + TRUCE_TURNS
     game.houses[war.aggressor].truces[war.defender] = expiry
     game.houses[war.defender].truces[war.aggressor] = expiry

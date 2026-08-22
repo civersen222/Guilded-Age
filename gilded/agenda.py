@@ -257,9 +257,9 @@ def goal_initiative(game, house_name: str, goal: Goal
     realm = game.realms[house_name]
     fam, target = goal.family, goal.target
     if fam == "Conquest":
-        if (target in game.houses and target not in house.at_war_with
-                and house.truces.get(target, 0) <= game.turn
-                and not house.at_war_with):
+        from gilded import pacts
+        if (target in game.houses and not house.at_war_with
+                and pacts.may_declare_war(game, house_name, target)):
             return "declare_war", {"target_house": target}
         return None
     if fam == "Dominion":

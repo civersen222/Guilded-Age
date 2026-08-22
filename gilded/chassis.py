@@ -77,6 +77,8 @@ class GildedGame:
         self.legitimacy = {h: 50.0 for h in self.houses}
         self.scheme_mgr = SchemeManager()
         self.marriages = MarriageRegistry()
+        self.pacts: List[object] = []                      # pacts.Pact, Stage 14B
+        self.pact_pledges: Dict[str, tuple] = {}           # house -> (war, deadline)
         self.wars: List[object] = []                       # fronts.War from G15
         self.events: List[TurnEvent] = []                  # last resolved turn's record
         self.docket_by_house: Dict[str, List[Petition]] = {}
@@ -299,6 +301,8 @@ class GildedGame:
         self.scheme_mgr.pending_successions.clear()
         self._emit(self.marriages.tick(self.realms, self.houses,
                                        self._ents_by_house(), self.rng), "gazette")
+        from gilded import pacts
+        self._emit(pacts.pact_tick(self), "gazette")
         for h in sorted(self.realms):
             realm = self.realms[h]
             self._emit(tick_directors(realm, self.enterprises, self.rng), "ledger", h)

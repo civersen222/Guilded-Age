@@ -1344,9 +1344,13 @@ def _init_declare_war(ctx, target_house=None, goal=None, **kw) -> List[str]:
     truce = house.truces.get(target_house, 0)
     if truce > ctx.game.turn:
         return [f"A truce with House {target_house} holds until turn {truce}"]
+    from gilded import pacts
+    if not pacts.may_declare_war(ctx.game, ctx.house, target_house):
+        return [f"A pact of alliance binds the House to House {target_house}"]
     war = declare_war(ctx.game, ctx.house, target_house,
                       goal if goal is not None else WarGoal("humble"))
     out = [f"House {ctx.house} declares war on House {target_house}!"]
+    out.extend(pacts.call_to_arms(ctx.game, war))
     if not war.fronts:
         out.append("No shared border: the war exists only on paper")
     return out
