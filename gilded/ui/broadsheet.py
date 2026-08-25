@@ -2672,9 +2672,10 @@ class BroadsheetView:
         sy = content.bottom - 10
         btn_w = 140
         btn_h = body.get_height() + 4
+        bx = PAD + 160 + 8
         if sy - 60 <= content.bottom - 10:
             label = f"Ambition: {st['family']}" if st["family"] else "Set Ambition"
-            btn_rect = _draw_button(surface, label, PAD, sy - 28, btn_w, btn_h, True)
+            btn_rect = _draw_button(surface, label, bx, sy - 20, btn_w, btn_h, True)
             self.regions.add(Region(
                 rect=btn_rect,
                 action={"open_ambition_picker": True},
@@ -2707,7 +2708,7 @@ class BroadsheetView:
         _draw_button(surface, "Cancel", x, content.bottom - 40,
                      150, btn_h, True)
         self.regions.add(Region(
-            rect=pygame.Rect(PAD, content.bottom - 40, 150, btn_h),
+            rect=pygame.Rect(PAD + 168, content.bottom - 40, 150, btn_h),
             action={"close_ambition_picker": True},
             hint="Cancel - spends nothing",
             group="ambition_picker",

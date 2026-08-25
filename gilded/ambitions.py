@@ -103,6 +103,9 @@ def _snapshot(game, house_name: str, target: Optional[str]) -> dict:
     mean_unrest = (sum(p.unrest for p in provs) / len(provs)) if provs else 0.0
     rel = game.houses[house_name].relations
     mean_rel = (sum(rel.values()) / len(rel)) if rel else 0.0
+    # the quietest rival's mills - Consolidation wins by standing quieter
+    # than every rival (an honest relative axis: the labor directive
+    # calms the player's own mills, rivalry unrest is the world's own)
     return {
         "provinces": len(provs),
         "enterprises": len([e for e in game.enterprises
@@ -110,6 +113,8 @@ def _snapshot(game, house_name: str, target: Optional[str]) -> dict:
         "treasury": game.houses[house_name].treasury,
         "mean_unrest": mean_unrest,
         "mean_rel": mean_rel,
+        "rel_with_target": (game.houses[target].relations.get(house_name, 0)
+                            if target else 0),
         "informed": _intel_tier(game, house_name, target) if target else 0,
         "war_with_target": bool(target)
         and target in game.houses[house_name].at_war_with,
@@ -127,8 +132,12 @@ def _fulfilled(game, house_name: str, goal: Goal, snap: dict) -> bool:
     if family == "Dominion":
         return len(game.provinces_of(house_name)) > snap["provinces"]
     if family == "Buyout":
-        n = len([e for e in game.enterprises if e.house == house_name])
-        return n > snap["enterprises"]
+        if goal.target is None:
+            return False
+        # the target's regard for this House - the docket's own lever
+        # (envoys, marriages, treaties) is what moves it
+        return (game.houses[goal.target].relations.get(house_name, 0)
+                > snap["rel_with_target"])
     if family == "Dynasty":
         rel = game.houses[house_name].relations
         now = (sum(rel.values()) / len(rel)) if rel else 0.0
@@ -141,9 +150,18 @@ def _fulfilled(game, house_name: str, goal: Goal, snap: dict) -> bool:
         return (len(game.provinces_of(house_name)) > snap["provinces"]
                 or game.houses[house_name].treasury > snap["treasury"])
     if family == "Consolidation":
+        # the quietest mills in the realm: standing quieter than every
+        # rival at the close. The labor directive is the player's lever;
+        # the world's own unrest decides who else is quiet.
         provs = game.provinces_of(house_name)
-        now = (sum(p.unrest for p in provs) / len(provs)) if provs else 0.0
-        return now < snap["mean_unrest"]
+        if not provs:
+            return False
+        now = sum(p.unrest for p in provs) / len(provs)
+        rival_mus = [sum(p.unrest for p in game.provinces_of(h))
+                     / len(game.provinces_of(h))
+                     for h in game.houses
+                     if h != house_name and game.provinces_of(h)]
+        return bool(rival_mus) and now < min(rival_mus)
     return False
 
 

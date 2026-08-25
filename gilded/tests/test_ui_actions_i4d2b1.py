@@ -247,13 +247,15 @@ def test_e40_no_duplicate_rung():
 # ── R-4: ACTIONS registry unchanged ──────────────────────────────────────────
 
 def test_r4_actions_registry_updated():
-    """ACTIONS dict now has 42 keys, including war verbs, court verbs, and scheme verbs."""
+    """ACTIONS dict now has 43 keys, including war verbs, court verbs, scheme
+    verbs, and the C2 set_ambition verb."""
     from gilded.ui.actions import ACTIONS, PlayerAction
-    assert len(ACTIONS) == 42, f"ACTIONS has {len(ACTIONS)} keys, expected 42"
+    assert len(ACTIONS) == 43, f"ACTIONS has {len(ACTIONS)} keys, expected 43"
     assert "buy_shares" in ACTIONS, "buy_shares must be registered"
     assert "sell_shares" in ACTIONS, "sell_shares must be registered"
     assert "dismiss_seat" in ACTIONS, "dismiss_seat must be registered"
     assert "appoint_to_seat" in ACTIONS, "appoint_to_seat must be registered"
+    assert "set_ambition" in ACTIONS, "set_ambition must be registered"
     assert isinstance(ACTIONS["buy_shares"], PlayerAction)
     assert isinstance(ACTIONS["sell_shares"], PlayerAction)
     assert ACTIONS["buy_shares"].key == "buy_shares"

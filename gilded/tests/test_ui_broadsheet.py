@@ -38,7 +38,7 @@ EXPECTED_REGIONS = {
     "Enterprises": 26,    # venture x4, buy_shares x2, sell_shares x2, attack_takeover x1, found_enterprise x1, tab x11, save, open, end_turn, narrate, guide
     "Atlas": 36,          # select_province x1, atlas_actions x19, tab x11, save, open, end_turn, narrate, guide
     "Powers": 23,         # place_informant x7, tab x11, save, open, end_turn, narrate, guide
-    "House": 25,          # court seat x6, heir x2, open_scheme_picker x1, tab x11, save, open, end_turn, narrate, guide
+    "House": 26,          # court seat x6, heir x2, open_scheme_picker x1, open_ambition_picker x1, tab x11, save, open, end_turn, narrate, guide
     "War": 28,            # declare_war x6, propose_marriage x6, tab x11, save, open, end_turn, narrate, guide
 }
 
@@ -4366,7 +4366,7 @@ def test_every_control_on_every_tab_explains_itself():
                 f"painted -- the pixel inside {v.tooltip_rect} is {fill}, "
                 f"expected the INK fill {INK}")
             checked += 1
-    assert checked == 245, (
-        f"expected to point at 245 controls across the eleven tabs, pointed at "
+    assert checked == 246, (
+        f"expected to point at 246 controls across the eleven tabs, pointed at "
         f"{checked}. The census moved; EXPECTED_REGIONS should have caught "
         f"this first.")

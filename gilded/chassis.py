@@ -429,8 +429,11 @@ class GildedGame:
 
         # 9. endings, then the next morning's paper
         self.resolved_turn = self.turn
-        # 9.5 C2: close any ambition whose commit window has ended
+        # 9.5 C2: close any ambition whose commit window has ended -
+        # re-stamp wants first so members who aged into adulthood during
+        # the window carry their private want too
         for h in sorted(self.houses):
+            self.ambitions.wants(h)
             self.ambitions.resolve_due(h)
         self.beats.end_turn_close()   # C1: record the turn's beats and deltas
         self.turn += 1

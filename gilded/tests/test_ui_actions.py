@@ -313,6 +313,8 @@ def _build_action_for_key(key, game, house, view=None):
         return None
     elif key == "set_stance":
         return {"set_stance": ("cooperation", 0)}
+    elif key == "set_ambition":
+        return {"set_ambition": {"family": "Consolidation"}}
     elif key == "rule":
         petitions = game.docket_by_house.get(house, [])
         if petitions:
