@@ -103,6 +103,19 @@ def test_game_exposes_ladder_and_beats(game):
                                                             next(iter(game.houses)))
 
 
+def test_beats_public_view_without_a_house(game):
+    # the public view: no house argument, so every House's ledger beats
+    # are visible, and every beat names a real House
+    all_beats = beats(game)
+    divs = {b.house for b in all_beats if b.kind == "dividends"}
+    for h in game.houses:
+        for b in beats_for(game, h):
+            if b.kind == "dividends":
+                assert b.house in divs
+    assert all(b.house in game.houses for b in all_beats)
+    assert game.beats() == all_beats
+
+
 def test_beats_pure_no_mutation(game):
     before = ladder(game)
     player = next(iter(game.houses))

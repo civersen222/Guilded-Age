@@ -119,9 +119,10 @@ class GildedGame:
         from gilded.ladder import ladder
         return ladder(self)
 
-    def beats(self, house: str, turn: int = None):
-        """Consequence beats (Mission C1) for one House: the named moments
-        the world bit back, each with the rule that fired and its Causes."""
+    def beats(self, house: Optional[str] = None, turn: int = None):
+        """Consequence beats (Mission C1) for one House - or for every
+        House when `house` is None: the named moments the world bit back,
+        each with the rule that fired and its Causes."""
         from gilded.beats import beats
         return beats(self, house, turn)
 

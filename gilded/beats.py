@@ -46,11 +46,12 @@ def _province_of(game, text: str):
     return None
 
 
-def _owner_of(game, province, house: str) -> str:
+def _owner_of(game, province, house: Optional[str]) -> str:
     """The House whose enterprise is squeezed in that province; the
-    province's owner when no enterprise sits there."""
+    province's owner when no enterprise sits there. When `house` is None
+    (the public view) the first enterprise in the province wins."""
     for e in game.enterprises:
-        if e.province == province.pid and e.house == house:
+        if e.province == province.pid and (house is None or e.house == house):
             return e.house
     for e in game.enterprises:
         if e.province == province.pid:
@@ -67,8 +68,10 @@ def _journal_causes(game, house: str, turn: int) -> tuple:
                  for label, amt in entries)
 
 
-def beats(game, house: str, turn: Optional[int] = None) -> List[Beat]:
-    """The consequence beats for one House.
+def beats(game, house: Optional[str] = None, turn: Optional[int] = None,
+          ) -> List[Beat]:
+    """The consequence beats for one House, or for every House when
+    `house` is None - the public view.
 
     `turn=None` means the last resolved turn (the events currently in the
     chassis log). The house argument scopes the ledger beats; gazette beats
@@ -108,12 +111,12 @@ def beats(game, house: str, turn: Optional[int] = None) -> List[Beat]:
                     (Cause(f"{prov.name} organizes", 0.0,
                            "society.labor.Movement.state"),)
                     if prov else ()))
-        if e.register == "ledger" and e.house == house \
+        if e.register == "ledger" and (house is None or e.house == house) \
                 and e.text.startswith(_DIVIDENDS_MARKER):
             out.append(Beat(
-                turn, "dividends", house, e.text,
+                turn, "dividends", e.house, e.text,
                 "houses.House.credit",
-                _journal_causes(game, house, turn)))
+                _journal_causes(game, e.house, turn)))
     return out
 
 
