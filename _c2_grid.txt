@@ -1,0 +1,46 @@
+78 an undisclosed seed). Grid: seed 7 Consolidation, seed 11 Glory, seed 13 Buyout
+79 (target = first rival by sorted house name).
+80 | id | assertion |
+81 | G2.1a | after set_ambition: game.agendas.get(player).family == family, .commit_turns == 10 |
+82 | G2.1b | with informant (rival,player) + relations 5: intel.report(g, rival, player).tier >= 2 and f"Pursuing {family}" in .apparent_intent — through UNCHANGED intel.py |
+83 | G2.2a | every adult has want{text, disposition in dispositions, stance in backs/wary/opposes} |
+84 | G2.2b | two seed-7 boots: (id, text, disposition, stance) lists byte-identical |
+85 | G2.2c | across the 3-seed grid, all three stances occur |
+86 | G2.3.mid | after 3 end_turns: status turns_left == 7, fulfilled is None |
+87 | G2.3.end | after 10 end_turns: fulfilled in (True, False); a beat's text contains "ambition" |
+88 | G2.3.cause | if fulfilled: some Cause label in beats.deltas(resolved_turn) contains "ambition" |
+89 | G2.3.achievable | at least one grid seed fulfils its ambition |
+90 | G2.3.failable | at least one grid seed FAILS its ambition (win conditions must be real) |
+91 | G2.4a | court_cards ids == adult ids exactly; each card's traits/stance/want_text mirror the model |
+92 | G2.4b | banner clock == "turn 1 of 10" at set, == "turn 4 of 10" after 3 end_turns |
+93 | G2.4c | the ENTIRE C1 gate still passes (regression chain inside the C2 gate) |
+94 
+95 SELF-CHECK COMMAND (run it yourself EXACTLY as written BEFORE the marker commit;
+120       for _ in range(3):
+121           g.end_turn()
+122       assert ui_house.banner(g, player)["clock"] == "turn 4 of 10"
+123       st = g.ambitions.status(player)
+124       assert st["turns_left"] == 7 and st["fulfilled"] is None, st
+125       for _ in range(7):
+126           g.end_turn()
+127       st = g.ambitions.status(player)
+128       assert st["fulfilled"] in (True, False), st
+129       assert any("ambition" in (b.text or "").lower() for b in g.beats.log)
+130       print(seed, family, "fulfilled:", st["fulfilled"])
+131   print("C2 CONTRACT HOLDS")
+132   EOF
+133 Sanity beyond the heredoc: the three "fulfilled:" lines must include at least
+134 one True AND at least one False, and across the three courts all of backs/wary/
+135 opposes must have appeared — the sealed gate asserts both.
+136 
+137 RULES
+138 - Honest levers only. Deterministic given seed. No debug hooks in game logic.
+139 - Wants derive from the 30 dispositions — not from a lookup table of names, not
+140   from randomness. The derivation must survive a reader asking "why does THIS
+141   character oppose THIS ambition?" with a disposition-grounded answer.
+142 - Ship pytest tests for every new module, in gilded/tests/, same style as the
+143   existing suite. python -m pytest gilded/tests -x -q must stay green.
+144 - Wire-check before finishing: grep every new symbol (set_ambition, ambitions,
+145   want, court_cards, banner) and prove each is imported AND called from the
+146   live game/UI, not just defined. Put the grep proof in the final commit message.
+147 - Commit early and often.
