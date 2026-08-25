@@ -23,6 +23,13 @@ def game():
     return g
 
 
+def _player(game):
+    """The player House, falling back to the first House for a headless
+    game (the app always names one; the fixture game does not)."""
+    return next((h for h in game.houses if game.houses[h].is_player),
+                sorted(game.houses)[0])
+
+
 def test_ladder_ranks_every_house(game):
     rows = ladder(game)
     assert sorted(r.house for r in rows) == sorted(game.houses)
@@ -66,7 +73,7 @@ def test_beats_carry_provenance(game):
     # seed 7 after 12 turns: something happened somewhere - strikes, a
     # union, or dividends. At least the dividend ledger lines, if any,
     # carry Causes that sum to what landed in the treasury.
-    divs = [b for b in all_beats if b.kind == "dividends"]
+    divs = [b for b in all_beats if b.facet == "dividends"]
     for b in divs:
         assert b.source == "houses.House.credit"
         # the beat's Causes are the turn's named journal lines, so they
@@ -107,10 +114,10 @@ def test_beats_public_view_without_a_house(game):
     # the public view: no house argument, so every House's ledger beats
     # are visible, and every beat names a real House
     all_beats = beats(game)
-    divs = {b.house for b in all_beats if b.kind == "dividends"}
+    divs = {b.house for b in all_beats if b.facet == "dividends"}
     for h in game.houses:
         for b in beats_for(game, h):
-            if b.kind == "dividends":
+            if b.facet == "dividends":
                 assert b.house in divs
     assert all(b.house in game.houses for b in all_beats)
     assert game.beats() == all_beats
@@ -137,3 +144,78 @@ def test_briefing_shows_the_ladder(game):
     assert sorted(r.house for r in v._ladder_rows) == sorted(game.houses)
     # rank 1 is the house winning the age - the player can see who
     assert v._ladder_rows[0].rank == 1
+
+
+# ---------------------------------------------------------------- wave 2 --
+# the exact API surface: game.ladder.standings(), game.beats.{log,deltas,
+# inquire}, game.acts.*, and the ui registry.
+
+
+def test_ladder_facade_standings(game):
+    rows = game.ladder.standings()
+    assert [r for _h, r, _a in rows] == list(range(1, len(game.houses) + 1))
+    # axes are plain floats here, the four endings axes
+    for house, _rank, axes in rows:
+        assert house in game.houses
+        assert set(axes) == {"capital", "standing", "blood", "world"}
+        assert all(isinstance(v, float) for v in axes.values())
+    # agrees with the wave-1 ladder rows
+    assert [(h, r) for h, r, _a in rows] == [
+        (row.house, row.rank) for row in ladder(game)]
+
+
+def test_beats_facade_shape(game):
+    for b in game.beats.log:
+        assert b.kind in {"signature", "season", "inquiry", "deflection"}
+        assert isinstance(b.turn, int)
+        assert isinstance(b.text, str) and b.text
+        assert b.face is None or isinstance(b.face, str)
+    # the player's treasury delta has a materialised why?
+    player = _player(game)
+    t = game.resolved_turn
+    deltas = game.beats.deltas(t)
+    att = game.beats.inquire(f"{player}.treasury", t)
+    assert att.causes and att.check(1e-6)
+    assert any(label == f"{player}.treasury" for label, _a in deltas)
+
+
+def test_acts_set_dial_emits_signature(game):
+    player = _player(game)
+    ent = next(e for e in game.enterprises if e.house == player)
+    beat = game.acts.set_dial(ent.eid, 75.0)
+    assert beat.kind == "signature"
+    assert beat.face and beat.face in beat.text
+    assert ent.extraction_dial == 75.0
+    assert any(b.kind == "signature" for b in game.beats.log)
+    # clamped to the 0-100 band
+    beat = game.acts.set_dial(ent.eid, 150.0)
+    assert ent.extraction_dial == 100.0
+
+
+def test_ui_registry_shape():
+    from gilded.ui import registry
+    assert "set_dial" in registry.VERBS
+    for verb_id, spec in registry.VERBS.items():
+        assert spec["what"] and spec["why_now"] and spec["serves"]
+    assert registry.DATA
+    assert all(isinstance(v, str) and v for v in registry.DATA.values())
+
+
+def test_all_four_kinds_in_seed7_20_turns():
+    from gilded.ui.app import new_app_state
+    s = new_app_state(seed=7)
+    g = s.game
+    mine = [e for e in g.enterprises if e.house == s.house]
+    g.acts.set_dial(mine[0].eid, 75.0)
+    assert any(b.kind == "signature" for b in g.beats.log)
+    for t in range(20):
+        g.end_turn()
+        lad = g.ladder.standings()
+        assert sorted(r for h, r, ax in lad) == list(range(1, len(lad) + 1))
+        assert all(att.check(1e-6)
+                   for _, att in g.beats.deltas(g.resolved_turn))
+    kinds = {b.kind for b in g.beats.log}
+    assert kinds >= {"signature", "season", "inquiry", "deflection"}, kinds
+    lbl, _ = g.beats.deltas(g.resolved_turn)[0]
+    att = g.beats.inquire(lbl, g.resolved_turn)
+    assert att.causes and att.check(1e-6)

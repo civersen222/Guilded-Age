@@ -102,6 +102,7 @@ class GildedGame:
         self.takeovers: List[object] = []      # society.schemes.Takeover in flight
         self.completed_takeovers: List[object] = []  # campaigns that reached the threshold
         self._seed_enterprises()
+        self._init_c1_visibility()
         self.open_turn()
 
     # --- helpers -------------------------------------------------------------
@@ -113,18 +114,16 @@ class GildedGame:
         return [p for p in sorted(self.atlas.provinces.values(), key=lambda p: p.pid)
                 if p.owner == house]
 
-    def ladder(self):
-        """The public ladder (Mission C1): every House ranked by the four
-        judgment axes, each axis with the Causes that produced it."""
-        from gilded.ladder import ladder
-        return ladder(self)
-
-    def beats(self, house: Optional[str] = None, turn: int = None):
-        """Consequence beats (Mission C1) for one House - or for every
-        House when `house` is None: the named moments the world bit back,
-        each with the rule that fired and its Causes."""
-        from gilded.beats import beats
-        return beats(self, house, turn)
+    # Mission C1 wave 2: the public API is objects with named members -
+    # `game.ladder.standings()`, `game.beats.{log,deltas,inquire}`,
+    # `game.acts.*` - each still callable like the wave-1 functions.
+    def _init_c1_visibility(self):
+        from gilded.ladder import LadderFacade
+        from gilded.beats import BeatsFacade
+        from gilded.acts import Acts
+        self.ladder = LadderFacade(self)
+        self.beats = BeatsFacade(self)
+        self.acts = Acts(self)
 
     def _ents_by_house(self) -> Dict[str, List[Enterprise]]:
         out: Dict[str, List[Enterprise]] = {h: [] for h in self.houses}
@@ -418,6 +417,7 @@ class GildedGame:
 
         # 9. endings, then the next morning's paper
         self.resolved_turn = self.turn
+        self.beats.end_turn_close()   # C1: record the turn's beats and deltas
         self.turn += 1
         from gilded.endings import check_ending    # local: endings imports our constants
         judged = next((h for h in sorted(self.houses)

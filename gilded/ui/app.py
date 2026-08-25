@@ -69,6 +69,13 @@ def _apply_action(state: AppState, action: dict) -> None:
                     state.view._action_messages.append(str(_reason))
                 return
             result = _adjust_garrison_dispatch(state.game, state.house, state.view, action)
+        elif key == "set_dial":
+            from gilded.ui import registry
+            v = registry.VERBS["set_dial"]
+            beat = state.game.acts.set_dial(action.get("eid", ""), action.get("value", 50))
+            state.view._action_messages.append(v["what"])
+            state.view._action_messages.append(beat.text)
+            result = None
         else:
             act = ACTIONS.get(key)
             if act is None:

@@ -147,3 +147,20 @@ def ladder(game) -> List[LadderRow]:
 def leader(game) -> LadderRow:
     """The House winning the age right now, with the causes that say why."""
     return ladder(game)[0]
+
+
+class LadderFacade:
+    """`game.ladder` - callable like `ladder(game)` (full LadderRows with
+    Attributed axes) and also exposing `.standings()`, the plain public
+    view: one (house, rank, axes-as-plain-floats) row per House, 1..N."""
+
+    def __init__(self, game):
+        self.game = game
+
+    def __call__(self):
+        return ladder(self.game)
+
+    def standings(self) -> List[tuple]:
+        rows = ladder(self.game)
+        return [(r.house, r.rank, {k: ax.value for k, ax in r.axes.items()})
+                for r in rows]
