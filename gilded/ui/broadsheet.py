@@ -809,6 +809,7 @@ class BroadsheetView:
         self.narrator = narrator if narrator is not None else NarratorTemplated()
         self.narrate_on = True
         self.active_tab = TABS[0]
+        self._ladder_rows = None
         self.selected_pid: Optional[int] = None
         # the previous turn's board, retained by app.py across end_turn so the
         # briefing can show "since last session"; None means first session.
@@ -1309,6 +1310,27 @@ class BroadsheetView:
                     surface.blit(body.render(line, True, INK), (PAD + 10, y))
                     y += body.get_height() + 2
                 y += 4
+        y += 8
+
+        surface.blit(head.render("The Ladder", True, INK), (PAD, y))
+        y += head.get_height() + 4
+        rows = self.game.ladder()
+        self._ladder_rows = rows
+        for row in rows[:5]:
+            who = row.house + (" (you)" if row.house == self.house else "")
+            line = f"{row.rank}. {who}  {row.composite:.0f}"
+            surface.blit(body.render(line, True,
+                                     INK if row.rank == 1 else FADED),
+                         (PAD + 10, y))
+            y += body.get_height() + 2
+        top = rows[0]
+        if y < content.bottom - 170:
+            axis = max(top.axes.values(), key=lambda a: a.value)
+            if axis.causes:
+                why_line = f"{top.house} leads on {axis.causes[0].label}."
+                surface.blit(body.render(why_line, True, FADED),
+                             (PAD + 10, y))
+                y += body.get_height() + 2
         y += 8
 
         surface.blit(head.render("The Agenda", True, INK), (PAD, y))

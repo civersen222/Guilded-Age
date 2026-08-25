@@ -109,3 +109,18 @@ def test_beats_pure_no_mutation(game):
     beats(game, player)
     beats_for(game, player)
     assert ladder(game) == before
+
+
+def test_briefing_shows_the_ladder(game):
+    import pygame
+    from gilded.ui.broadsheet import BroadsheetView
+    pygame.init()
+    player = next(iter(game.houses))
+    v = BroadsheetView(game, player)
+    v.active_tab = "Briefing"
+    surf = pygame.Surface((1280, 900))
+    v.draw(surf)
+    assert v._ladder_rows is not None, "the briefing draws the public ladder"
+    assert sorted(r.house for r in v._ladder_rows) == sorted(game.houses)
+    # rank 1 is the house winning the age - the player can see who
+    assert v._ladder_rows[0].rank == 1
