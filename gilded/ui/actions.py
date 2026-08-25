@@ -128,6 +128,31 @@ def _set_stance_dispatch(game, house, view, action):
     return [f"Your {key} stance moves from {old} to {new}."]
 
 
+def _set_ambition_eligible(game, house, action):
+    return True, ""
+
+
+def _set_ambition_dispatch(game, house, view, action):
+    """C2: record the House's stake - the goal the court now backs or
+    opposes, and the win the world is measured against."""
+    from gilded.agenda import FAMILIES
+    payload = action["set_ambition"]
+    family = payload.get("family")
+    if family not in FAMILIES:
+        return [f"Unknown family: {family}."]
+    goal = game.set_ambition(house, family, payload.get("target"))
+    lines = [f"Your ambition is set: {family}"
+             + (f" against House {goal.target}" if goal.target else "")
+             + f" - {goal.why}"]
+    stances = {}
+    for w in game.ambitions.wants(house):
+        stances[w["stance"]] = stances.get(w["stance"], 0) + 1
+    lines.append("The court's private wants: "
+                 + ", ".join(f"{n} {label}" for label, n in
+                             sorted(stances.items())))
+    return lines
+
+
 def next_step(game, house):
     """S17: the one next step a stranger should take. Returns (label, action,
     hint) — the action dict is the same shape the tabs emit, so clicking the
@@ -1167,6 +1192,11 @@ ACTIONS: dict[str, PlayerAction] = {
         key="set_stance", label="Set Stance", domain="policies",
         attention_cost=0, gold_cost=0,
         eligible=_set_stance_eligible, dispatch=_set_stance_dispatch,
+    ),
+    "set_ambition": PlayerAction(
+        key="set_ambition", label="Set Ambition", domain="statecraft",
+        attention_cost=0, gold_cost=0,
+        eligible=_set_ambition_eligible, dispatch=_set_ambition_dispatch,
     ),
     "rule": PlayerAction(
         key="rule", label="Rule Petition", domain="statecraft",

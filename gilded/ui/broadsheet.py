@@ -831,6 +831,7 @@ class BroadsheetView:
 
         # court appointment picker state: None or position_key
         self._court_picker: Optional[str] = None
+        self._ambition_picker: bool = False
         # heir picker state: None or True (picker open)
         self._heir_picker: Optional[bool] = None
         # director picker state: None or eid whose picker is open
@@ -2606,7 +2607,40 @@ class BroadsheetView:
         """Build text lines for the House tab from the peerage read-model."""
         from gilded.peerage import report as peerage_report
         rpt = peerage_report(self.game, self.house)
-        return _house_tab_lines(rpt)
+        lines = _house_tab_lines(rpt)
+        lines.extend(self._ambition_banner_lines())
+        lines.extend(self._court_want_lines())
+        return lines
+
+    def _ambition_banner_lines(self) -> List[str]:
+        """C2: the House's stake - the banner's family, target, clock."""
+        lines: List[str] = []
+        st = self.game.ambitions.status(self.house)
+        if st["family"] is None:
+            lines.append("")
+            lines.append("AMBITION: (none set - use Set Ambition below)")
+            return lines
+        lines.append("")
+        target = f" against House {st['target']}" if st["target"] else ""
+        lines.append(f"AMBITION: {st['family']}{target}  [{st['clock']}]")
+        lines.append(f"  {st['why']}")
+        if st["fulfilled"] is not None:
+            lines.append("  " + ("FULFILLED" if st["fulfilled"]
+                                 else "fell short"))
+        return lines
+
+    def _court_want_lines(self) -> List[str]:
+        """C2: the court's private wants - one card per adult member."""
+        lines: List[str] = []
+        cards = self.game.ambitions.cards(self.house)
+        if not cards:
+            return lines
+        lines.append("COURT WANTS")
+        for c in cards:
+            traits = ", ".join(c["traits"]) if c["traits"] else "no mark"
+            lines.append(f"  {c['name']} ({c['age']}, {traits}): "
+                         f"{c['stance']} - {c['want_text']}")
+        return lines
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         from gilded.peerage import report as peerage_report
@@ -2615,12 +2649,69 @@ class BroadsheetView:
         draw_house_tab(surface, content, rpt, self)
         # Draw intrigue section (plot visibility)
         self._draw_intrigue(surface, content)
+        # C2: the Set Ambition button, then the family picker when open
+        self._draw_ambition_controls(surface, content)
+        if self._ambition_picker:
+            self._draw_ambition_picker(surface, content)
         # If court picker is open, draw candidates
         if self._court_picker is not None:
             self._draw_court_picker(surface, content, rpt)
         # If scheme picker is open, draw it
         if self._scheme_picker is not None:
             self._draw_scheme_picker(surface, content)
+
+    def _draw_ambition_controls(self, surface, content: pygame.Rect) -> None:
+        """C2: the Set Ambition button under the court section."""
+        from gilded.ui.widgets import INK, Region, RegionState, TONES
+        from gilded.ui.house_tab import _draw_button
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        game = self.game
+        house = self.house
+        st = game.ambitions.status(house)
+        sy = content.bottom - 10
+        btn_w = 140
+        btn_h = body.get_height() + 4
+        if sy - 60 <= content.bottom - 10:
+            label = f"Ambition: {st['family']}" if st["family"] else "Set Ambition"
+            btn_rect = _draw_button(surface, label, PAD, sy - 28, btn_w, btn_h, True)
+            self.regions.add(Region(
+                rect=btn_rect,
+                action={"open_ambition_picker": True},
+                hint="Set the House's stake - the goal the court backs or opposes",
+                group="ambition_picker",
+            ))
+
+    def _draw_ambition_picker(self, surface, content: pygame.Rect) -> None:
+        """C2: the family picker overlay - click a family to set the stake."""
+        from gilded.agenda import FAMILIES
+        from gilded.ui.widgets import INK, Region, TONES
+        from gilded.ui.house_tab import _draw_button
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        btn_h = body.get_height() + 6
+        x = PAD
+        y = content.y + 8
+        for family in FAMILIES:
+            btn = pygame.Rect(x, y, 150, btn_h)
+            _draw_button(surface, family, x, y, 150, btn_h, True)
+            self.regions.add(Region(
+                rect=btn,
+                action={"set_ambition": {"family": family}},
+                hint=f"Set the House's ambition to {family}",
+                group="ambition_picker",
+            ))
+            y += btn_h + 2
+            if y > content.bottom - 40:
+                break
+        _draw_button(surface, "Cancel", x, content.bottom - 40,
+                     150, btn_h, True)
+        self.regions.add(Region(
+            rect=pygame.Rect(PAD, content.bottom - 40, 150, btn_h),
+            action={"close_ambition_picker": True},
+            hint="Cancel - spends nothing",
+            group="ambition_picker",
+        ))
 
     def _draw_intrigue(self, surface, content: pygame.Rect) -> None:
         """Draw intrigue section: plots affecting the played House."""
@@ -2911,6 +3002,15 @@ class BroadsheetView:
             if "open_heir_picker" in action:
                 self._heir_picker = True
                 return {"open_heir_picker": True}
+            if "open_ambition_picker" in action:
+                self._ambition_picker = True
+                return None
+            if "close_ambition_picker" in action:
+                self._ambition_picker = False
+                return None
+            if "set_ambition" in action:
+                self._ambition_picker = False
+                return {"set_ambition": action["set_ambition"]}
             if "close_heir_picker" in action:
                 self._heir_picker = None
             if "designate_heir" in action:

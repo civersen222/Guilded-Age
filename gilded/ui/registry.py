@@ -15,6 +15,13 @@ VERBS = {
         "why_now": "The squeeze sets this turn's output, dividends and unrest",
         "serves": "capital",
     },
+    "set_ambition": {
+        "what": "Set your House's ambition - the Goal the court now backs "
+                "or opposes",
+        "why_now": "Your stake gives the court a reason to push or pull, "
+                   "and pays ladder movement if you fulfil it",
+        "serves": "ambition",
+    },
 }
 
 DATA = {

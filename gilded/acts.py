@@ -8,6 +8,8 @@ the act and carries the face of the person acting (the House steward).
 
 from __future__ import annotations
 
+from typing import Optional
+
 from gilded.beats import Beat
 from gilded.society.labor import clamp_dial
 
@@ -27,6 +29,15 @@ class Acts:
     def _steward_name(self, house: str) -> str:
         h = self.game.houses[house]
         return getattr(h, "steward", None) or house
+
+    def set_ambition(self, family: str, target: Optional[str] = None) -> Beat:
+        """Record the player House's stake (wraps
+        `game.ambitions.set_ambition`) and return the instant signature
+        beat acknowledging the stake."""
+        game = self.game
+        house = self._player_house()
+        game.ambitions.set_ambition(house, family, target)
+        return game.beats.log[-1]
 
     def set_dial(self, eid: str, value: float) -> Beat:
         """Set an enterprise's extraction dial (wraps

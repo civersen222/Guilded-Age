@@ -103,6 +103,7 @@ class GildedGame:
         self.completed_takeovers: List[object] = []  # campaigns that reached the threshold
         self._seed_enterprises()
         self._init_c1_visibility()
+        self._init_c2_stake()
         self.open_turn()
 
     # --- helpers -------------------------------------------------------------
@@ -124,6 +125,17 @@ class GildedGame:
         self.ladder = LadderFacade(self)
         self.beats = BeatsFacade(self)
         self.acts = Acts(self)
+
+    # Mission C2: the player has a stake - `game.ambitions.status(house)`,
+    # `game.set_ambition(...)`, and every adult's private want + stance.
+    def _init_c2_stake(self):
+        from gilded.ambitions import AmbitionsFacade
+        self.ambitions = AmbitionsFacade(self)
+
+    def set_ambition(self, house_name: str, family: str,
+                     target: Optional[str] = None):
+        """C2: the player records their House's stake (goal + private wants)."""
+        return self.ambitions.set_ambition(house_name, family, target)
 
     def _ents_by_house(self) -> Dict[str, List[Enterprise]]:
         out: Dict[str, List[Enterprise]] = {h: [] for h in self.houses}
@@ -417,6 +429,9 @@ class GildedGame:
 
         # 9. endings, then the next morning's paper
         self.resolved_turn = self.turn
+        # 9.5 C2: close any ambition whose commit window has ended
+        for h in sorted(self.houses):
+            self.ambitions.resolve_due(h)
         self.beats.end_turn_close()   # C1: record the turn's beats and deltas
         self.turn += 1
         from gilded.endings import check_ending    # local: endings imports our constants
