@@ -131,6 +131,10 @@ class GildedGame:
     def _init_c2_stake(self):
         from gilded.ambitions import AmbitionsFacade
         self.ambitions = AmbitionsFacade(self)
+        # boot: every adult carries a private want before any ambition is
+        # declared - neutral, from their own strongest disposition
+        for h in sorted(self.houses):
+            self.ambitions.neutral_wants(h)
 
     def set_ambition(self, house_name: str, family: str,
                      target: Optional[str] = None):
@@ -434,6 +438,7 @@ class GildedGame:
         # the window carry their private want too
         for h in sorted(self.houses):
             self.ambitions.wants(h)
+            self.ambitions.neutral_wants(h)
             self.ambitions.resolve_due(h)
         self.beats.end_turn_close()   # C1: record the turn's beats and deltas
         self.turn += 1

@@ -80,6 +80,14 @@ WANT_TEXT = {
     },
 }
 
+# stance -> the private want when the House has NO declared ambition:
+# the courtier is bent on their own strongest disposition, for its own sake
+NEUTRAL_WANT_TEXT = {
+    "backs": "follows their own bent",
+    "wary": "weighs it against their own bent",
+    "opposes": "runs against the current of their house",
+}
+
 
 def _rivals(game, house_name: str) -> List[str]:
     """The House's rivals: houses it is at war with, then the rest,
@@ -272,6 +280,43 @@ class AmbitionsFacade:
                 "fulfilled": None, "why": goal.why,
                 "started_turn": goal.opened_turn, "clock": clock}
 
+    def neutral_wants(self, house_name: str) -> List[dict]:
+        """A courtier's private want BEFORE the House declares an ambition:
+        the stance is computed from their OWN strongest disposition (ties
+        broken by key name, so two boots of one seed see the identical
+        court). Never overwrites a want already stamped against a live
+        goal - those belong to `.wants`."""
+        game = self.game
+        realm = game.realms.get(house_name)
+        if realm is None or game.agendas.get(house_name) is not None:
+            return []
+        out: List[dict] = []
+        for c in sorted(realm.characters, key=lambda c: c.id):
+            if c.age < 16 or not c.dispositions:
+                continue
+            keys = sorted(c.dispositions)
+            key = max(keys, key=lambda k: (abs(float(c.dispositions[k])), k))
+            value = float(c.dispositions[key])
+            if value > STANCE_BACKS_AT:
+                stance = "backs"
+            elif value < STANCE_OPPOSES_AT:
+                stance = "opposes"
+            else:
+                stance = "wary"
+            text = f"{c.name} {NEUTRAL_WANT_TEXT[stance]} ({key})"
+            c.want = {"text": text, "disposition": key, "stance": stance}
+            out.append({
+                "id": c.id,
+                "name": c.name,
+                "age": c.age,
+                "traits": list(c.traits),
+                "stance": stance,
+                "disposition": key,
+                "value": value,
+                "text": text,
+            })
+        return out
+
     def wants(self, house_name: str) -> List[dict]:
         """Every adult's private want: the stance COMPUTED from their
         own disposition on the family's line, the want text by name, and
@@ -377,4 +422,5 @@ __all__ = [
     "AmbitionsFacade", "set_ambition",
     "AMBITION_REWARD", "STANCE_BACKS_AT", "STANCE_OPPOSES_AT",
     "FAMILY_DISPOSITION", "TARGETED_FAMILIES", "WANT_TEXT",
+    "NEUTRAL_WANT_TEXT",
 ]
