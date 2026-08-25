@@ -94,6 +94,15 @@ def test_beats_deterministic():
         assert ladder(a) == ladder(b)
 
 
+def test_game_exposes_ladder_and_beats(game):
+    # the public API lives on the game itself, next to the event log it
+    # reads and the scoreboard it agrees with
+    assert hasattr(game, "ladder") and hasattr(game, "beats")
+    assert game.ladder() == ladder(game)
+    assert game.beats(next(iter(game.houses))) == beats_for(game,
+                                                            next(iter(game.houses)))
+
+
 def test_beats_pure_no_mutation(game):
     before = ladder(game)
     player = next(iter(game.houses))

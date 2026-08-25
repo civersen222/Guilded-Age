@@ -113,6 +113,18 @@ class GildedGame:
         return [p for p in sorted(self.atlas.provinces.values(), key=lambda p: p.pid)
                 if p.owner == house]
 
+    def ladder(self):
+        """The public ladder (Mission C1): every House ranked by the four
+        judgment axes, each axis with the Causes that produced it."""
+        from gilded.ladder import ladder
+        return ladder(self)
+
+    def beats(self, house: str, turn: int = None):
+        """Consequence beats (Mission C1) for one House: the named moments
+        the world bit back, each with the rule that fired and its Causes."""
+        from gilded.beats import beats
+        return beats(self, house, turn)
+
     def _ents_by_house(self) -> Dict[str, List[Enterprise]]:
         out: Dict[str, List[Enterprise]] = {h: [] for h in self.houses}
         for e in self.enterprises:
