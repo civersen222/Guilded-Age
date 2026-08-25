@@ -30,6 +30,7 @@ from gilded.agenda import COMMIT_TURNS, FAMILIES, Goal
 from gilded.beats import Beat
 
 AMBITION_REWARD = 300.0       # a fulfilled ambition pays the treasury
+BUYOUT_STAKE_THRESHOLD = 30.0  # the average stake that owns the House
 STANCE_BACKS_AT = 15.0        # disposition this far for the ambition: backs
 STANCE_OPPOSES_AT = -15.0     # this far against: opposes; in between: wary
 
@@ -96,6 +97,21 @@ def _intel_tier(game, viewer: str, target: str) -> int:
     return report(game, viewer, target).tier
 
 
+def _house_stake_in(game, house_name: str, target: str) -> float:
+    """The House's average stake, in percent, across the target's
+    enterprises - the takeover's own yardstick (house_stake). Buying
+    shares is the player's lever; owning the portfolio is the House."""
+    ents = [e for e in game.enterprises if e.house == target]
+    if not ents:
+        return 0.0
+    ids = {c.id for c in game.realms[house_name].characters}
+    stakes = []
+    for e in ents:
+        stakes.append(sum(pct for cid, pct in e.ledger.items()
+                          if cid in ids))
+    return sum(stakes) / len(stakes)
+
+
 def _snapshot(game, house_name: str, target: Optional[str]) -> dict:
     """The state the ambition is measured against - taken the turn the
     stake is set."""
@@ -115,6 +131,8 @@ def _snapshot(game, house_name: str, target: Optional[str]) -> dict:
         "mean_rel": mean_rel,
         "rel_with_target": (game.houses[target].relations.get(house_name, 0)
                             if target else 0),
+        "stake_in_target": _house_stake_in(game, house_name, target)
+        if target else 0.0,
         "informed": _intel_tier(game, house_name, target) if target else 0,
         "war_with_target": bool(target)
         and target in game.houses[house_name].at_war_with,
@@ -134,10 +152,11 @@ def _fulfilled(game, house_name: str, goal: Goal, snap: dict) -> bool:
     if family == "Buyout":
         if goal.target is None:
             return False
-        # the target's regard for this House - the docket's own lever
-        # (envoys, marriages, treaties) is what moves it
-        return (game.houses[goal.target].relations.get(house_name, 0)
-                > snap["rel_with_target"])
+        # owning the portfolio, not its goodwill: the House's average
+        # stake across the target's enterprises must cross the threshold
+        # - the share market (buy_shares) is the player's lever
+        return (_house_stake_in(game, house_name, goal.target)
+                >= BUYOUT_STAKE_THRESHOLD)
     if family == "Dynasty":
         rel = game.houses[house_name].relations
         now = (sum(rel.values()) / len(rel)) if rel else 0.0
