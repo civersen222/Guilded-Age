@@ -35,11 +35,17 @@ and `_weakest_neighbor`-driven tests stay green.
 ## Verification
 
 - `test_c3_orders.py` (wave 1, 10 tests) — green, unchanged.
+- `test_c3_contract.py` (new, 4 tests — the committed self-check, run as
+  `python -m pytest gilded/tests/test_c3_contract.py -q`) — anatomy with
+  out-of-realm heads and per-order goal families, informant-driven intel
+  fog, act faces + paper trail over 40 turns, Treasury accumulation and
+  cross-boot determinism.
 - `test_c3_wave2.py` (new, 5 tests) — levers move real quantities, net Crown/Guilds
   interaction on a shared target, lever-press beats carry the head's face and
   non-empty `causes`, determinism across boots, House gold untouched.
-- Full suite: `python -m pytest gilded` → **2022 passed, 0 failed** (base was
-  2018 passed, 0 failed; +4 is the wave-2 test file, no regressions).
+- Full suite: `python -m pytest gilded` → **2026 passed, 0 failed** (base was
+  2018 passed, 0 failed; +8 is the wave-2 and contract test files, no
+  regressions).
 
 ## Known interactions (intended, not bugs)
 
