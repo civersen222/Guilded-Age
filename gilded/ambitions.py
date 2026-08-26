@@ -28,6 +28,7 @@ from typing import Dict, List, Optional
 
 from gilded.agenda import COMMIT_TURNS, FAMILIES, Goal
 from gilded.beats import Beat
+from gilded.provenance import Cause
 
 AMBITION_REWARD = 300.0       # a fulfilled ambition pays the treasury
 BUYOUT_STAKE_THRESHOLD = 30.0  # the average stake that owns the House
@@ -274,7 +275,9 @@ class AmbitionsFacade:
                 turn=game.turn, kind="signature", house=house_name,
                 text=(f"The {order_name} stands in the way: its {ogoal.family} "
                       f"goal already presses House {target}"),
-                source="ambitions.order_clash", causes=(),
+                source="ambitions.order_clash",
+                causes=(Cause(f"{ogoal.family} on House {target}", 1.0,
+                              "ambitions.order_clash"),),
                 face=order.head.name, facet="ambition",
             ))
         else:
