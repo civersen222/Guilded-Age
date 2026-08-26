@@ -53,6 +53,15 @@ _ORDER_BIAS = {
 
 ORDER_NAMES = tuple(_ORDER_SPECS)
 
+# wave 2 - the levers move real world quantities. Every tick each Order
+# presses its lever on the House it currently aims at; the effect is
+# deterministic (no RNG) and House treasuries are never touched (only the
+# Treasury Order credits ITS OWN treasury from the target's gold).
+_CROWN_PRESSURE = 0.5        # border pressure: unrest added per target province
+_TREASURY_PURCHASE = 100.0   # shares bought from the richest House, per tick
+_GUILD_CALM = 0.5            # quieting of the mills: unrest removed per target province
+_CHURCH_EYES = 0.25          # the eyes of the Church: unrest added to the target's capital
+
 
 def _head_stats(name: str) -> Dict[str, int]:
     base = {"statecraft": 7, "command": 7, "industry": 7,
@@ -163,6 +172,34 @@ def _refresh_wants(order: Order) -> None:
         order.wants(order.goal.family)
 
 
+def _press(game, order: Order) -> None:
+    """wave 2 - the Order acts: its lever moves a real, deterministic
+    world quantity on the House it aims at. The gold that moves (Treasury
+    only) is journalled on the Order; its treasury is never touched, so
+    the world the Orders push on stays deterministic across boots."""
+    target = order.goal.target
+    if target is None or target not in game.houses:
+        return
+    if order.family == "Dominion":
+        for p in game.provinces_of(target):
+            p.unrest = p.unrest + _CROWN_PRESSURE
+    elif order.family == "Buyout":
+        # collects a tax share of the richest House's gold - it does NOT
+        # drain the House's treasury (that would move the world's strength
+        # rankings); the Order's own treasury is where the gold lands.
+        amount = min(_TREASURY_PURCHASE, game.houses[target].treasury)
+        if amount > 0.0:
+            order.credit(game.turn, "shares taken", amount)
+    elif order.family == "Consolidation":
+        for p in game.provinces_of(target):
+            p.unrest = max(0.0, p.unrest - _GUILD_CALM)
+    elif order.family == "Intrigue":
+        capital = next((p for p in game.provinces_of(target)
+                        if p.pid == game.houses[target].capital), None)
+        if capital is not None:
+            capital.unrest = capital.unrest + _CHURCH_EYES
+
+
 def init_orders(game) -> None:
     """Create the four Orders on the game. Heads are real Characters built
     from the seeded society (so a seed yields the same four heads); each
@@ -218,4 +255,5 @@ def tick_orders(game) -> None:
                 source="orders.tick_orders", causes=(),
                 face=order.head.name, facet="ambition",
             ))
+        _press(game, order)
         _refresh_wants(order)
