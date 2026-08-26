@@ -35,7 +35,8 @@ def _widgets_dir() -> pathlib.Path:
 
 
 def _find_font_func() -> str:
-    """Find the function in widgets.py that calls pygame.font.SysFont."""
+    """Find the font function in widgets.py: the one whose body calls
+    pygame.font.Font with a path (the Banknote TTF cache)."""
     src = pathlib.Path(widgets.__file__).read_text(encoding="utf-8")
     tree = ast.parse(src)
     for node in ast.walk(tree):
@@ -43,9 +44,9 @@ def _find_font_func() -> str:
             for child in ast.walk(node):
                 if isinstance(child, ast.Call):
                     func = child.func
-                    if isinstance(func, ast.Attribute) and func.attr == "SysFont":
+                    if isinstance(func, ast.Attribute) and func.attr == "Font":
                         return node.name
-    raise AssertionError("No function calling SysFont found in widgets.py")
+    raise AssertionError("No function calling pygame.font.Font found in widgets.py")
 
 
 def _find_scale_tuple() -> str:
@@ -79,18 +80,13 @@ def _get_scale_step_names_from_tuple() -> list[str]:
     raise AssertionError(f"Could not find {tuple_name} in widgets.py")
 
 
-# ── R3: font cache is the only SysFont caller ────────────────────────────────
+# ── R3: no SysFont under gilded/ui — TTFs are the only font source ──────────
 
 
-def test_font_cache_is_only_sysfont_caller():
-    """The font-cache function in widgets.py is the ONLY caller of SysFont.
-
-    Resolves by property: finds the function that calls SysFont via AST,
-    then verifies no other file in gilded/ calls it.
-    """
+def test_no_sysfont_under_gilded():
+    """Mission C4: zero pygame.font.SysFont calls under gilded/ui — every
+    font comes from the shipped Banknote TTFs via the widgets font cache."""
     widgets_dir = _widgets_dir()
-    font_func = _find_font_func()
-
     callers = []
     for py_file in widgets_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
@@ -101,13 +97,11 @@ def test_font_cache_is_only_sysfont_caller():
             if isinstance(node, ast.Call):
                 func = node.func
                 if isinstance(func, ast.Attribute) and func.attr == "SysFont":
-                    # Find enclosing function or module-level context
-                    callers.append((py_file.relative_to(widgets_dir), font_func))
+                    callers.append(py_file.relative_to(widgets_dir))
 
-    # The font cache function should be the only caller
-    assert len(callers) == 1, (
-        f"Expected exactly 1 SysFont caller (the font cache), found {len(callers)}:\n"
-        + "\n".join(f"  {f}: {func}" for f, func in callers)
+    assert not callers, (
+        "SysFont calls found under gilded/ui — C4 requires the shipped TTFs:\n"
+        + "\n".join(str(f) for f in callers)
     )
 
 

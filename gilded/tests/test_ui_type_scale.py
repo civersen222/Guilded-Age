@@ -2,10 +2,10 @@
 
 Covers:
   - Type scale constants exist in widgets.py with role-describing names
-  - At most six distinct point sizes reach pygame.font.SysFont across all screens
+  - At most six distinct point sizes reach the widgets.font cache across all screens
   - atlas_view.py has no font cache of its own
   - No point size literals outside widgets.py
-  - One-cache rule: SysFont calls == distinct (size, bold) pairs
+  - One-cache rule: cache-construction count == distinct (size, bold) pairs
   - Scale values pinned against the ef65dad baseline
 
 Each test measures ONE property. When that property is perturbed, only that
@@ -31,13 +31,13 @@ import gilded.ui.widgets as widgets
 # ── ef65dad baseline ─────────────────────────────────────────────────────────
 
 # The thirteen point sizes the game drew at ef65dad (before I6j), measured by
-# recording every call to pygame.font.SysFont across all fourteen screens:
+# recording every font the widgets.font cache builds across all screens:
 _EF65DAD_SIZES = frozenset([11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 24, 26, 30])
 
 
 # ── subprocess measurement helper ────────────────────────────────────────────
 
-# Script run in a subprocess to draw all 14 screens and record SysFont calls.
+# Script run in a subprocess to draw all 14 screens and record the fonts the cache builds.
 # Resolves the package path from the imported module, not the working directory.
 _RENDER_SCRIPT = textwrap.dedent(r"""
     import json, os, pathlib, sys
@@ -58,17 +58,34 @@ _RENDER_SCRIPT = textwrap.dedent(r"""
     from gilded.chassis import GildedGame
 
     sizes_seen = []
-    pairs_seen = []
+    instances = []
     call_count = 0
 
-    original_sysfont = pygame.font.SysFont
+    original_font = pygame.font.Font
 
-    def recording_sysfont(name, size, bold=False):
+    class _RecordingFont:
+        # Wraps a pygame.font.Font built from the Banknote TTFs and records
+        # (size, bold). Bold is set by set_bold() after construction, so the
+        # pair is recorded there (widgets.font applies bold via set_bold).
+        def __init__(self, *args, **kwargs):
+            global call_count
+            self._f = original_font(*args, **kwargs)
+            self._size = args[1] if len(args) > 1 else kwargs.get("size", 0)
+            self._bold = False
+            call_count += 1
+            sizes_seen.append(self._size)
+            instances.append(self)
+
+        def set_bold(self, bold):
+            self._bold = bool(bold)
+            return self._f.set_bold(bold)
+
+        def __getattr__(self, name):
+            return getattr(self._f, name)
+
+    def recording_font(*args, **kwargs):
         global call_count
-        call_count += 1
-        sizes_seen.append(size)
-        pairs_seen.append((size, bool(bold)))
-        return original_sysfont(name, size, bold)
+        return _RecordingFont(*args, **kwargs)
 
     g = GildedGame(seed=42)
     house = next(iter(g.houses))
@@ -80,7 +97,7 @@ _RENDER_SCRIPT = textwrap.dedent(r"""
     # Ten tabs
     for tab in broadsheet.TABS:
         view.active_tab = tab
-        pygame.font.SysFont = recording_sysfont
+        pygame.font.Font = recording_font
         view.draw(surf)
 
     # Pickers — always drawn, even without enterprises
@@ -90,29 +107,30 @@ _RENDER_SCRIPT = textwrap.dedent(r"""
 
     # Director picker
     view._director_picker = eid
-    pygame.font.SysFont = recording_sysfont
+    pygame.font.Font = recording_font
     view.draw(surf)
     view._director_picker = None
 
     # Share picker
     view._share_picker = {"direction": "buy", "eid": eid}
-    pygame.font.SysFont = recording_sysfont
+    pygame.font.Font = recording_font
     view.draw(surf)
     view._share_picker = None
 
     # Found picker
     view._found_picker = True
-    pygame.font.SysFont = recording_sysfont
+    pygame.font.Font = recording_font
     view.draw(surf)
     view._found_picker = False
 
     # Found picker with treasury at zero
     g.houses[house].treasury = 0
     view._found_picker = True
-    pygame.font.SysFont = recording_sysfont
+    pygame.font.Font = recording_font
     view.draw(surf)
     view._found_picker = False
 
+    pairs_seen = [(i._size, i._bold) for i in instances]
     result = {
         "sizes": sorted(set(sizes_seen)),
         "pairs": sorted(set(pairs_seen)),
@@ -197,11 +215,11 @@ def test_type_scale_names_describe_roles():
             assert not name.startswith(bad), f"{name} starts with placeholder prefix {bad}"
 
 
-# ── at most six distinct sizes reach SysFont ─────────────────────────────────
+# ── at most six distinct sizes reach the font cache ──────────────────────────
 
 
 def test_at_most_six_sizes_on_screen():
-    """Recording SysFont calls across all fourteen screens yields <= 6 sizes."""
+    """Recording cache constructions across all screens yields <= 6 sizes."""
     sizes_seen, _, _ = _measure_all_screens()
     assert len(sizes_seen) > 0, "No font sizes were recorded — measurement failed"
     assert len(sizes_seen) <= 6, f"{len(sizes_seen)} distinct sizes: {sorted(sizes_seen)}"
@@ -240,18 +258,19 @@ def test_scale_within_band_of_baseline():
 
 
 def test_one_cache_property():
-    """SysFont call count == distinct (size, bold) pairs across all screens.
+    """Cache construction count == distinct (size, bold) pairs.
 
-    With one cache, each (size, bold) pair reaches pygame.font.SysFont
-    exactly once. A second cache would cause duplicate calls for pairs
-    both caches hold, making calls > pairs.
+    With one cache, each (size, bold) pair reaches the pygame.font.Font
+    constructor exactly once (via widgets.font). A second cache would
+    cause duplicate constructions for pairs both caches hold, making
+    constructions > pairs.
 
     Measured from a fresh subprocess so no cache anywhere is warm.
     """
     sizes_seen, pairs_seen, call_count = _measure_all_screens()
     assert len(sizes_seen) > 0, "No font sizes were recorded — measurement failed"
     assert call_count == len(pairs_seen), (
-        f"SysFont calls ({call_count}) != distinct pairs ({len(pairs_seen)}) — "
+        f"font constructions ({call_count}) != distinct pairs ({len(pairs_seen)}) — "
         "multiple font caches detected"
     )
 
