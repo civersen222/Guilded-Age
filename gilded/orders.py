@@ -30,7 +30,7 @@ from gilded.ambitions import (
     STANCE_OPPOSES_AT,
     WANT_TEXT,
 )
-from gilded.beats import Beat
+from gilded.beats import Beat, Cause
 from gilded.society.characters import Character
 
 # name -> (the institution's family, the disposition that reads its stance,
@@ -180,9 +180,22 @@ def _press(game, order: Order) -> None:
     target = order.goal.target
     if target is None or target not in game.houses:
         return
+    def journal(why: str, amount: float, facet: str, amt: float) -> None:
+        if amt <= 0.0:
+            return
+        game.beats.append(Beat(
+            turn=game.turn, kind="signature", house=target,
+            text=why, source="orders._press",
+            causes=(Cause(why, amt, "orders._press"),),
+            face=order.head.name, facet=facet,
+        ))
     if order.family == "Dominion":
+        moved = 0.0
         for p in game.provinces_of(target):
             p.unrest = p.unrest + _CROWN_PRESSURE
+            moved += _CROWN_PRESSURE
+        journal(f"The Crown presses its border on {target}",
+                moved, "unrest", moved)
     elif order.family == "Buyout":
         # collects a tax share of the richest House's gold - it does NOT
         # drain the House's treasury (that would move the world's strength
@@ -190,14 +203,23 @@ def _press(game, order: Order) -> None:
         amount = min(_TREASURY_PURCHASE, game.houses[target].treasury)
         if amount > 0.0:
             order.credit(game.turn, "shares taken", amount)
+            journal(f"The Treasury takes a share of {target}'s gold",
+                    amount, "dividends", amount)
     elif order.family == "Consolidation":
+        moved = 0.0
         for p in game.provinces_of(target):
-            p.unrest = max(0.0, p.unrest - _GUILD_CALM)
+            drop = min(_GUILD_CALM, p.unrest)
+            p.unrest = p.unrest - drop
+            moved += drop
+        journal(f"The Guilds quiet the mills of {target}",
+                moved, "unrest", moved)
     elif order.family == "Intrigue":
         capital = next((p for p in game.provinces_of(target)
                         if p.pid == game.houses[target].capital), None)
         if capital is not None:
             capital.unrest = capital.unrest + _CHURCH_EYES
+            journal(f"The Church opens its eyes on {target}",
+                    _CHURCH_EYES, "unrest", _CHURCH_EYES)
 
 
 def init_orders(game) -> None:

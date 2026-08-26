@@ -5,12 +5,12 @@ were no-ops. wave 2 makes each lever move a real, deterministic world
 quantity on the House the Order aims at:
 
   Crown    - border pressure: adds unrest to the target's provinces
-  Treasury - buys shares: debits the richest House's gold
+  Treasury - collects a tax share of its target's gold into ITS OWN treasury
   Guilds   - quiets the mills: removes unrest from the target's provinces
   Church   - keeps watch: adds unrest to the target's capital
 
-The effect is deterministic (no RNG) and the Orders' own treasuries are
-never touched, so the world they push on is identical across boots.
+The effect is deterministic (no RNG) and House treasuries are never
+touched, so the world the Orders push on is identical across boots.
 """
 
 from gilded import GildedGame
@@ -50,6 +50,19 @@ def test_crown_presses_unrest_up_and_guilds_calm_it():
     # so the net effect on that House is Crown's pressure minus Guilds' calm.
     if crown.goal.target == guilds.goal.target:
         assert _unrest(g, crown.goal.target) >= 0.0
+
+
+def test_lever_presses_journal_beats_with_face_and_causes():
+    g = GildedGame(7, player_house="Brandtner")
+    for _ in range(12):
+        g.end_turn()
+        g.tick_orders()
+    press_beats = [b for b in g.beats.log if b.source == "orders._press"]
+    assert press_beats
+    for b in press_beats:
+        assert b.kind == "signature"
+        assert b.face is not None and b.face != ""
+        assert b.causes  # a lever press that moved a quantity is attributed
 
 
 def test_orders_act_deterministically_and_do_not_spend_gold():

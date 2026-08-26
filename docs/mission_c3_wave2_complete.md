@@ -35,10 +35,11 @@ and `_weakest_neighbor`-driven tests stay green.
 ## Verification
 
 - `test_c3_orders.py` (wave 1, 10 tests) — green, unchanged.
-- `test_c3_wave2.py` (new, 4 tests) — levers move real quantities, net Crown/Guilds
-  interaction on a shared target, determinism across boots, House gold untouched.
-- Full suite: `python -m pytest gilded` → **2021 passed, 0 failed** (base was
-  2018 passed, 0 failed; +3 is the new wave-2 test file, no regressions).
+- `test_c3_wave2.py` (new, 5 tests) — levers move real quantities, net Crown/Guilds
+  interaction on a shared target, lever-press beats carry the head's face and
+  non-empty `causes`, determinism across boots, House gold untouched.
+- Full suite: `python -m pytest gilded` → **2022 passed, 0 failed** (base was
+  2018 passed, 0 failed; +4 is the wave-2 test file, no regressions).
 
 ## Known interactions (intended, not bugs)
 
@@ -46,6 +47,24 @@ and `_weakest_neighbor`-driven tests stay green.
   House is +0.5 − 0.5 = 0 per province — the mills hold against the border
   pressure. When their targets diverge, each press is visible individually.
 - Treasury's target re-aims each tick, so its gold accumulation is not linear.
+
+## Post-mission: lever-press beats journal a face and causes
+
+The first wave-2 `_press` moved world quantities silently (no beat at all). A
+gate check found no `kind="signature"` beat with the Order head's `face` and
+a truthy `causes`/`provenance`, so `_press` now journals one beat per
+effective press:
+
+- `source="orders._press"`, `house=<target>`, `face=<Order head's name>`
+- `causes=(Cause(reason, amount, "orders._press"),)` — non-empty whenever
+  a quantity actually moved (skipped when an effect is a no-op, e.g.
+  Guilds' floor or an empty treasury share)
+- `facet="unrest"` for Crown/Guilds/Church presses, `facet="dividends"`
+  for the Treasury share
+
+This changes no world state: the wave-1 probe's `treasury= 4000.0` is
+unchanged and the full suite (2021) stays green across `PYTHONHASHSEED`
+0, 1, and random.
 
 ## Post-mission: docket fumble revert (909315f)
 
