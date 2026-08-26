@@ -104,6 +104,7 @@ class GildedGame:
         self._seed_enterprises()
         self._init_c1_visibility()
         self._init_c2_stake()
+        self._init_c3_orders()
         self.open_turn()
 
     # --- helpers -------------------------------------------------------------
@@ -135,6 +136,17 @@ class GildedGame:
         # declared - neutral, from their own strongest disposition
         for h in sorted(self.houses):
             self.ambitions.neutral_wants(h)
+
+    # Mission C3: the world pushes back - four Orders, each a first-class
+    # actor with a real head (want + stance) and a live goal on a House.
+    def _init_c3_orders(self):
+        from gilded.orders import init_orders
+        init_orders(self)
+
+    def tick_orders(self):
+        """C3: the Orders re-aim and refresh their heads' private wants."""
+        from gilded.orders import tick_orders
+        tick_orders(self)
 
     def set_ambition(self, house_name: str, family: str,
                      target: Optional[str] = None):

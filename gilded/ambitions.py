@@ -211,6 +211,8 @@ class AmbitionsFacade:
         self._start: Dict[str, dict] = {}
         # house -> fulfilled? once the window closes
         self._resolved: Dict[str, bool] = {}
+        # C3: house -> the Order whose goal stands in the way of its stake
+        self._clashes: Dict[str, str] = {}
 
     # --- the stake ----------------------------------------------------------
 
@@ -264,6 +266,19 @@ class AmbitionsFacade:
             face=game.realms[house_name].ruler.name, facet="ambition",
         )
         game.beats.append(beat)
+        clash = self._order_clash(house_name, family, target)
+        if clash is not None:
+            order_name, order, ogoal = clash
+            self._clashes[house_name] = order_name
+            game.beats.append(Beat(
+                turn=game.turn, kind="signature", house=house_name,
+                text=(f"The {order_name} stands in the way: its {ogoal.family} "
+                      f"goal already presses House {target}"),
+                source="ambitions.order_clash", causes=(),
+                face=order.head.name, facet="ambition",
+            ))
+        else:
+            self._clashes.pop(house_name, None)
         return goal
 
     # --- the read model -----------------------------------------------------
@@ -275,11 +290,12 @@ class AmbitionsFacade:
         set, "turn 4 of 10" after three end_turns."""
         game = self.game
         goal = game.agendas.get(house_name)
+        opposed_by = self._clashes.get(house_name)
         if goal is None:
             return {"family": None, "target": None, "turns_left": 0,
                     "progress": 0.0,
                     "fulfilled": None, "why": None, "started_turn": None,
-                    "clock": None}
+                    "clock": None, "opposed_by": opposed_by}
         elapsed = game.turn - goal.opened_turn
         current = min(goal.commit_turns, max(1, elapsed + 1))
         clock = f"turn {current} of {goal.commit_turns}"
@@ -289,12 +305,13 @@ class AmbitionsFacade:
                     "turns_left": 0, "progress": 1.0,
                     "fulfilled": self._resolved.get(house_name),
                     "why": goal.why, "started_turn": goal.opened_turn,
-                    "clock": clock}
+                    "clock": clock, "opposed_by": opposed_by}
         return {"family": goal.family, "target": goal.target,
                 "turns_left": goal.commit_turns - elapsed,
                 "progress": progress,
                 "fulfilled": None, "why": goal.why,
-                "started_turn": goal.opened_turn, "clock": clock}
+                "started_turn": goal.opened_turn, "clock": clock,
+                "opposed_by": opposed_by}
 
     def neutral_wants(self, house_name: str) -> List[dict]:
         """A courtier's private want BEFORE the House declares an ambition:
@@ -338,6 +355,11 @@ class AmbitionsFacade:
         own disposition on the family's line, the want text by name, and
         the disposition the stance was computed from."""
         game = self.game
+        orders = getattr(game, "orders", None)
+        if orders and house_name in orders:
+            # C3: the Orders push back - their heads carry the same want
+            # anatomy as a House adult
+            return orders[house_name].wants(orders[house_name].family)
         goal = game.agendas.get(house_name)
         realm = game.realms.get(house_name)
         if goal is None or realm is None:
