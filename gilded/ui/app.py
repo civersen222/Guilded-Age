@@ -25,7 +25,7 @@ from gilded.saga.narrator import select_narrator
 from gilded.ui.actions import ACTIONS
 from gilded.ui.broadsheet import BroadsheetView
 
-WINDOW_TITLE = "The Gilded Machine"
+WINDOW_TITLE = "CivKings: The Gilded Machine"
 DEFAULT_SIZE = (1280, 900)
 FPS = 30
 
