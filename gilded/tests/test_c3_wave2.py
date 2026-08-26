@@ -77,3 +77,27 @@ def test_orders_act_deterministically_and_do_not_spend_gold():
         assert a.orders[name].treasury >= 0.0
         assert _unrest(a, a.orders[name].goal.target) == \
             _unrest(b, b.orders[name].goal.target)
+
+
+def test_deflection_beat_carries_face_and_cause():
+    g = GildedGame(7, player_house="Brandtner")
+    g.end_turn()
+    for name in ORDER_NAMES:
+        gl = g.orders[name].goal
+        if gl and gl.target and gl.target != "Brandtner":
+            target, fam = gl.target, gl.family
+            break
+    else:
+        raise AssertionError("no order goal targets a non-player house")
+    g.ambitions.set_ambition("Brandtner", fam, target)
+    for _ in range(11):
+        g.end_turn()
+    clash = [b for b in g.beats.log if b.source == "ambitions.order_clash"]
+    assert clash, "no order-clash beat journaled"
+    b = clash[-1]
+    order_name = g.ambitions.status("Brandtner")["opposed_by"]
+    assert b.face == g.orders[order_name].head.name
+    assert b.causes, "clash beat carries no causes"
+    st = g.ambitions.status("Brandtner")
+    assert st["fulfilled"] is False
+    assert st["opposed_by"] == order_name
