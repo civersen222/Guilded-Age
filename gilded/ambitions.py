@@ -214,6 +214,22 @@ class AmbitionsFacade:
 
     # --- the stake ----------------------------------------------------------
 
+    def _order_clash(self, house_name: str, family: str,
+                     target: Optional[str]) -> Optional[tuple]:
+        """C3: if this stake crosses an ORDER's active goal (same target),
+        return (order_name, order, goal) - the paper trail that will stand
+        in the way; None otherwise."""
+        orders = getattr(self.game, "orders", None)
+        if not orders or target is None:
+            return None
+        for name, order in orders.items():
+            goal = order.goal
+            if goal is None or goal.target is None:
+                continue
+            if goal.target == target:
+                return (name, order, goal)
+        return None
+
     def set_ambition(self, house_name: str, family: str,
                      target: Optional[str] = None):
         """Record the House's stake. The ONLY writer of a player ambition;

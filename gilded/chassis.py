@@ -345,6 +345,10 @@ class GildedGame:
             self._emit(tick_directors(realm, self.enterprises, self.rng), "ledger", h)
             self._emit(tick_loyalty(realm, self.enterprises, self.rng), "letters", h)
 
+        # 4.6 Orders act (Stage: the Four Orders push back)
+        from gilded import orders as orders_mod
+        orders_mod.tick_orders(self)
+
         # 5. directives friction
         for h in sorted(self.houses):
             realm = self.realms[h]

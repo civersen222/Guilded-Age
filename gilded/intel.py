@@ -94,6 +94,22 @@ def report(game, viewer: str, target: str) -> IntelReport:
         sources.append("informant in place")
     tier = min(3, len(sources))
 
+    # --- Order path: the four Orders are not houses; their fog is driven
+    #     purely by the informant lever (no borders, no marriage ties).
+    #     Tier 0: blind.  With an informant: tier 2 (goal family visible).
+    if target in game.orders:
+        order = game.orders[target]
+        sources = []
+        if (viewer, target) in game.informants:
+            sources.append("informant in place")
+        tier = 2 if sources else 0
+        goal = order.goal
+        if tier >= 2 and goal is not None:
+            apparent = f"Pursuing {goal.family}"
+        else:
+            apparent = "Their intentions are unknown"
+        return IntelReport(tier=tier, breakdown=sources, apparent_intent=apparent)
+
     goal = game.agendas.get(target)
     if tier <= 0 or goal is None:
         intent = "Their intentions are unknown"
