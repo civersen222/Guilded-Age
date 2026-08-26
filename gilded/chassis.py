@@ -126,6 +126,7 @@ class GildedGame:
         self.ladder = LadderFacade(self)
         self.beats = BeatsFacade(self)
         self.acts = Acts(self)
+        self.order_seats = {}   # order name -> house holding the seat (mission C3)
 
     # Mission C2: the player has a stake - `game.ambitions.status(house)`,
     # `game.set_ambition(...)`, and every adult's private want + stance.
@@ -152,6 +153,16 @@ class GildedGame:
                      target: Optional[str] = None):
         """C2: the player records their House's stake (goal + private wants)."""
         return self.ambitions.set_ambition(house_name, family, target)
+
+    def hold_seat(self, house_name: str, order_name: str):
+        """C3: the player House holds the Order's seat - the Order's honest
+        lever then plays in the House's favour (better terms, spared
+        pressure) through the world, never a direct grant."""
+        from gilded.orders import ORDER_NAMES
+        if order_name not in ORDER_NAMES:
+            raise ValueError(f"unknown order {order_name!r}")
+        self.order_seats[order_name] = house_name
+        return self.acts.hold_seat(house_name, order_name)
 
     def _ents_by_house(self) -> Dict[str, List[Enterprise]]:
         out: Dict[str, List[Enterprise]] = {h: [] for h in self.houses}

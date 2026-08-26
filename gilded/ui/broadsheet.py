@@ -500,6 +500,17 @@ def powers_report(game, house) -> Tuple[PowerLine, ...]:
             apparent_intent=r.apparent_intent,
             can_place_informant=can_place,
         ))
+    # the four Orders: a head (face) the player knows, and a goal the fog
+    # gates - an informant within an Order reads its pursuit
+    for name in sorted(getattr(game, "orders", {})):
+        r = intel_report(game, house, name)
+        lines.append(PowerLine(
+            house=name,
+            tier=r.tier,
+            breakdown=tuple(r.breakdown),
+            apparent_intent=r.apparent_intent,
+            can_place_informant=(house, name) not in game.informants,
+        ))
     return tuple(lines)
 
 

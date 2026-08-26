@@ -22,6 +22,22 @@ VERBS = {
                    "and pays ladder movement if you fulfil it",
         "serves": "ambition",
     },
+    "hold_seat": {
+        "what": "Take a seat on an Order's council - the Order's lever "
+                "plays in your House's favour: better loan terms, spared "
+                "strikes, softer expos\u00e9s",
+        "why_now": "The seat changes how each Order's goal lands on your "
+                   "House - through the world's own levers, not a grant",
+        "serves": "treasury and prestige - the Order's pressure bends "
+                  "toward you",
+    },
+    "informant_on_order": {
+        "what": "Plant an informant on an Order - its goal becomes visible "
+                "in your intel report",
+        "why_now": "Orders keep their intentions to themselves; an "
+                   "informant reads the Order's current pursuit",
+        "serves": "intelligence - the Order's goal family and target",
+    },
 }
 
 DATA = {

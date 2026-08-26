@@ -23,7 +23,7 @@ from gilded.chassis import GildedGame
 from gilded.intel import report
 from gilded.society.characters import Character
 
-ORDER_NAMES = ("Crown", "Treasury", "Guilds", "Church")
+ORDER_NAMES = ("Combine", "Bank", "Church", "Gazette")
 STANCES = ("backs", "wary", "opposes")
 
 
@@ -41,7 +41,7 @@ def test_orders_exist_with_their_anatomy():
         assert o.head.name and o.head.age >= 16
         assert o.goal is not None and o.goal.family
         assert o.goal.target in g.houses
-        assert o.reach > 0
+        assert isinstance(o.reach, (set, frozenset)) and o.reach
         assert o.treasury >= 0
 
 
@@ -95,19 +95,19 @@ def test_tick_reaims_a_lapsed_order_and_refreshes_reach():
     for _ in range(12):
         g.end_turn()
         g.tick_orders()
-    crown = g.orders["Crown"]
-    assert crown.goal is not None
-    # reach tracks the realm's population as it shifts
-    assert crown.reach == sum(p.population for p in g.atlas.provinces.values())
-    assert crown.head.want is not None
+    bank = g.orders["Bank"]
+    assert bank.goal is not None
+    # reach is a SET: the Bank's debt-book houses, refreshed each turn
+    assert set(bank.reach) <= set(g.houses)
+    assert bank.head.want is not None
 
 
 def test_intel_fog_is_driven_purely_by_the_informant():
     g = GildedGame(7, player_house="Brandtner")
-    r0 = report(g, "Brandtner", "Crown")
+    r0 = report(g, "Brandtner", "Bank")
     assert r0.tier == 0
     assert r0.apparent_intent == "Their intentions are unknown"
-    g.informants.add(("Brandtner", "Crown"))
-    r1 = report(g, "Brandtner", "Crown")
+    g.informants.add(("Brandtner", "Bank"))
+    r1 = report(g, "Brandtner", "Bank")
     assert r1.tier == 2
     assert r1.apparent_intent.startswith("Pursuing ")

@@ -4,13 +4,14 @@ Wave 1 gave the Orders their anatomy and a goal that re-aims; the levers
 were no-ops. wave 2 makes each lever move a real, deterministic world
 quantity on the House the Order aims at:
 
-  Crown    - border pressure: adds unrest to the target's provinces
-  Treasury - collects a tax share of its target's gold into ITS OWN treasury
-  Guilds   - quiets the mills: removes unrest from the target's provinces
+  Combine  - stirs the mills: adds unrest to the target's provinces
+  Bank     - extends a loan: credits ITS OWN treasury from the target
   Church   - keeps watch: adds unrest to the target's capital
+  Gazette  - runs a hard exposé: adds unrest to the target's provinces
 
-The effect is deterministic (no RNG) and House treasuries are never
-touched, so the world the Orders push on is identical across boots.
+The effect is deterministic (no RNG): the Bank's loan lands in the Bank's
+own treasury, not the target House's, and a House that holds an Order's
+seat is spared the press and takes the Order's honest lever instead.
 """
 
 from gilded import GildedGame
@@ -29,27 +30,27 @@ def test_levers_move_real_world_quantities():
     for name in ORDER_NAMES:
         target = g.orders[name].goal.target
         assert target in g.houses
-    # Treasury collects a tax share into its OWN treasury; the target
+    # The Bank's loan is credited to the Bank's OWN treasury; the target
     # House's gold is never touched (strength rankings stay put).
-    treasury = g.orders["Treasury"]
-    assert any(label == "shares taken"
-               for (_t, label, _amt) in treasury.journal)
-    assert all(label != "shares taken"
-               for (_t, label, _amt) in g.houses[treasury.goal.target].journal)
-    assert treasury.treasury > 0.0
+    bank = g.orders["Bank"]
+    assert any(label == "loan extended"
+               for (_t, label, _amt) in bank.journal)
+    assert all(label != "loan extended"
+               for (_t, label, _amt) in g.houses[bank.goal.target].journal)
+    assert bank.treasury > 0.0
 
 
-def test_crown_presses_unrest_up_and_guilds_calm_it():
+def test_gazette_and_combine_press_unrest_up():
     g = GildedGame(7, player_house="Brandtner")
     for _ in range(12):
         g.end_turn()
         g.tick_orders()
-    crown = g.orders["Crown"]
-    guilds = g.orders["Guilds"]
-    # both Orders aim at the strongest House (their families resolve there),
-    # so the net effect on that House is Crown's pressure minus Guilds' calm.
-    if crown.goal.target == guilds.goal.target:
-        assert _unrest(g, crown.goal.target) >= 0.0
+    gazette = g.orders["Gazette"]
+    combine = g.orders["Combine"]
+    # both Orders press their target's provinces (a hard exposé, a stirred
+    # mill) - unrest on the pressed provinces never goes negative.
+    if gazette.goal.target == combine.goal.target:
+        assert _unrest(g, gazette.goal.target) >= 0.0
 
 
 def test_lever_presses_journal_beats_with_face_and_causes():

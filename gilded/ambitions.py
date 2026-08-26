@@ -45,6 +45,24 @@ FAMILY_DISPOSITION = {
     "Intrigue": ("honest_deceitful", -1.0),   # the deceitful side backs it
     "Glory": ("bold_craven", 1.0),
     "Consolidation": ("cruel_compassionate", 1.0),
+    # C3 wave 3 - the Four Orders' OWN goal families (house agendas above
+    # never stand in for these; see orders._ORDER_SPECS)
+    "Organize": ("bold_craven", 1.0),
+    "Recognition": ("ambitious_content", 1.0),
+    "General Strike": ("cruel_compassionate", -1.0),
+    "Purge Scabs": ("cruel_compassionate", 1.0),
+    "Solvency": ("trusting_paranoid", 1.0),
+    "Expansion": ("ambitious_content", 1.0),
+    "Receivership": ("generous_greedy", 1.0),
+    "King-making": ("ambitious_content", 1.0),
+    "Endowment": ("generous_greedy", 1.0),
+    "Crusade of Morals": ("pious_secular", 1.0),
+    "Sanctuary": ("honest_deceitful", 1.0),
+    "Schism": ("pious_secular", -1.0),
+    "Circulation War": ("traditionalist_modernist", 1.0),
+    "Expose": ("honest_deceitful", 1.0),
+    "Respectability": ("honest_deceitful", 1.0),
+    "Patronage": ("generous_greedy", 1.0),
 }
 
 # family -> families that carry a named rival target
@@ -60,6 +78,23 @@ WANT_TEXT = {
         "Intrigue": "keeps ears in other courts",
         "Glory": "collects trophies and titles",
         "Consolidation": "keeps the mills quiet",
+        # C3 wave 3 - the Four Orders' OWN goal families
+        "Organize": "pushes the men and women of the mills to join",
+        "Recognition": "demands the Combine be read as a voice of the realm",
+        "General Strike": "calls the mills to stop their hands",
+        "Purge Scabs": "sweeps the strike-breakers from the gates",
+        "Solvency": "guards the ledger so the coin keeps turning",
+        "Expansion": "lends into new trades and new towns",
+        "Receivership": "takes a failing house into its keeping",
+        "King-making": "decides which crown the Bank will back",
+        "Endowment": "builds the Church's own lands and pews",
+        "Crusade of Morals": "preaches the realm to a stricter creed",
+        "Sanctuary": "opens the doors to those the realm would press",
+        "Schism": "splits the faith to found a purer one",
+        "Circulation War": "fights for every reader in the realm",
+        "Expose": "prints what the powerful would hide",
+        "Respectability": "polishes the press into a respectable voice",
+        "Patronage": "buys the favour of the courts and houses",
     },
     "wary": {
         "Conquest": "watches the frontier, undecided",
@@ -69,6 +104,22 @@ WANT_TEXT = {
         "Intrigue": "keeps their own letters safe",
         "Glory": "lets others take the glory",
         "Consolidation": "waits to see the labor question",
+        "Organize": "watches the mill gates, undecided",
+        "Recognition": "listens to the Combine's demand",
+        "General Strike": "holds the call, watching the mood",
+        "Purge Scabs": "watches the scabs at the gates",
+        "Solvency": "watches the ledger, undecided",
+        "Expansion": "watches the new trades",
+        "Receivership": "watches the failing houses",
+        "King-making": "waits to see which crown rises",
+        "Endowment": "watches the pews, undecided",
+        "Crusade of Morals": "listens to the pulpit",
+        "Sanctuary": "watches the doors of the sanctuary",
+        "Schism": "listens to the heresy talk",
+        "Circulation War": "watches the readership, undecided",
+        "Expose": "watches the press, undecided",
+        "Respectability": "watches the tone of the press",
+        "Patronage": "watches the courts, undecided",
     },
     "opposes": {
         "Conquest": "quietly undermines the war effort",
@@ -78,6 +129,22 @@ WANT_TEXT = {
         "Intrigue": "feeds the rivals whispers",
         "Glory": "spits on the ruler's name",
         "Consolidation": "loosens the screws on the mills",
+        "Organize": "breaks the union's grip on the mills",
+        "Recognition": "denies the Combine any voice",
+        "General Strike": "busts the strike before it spreads",
+        "Purge Scabs": "backs the scabs against the purge",
+        "Solvency": "lets the ledger run hot for a cut",
+        "Expansion": "denies the Bank its new trades",
+        "Receivership": "fights to keep the house out of keeping",
+        "King-making": "plots against the Bank's crown",
+        "Endowment": "denies the Church its lands",
+        "Crusade of Morals": "defies the pulpit's stricter creed",
+        "Sanctuary": "shuts the sanctuary doors",
+        "Schism": "holds the faith against the schism",
+        "Circulation War": "denies the press its readers",
+        "Expose": "sits on the stories that would print",
+        "Respectability": "keeps the press cheap and loud",
+        "Patronage": "spurns the press's flattery",
     },
 }
 
@@ -214,6 +281,10 @@ class AmbitionsFacade:
         self._resolved: Dict[str, bool] = {}
         # C3: house -> the Order whose goal stands in the way of its stake
         self._clashes: Dict[str, str] = {}
+        # C3: house -> the clashing goal AS SET, (order_name, family,
+        # opened_turn, target) - the deflection speaks of this snapshot,
+        # not the Order's current (rotated) aim
+        self._clash_goal: Dict[str, tuple] = {}
 
     # --- the stake ----------------------------------------------------------
 
@@ -257,6 +328,7 @@ class AmbitionsFacade:
         game.agendas[house_name] = goal
         self._start[house_name] = _snapshot(game, house_name, target)
         self._resolved.pop(house_name, None)
+        self._clash_goal.pop(house_name, None)
         self.wants(house_name)  # every adult carries their private want
         beat = Beat(
             turn=game.turn, kind="signature", house=house_name,
@@ -271,6 +343,12 @@ class AmbitionsFacade:
         if clash is not None:
             order_name, order, ogoal = clash
             self._clashes[house_name] = order_name
+            # the Order's goal AS IT STANDS IN THE WAY - recorded now, not
+            # re-derived at resolve time (the Order rotates its aim each
+            # turn; the deflection speaks of the goal that actually
+            # crossed the stake, with the Order's own commit clock)
+            self._clash_goal[house_name] = (
+                order_name, ogoal.family, ogoal.opened_turn, ogoal.target)
             game.beats.append(Beat(
                 turn=game.turn, kind="signature", house=house_name,
                 text=(f"The {order_name} stands in the way: its {ogoal.family} "
@@ -362,7 +440,7 @@ class AmbitionsFacade:
         if orders and house_name in orders:
             # C3: the Orders push back - their heads carry the same want
             # anatomy as a House adult
-            return orders[house_name].wants(orders[house_name].family)
+            return orders[house_name].wants(orders[house_name].goal.family)
         goal = game.agendas.get(house_name)
         realm = game.realms.get(house_name)
         if goal is None or realm is None:
@@ -422,6 +500,32 @@ class AmbitionsFacade:
         if house_name not in self._start:
             return None    # an AI-chosen goal, not a player stake
         if house_name in self._resolved:
+            return None
+        # C3: an ORDER that stands in the way of this stake deflects it -
+        # the house's aim never lands, and the deflection is spoken, with
+        # the Order's commit clock (turn N of 10), not a silent fizzle.
+        # The deflection speaks of the goal AS IT STOOD IN THE WAY when the
+        # stake was set (recorded in set_ambition) - the Order rotates its
+        # aim each turn and the clash is not re-derived at resolve time.
+        snap = self._clash_goal.get(house_name)
+        if snap is not None:
+            order_name, ofamily, o_opened, otarget = snap
+            order = game.orders.get(order_name)
+            head = order.head if order is not None else None
+            elapsed = max(1, game.resolved_turn - o_opened)
+            game.beats.append(Beat(
+                turn=game.turn, kind="deflection", house=house_name,
+                text=(f"The {order_name}'s {ofamily} of House "
+                      f"{otarget} stands in the way of House "
+                      f"{house_name}'s {goal.family} - turn "
+                      f"{elapsed} of {goal.commit_turns}"),
+                source="ambitions.resolve_due",
+                causes=(Cause(f"{ofamily} on House {otarget}", 1.0,
+                              "ambitions.resolve_due"),),
+                face=head.name if head is not None else order_name,
+                facet="ambition",
+            ))
+            self._resolved[house_name] = False
             return None
         snap = self._start[house_name]
         won = _fulfilled(game, house_name, goal, snap)

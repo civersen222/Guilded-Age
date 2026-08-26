@@ -39,6 +39,40 @@ class Acts:
         game.ambitions.set_ambition(house, family, target)
         return game.beats.log[-1]
 
+    def hold_seat(self, house: str, order_name: str) -> Beat:
+        """Take the Order's seat (wraps `game.order_seats`). The Order's
+        honest lever then plays in the House's favour through the world."""
+        game = self.game
+        face = self._steward_name(house)
+        beat = Beat(
+            turn=game.turn,
+            kind="signature",
+            house=house,
+            text=f"{face} takes the {order_name} seat - the Order listens now",
+            source="acts.hold_seat",
+            causes=(),
+            face=face,
+        )
+        game.beats.append(beat)
+        return beat
+
+    def informant_on_order(self, house: str, order_name: str) -> Beat:
+        """Plant an informant on an Order (wraps `game.informants`)."""
+        game = self.game
+        face = self._steward_name(house)
+        game.informants.add((house, order_name))
+        beat = Beat(
+            turn=game.turn,
+            kind="signature",
+            house=house,
+            text=f"{face} plants an informant within the {order_name}",
+            source="acts.informant_on_order",
+            causes=(),
+            face=face,
+        )
+        game.beats.append(beat)
+        return beat
+
     def set_dial(self, eid: str, value: float) -> Beat:
         """Set an enterprise's extraction dial (wraps
         `Enterprise.extraction_dial`, clamped to 0-100) and emit the
