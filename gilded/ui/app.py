@@ -19,6 +19,7 @@ from typing import Optional
 import pygame
 
 from gilded.chassis import GildedGame
+from gilded.orders import init_orders
 from gilded.save import save_game
 from gilded.saga.narrator import select_narrator
 from gilded.ui.actions import ACTIONS
@@ -48,6 +49,10 @@ def new_app_state(seed: int, player_house: Optional[str] = None,
     house = player_house if player_house is not None else sorted(game.houses)[0]
     if player_house is None:
         game.houses[house].is_player = True
+        # the player was set AFTER init_orders ran in __init__, so the Orders
+        # had no player to press; re-init them now (heads rebuild identically
+        # from the seeded rng snapshot, goals re-target at the player)
+        init_orders(game)
     screen = pygame.display.set_mode(size)
     pygame.display.set_caption(WINDOW_TITLE)
     pygame.event.clear()
