@@ -1,6 +1,6 @@
 # C3 wave 2 complete: the four Orders push on the world
 
-BASE: 52c90ca (wave 1) — COMMIT: 9545d85
+BASE: 52c90ca (wave 1) — HEAD: aad8ad4
 
 ## What wave 2 changed
 
@@ -40,11 +40,12 @@ and `_weakest_neighbor`-driven tests stay green.
   out-of-realm heads and per-order goal families, informant-driven intel
   fog, act faces + paper trail over 40 turns, Treasury accumulation and
   cross-boot determinism.
-- `test_c3_wave2.py` (new, 5 tests) — levers move real quantities, net Crown/Guilds
+- `test_c3_wave2.py` (new, 6 tests) — levers move real quantities, net Crown/Guilds
   interaction on a shared target, lever-press beats carry the head's face and
-  non-empty `causes`, determinism across boots, House gold untouched.
-- Full suite: `python -m pytest gilded` → **2026 passed, 0 failed** (base was
-  2018 passed, 0 failed; +8 is the wave-2 and contract test files, no
+  non-empty `causes`, the deflection clash beat carries the head's face and a
+  truthy Cause, determinism across boots, House gold untouched.
+- Full suite: `python -m pytest gilded` → **2027 passed, 0 failed** (base was
+  2018 passed, 0 failed; +9 is the wave-2 and contract test files, no
   regressions).
 
 ## Known interactions (intended, not bugs)
@@ -83,3 +84,18 @@ showed orders.py is innocent and the docket change shifts the world's rng
 stream. The mission tree is therefore `base + wave-2 orders` with docket at
 base; the full suite (2021) is green and `test_agenda.py` (54) is stable
 across `PYTHONHASHSEED` 0 and 1.
+
+## Post-mission: deflection beat carries face and causes (2c45d40, aad8ad4)
+
+The `ambitions.order_clash` deflection beat (player ambition crosses an
+Order's active goal) was journaled with `causes=()` and `provenance=None` —
+no paper trail on the one beat that is the proof of deflection. It now
+carries the Order head's `face` and a truthy `Cause`:
+
+- `causes=(Cause(f"{goal.family} on House {target}", 1.0,
+  "ambitions.order_clash"),)` — `gilded/ambitions.py` `set_ambition`
+- the crossed ambition closes `fulfilled=False` with `opposed_by=<order>`
+  when its commit window ends
+
+Locked in by `test_deflection_beat_carries_face_and_cause`
+(`test_c3_wave2.py`, now 6 tests). Full suite: **2027 passed, 0 failed**.
