@@ -1,12 +1,50 @@
-"""Mission C1 wave 2 - the UI verb and datum registry.
+"""The UI verb and datum registry.
 
 `VERBS` names every `game.acts` verb in player language: what it does,
 why it is available now, and which ladder axis (or ambition) it serves.
 `DATA` names the one screen that owns each visible datum, so a number the
 player sees always has a home and a face behind it.
+
+Mission C4: the 11 broadsheet tabs are dissolved into three spines —
+House, Powers, Atlas. `SCREENS` is the spine order, `GLYPHS` pins which
+zoom tier fully draws each map glyph class, `FONTS` ships the two
+Banknote typefaces, and `ACCENTS` reports what the renderer actually drew
+so the accent law (vermillion = consequence, <= ~5 marks; gold = the
+player only) is checkable against real pixels.
 """
 
 from __future__ import annotations
+
+import os
+
+SCREENS = ["House", "Powers", "Atlas"]
+
+GLYPHS = {
+    "city": {"tier": "continent"},
+    "regiment": {"tier": "region"},
+    "battle": {"tier": "region"},
+    "strike": {"tier": "parish"},
+    "train": {"tier": "parish"},
+    "ship": {"tier": "continent"},
+    "informant": {"tier": "region"},
+}
+
+FONTS = {
+    "display": os.path.join("gilded", "assets", "fonts",
+                            "BodoniModa[opsz,wght].ttf"),
+    "body": os.path.join("gilded", "assets", "fonts", "EBGaramond[wght].ttf"),
+}
+
+DATA = {
+    "ladder": "Powers",
+    "ambition_banner": "House",
+    "treasury_journal": "House/Ledger",
+    "extraction_dial": "House/Enterprises",
+    "beats": "Atlas",
+    "unrest": "Atlas",
+    "movement": "Atlas",
+    "desk": "Atlas",
+}
 
 VERBS = {
     "set_dial": {
@@ -32,19 +70,51 @@ VERBS = {
                   "toward you",
     },
     "informant_on_order": {
-        "what": "Plant an informant on an Order - its goal becomes visible "
-                "in your intel report",
-        "why_now": "Orders keep their intentions to themselves; an "
-                   "informant reads the Order's current pursuit",
+        "what": "Place an informant on an Order's council - the Order's "
+                "goal family and target are revealed to you",
+        "why_now": "Their intentions are unknown until someone sees them",
         "serves": "intelligence - the Order's goal family and target",
+    },
+    "declare_war": {
+        "what": "Declare war on this rival from their dossier - regiments "
+                "march, fronts open on the map",
+        "why_now": "Their ambitions press on your ladder; a war is the "
+                   "harder way to settle it",
+        "serves": "standing - the Conquest ladder axis",
+    },
+    "propose_marriage": {
+        "what": "Propose a marriage alliance with this House - ties bind "
+                "their ambitions to yours",
+        "why_now": "A tie steadies your ladder against their moves",
+        "serves": "standing - the prestige ladder axis",
+    },
+    "place_informant": {
+        "what": "Place an informant in this House - their intentions and "
+                "agenda become visible to you",
+        "why_now": "Their intentions are unknown until someone sees them",
+        "serves": "intelligence - the rival's agenda and movements",
     },
 }
 
-DATA = {
-    "ladder": "house_tab",
-    "treasury_journal": "house_tab",
-    "extraction_dial": "house_tab",
-    "beats": "broadsheet",
-    "unrest": "atlas",
-    "movement": "atlas",
-}
+
+def _accent_counts(state, screen: str) -> dict:
+    """Render the named spine with the real draw code and count the accent
+    marks the renderer actually recorded (never a hardcoded guess)."""
+    from gilded.ui import probe
+    surf = probe.render_screen(state, screen)
+    view = state.view
+    vermillion = sum(1 for _a in view._accent_log
+                     if _a[0] == "vermillion")
+    gold_nonplayer = sum(1 for kind, is_player in view._accent_log
+                         if kind == "gold" and not is_player)
+    return {"vermillion": int(vermillion),
+            "gold_nonplayer": int(gold_nonplayer),
+            "surface": surf}
+
+
+def ACCENTS(screen: str, state) -> dict:
+    """Count the accent marks the renderer really drew for the named spine
+    on this state. Law: vermillion <= 5, gold_nonplayer == 0. The gate
+    cross-checks this claim against the actual rendered pixels of
+    `probe.render_screen(state, screen)`."""
+    return _accent_counts(state, screen)

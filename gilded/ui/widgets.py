@@ -7,6 +7,7 @@ other gilded.ui modules.
 from __future__ import annotations
 
 import math
+import os
 import re
 from dataclasses import dataclass
 from typing import Sequence
@@ -164,13 +165,24 @@ TYPE_SIZES = (TYPE_CAPTION, TYPE_BODY, TYPE_TEXT, TYPE_SUBTITLE, TYPE_HEADING, T
 _font_cache: dict[tuple[int, bool], pygame.font.Font] = {}
 
 
+def _font_path(role: str) -> str:
+    from gilded.ui import registry
+    path = registry.FONTS[role]
+    if not os.path.isabs(path):
+        path = os.path.join(os.path.dirname(__file__), "..", "..", path)
+    return path
+
+
 def font(size: int, bold: bool = False) -> pygame.font.Font:
-    """Cached SysFont("georgia,serif"), lazily calling pygame.font.init()."""
+    """Cached Banknote font from registry.FONTS (Bodoni display, EB
+    Garamond body), lazily calling pygame.font.init()."""
     key = (size, bold)
     if key not in _font_cache:
         if not pygame.font.get_init():
             pygame.font.init()
-        _font_cache[key] = pygame.font.SysFont("georgia,serif", size, bold)
+        role = "display" if size >= TYPE_HEADING else "body"
+        _font_cache[key] = pygame.font.Font(_font_path(role), size)
+        _font_cache[key].set_bold(bold)
     return _font_cache[key]
 
 
