@@ -46,3 +46,15 @@ and `_weakest_neighbor`-driven tests stay green.
   House is +0.5 − 0.5 = 0 per province — the mills hold against the border
   pressure. When their targets diverge, each press is visible individually.
 - Treasury's target re-aims each tick, so its gold accumulation is not linear.
+
+## Post-mission: docket fumble revert (909315f)
+
+A later commit (64441e4) added a "deterministic sub-stream" fumble draw to
+`gilded/docket.py`. It is unrelated to the Four Orders and it broke 3 agenda
+tests (`test_goal_initiative_conquest_acts_only_on_declared_target`,
+`test_r4_truce_at_turn_not_blocking`, `test_r5_dominion_backed_by_industry`).
+Controlled A/B/C worktree experiments (base / base+orders.py / base+docket)
+showed orders.py is innocent and the docket change shifts the world's rng
+stream. The mission tree is therefore `base + wave-2 orders` with docket at
+base; the full suite (2021) is green and `test_agenda.py` (54) is stable
+across `PYTHONHASHSEED` 0 and 1.
