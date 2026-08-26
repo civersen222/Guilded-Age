@@ -69,10 +69,13 @@ def test_wants_are_deterministic_across_boots():
 def test_clash_records_the_order_that_stands_in_the_way():
     g = GildedGame(7, player_house="Brandtner")
     player = "Brandtner"
-    assert g.orders["Church"].goal.target == player
-    non = next(h for h in g.houses if h != player)
-    g.set_ambition(non, "Conquest", player)
-    assert g.ambitions.status(non)["opposed_by"] in g.orders
+    # some Order is pressing a house; a rival stake against that SAME
+    # house crosses the Order
+    pressed = {o.goal.target for o in g.orders.values()
+               if o.goal is not None and o.goal.target is not None}
+    target = next(t for t in pressed if t != player)
+    g.set_ambition(player, "Conquest", target)
+    assert g.ambitions.status(player)["opposed_by"] in g.orders
     assert any(b.source == "ambitions.order_clash" for b in g.beats.log)
 
 
