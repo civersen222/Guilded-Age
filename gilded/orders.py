@@ -150,6 +150,25 @@ def _player_of(game) -> Optional[str]:
     return next((h for h in game.houses if game.houses[h].is_player), None)
 
 
+def _strongest_house(game) -> Optional[str]:
+    best, best_val = None, None
+    for h in sorted(game.houses):
+        val = sum(p.population for p in game.provinces_of(h)) + \
+            game.houses[h].treasury
+        if best_val is None or val > best_val:
+            best, best_val = h, val
+    return best
+
+
+def _richest_house(game) -> Optional[str]:
+    best, best_val = None, None
+    for h in sorted(game.houses):
+        val = game.houses[h].treasury
+        if best_val is None or val > best_val:
+            best, best_val = h, val
+    return best
+
+
 def _non_seat_houses(game, name: str) -> List[str]:
     """The houses the Order presses on: every house but the seat holder."""
     seat = getattr(game, "order_seats", {}).get(name)
@@ -158,18 +177,22 @@ def _non_seat_houses(game, name: str) -> List[str]:
 
 
 def _target_for(game, name: str, family: str) -> Optional[str]:
-    """Deterministic target: the family's turn window cycles the Order
-    through its pressable houses (and, for the Bank, through the richest
-    first). A seat-holder house is never a target."""
-    houses = _non_seat_houses(game, name)
-    if not houses:
-        return None
+    """Deterministic target for the Order's goal:
+    - Bank's Receivership -> richest house (the debts are where the gold is)
+    - Church's Sanctuary  -> the player (the faithful at home)
+    - everything else     -> the strongest house.
+    A seat-holder house is never a target."""
+    seat = getattr(game, "order_seats", {}).get(name)
     if name == "Bank":
-        def rich(h):
-            return -game.houses[h].treasury
-        houses.sort(key=lambda h: (rich(h), h))
-    window = max(0, game.resolved_turn or 0) // COMMIT_TURNS
-    return houses[(window + len(_ORDER_SPECS[name]["families"])) % len(houses)]
+        richest = _richest_house(game)
+        return None if richest == seat else richest
+    if name == "Church":
+        player = _player_of(game)
+        if player is not None and player != seat:
+            return player
+        return _strongest_house(game)
+    strongest = _strongest_house(game)
+    return None if strongest == seat else strongest
 
 
 def _why(name: str, family: str, target: Optional[str]) -> str:

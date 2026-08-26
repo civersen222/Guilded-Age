@@ -509,7 +509,8 @@ def powers_report(game, house) -> Tuple[PowerLine, ...]:
             tier=r.tier,
             breakdown=tuple(r.breakdown),
             apparent_intent=r.apparent_intent,
-            can_place_informant=(house, name) not in game.informants,
+            can_place_informant=(attention > 0
+                                 and (house, name) not in game.informants),
         ))
     return tuple(lines)
 

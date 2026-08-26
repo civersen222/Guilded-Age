@@ -86,11 +86,13 @@ def test_deflection_beat_carries_face_and_cause():
     for name in ORDER_NAMES:
         gl = g.orders[name].goal
         if gl and gl.target and gl.target != "Brandtner":
-            target, fam = gl.target, gl.family
+            target = gl.target
             break
     else:
         raise AssertionError("no order goal targets a non-player house")
-    g.ambitions.set_ambition("Brandtner", fam, target)
+    # a HOUSE stake (Buyout is a house family) against the SAME target the
+    # Order presses - the clash is by target, the deflection by the Order
+    g.ambitions.set_ambition("Brandtner", "Buyout", target)
     for _ in range(11):
         g.end_turn()
     clash = [b for b in g.beats.log if b.source == "ambitions.order_clash"]
