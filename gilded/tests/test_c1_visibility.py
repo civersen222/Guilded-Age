@@ -166,7 +166,7 @@ def test_ladder_facade_standings(game):
 
 def test_beats_facade_shape(game):
     for b in game.beats.log:
-        assert b.kind in {"signature", "season", "inquiry", "deflection"}
+        assert b.kind in {"signature", "season", "inquiry", "deflection", "gentry"}
         assert isinstance(b.turn, int)
         assert isinstance(b.text, str) and b.text
         assert b.face is None or isinstance(b.face, str)

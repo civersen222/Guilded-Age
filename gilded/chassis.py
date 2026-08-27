@@ -12,7 +12,7 @@ import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from gilded.world import generate_atlas
+from gilded.world import GENTRY_SURNAMES, generate_atlas
 from gilded.houses import assign_houses
 from gilded.enterprises import (Enterprise, capacity_out, director_skim,
                                 found_enterprise, tick_construction)
@@ -63,6 +63,10 @@ class GildedGame:
         self.seed = seed
         random.seed(seed)          # governs narration text (event_engine.render)
         self.rng = random.Random(seed)
+        # C5: dedicated stream for the minor-gentry bookkeeping pass so the
+        # main sim stream stays bit-identical to pre-C5 (fixtures that
+        # pin an enterprise-verb premise on a seed keep holding).
+        self._gentry_rng = random.Random(seed ^ 0x5C5)
         self.society = SocietyState(self.rng)
         self.turn = 1
         self.atlas = generate_atlas(seed)
@@ -102,6 +106,7 @@ class GildedGame:
         self.takeovers: List[object] = []      # society.schemes.Takeover in flight
         self.completed_takeovers: List[object] = []  # campaigns that reached the threshold
         self._seed_enterprises()
+        self._seed_gentry()
         self._init_c1_visibility()
         self._init_c2_stake()
         self._init_c3_orders()
@@ -115,6 +120,55 @@ class GildedGame:
     def provinces_of(self, house) -> List:
         return [p for p in sorted(self.atlas.provinces.values(), key=lambda p: p.pid)
                 if p.owner == house]
+
+    # Mission C5 wave 1: 20-30 minor gentry (light sim - shares, board
+    # seats, marriages; can rise to great or fall out). Not house-grade
+    # actors: a bookkeeping pass, not full agendas.
+    def _seed_gentry(self) -> None:
+        names = self._gentry_rng.sample(GENTRY_SURNAMES, 24)
+        self.gentry = {n: {"standing": 20 + self._gentry_rng.randrange(60)}
+                       for n in names}
+
+    def _gentry_tick(self) -> None:
+        """One light pass over the minor gentry. Emits a share/board/
+        marriage beat, and occasionally a fall (or a rise) - the state
+        change and its beat travel together (Clarity Law)."""
+        from gilded.beats import Beat
+        if not self.gentry:
+            return
+        name = self._gentry_rng.choice(sorted(self.gentry))
+        r = self._gentry_rng.random()
+        standing = self.gentry[name]["standing"]
+        if r < 0.05:
+            # the house loses its way - falls out of the ranks
+            del self.gentry[name]
+            self.beats.append(Beat(
+                self.turn, "gentry", "",
+                f"The {name} family falls out of the ranks",
+                "chassis.gentry_tick", (), None, facet="fall"))
+            return
+        if r < 0.10 and standing >= 70:
+            # rises - seats at the great houses' table
+            del self.gentry[name]
+            pool = [s for s in GENTRY_SURNAMES if s not in self.gentry]
+            if pool:
+                self.gentry[self._gentry_rng.choice(pool)] = {"standing": 20}
+            self.beats.append(Beat(
+                self.turn, "gentry", "",
+                f"The {name} family is raised to the great houses",
+                "chassis.gentry_tick", (), None, facet="rise"))
+            return
+        self.gentry[name]["standing"] = max(
+            0, min(100, standing + self.rng.randint(-15, 18)))
+        facet = self.rng.choice(("share", "board", "marriage"))
+        text = {
+            "share": f"Shares pass to the {name} family",
+            "board": f"The {name} family takes a board seat",
+            "marriage": f"The {name} family marries into the great houses",
+        }[facet := self._gentry_rng.choice(("share", "board", "marriage"))]
+        self.beats.append(Beat(
+            self.turn, "gentry", "",
+            text, "chassis.gentry_tick", (), None, facet=facet))
 
     # Mission C1 wave 2: the public API is objects with named members -
     # `game.ladder.standings()`, `game.beats.{log,deltas,inquire}`,
@@ -467,6 +521,7 @@ class GildedGame:
             self.ambitions.wants(h)
             self.ambitions.neutral_wants(h)
             self.ambitions.resolve_due(h)
+        self._gentry_tick()           # C5: the minor gentry turn over
         self.beats.end_turn_close()   # C1: record the turn's beats and deltas
         self.turn += 1
         from gilded.endings import check_ending    # local: endings imports our constants
