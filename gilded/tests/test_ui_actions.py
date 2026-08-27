@@ -53,80 +53,91 @@ def _rich_state():
     return state
 
 
-def _collect_emitted_keys(view):
-    """Walk every tab, draw to a headless surface, collect all emitted action keys."""
+def _collect_emitted_keys(view, app=None):
+    """Collect every action key the current spine/pages emit at 1200x800."""
     collected = set()
     surf = pygame.Surface((1200, 800))
+    pages = {"House": [None, "Ledger", "Governance"], "Powers": [None], "Atlas": [None]}
     for tab_name in TABS:
-        view.active_tab = tab_name
-        view.draw(surf)
+        for page in pages[tab_name]:
+            view.house_page = page
+            view.active_tab = tab_name
+            view.draw(surf)
 
-        # Special case: House tab — collect court regions and open the appointment picker
-        if tab_name == "House":
-            for region in view.regions._regions:
-                if region.group == "court_seats" and region.action:
-                    for k in region.action:
-                        if k != "char_id":
-                            collected.add(k)
-            # Open the appointment picker if there is a vacant seat
-            court_regions = [r for r in view.regions._regions if r.group == "court_seats"]
-            if court_regions:
-                collected.add("open_appointment_picker")
-                _open_appointment_picker(view, surf)
+            # House spine, Overview page — collect court regions and open
+            # the appointment picker
+            if tab_name == "House" and page is None:
                 for region in view.regions._regions:
-                    if region.group == "picker" and region.action:
+                    if region.group == "court_seats" and region.action:
                         for k in region.action:
                             if k != "char_id":
                                 collected.add(k)
-            continue
+                # Open the appointment picker if there is a vacant seat
+                court_regions = [r for r in view.regions._regions
+                                 if r.group == "court_seats"]
+                vacant = [r for r in court_regions
+                          if r.action and "open_appointment_picker" in r.action]
+                if vacant:
+                    collected.add("open_appointment_picker")
+                    view._court_picker = vacant[0].action["open_appointment_picker"]
+                    view.draw(surf)
+                    for region in view.regions._regions:
+                        if region.group == "picker" and region.action:
+                            for k in region.action:
+                                if k != "char_id":
+                                    collected.add(k)
+                    view._court_picker = None
+                _collect_standard(view, collected)
+                continue
 
-        # Special case: Enterprises tab — collect both picker-open and picker-closed hits
-        if tab_name == "Enterprises":
-            # First collect from enterprise/appoint hits (picker closed)
-            for rect, payload in view._enterprise_hits:
-                if isinstance(payload, dict):
-                    action = payload.get("action", payload)
-                    for k in action:
-                        if k != "char_id":
-                            collected.add(k)
-            for rect, payload in view._appoint_hits:
-                if isinstance(payload, dict):
-                    action = payload.get("action", payload)
-                    for k in action:
-                        if k != "char_id":
-                            collected.add(k)
-
-            # Open the director picker and collect its hits
-            if view._appoint_hits:
-                collected.add("open_director_picker")  # emitted by the click we simulate below
-                _open_director_picker(view, surf)
-                for rect, payload in view._director_picker_hits:
+            # Governance inner page — enterprise verbs, both picker-closed
+            # and director-picker-open
+            if tab_name == "House" and page == "Governance":
+                for rect, payload in view._enterprise_hits:
                     if isinstance(payload, dict):
-                        for k in payload:
+                        action = payload.get("action", payload)
+                        for k in action:
                             if k != "char_id":
                                 collected.add(k)
-            continue
+                for rect, payload in view._appoint_hits:
+                    if isinstance(payload, dict):
+                        action = payload.get("action", payload)
+                        for k in action:
+                            if k != "char_id":
+                                collected.add(k)
+                if view._appoint_hits:
+                    collected.add("open_director_picker")
+                    # Open the first director picker
+                    eid = view._appoint_hits[0][1].get("appoint_director")
+                    view._director_picker = eid
+                    view.draw(surf)
+                    for rect, payload in view._director_picker_hits:
+                        if isinstance(payload, dict):
+                            for k in payload:
+                                if k != "char_id":
+                                    collected.add(k)
+                    view._director_picker = None
+                _collect_standard(view, collected)
+                continue
 
-        # Special case: Atlas tab — collect atlas action keys from regions
-        if tab_name == "Atlas":
-            for region in view.regions._regions:
-                if region.group == "atlas_actions" and region.action:
-                    for k in region.action:
-                        if k not in ("acquire_minor", "build_rail_a", "build_rail_b", "tour_province", "reason"):
-                            continue
-                        # Map build_rail_a/build_rail_b to build_rail
-                        if k.startswith("build_rail_"):
-                            collected.add("build_rail")
-                        else:
-                            collected.add(k)
-            continue
+            # Atlas spine — collect atlas action keys from regions
+            if tab_name == "Atlas":
+                for region in view.regions._regions:
+                    if region.group == "atlas_actions" and region.action:
+                        for k in region.action:
+                            if k.startswith("build_rail_"):
+                                collected.add("build_rail")
+                            else:
+                                collected.add(k)
+                _collect_standard(view, collected)
+                continue
 
-        _collect_standard(view, collected)
+            _collect_standard(view, collected)
     return collected
 
 
 def _collect_standard(view, collected):
-    """Collect keys from standard hit structures for the current tab."""
+    """Collect keys from all regions and hit structures for the current page."""
     for name in view._tab_rects:
         collected.add("tab")
     for rect, payload in view._option_hits:
@@ -147,24 +158,22 @@ def _collect_standard(view, collected):
     for rect, payload in view._informant_hits:
         if isinstance(payload, dict):
             for k in payload:
-                collected.add(k)
+                if k != "char_id":
+                    collected.add(k)
     for rect, payload in view._director_picker_hits:
         if isinstance(payload, dict):
             for k in payload:
                 if k != "char_id":
                     collected.add(k)
     for region in view.regions._regions:
-        if region.group == "court_seats" and region.action:
+        if region.action:
             for k in region.action:
-                if k != "char_id":
+                if k == "char_id":
+                    continue
+                if k in ("build_rail_a", "build_rail_b"):
+                    collected.add("build_rail")
+                else:
                     collected.add(k)
-    for region in view.regions._regions:
-        if region.group == "picker" and region.action:
-            for k in region.action:
-                if k != "char_id":
-                    collected.add(k)
-    for rect, key in view._dial_hits:
-        collected.add("set_stance")
     if view._end_turn_rect is not None:
         collected.add("end_turn")
     if view._narrate_rect is not None:
@@ -208,11 +217,14 @@ def test_every_drawn_key_is_registered():
     drawn = _collect_emitted_keys(state.view)
 
     assert drawn == {
-        "acquire_minor", "appoint_director", "appoint_to_seat",
-        "build_rail", "close_appointment_picker", "close_director_picker",
-        "defend_buyout", "dismiss_seat", "end_turn", "expand_enterprise",
-        "open_appointment_picker", "open_director_picker",
-        "place_informant", "rule", "select_province", "set_stance",
+        "acquire_minor", "appoint_director", "appoint_to_seat", "attack_takeover",
+        "build_rail", "buy_shares", "clear_heir", "close_appointment_picker",
+        "cycle_exec", "declare_war", "defend_buyout",
+        "dismiss_seat", "end_turn", "expand_enterprise", "found_enterprise",
+        "open_ambition_picker", "open_appointment_picker",
+        "open_director_picker", "open_heir_picker", "open_scheme_picker",
+        "place_informant", "propose_marriage", "quicksave", "quickload",
+        "rule", "sell_shares", "select_province", "set_spine_page",
         "tab", "toggle_narrate", "tour_province",
     }, f"the drawn set moved: {sorted(drawn)}"
 
@@ -456,6 +468,10 @@ def _build_action_for_key(key, game, house, view=None):
         return {"quickload": True}
     elif key == "select_province":
         return {"select_province": 0}
+    elif key == "open_ambition_picker":
+        return {"open_ambition_picker": True}
+    elif key == "set_spine_page":
+        return {"set_spine_page": "Ledger"}
     elif key == "dismiss_seat":
         from gilded.society.court import CourtPosition
         realm = game.realms[house]
@@ -746,7 +762,7 @@ def test_end_turn_advances_turn_and_resets_tab():
     app._apply_action(state, {"end_turn": True})
 
     assert g.turn == turn_before + 1, "turn must advance by exactly 1"
-    assert view.active_tab == "Briefing", "active_tab must reset to Briefing"
+    assert view.active_tab == "House", "active_tab must reset to House"
     assert view.prev_board is not None, "prev_board must be set"
 
 

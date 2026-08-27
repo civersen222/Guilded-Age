@@ -1275,6 +1275,16 @@ ACTIONS: dict[str, PlayerAction] = {
         attention_cost=0, gold_cost=0,
         eligible=_noop_eligible, dispatch=_noop_dispatch,
     ),
+    "set_spine_page": PlayerAction(
+        key="set_spine_page", label="Open Inner Page", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_noop_eligible, dispatch=_noop_dispatch,
+    ),
+    "open_ambition_picker": PlayerAction(
+        key="open_ambition_picker", label="Open Ambition Picker", domain="house",
+        attention_cost=0, gold_cost=0,
+        eligible=_noop_eligible, dispatch=_noop_dispatch,
+    ),
     "cycle_exec": PlayerAction(
         key="cycle_exec", label="Choose Executor", domain="view",
         attention_cost=0, gold_cost=0,
