@@ -75,6 +75,20 @@ from gilded.ui.widgets import (
 
 TABS = ("House", "Powers", "Atlas")
 
+# spec §2 fate table — the dissolved 11-tab names still address their re-homed
+# content: (spine, House page or Powers page).  Assigning a dissolved name
+# to BroadsheetView.active_tab navigates to the home the content moved to.
+LEGACY_TABS = {
+    "Briefing": ("House", "Overview"),      # agenda card -> House ambition banner; alerts -> desk letters
+    "Gazette": ("Atlas", None),            # the End Turn beat over the map; archived at the desk
+    "Ledger": ("House", "Ledger"),
+    "Letters": ("Atlas", None),            # desk strip on the Atlas
+    "Docket": ("House", "Overview"),       # its decisions are the desk strip
+    "Policies": ("House", "Overview"),     # edicts signed from the Court in Session
+    "Enterprises": ("House", "Governance"),
+    "War": ("Atlas", None),                # wars are drawn on the map
+}
+
 TAB_H = 40
 BOTTOM_H = 56
 
@@ -566,7 +580,7 @@ def powers_model(lines, selected=None) -> PowersModel:
             return s.replace("|", "")
 
         rows.append([
-            power_row_title(ln),
+            _clean(power_row_title(ln)),
             threat_str,
             intel_str,
             _clean(ties_str),
@@ -828,13 +842,35 @@ def enterprises_layout(model, content: pygame.Rect) -> Dict[str, pygame.Rect]:
 class BroadsheetView:
     _found_picker: Optional[bool]
 
+    @property
+    def active_tab(self) -> str:
+        return self._active_tab
+
+    @active_tab.setter
+    def active_tab(self, name: str) -> None:
+        # spec §2 fate table: a dissolved tab name navigates to the home its
+        # content moved to (spine + inner page).  "House"/"Powers"/"Atlas"
+        # stay the three spines.
+        if name in LEGACY_TABS:
+            spine, page = LEGACY_TABS[name]
+            self._active_tab = spine
+            if page == "Ledger":
+                self.house_page = "Ledger"
+            elif page == "Governance":
+                self.house_page = "Governance"
+            else:
+                self.house_page = "Overview"
+            if spine == "Atlas":
+                self.atlas_desk = True
+        else:
+            self._active_tab = name
+
     def __init__(self, game, house_name: str, narrator=None):
         self.game = game
         self.house = house_name
         # the narrator rewrites the Gazette's prose only; templated is identity.
         self.narrator = narrator if narrator is not None else NarratorTemplated()
         self.narrate_on = True
-        self.active_tab = TABS[0]
         # Inner pages of the three spines (spec §2 fate table): the dissolved
         # tabs' content re-homed as pages.  The Atlas desk strip (Letters)
         # and the End Turn gazette are drawn on the Atlas itself.
@@ -843,6 +879,7 @@ class BroadsheetView:
         self.powers_page = "Overview"
         self.powers_pages = ["Overview", "Dossier"]
         self.atlas_desk = False
+        self.active_tab = TABS[0]
         self.gazette_page = None
         # Accent ledger (registry.ACCENTS): entries ("vermillion", is_player)
         # or ("gold", is_player) that THIS draw pass actually made.  Cleared
@@ -957,6 +994,9 @@ class BroadsheetView:
                 self._draw_powers(surface, content)
         elif self.active_tab == "Atlas":
             self._draw_atlas(surface)
+            # spec §2: the War tab dies — wars are drawn on the map; the
+            # garrison/raise controls ride over the Atlas.
+            self._draw_war(surface, content)
 
         # ── Ending overlay when the age closes ──────────────────────────────
         if self.game.game_over is not None:
@@ -1043,17 +1083,9 @@ class BroadsheetView:
         font = _font(TYPE_TEXT, bold=True)
         self._tab_rects = {}
         TAB_HINTS = {
-            "Briefing": "Your command post — see what changed and act on it.",
-            "Gazette": "Read the world's news in full prose.",
-            "Ledger": "Track your money, income, and spending.",
-            "Letters": "Private correspondence from your network.",
-            "Docket": "Standing rules and appointments before the council.",
-            "Policies": "Set your house's five standing directives.",
-            "Enterprises": "Manage your ventures and their directors.",
-            "Atlas": "Survey the realm's map and your territory.",
+            "House": "Your court, your people, your ledger, and your ventures.",
             "Powers": "See the other houses, their axes, and their moves.",
-            "House": "Your court, your people, and your standing.",
-            "War": "Conduct your wars — muster, commit, and seek peace.",
+            "Atlas": "Survey the realm's map, its wars, and your letters.",
         }
         for i, name in enumerate(TABS):
             rect = pygame.Rect(i * tabw, 0, tabw, TAB_H)
@@ -1348,7 +1380,20 @@ class BroadsheetView:
                     y += body.get_height() + 2
                 y += 4
         y += 8
+        self._draw_ladder_and_agenda(surface, content, y)
 
+    # --- the public ladder + the docket's agenda (House's ambition banner) --
+
+    def _draw_ladder_and_agenda(self, surface, content: pygame.Rect,
+                                y: int) -> None:
+        """spec §2: the Briefing's ladder and Agenda re-homed to the House
+        spine — the ladder stays public, the docket's decisions are the
+        agenda cards (its old tab dies; its content lives here and at the
+        Atlas desk strip)."""
+        head = _font(TYPE_SUBTITLE, bold=True)
+        body = _font(TYPE_TEXT)
+        if y > content.bottom - 120:
+            return
         surface.blit(head.render("The Ladder", True, INK), (PAD, y))
         y += head.get_height() + 4
         rows = self.game.ladder()
@@ -2688,6 +2733,9 @@ class BroadsheetView:
         from gilded.ui.court_actions import _get_appointment_pool
         rpt = peerage_report(self.game, self.house)
         draw_house_tab(surface, content, rpt, self)
+        # spec §2: the Briefing's ladder + agenda re-homed here (the House
+        # spine is their home now); the agenda cards are the docket's decisions.
+        self._draw_ladder_and_agenda(surface, content, content.y + 8)
         # Draw intrigue section (plot visibility)
         self._draw_intrigue(surface, content)
         # C2: the Set Ambition button, then the family picker when open

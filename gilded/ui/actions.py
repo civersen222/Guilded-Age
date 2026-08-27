@@ -60,7 +60,7 @@ def _end_turn_dispatch(game, house, view, action):
     pre = scoreboard(game, house)
     game.end_turn()
     view.prev_board = pre
-    view.active_tab = "Briefing"
+    view.active_tab = "House"
     return []
 
 
@@ -87,7 +87,7 @@ def _quickload_dispatch(game, house, view, action):
     from gilded.save import load_game, quicksave_path
     loaded = load_game(quicksave_path())
     view.prev_board = None
-    view.active_tab = "Briefing"
+    view.active_tab = "House"
     view._action_messages.append(
         f"The century is picked up again at turn {loaded.turn}.")
     return loaded
