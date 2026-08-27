@@ -23,23 +23,16 @@ from gilded.society.schemes import Takeover
 from gilded.tests._fixtures import make_one_seller, no_sellers
 
 
-# Measured at 53cb9af with _view() on a 1280x900 surface. Every tab
-# draws ten tab regions, one end_turn and one narrate; the remainder is
-# that tab's own interaction. These are exact values, not floors: a
-# floor is satisfied by a double registration, which is the specific
-# bug a census exists to catch.
+# Three-spine world (spec §2: the eleven tabs are dissolved).  Measured
+# with _view() on a 1280x900 surface, seed 42, turn 0.  Every spine draws
+# the three spine tabs, one end_turn and one narrate; the remainder is the
+# spine's own interaction.  These are exact values, not floors: a floor is
+# satisfied by a double registration, which is the specific bug a census
+# exists to catch.
 EXPECTED_REGIONS = {
-    "Briefing": 19,       # cycle_exec x1, rule x2, tab x11, save, open, end_turn, narrate, guide
-    "Gazette": 16,        # tab x11, save, open, end_turn, narrate, guide
-    "Ledger": 16,         # tab x11, save, open, end_turn, narrate, guide
-    "Letters": 16,        # tab x11, save, open, end_turn, narrate, guide
-    "Docket": 19,         # cycle_exec x1, rule x2, tab x11, save, open, end_turn, narrate, guide
-    "Policies": 21,       # set_stance x5, tab x11, save, open, end_turn, narrate, guide
-    "Enterprises": 26,    # venture x4, buy_shares x2, sell_shares x2, attack_takeover x1, found_enterprise x1, tab x11, save, open, end_turn, narrate, guide
-    "Atlas": 36,          # select_province x1, atlas_actions x19, tab x11, save, open, end_turn, narrate, guide
-    "Powers": 27,         # place_informant x7, order dossier x4, tab x11, save, open, end_turn, narrate, guide
-    "House": 26,          # court seat x6, heir x2, open_scheme_picker x1, open_ambition_picker x1, tab x11, save, open, end_turn, narrate, guide
-    "War": 28,            # declare_war x6, propose_marriage x6, tab x11, save, open, end_turn, narrate, guide
+    "House": 26,         # rule x3, dismiss_seat x6, cycle_exec, set_stance x5 (House edicts — the dissolved Policies tab re-homed), open_ambition_picker, open_heir_picker, open_scheme_picker, clear_heir, tab x3, save, open, end_turn, narrate
+    "Powers": 19,        # place_informant x11, rule, tab x3, save, open, end_turn, narrate
+    "Atlas": 39,         # select_province, tour_province x3, declare_war x6, propose_marriage x6, acquire_minor x5, build_rail x10 (+a/b variants), tab x3, save, open, end_turn, narrate
 }
 
 
@@ -50,8 +43,7 @@ def _view():
 
 
 def test_tabs_shape():
-    assert TABS == ("Briefing", "Gazette", "Ledger", "Letters",
-                    "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House", "War")
+    assert TABS == ("House", "Powers", "Atlas")
 
 
 def test_hud_rides_above_every_tab():
@@ -62,9 +54,9 @@ def test_hud_rides_above_every_tab():
         v.draw(surf)   # the HUD is drawn on every tab; must not crash
 
 
-def test_briefing_is_the_default_view():
+def test_house_is_the_default_view():
     g, v = _view()
-    assert v.active_tab == "Briefing"
+    assert v.active_tab == "House"
 
 
 def test_briefing_agenda_rules_a_petition():
@@ -864,9 +856,9 @@ def test_clicking_a_tab_switches():
     g, v = _view()
     surf = pygame.Surface((1280, 900))
     v.draw(surf)
-    rect = v._tab_rects["Docket"]
+    rect = v._tab_rects["Atlas"]
     action = v.handle_click(rect.center)
-    assert action == {"tab": "Docket"} and v.active_tab == "Docket"
+    assert action == {"tab": "Atlas"} and v.active_tab == "Atlas"
 
 
 
@@ -927,14 +919,36 @@ def test_atlas_click_selects_province():
     v.active_tab = "Atlas"
     surf = pygame.Surface((1280, 900))
     v.draw(surf)
-    pid = next(iter(g.atlas.provinces))
-    c = g.atlas.provinces[pid].center
-    hud_h = 116
-    TAB_H = 40
-    BOTTOM_H = 40
-    content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
+    from gilded.ui.broadsheet import _hud_height
+    hud_h = _hud_height()
+    content = pygame.Rect(0, 40 + hud_h, 1280, 900 - 40 - hud_h - 56)
     transform = atlas_transform(g.atlas, content)
-    result = v.handle_click(transform.apply(c))
+    # Find a province whose centre is inside the content rect so the click
+    # lands inside the atlas map panel (the first province is not guaranteed
+    # to be, since the transform is centred on the atlas extent).
+    from gilded.ui.atlas_view import pick_province
+    # The atlas action panel occupies the right 260px, and the war/diplomacy
+    # rows (the War tab dissolved — its verbs ride over the map) cover part
+    # of the map area too.  So a click must land on a point that RESOLVES to
+    # the select_province region: scan province centres and keep the first
+    # whose region lookup is the map itself.
+    panel_x = content.right - 260
+    point = None
+    pid = None
+    for _pid, prov in g.atlas.provinces.items():
+        p = transform.apply(prov.center)
+        if p[0] >= panel_x or not content.collidepoint(p):
+            continue
+        if pick_province(g.atlas, v._atlas_polys, p) is None:
+            continue
+        r = v.regions.at(p)
+        if r is None or "select_province" not in r.action:
+            continue
+        pid = _pid
+        point = p
+        break
+    assert point is not None, "no province centre in the left map area resolves to the map"
+    result = v.handle_click(point)
     assert result == {"select_province": pid} and v.selected_pid == pid
 
 
@@ -3466,7 +3480,10 @@ def test_R4_chooser_closes_after_founding(found_state):
 def test_R5_page_level_button_opens_chooser(found_state):
     """R-5: The page-level button opens the chooser."""
     g, v = found_state
-    surf = pygame.Surface((800, 600))
+    # The action area sits below the (capped) table; at 800x600 the table
+    # takes its full max height and pushes the page-level buttons off the
+    # frame, so draw at the standard size where the button is registered.
+    surf = pygame.Surface((1280, 900))
     v.draw(surf)
     found_region = _region_with(v, "found_enterprise")
     assert found_region is not None, "Found Enterprise button should be drawn"
@@ -3776,6 +3793,13 @@ def test_every_tab_draws_its_measured_number_of_regions():
         v.draw(surf)
         actual[tab] = len(v.regions)
     assert actual == EXPECTED_REGIONS, f"region census moved: {actual}"
+    # Three-spine census, measured at the re-homed layout.  Every spine draws
+    # the three spine tabs (x3), end_turn, narrate, quicksave, quickload and a
+    # rule; the remainder is the spine's own interaction.  The House spine now
+    # carries the five edict sliders (set_stance x5) that the dissolved Policies
+    # tab re-homed as House edicts.
+    assert sum(actual.values()) == sum(EXPECTED_REGIONS.values()), (
+        f"total census moved: {sum(actual.values())}")
 
 
 def test_every_tab_has_exactly_one_active_region():
@@ -3882,11 +3906,26 @@ def test_atlas_region_resolves_a_real_province_at_click_time():
         f"the atlas region resolves its pid at click time; its action "
         f"should carry None: {region.action}")
 
-    point = region.rect.center
-    expected = pick_province(g.atlas, v._atlas_polys, point)
-    assert expected is not None, (
-        "premise: the centre of the map panel is inside some province")
+    # The action panel occupies the right 260px, so scan the map area left
+    # of it for a point that both resolves a province AND hits the map
+    # region itself (not an overlay action row).
+    panel_x = region.rect.right - 260
+    point = None
+    for px in range(region.rect.left + 40, panel_x - 20, 4):
+        for py in range(region.rect.top + 40, region.rect.bottom - 20, 4):
+            p = (px, py)
+            hit = v.regions.at(p)
+            if hit is not region:
+                continue
+            if pick_province(g.atlas, v._atlas_polys, p) is not None:
+                point = p
+                break
+        if point is not None:
+            break
+    assert point is not None, (
+        "premise: some map point resolves a province and hits the map region")
 
+    expected = pick_province(g.atlas, v._atlas_polys, point)
     result = v.handle_click(point)
     assert result == {"select_province": expected}, result
     assert v.selected_pid == expected
@@ -3976,16 +4015,18 @@ def test_opening_the_picker_retires_the_venture_regions():
 
 
 def test_enterprises_picker_open_census():
-    """The open picker's exact region count, measured at 20c2720.
+    """The open picker's exact region count in the three-spine world.
 
     EXPECTED_REGIONS covers the closed state only; the picker is a second
-    layout of the same tab and needs its own number."""
+    layout of the same tab and needs its own number. Measured: 8 candidate
+    rows + 1 back button + 11 base controls (end_turn, quickload,
+    quicksave, rule, set_spine_page x3, tab x3, toggle_narrate) = 20."""
     g, v = _drawn("Enterprises")
     appoint = _region_with(v, "appoint_director")
     v.handle_click(appoint.rect.center)
     v.draw(pygame.Surface((1280, 900)))
-    assert len(v.regions) == 25, (
-        f"picker-open census moved: {len(v.regions)} regions, expected 25")
+    assert len(v.regions) == 20, (
+        f"picker-open census moved: {len(v.regions)} regions, expected 20")
 
 
 # ── I3d — a refused control is visible and says why ──────────────────────
@@ -4060,26 +4101,30 @@ def test_a_disabled_region_is_never_actionable():
     # "tab" branch ALSO returns None, having already moved the player. Only
     # a DISABLED region carrying a side-effecting action can tell the two
     # apart, so inject one.
-    v.active_tab = "Briefing"
+    v.active_tab = "House"
     v.draw(surf)
     elsewhere = pygame.Rect(4, 40, 12, 12)
     v.regions.add(Region(rect=elsewhere,
-                         action={"tab": "Ledger"},
+                         action={"tab": "Atlas"},
                          state=RegionState.DISABLED,
                          reason="an injected refusal that would move the player"))
     assert v.handle_click(elsewhere.center) is None, (
         "a DISABLED region carrying a tab switch returned an action")
-    assert v.active_tab == "Briefing", (
+    assert v.active_tab == "House", (
         f"the refusal ran too late: a DISABLED region changed the active tab "
         f"to {v.active_tab!r} and only then refused. The DISABLED check must "
         f"be the FIRST thing handle_click does after resolving the region.")
 
-    # Any real DISABLED regions obey the same rule.
+     # Any real DISABLED region that is TOPMOST at its own centre obeys the
+    # same rule. (A disabled region covered by another region is not
+    # clickable, so its centre resolving to the covering region is correct.)
     for tab in TABS:
         v.active_tab = tab
         v.draw(surf)
         for region in list(v.regions._regions):
             if region.state is RegionState.DISABLED:
+                if v.regions.at(region.rect.center) is not region:
+                    continue
                 assert v.handle_click(region.rect.center) is None, (
                     f"{tab}: DISABLED region carrying {region.action} acted")
 
@@ -4328,7 +4373,7 @@ def test_the_tooltip_follows_a_tab_switch():
 
 
 def test_every_control_on_every_tab_explains_itself():
-    """250 controls, eleven tabs, and each one says something when pointed at,
+    """Every control on every tab says something when pointed at,
     inside a panel that is on the screen and has actually been painted.
 
     The pixel check is what stops a tooltip that is computed and never
@@ -4366,7 +4411,8 @@ def test_every_control_on_every_tab_explains_itself():
                 f"painted -- the pixel inside {v.tooltip_rect} is {fill}, "
                 f"expected the INK fill {INK}")
             checked += 1
-    assert checked == 250, (
-        f"expected to point at 250 controls across the eleven tabs, pointed at "
-        f"{checked}. The census moved; EXPECTED_REGIONS should have caught "
-        f"this first.")
+    assert checked == sum(EXPECTED_REGIONS.values()), (
+        f"expected to point at the census total "
+        f"({sum(EXPECTED_REGIONS.values())}) across the three spines, "
+        f"pointed at {checked}. The census moved; EXPECTED_REGIONS should "
+        f"have caught this first.")

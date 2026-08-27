@@ -225,7 +225,7 @@ def test_every_drawn_key_is_registered():
         "open_director_picker", "open_heir_picker", "open_scheme_picker",
         "place_informant", "propose_marriage", "quicksave", "quickload",
         "rule", "sell_shares", "select_province", "set_spine_page",
-        "tab", "toggle_narrate", "tour_province",
+        "set_stance", "tab", "toggle_narrate", "tour_province",
     }, f"the drawn set moved: {sorted(drawn)}"
 
     unhandled = sorted(drawn - set(act.ACTIONS))

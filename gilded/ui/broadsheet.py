@@ -2758,6 +2758,9 @@ class BroadsheetView:
         # If scheme picker is open, draw it
         if self._scheme_picker is not None:
             self._draw_scheme_picker(surface, content)
+        # spec §2: the dissolved Policies tab survives as the House edicts
+        # block — each dial move is a signed decision.
+        self._draw_policies(surface, content)
 
     def _draw_ambition_controls(self, surface, content: pygame.Rect) -> None:
         """C2: the Set Ambition button under the court section."""
@@ -2892,12 +2895,13 @@ class BroadsheetView:
         surface.blit(head, (PAD, content.y + 6))
         y = content.y + 30
         body = _font(TYPE_TEXT)
+        x = PAD
         for p in pages:
-            x = PAD
             label = body.render(p, True, INK if p == cur else INK2)
             rect = pygame.Rect(x, y, label.get_width() + 16, body.get_height() + 8)
             if p == cur:
                 pygame.draw.rect(surface, palette.rgb(palette.SAGE), rect)
+            surface.blit(label, (rect.x + 8, rect.y + 4))
             self.regions.add(Region(
                 rect=rect,
                 action={"set_spine_page": p},
