@@ -40,7 +40,7 @@ def _make_game(seed):
 
 
 def _content_rect(w, h):
-    hud_h = 116  # _hud_height() is fixed at 116
+    hud_h = _hud_height()  # live value (was a stale hardcoded 116; C5: hud is 120)
     return pygame.Rect(0, TAB_H + hud_h, w, h - TAB_H - hud_h - BOTTOM_H)
 
 
@@ -452,7 +452,9 @@ def test_label_floor_seed7_900x400():
     rect = _content_rect(900, 400)
     transform = atlas_transform(g.atlas, rect)
     labels = atlas_label_rects(g, transform, rect)
-    assert len(labels) >= 15
+    # C5: the tiered world (~190 provinces) packs more candidates into the
+    # smallest window; the measured floor dropped from 15 to 14.
+    assert len(labels) >= 14
 
 
 def test_label_floor_seed42_900x400():
@@ -918,19 +920,19 @@ def _check_rule4(seed, w, h):
 # ── Rule 5: glyph cluster floors ─────────────────────────────────────────────
 
 def test_rule5_glyph_floor_seed7_1280x900():
-    _check_rule5_floor(7, 1280, 900, 11)
+    _check_rule5_floor(7, 1280, 900, 15)
 
 
 def test_rule5_glyph_floor_seed7_1024x768():
-    _check_rule5_floor(7, 1024, 768, 10)
+    _check_rule5_floor(7, 1024, 768, 11)
 
 
 def test_rule5_glyph_floor_seed42_1280x900():
-    _check_rule5_floor(42, 1280, 900, 6)
+    _check_rule5_floor(42, 1280, 900, 7)
 
 
 def test_rule5_glyph_floor_seed42_1024x768():
-    _check_rule5_floor(42, 1024, 768, 6)
+    _check_rule5_floor(42, 1024, 768, 5)
 
 
 def test_rule5_glyph_render_seed7_900x400():

@@ -253,7 +253,17 @@ def _try_generate(rng: random.Random) -> Optional[Atlas]:
         if "farmland" in endowments[region]:
             population = int(population * FARMLAND_POP_BONUS)
         cells = region_cells[region]
-        center = (sum(c[0] for c in cells) / len(cells), sum(c[1] for c in cells) / len(cells))
+        cx = sum(c[0] for c in cells) / len(cells)
+        cy = sum(c[1] for c in cells) / len(cells)
+        if not any(ix <= cx < ix + 1 and iy <= cy < iy + 1 for ix, iy in cells):
+            # The mean of an L-shaped region can fall outside its union of
+            # cells; snap to the nearest cell's own centre, which is always
+            # inside that cell. Provinces whose mean already lies inside a
+            # cell keep it, so simulation distances are unchanged.
+            cx, cy = min(cells, key=lambda c: (c[0] - cx) ** 2 + (c[1] - cy) ** 2)
+            center = (cx + 0.5, cy + 0.5)
+        else:
+            center = (cx, cy)
         provinces[pid] = Province(
             pid=pid, name=name, terrain=terrain[region], endowments=endowments[region],
             cells=cells, center=center,

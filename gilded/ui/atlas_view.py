@@ -211,16 +211,30 @@ def _boundary_loop(cells: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
         start = next(iter(edges))
         loop: List[Tuple[int, int]] = [start]
         cur = start
+        prev = None
         while True:
             outs = edges.get(cur)
             if outs is None or len(outs) == 0:
                 break
-            nxt = outs.pop()
+            if len(outs) == 2:
+                # T-junction: one outgoing edge continues the boundary (its
+                # destination still has outgoing edges), the other is the
+                # dead-end stem of the notch. Take the live one.
+                live = [q for q in outs
+                        if len(edges.get(q, ())) > 0]
+                if len(live) == 1:
+                    nxt = live[0]
+                else:
+                    nxt = outs[0]
+            else:
+                nxt = outs[0]
+            outs.remove(nxt)
             if len(outs) == 0:
                 del edges[cur]
             loop.append(nxt)
             if nxt == start:
                 break
+            prev = cur
             cur = nxt
             # Safety valve
             if len(loop) > 10000:
@@ -233,6 +247,12 @@ def _boundary_loop(cells: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
 def _drop_collinear(pts: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
     if len(pts) < 3:
         return pts
+    # The walk re-appends the start vertex to close the loop.  Drop the
+    # duplicate first: with it present the seam vertex is degenerate at
+    # both ends (a==b at index 0, b==c at the last index) and gets
+    # deleted, taking a corner with it.
+    if pts[0] == pts[-1]:
+        pts = pts[:-1]
     out: List[Tuple[int, int]] = []
     n = len(pts)
     for i in range(n):

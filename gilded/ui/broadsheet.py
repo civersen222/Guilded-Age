@@ -886,6 +886,10 @@ class BroadsheetView:
         self.powers_page = "Overview"
         self.powers_pages = ["Overview", "Dossier"]
         self.atlas_desk = False
+        # C4 residual (C5): the war panel left the map field.  The desk strip
+        # carries a War toggle; when open it draws the war panel as a
+        # right-column drawer that can never shadow a province centroid.
+        self.war_drawer = False
         self.paper_section = None
         self.active_tab = TABS[0]
         self.gazette_page = None
@@ -1003,8 +1007,11 @@ class BroadsheetView:
         elif self.active_tab == "Atlas":
             self._draw_atlas(surface)
             # spec §2: the War tab dies — wars are drawn on the map; the
-            # garrison/raise controls ride over the Atlas.
-            self._draw_war(surface, content)
+            # garrison/raise controls ride in a right-column drawer so the
+            # panel never shadows a province centroid (C4 residual).
+            if self.war_drawer:
+                self._draw_war(surface, self._war_drawer_rect(content))
+            self._draw_war_toggle(surface, content)
 
         # ── Ending overlay when the age closes ──────────────────────────────
         if self.game.game_over is not None:
@@ -2948,6 +2955,12 @@ class BroadsheetView:
             group="war",
         ))
 
+    def _war_drawer_rect(self, content: pygame.Rect) -> pygame.Rect:
+        # Right-column drawer: sits in the actions column (x >= content.right -
+        # 260), clear of every province centroid (all at x < content.right -
+        # 420 at every supported window size).
+        return pygame.Rect(content.right - 260, content.y, 250, content.h)
+
     def _draw_war(self, surface, content: pygame.Rect) -> None:
         from gilded.ui.war_tab import draw_war_tab
         draw_war_tab(surface, self.game, self.house,
@@ -2956,6 +2969,25 @@ class BroadsheetView:
                      font_text=None)
         if self._garrison_picker is not None:
             self._draw_garrison_picker(surface, content)
+
+    def _draw_war_toggle(self, surface, content: pygame.Rect) -> None:
+        # Desk-strip toggle: top-right when closed (the atlas's centroid-free
+        # zone, measured C4 diagnosis: all centroids at x < right - 164);
+        # just left of the drawer when open so it stays reachable.
+        from gilded.ui.house_tab import _draw_button
+        label = "Close war" if self.war_drawer else "War"
+        if self.war_drawer:
+            btn_x = content.right - 260 - 160
+        else:
+            btn_x = content.right - 150
+        btn = _draw_button(surface, label, btn_x,
+                           content.y + 8, 150, 30, True)
+        self.regions.add(Region(
+            rect=btn,
+            action={"toggle_war_drawer": True},
+            hint="Toggle the War drawer (right column).",
+            group="war",
+        ))
 
     def _draw_court_picker(self, surface, content, report):
         """Draw the appointment picker for a vacant court seat using Regions."""
@@ -3147,6 +3179,9 @@ class BroadsheetView:
             if region.state is RegionState.DISABLED:
                 return None
             action = region.action
+            if "toggle_war_drawer" in action:
+                self.war_drawer = not self.war_drawer
+                return None
             if "tab" in action:
                 self.active_tab = action["tab"]
             if "set_spine_page" in action:
