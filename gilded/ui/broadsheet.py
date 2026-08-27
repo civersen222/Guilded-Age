@@ -73,7 +73,7 @@ from gilded.ui.widgets import (
     GUIDE_BG, GUIDE_EDGE,
 )
 
-TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House", "War")
+TABS = ("House", "Powers", "Atlas")
 
 TAB_H = 40
 BOTTOM_H = 56
@@ -526,6 +526,20 @@ def _intel_tone(tier: int) -> str:
         return "good"
 
 
+# The four Orders. A Powers row whose name is an Order is titled by its own
+# name (no "House" prefix) so Order rows never read "House Combine".
+ORDER_NAMES = frozenset({"Combine", "Bank", "Church", "Gazette"})
+
+
+def power_row_title(line) -> str:
+    """The rendered title cell for a Powers row: rival houses keep a
+    "House " prefix; Orders are named as themselves (never "House Combine")."""
+    name = line.house
+    if name in ORDER_NAMES:
+        return name
+    return f"House {name}"
+
+
 def powers_model(lines, selected=None) -> PowersModel:
     """Build a pure PowersModel from a tuple of PowerLine objects."""
     rows: List[List[str]] = []
@@ -552,7 +566,7 @@ def powers_model(lines, selected=None) -> PowersModel:
             return s.replace("|", "")
 
         rows.append([
-            _clean(f"House {ln.house}"),
+            power_row_title(ln),
             threat_str,
             intel_str,
             _clean(ties_str),
@@ -821,8 +835,22 @@ class BroadsheetView:
         self.narrator = narrator if narrator is not None else NarratorTemplated()
         self.narrate_on = True
         self.active_tab = TABS[0]
+        # Inner pages of the three spines (spec §2 fate table): the dissolved
+        # tabs' content re-homed as pages.  The Atlas desk strip (Letters)
+        # and the End Turn gazette are drawn on the Atlas itself.
+        self.house_page = "Overview"
+        self.house_pages = ["Overview", "Ledger", "Governance"]
+        self.powers_page = "Overview"
+        self.powers_pages = ["Overview", "Dossier"]
+        self.atlas_desk = False
+        self.gazette_page = None
+        # Accent ledger (registry.ACCENTS): entries ("vermillion", is_player)
+        # or ("gold", is_player) that THIS draw pass actually made.  Cleared
+        # at the start of every draw(); registry/probe count what is drawn.
+        self._accent_log: List[tuple] = []
         self._ladder_rows = None
         self.selected_pid: Optional[int] = None
+        self._powers_selected: Optional[str] = None
         # the previous turn's board, retained by app.py across end_turn so the
         # briefing can show "since last session"; None means first session.
         self.prev_board = None
@@ -911,28 +939,23 @@ class BroadsheetView:
         content = pygame.Rect(0, TAB_H + hud_h, self._w,
                               self._h - TAB_H - hud_h - BOTTOM_H)
 
-        if self.active_tab == "Briefing":
-            self._draw_briefing(surface, content)
+        if self.active_tab == "House":
+            if self.house_page == "Ledger":
+                self._draw_house_page_header(surface, content, "Ledger")
+                self._draw_ledger(surface, content)
+            elif self.house_page == "Governance":
+                self._draw_house_page_header(surface, content, "Governance")
+                self._draw_enterprises(surface, content)
+            else:
+                self._draw_house(surface, content)
+        elif self.active_tab == "Powers":
+            if self.powers_page == "Dossier":
+                self._draw_house_page_header(surface, content, "Dossier")
+                self._draw_powers_dossier(surface, content)
+            else:
+                self._draw_powers(surface, content)
         elif self.active_tab == "Atlas":
             self._draw_atlas(surface)
-        elif self.active_tab == "Gazette":
-            self._draw_paper(surface, content)
-        elif self.active_tab == "Ledger":
-            self._draw_ledger(surface, content)
-        elif self.active_tab == "Letters":
-            self._draw_paper(surface, content)
-        elif self.active_tab == "Docket":
-            self._draw_docket(surface, content)
-        elif self.active_tab == "Policies":
-            self._draw_policies(surface, content)
-        elif self.active_tab == "Powers":
-            self._draw_powers(surface, content)
-        elif self.active_tab == "Enterprises":
-            self._draw_enterprises(surface, content)
-        elif self.active_tab == "House":
-            self._draw_house(surface, content)
-        elif self.active_tab == "War":
-            self._draw_war(surface, content)
 
         # ── Ending overlay when the age closes ──────────────────────────────
         if self.game.game_over is not None:
@@ -1405,15 +1428,17 @@ class BroadsheetView:
                                     group=f"petition:{p.pid}"))
             y += card_h + 10
 
-    def _draw_paper(self, surface, content: pygame.Rect) -> None:
+    def _draw_paper(self, surface, content: pygame.Rect,
+                    section: str = None) -> None:
+        section = section or self.active_tab
         report = compose(self.game, self.house)
-        if self.narrate_on and self.active_tab == "Gazette":
+        if self.narrate_on and section == "Gazette":
             report = self.narrator.render(report, self.game.director, self.game)
         items = {"Gazette": report.gazette, "Ledger": report.ledger,
-                 "Letters": report.letters}[self.active_tab]
+                 "Letters": report.letters}[section]
         head_font = _font(TYPE_TITLE, bold=True)
         head = head_font.render(
-            f"THE {self.active_tab.upper()} - {report.year}", True, INK)
+            f"THE {section.upper()} - {report.year}", True, INK)
         surface.blit(head, (PAD, content.y + 6))
         # Horizontal rule under the head, in the gap before body text
         rule_y = content.y + 6 + head.get_height() + 4
@@ -1754,7 +1779,8 @@ class BroadsheetView:
             hud_h = _hud_height()
             rect = pygame.Rect(0, TAB_H + hud_h, self._w,
                                self._h - TAB_H - hud_h - BOTTOM_H)
-        self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid)
+        self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid,
+                                       accent_log=self._accent_log)
         self.regions.add(Region(rect=rect,
                                 action={"select_province": None},
                                 hint="Click a province to inspect it.",
@@ -1942,10 +1968,12 @@ class BroadsheetView:
         return lines
 
     def _draw_powers(self, surface, content) -> None:
-        """Draw the Powers tab: model -> layout -> draw."""
+        """Draw the Powers spine: model -> layout -> draw.  The selected
+        rival/Order (self._powers_selected) is highlighted and its dossier
+        opens on the inner page."""
         g, name = self.game, self.house
         lines = powers_report(g, name)
-        model = powers_model(lines, selected=None)
+        model = powers_model(lines, selected=self._powers_selected)
         layout = powers_layout(model, content)
 
         title_rect = layout["title"]
@@ -2788,6 +2816,75 @@ class BroadsheetView:
                     group="intrigue",
                 ))
 
+    def _draw_house_page_header(self, surface, content: pygame.Rect,
+                                title: str) -> None:
+        """Header strip for a House/Powers inner page (the dissolved tab's
+        content re-homed).  Page-switch buttons let the player move between
+        the spine's inner pages."""
+        from gilded.ui.widgets import font as _font, TYPE_TITLE, TYPE_TEXT, INK
+        from gilded.ui import palette
+        INK2 = palette.rgb(palette.INK2)
+        pages = (self.powers_pages if self.active_tab == "Powers"
+                 else self.house_pages)
+        cur = (self.powers_page if self.active_tab == "Powers"
+               else self.house_page)
+        head_font = _font(TYPE_TITLE, bold=True)
+        head = head_font.render(title, True, INK)
+        surface.blit(head, (PAD, content.y + 6))
+        y = content.y + 30
+        body = _font(TYPE_TEXT)
+        for p in pages:
+            x = PAD
+            label = body.render(p, True, INK if p == cur else INK2)
+            rect = pygame.Rect(x, y, label.get_width() + 16, body.get_height() + 8)
+            if p == cur:
+                pygame.draw.rect(surface, palette.rgb(palette.SAGE), rect)
+            self.regions.add(Region(
+                rect=rect,
+                action={"set_spine_page": p},
+                hint=f"Open the {p} page.",
+                group=f"page:{self.active_tab}",
+            ))
+            x += rect.w + 10
+        content.y += 44
+
+    def _draw_powers_dossier(self, surface, content: pygame.Rect) -> None:
+        """Powers inner page: the dossier for the selected rival/Order.
+        Declaring war is a verb inside the dossier (the War tab dissolved)."""
+        from gilded.ui.house_tab import _draw_button
+        from gilded.ui.widgets import font as _font, TYPE_TEXT, INK
+        if self._powers_selected is None:
+            # No selection yet — show the roster so a row can be picked.
+            self._draw_powers(surface, content)
+            return
+        # Draw the full Powers table (with the selected row highlighted),
+        # then the dossier body for the selected power below it.
+        self._draw_powers(surface, content)
+        lines = self.powers_lines()
+        font = _font(TYPE_TEXT)
+        head = _font(TYPE_HEADING, bold=True).render(
+            f"DOSSIER - {self._powers_selected}", True, INK)
+        y = content.y + 4
+        surface.blit(head, (PAD, y))
+        y += head.get_height() + 8
+        for line in lines:
+            if line.startswith(self._powers_selected) or line.startswith(f"House {self._powers_selected}"):
+                txt = font.render(line, True, INK)
+            else:
+                continue
+            surface.blit(txt, (PAD, y))
+            y += font.get_height() + 4
+            break
+        war = _draw_button(
+            surface, "Declare War", PAD, y, 140,
+            font.get_height() + 8, True)
+        self.regions.add(Region(
+            rect=war,
+            action={"declare_war": self._powers_selected},
+            hint=f"Declare war on {self._powers_selected}.",
+            group="war",
+        ))
+
     def _draw_war(self, surface, content: pygame.Rect) -> None:
         from gilded.ui.war_tab import draw_war_tab
         draw_war_tab(surface, self.game, self.house,
@@ -2989,6 +3086,13 @@ class BroadsheetView:
             action = region.action
             if "tab" in action:
                 self.active_tab = action["tab"]
+            if "set_spine_page" in action:
+                page = action["set_spine_page"]
+                if self.active_tab == "Powers":
+                    self.powers_page = page
+                else:
+                    self.house_page = page
+                return {"set_spine_page": page}
             if "cycle_exec" in action:
                 pid = action["cycle_exec"]
                 cands = self._candidates(pid)

@@ -368,8 +368,14 @@ def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
     return legend_rect
 
 
-def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = None) -> Dict[int, List[Tuple[int, int]]]:
-    """Paint the whole map onto surface within rect; returns the polygons it used."""
+def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = None,
+                accent_log=None) -> Dict[int, List[Tuple[int, int]]]:
+    """Paint the whole map onto surface within rect; returns the polygons it used.
+
+    accent_log, when given, is appended with the accent marks the pass
+    actually draws: ("vermillion", is_player) for live war fronts and
+    ("gold", is_player) for the player's own railway lines.  registry.ACCENTS
+    counts what is drawn here — it never guesses."""
     transform = atlas_transform(game.atlas, rect)
     polys = province_polygons(game.atlas, transform)
 
@@ -389,6 +395,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                                     3 if pid == selected_pid else 1)
 
         # rail links as gold dashes between province centres
+        player = getattr(game, "player", None)
         for (a, b), link in game.atlas.links.items():
             if getattr(link, "rail", False):
                 ca = game.atlas.provinces[a].center
@@ -396,6 +403,10 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                 _dashed_line(surface, RAIL_COLOR,
                              transform.apply(ca),
                              transform.apply(cb))
+                if accent_log is not None:
+                    is_player = (game.atlas.provinces[a].owner == player
+                                 or game.atlas.provinces[b].owner == player)
+                    accent_log.append(("gold", is_player))
 
         # live war fronts as red lines along contested borders
         for war in game.wars:
@@ -407,6 +418,10 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                         pygame.draw.line(surface, FRONT_COLOR,
                                          transform.apply(ca),
                                          transform.apply(cd), 3)
+                        if accent_log is not None:
+                            # consequence mark: a live front is never the player's
+                            # own rail — gold belongs to the player only
+                            accent_log.append(("vermillion", False))
 
         # province labels
         labels = atlas_label_rects(game, transform, rect, selected_pid)
