@@ -1059,51 +1059,52 @@ def _check_glyph_selection_first(seed, w, h, pid, prov_name):
     )
 
 
-# Seed 7: pids 23 Brenvess, 24 Ostenstad, 21 Galvess (discriminating at both 1280x900 and 1024x768)
-def test_rule4_glyph_first_seed7_23_1280x900():
-    _check_glyph_selection_first(7, 1280, 900, 23, "Brenvess")
+# C5: re-pinned to the tiered world (150-250 provinces). Each pid is a real
+# glyph at BOTH 1280x900 and 1024x768 for its seed, so the rule-4 assertion
+# (selected province leads the glyph list) is unchanged.
+def test_rule4_glyph_first_seed7_35_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 35, "Ulmstad Marches")
 
 
-def test_rule4_glyph_first_seed7_23_1024x768():
-    _check_glyph_selection_first(7, 1024, 768, 23, "Brenvess")
+def test_rule4_glyph_first_seed7_35_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 35, "Ulmstad Marches")
 
 
-def test_rule4_glyph_first_seed7_24_1280x900():
-    _check_glyph_selection_first(7, 1280, 900, 24, "Ostenstad")
+def test_rule4_glyph_first_seed7_179_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 179, "Quillfen Vale")
 
 
-def test_rule4_glyph_first_seed7_24_1024x768():
-    _check_glyph_selection_first(7, 1024, 768, 24, "Ostenstad")
+def test_rule4_glyph_first_seed7_179_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 179, "Quillfen Vale")
 
 
-def test_rule4_glyph_first_seed7_21_1280x900():
-    _check_glyph_selection_first(7, 1280, 900, 21, "Galvess")
+def test_rule4_glyph_first_seed7_61_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 61, "Yarecliff")
 
 
-def test_rule4_glyph_first_seed7_21_1024x768():
-    _check_glyph_selection_first(7, 1024, 768, 21, "Galvess")
+def test_rule4_glyph_first_seed7_61_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 61, "Yarecliff")
 
 
-# Seed 42: pids 44 Ulmmore, 25 Wickfield Cross, 48 Yareshore (discriminating at both 1280x900 and 1024x768)
-def test_rule4_glyph_first_seed42_44_1280x900():
-    _check_glyph_selection_first(42, 1280, 900, 44, "Ulmmore")
+def test_rule4_glyph_first_seed42_128_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 128, "Brenburg Head")
 
 
-def test_rule4_glyph_first_seed42_44_1024x768():
-    _check_glyph_selection_first(42, 1024, 768, 44, "Ulmmore")
+def test_rule4_glyph_first_seed42_128_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 128, "Brenburg Head")
 
 
-def test_rule4_glyph_first_seed42_25_1280x900():
-    _check_glyph_selection_first(42, 1280, 900, 25, "Wickfield Cross")
+def test_rule4_glyph_first_seed42_174_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 174, "Fershore")
 
 
-def test_rule4_glyph_first_seed42_25_1024x768():
-    _check_glyph_selection_first(42, 1024, 768, 25, "Wickfield Cross")
+def test_rule4_glyph_first_seed42_174_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 174, "Fershore")
 
 
-def test_rule4_glyph_first_seed42_48_1280x900():
-    _check_glyph_selection_first(42, 1280, 900, 48, "Yareshore")
+def test_rule4_glyph_first_seed42_61_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 61, "Velbourne")
 
 
-def test_rule4_glyph_first_seed42_48_1024x768():
-    _check_glyph_selection_first(42, 1024, 768, 48, "Yareshore")
+def test_rule4_glyph_first_seed42_61_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 61, "Velbourne")
