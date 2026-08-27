@@ -934,6 +934,7 @@ class BroadsheetView:
 
         self._director_picker_hits = []
         self._found_picker_hits = []
+        self._accent_log = []
         surface.fill(PAPER_BG)
         hud_h = _hud_height()
         content = pygame.Rect(0, TAB_H + hud_h, self._w,
@@ -3226,7 +3227,7 @@ class BroadsheetView:
                         self._scheme_picker = None
                         self._scheme_picker_hits.clear()
                     return action
-        if self.active_tab == "Enterprises":
+        if self.active_tab == "House" and self.house_page == "Governance":
             for rect, act in self._enterprise_hits:
                 if rect.collidepoint(pos):
                     return act.get("action", act)
