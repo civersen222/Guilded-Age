@@ -17,9 +17,9 @@ TERRAINS = ("coast", "plains", "highlands", "marsh")
 ENDOWMENT_KINDS = ("coalfield", "iron", "timber", "farmland", "harbor")
 
 # --- generation tunables ---
-GRID_W, GRID_H = 96, 96
-SEED_POINTS = 100
-PROVINCE_MIN, PROVINCE_MAX = 50, 70
+GRID_W, GRID_H = 144, 144
+SEED_POINTS = 360
+PROVINCE_MIN, PROVINCE_MAX = 150, 250
 OCEAN_THRESHOLD = 0.92        # radial falloff + noise beyond this sinks a cell
 OCEAN_NOISE = 0.18            # per-region noise weight in the ocean formula
 REGION_SINK_FRACTION = 0.50   # regions with less land than this sink entirely
@@ -130,17 +130,35 @@ def _try_generate(rng: random.Random) -> Optional[Atlas]:
     noise = [rng.random() for _ in range(SEED_POINTS)]
 
     # Discrete Voronoi with a coastline carve: fringe regions sink coherently.
+    # Cell ownership via bounded rings (R >= grid max makes each cell's full
+    # point set fall inside its ring, so results are identical to the naive
+    # scan but O(cells * SEED_POINTS) becomes O(SEED_POINTS * ring_area)).
     cx, cy = GRID_W / 2.0, GRID_H / 2.0
     max_radius = min(GRID_W, GRID_H) / 2.0
     region_cells: List[List[Tuple[int, int]]] = [[] for _ in range(SEED_POINTS)]
     region_total = [0] * SEED_POINTS
-    for x, y in cells_all:
-        best, best_d = 0, math.inf
-        for i, (px, py) in enumerate(points):
-            d = (px - x) * (px - x) + (py - y) * (py - y)
-            if d < best_d:
-                best, best_d = i, d
+    ring = max(GRID_W, GRID_H)
+    owner = [-1] * (GRID_W * GRID_H)
+    dist = [math.inf] * (GRID_W * GRID_H)
+    for i, (px, py) in enumerate(points):
+        for dy in range(-ring, ring + 1):
+            y = py + dy
+            if y < 0 or y >= GRID_H:
+                continue
+            for dx in range(-ring, ring + 1):
+                x = px + dx
+                if x < 0 or x >= GRID_W:
+                    continue
+                d = (px - x) * (px - x) + (py - y) * (py - y)
+                idx = y * GRID_W + x
+                if d < dist[idx]:
+                    dist[idx] = d
+                    owner[idx] = i
+    for idx, best in enumerate(owner):
+        if best < 0:
+            continue
         region_total[best] += 1
+        x, y = idx % GRID_W, idx // GRID_W
         r = math.hypot(x - cx, y - cy) / max_radius
         if r + OCEAN_NOISE * noise[best] > OCEAN_THRESHOLD:
             continue                                  # ocean cell
