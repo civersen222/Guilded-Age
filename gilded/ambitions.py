@@ -296,11 +296,23 @@ class AmbitionsFacade:
         orders = getattr(self.game, "orders", None)
         if not orders or target is None:
             return None
+        # a stake crosses an Order whose goal presses the same target.
+        # FRESH goals (committed this turn) stand in the way first - the
+        # Order that just committed its aim is the one that deflects; a
+        # fresh clash is never shadowed by an older one. Ties break by
+        # order name, so the choice is deterministic per seed.
+        fresh = []
+        older = []
         for name, order in orders.items():
             goal = order.goal
             if goal is None or goal.target is None:
                 continue
             if goal.target == target:
+                (fresh if goal.opened_turn == self.game.turn else older).append(
+                    (name, order, goal))
+        for bucket in (fresh, older):
+            if bucket:
+                name, order, goal = min(bucket, key=lambda t: t[0])
                 return (name, order, goal)
         return None
 
