@@ -79,6 +79,19 @@ class Link:
     rail: bool = False
 
 
+# Mission C5 wave 1: the minor gentry. 40 surnames - 24 are seated at boot
+# (in the 20-30 band); the rest are a pool for births as the ranks turn over.
+GENTRY_SURNAMES = [
+    "Aldermoor", "Barrow", "Caldwell", "Dunmore", "Ellery", "Fenwick",
+    "Grantham", "Hartley", "Iveson", "Kilburn", "Loxley", "Merriweather",
+    "Northcote", "Oswald", "Pemberton", "Quincey", "Ravenshaw", "Slocombe",
+    "Thornbury", "Underwood", "Vane", "Wexford", "Yardley", "Zander",
+    "Ashcombe", "Bletchley", "Cromwell", "Dacre", "Edgeworth", "Farrow",
+    "Goring", "Hollis", "Ingram", "Jessel", "Kirkham", "Lamplight",
+    "Merrivale", "Nightingale", "Oswestry", "Pembroke",
+]
+
+
 class Atlas:
     """Provinces plus the road/rail graph between them."""
 
