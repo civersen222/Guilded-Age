@@ -15,6 +15,11 @@ from collections import namedtuple
 import pygame
 
 from gilded.world import MINOR_OWNER
+from gilded.ui import palette
+
+# Neutral slate for railway lines that are not the player's own — gold is
+# reserved for the player's own lines (accent law: gold = the player only).
+NEUTRAL_RAIL = palette.SLATE
 
 # Re-export palette names from widgets.py so existing imports continue to work.
 from gilded.ui.widgets import (
@@ -395,33 +400,44 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                                     3 if pid == selected_pid else 1)
 
         # rail links as gold dashes between province centres
-        player = getattr(game, "player", None)
+        # Accent law: gold marks are the player's only. A railway is a
+        # gold mark only when BOTH ends are the player's own provinces;
+        # every other line is drawn in a neutral slate.
+        player_house = next((h for h in game.houses
+                             if game.houses[h].is_player), None)
         for (a, b), link in game.atlas.links.items():
             if getattr(link, "rail", False):
                 ca = game.atlas.provinces[a].center
                 cb = game.atlas.provinces[b].center
-                _dashed_line(surface, RAIL_COLOR,
+                pa = game.atlas.provinces[a].owner
+                pb = game.atlas.provinces[b].owner
+                is_player = (player_house is not None
+                             and pa == player_house and pb == player_house)
+                if is_player:
+                    accent_log.append(("gold", True))
+                _dashed_line(surface, RAIL_COLOR if is_player else NEUTRAL_RAIL,
                              transform.apply(ca),
                              transform.apply(cb))
-                if accent_log is not None:
-                    is_player = (game.atlas.provinces[a].owner == player
-                                 or game.atlas.provinces[b].owner == player)
-                    accent_log.append(("gold", is_player))
 
-        # live war fronts as red lines along contested borders
+        # live war fronts as vermillion lines along contested borders.
+        # Accent law: a FRONT is one consequence mark (<= 5), not one per
+        # border segment — so the mark is logged once per front and the
+        # lines themselves are drawn in the palette's vermillion.
         for war in game.wars:
             for front in getattr(war, "fronts", []):
-                for (ap, dp) in getattr(front, "border", []):
-                    if ap in game.atlas.provinces and dp in game.atlas.provinces:
-                        ca = game.atlas.provinces[ap].center
-                        cd = game.atlas.provinces[dp].center
-                        pygame.draw.line(surface, FRONT_COLOR,
-                                         transform.apply(ca),
-                                         transform.apply(cd), 3)
-                        if accent_log is not None:
-                            # consequence mark: a live front is never the player's
-                            # own rail — gold belongs to the player only
-                            accent_log.append(("vermillion", False))
+                segments = [(ap, dp) for (ap, dp) in getattr(front, "border", [])
+                            if ap in game.atlas.provinces
+                            and dp in game.atlas.provinces]
+                if not segments:
+                    continue
+                if accent_log is not None:
+                    accent_log.append(("vermillion", False))
+                for (ap, dp) in segments:
+                    ca = game.atlas.provinces[ap].center
+                    cd = game.atlas.provinces[dp].center
+                    pygame.draw.line(surface, palette.VERMILLION,
+                                     transform.apply(ca),
+                                     transform.apply(cd), 3)
 
         # province labels
         labels = atlas_label_rects(game, transform, rect, selected_pid)
