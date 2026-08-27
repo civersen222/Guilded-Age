@@ -89,6 +89,11 @@ LEGACY_TABS = {
     "War": ("Atlas", None),                # wars are drawn on the map
 }
 
+# The paper sections of the Atlas desk/archive: the dissolved Gazette and
+# Letters tabs and the House Ledger page all render through _draw_paper, which
+# is addressed by these section keys — a separate axis from the spine.
+PAPER_SECTIONS = {"Gazette", "Ledger", "Letters"}
+
 TAB_H = 40
 BOTTOM_H = 56
 
@@ -862,8 +867,10 @@ class BroadsheetView:
                 self.house_page = "Overview"
             if spine == "Atlas":
                 self.atlas_desk = True
+            self.paper_section = name if name in PAPER_SECTIONS else None
         else:
             self._active_tab = name
+            self.paper_section = None
 
     def __init__(self, game, house_name: str, narrator=None):
         self.game = game
@@ -879,6 +886,7 @@ class BroadsheetView:
         self.powers_page = "Overview"
         self.powers_pages = ["Overview", "Dossier"]
         self.atlas_desk = False
+        self.paper_section = None
         self.active_tab = TABS[0]
         self.gazette_page = None
         # Accent ledger (registry.ACCENTS): entries ("vermillion", is_player)
@@ -1476,7 +1484,9 @@ class BroadsheetView:
 
     def _draw_paper(self, surface, content: pygame.Rect,
                     section: str = None) -> None:
-        section = section or self.active_tab
+        # Paper sections are the desk/archive axis, not the spine: the spine
+        # alone has no paper section, so fall back to the desk default.
+        section = section or self.paper_section or "Gazette"
         report = compose(self.game, self.house)
         if self.narrate_on and section == "Gazette":
             report = self.narrator.render(report, self.game.director, self.game)
