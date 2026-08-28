@@ -170,6 +170,10 @@ def _collect_standard(view, collected):
             for k in region.action:
                 if k == "char_id":
                     continue
+                if k == "toggle_war_drawer":
+                    # view-internal control (toggles the war drawer rect),
+                    # not a registered PlayerAction — handled directly in the view.
+                    continue
                 if k in ("build_rail_a", "build_rail_b"):
                     collected.add("build_rail")
                 else:
@@ -216,14 +220,17 @@ def test_every_drawn_key_is_registered():
     state = _rich_state()
     drawn = _collect_emitted_keys(state.view)
 
+    # C5 wave 2 moved the war verbs (declare_war, propose_marriage) behind the
+    # collapsed war drawer, so they are no longer drawn by default; the drawer
+    # toggle itself is a view-internal control, not a registered action.
     assert drawn == {
         "acquire_minor", "appoint_director", "appoint_to_seat", "attack_takeover",
         "build_rail", "buy_shares", "clear_heir", "close_appointment_picker",
-        "cycle_exec", "declare_war", "defend_buyout",
+        "cycle_exec", "defend_buyout",
         "dismiss_seat", "end_turn", "expand_enterprise", "found_enterprise",
         "open_ambition_picker", "open_appointment_picker",
         "open_director_picker", "open_heir_picker", "open_scheme_picker",
-        "place_informant", "propose_marriage", "quicksave", "quickload",
+        "place_informant", "quicksave", "quickload",
         "rule", "sell_shares", "select_province", "set_spine_page",
         "set_stance", "tab", "toggle_narrate", "tour_province",
     }, f"the drawn set moved: {sorted(drawn)}"
@@ -676,14 +683,17 @@ def test_dispatchability(key):
     g, h = state.game, state.house
     view = state.view
 
+    # The C5 wave-1 atlas left seed 42 with no house border for the player, so
+    # war verbs (commit / negotiate_peace / appoint_commander) cannot be
+    # constructed there. When the primary seed yields nothing constructible —
+    # or a constructible-but-ineligible action — sweep the seed range for one
+    # where the action builds AND is eligible (war verbs find seed 47).
     action = _build_action_for_key(key, g, h, view)
     if action is None:
-        pytest.fail(f"No fixture builder for key '{key}'. Every key in "
-                    f"ACTIONS must be constructible here — add a branch to "
-                    f"_build_action_for_key.")
+        ok, reason = False, "not constructible at primary seed"
+    else:
+        ok, reason = entry.eligible(g, h, action)
 
-    # Assert eligible premise
-    ok, reason = entry.eligible(g, h, action)
     if not ok:
         # Try alternative seeds to find a state where eligible is True
         found = False
@@ -733,6 +743,17 @@ def test_eligible_contract(key):
     state = app.new_app_state(seed=42)
     g, h = state.game, state.house
     action = _build_action_for_key(key, g, h, state.view)
+    # The C5 wave-1 atlas left seed 42 with no house border for the player, so
+    # war verbs cannot be constructed there; sweep the seed range for one that
+    # can (war verbs find seed 47).
+    if action is None:
+        for seed in range(42, 62):
+            state2 = app.new_app_state(seed=seed)
+            g2, h2 = state2.game, state2.house
+            action2 = _build_action_for_key(key, g2, h2, state2.view)
+            if action2 is not None:
+                state, g, h, action = state2, g2, h2, action2
+                break
     if action is None:
         pytest.fail(f"No fixture builder for key '{key}'. Every key in "
                     f"ACTIONS must be constructible here — add a branch to "
@@ -1402,8 +1423,8 @@ def test_D4_row_label_names_province_title_price():
 def test_D7_no_charters_refuses_button():
     """D-7: A house with no charters left is still offered the button — and the state IS reachable.
     
-    Seed 42 turn 0, house Vantrell: 9 charters available.
-    Appending 9 Enterprise objects empties the list, then the button refuses."""
+    Seed 42 turn 0: 10 charters available at the C5 wave-1 scale.
+    Appending 10 Enterprise objects empties the list, then the button refuses."""
     from gilded.tests._fixtures import _enterprises_view
     from gilded.ui.actions import _get_available_charters
     from gilded.enterprises import Enterprise, KIND_TITLES
@@ -1411,7 +1432,7 @@ def test_D7_no_charters_refuses_button():
     g, v = _enterprises_view(seed=42, turns=0)
     charters = _get_available_charters(g, v.house)
     n = len(charters)
-    assert n == 9, f"premise: expected 9 charters, got {n}"
+    assert n == 10, f"premise: expected 10 charters, got {n}"
     
     # Fill every available charter with a dummy enterprise
     for kind, pid, pname, cost in charters:
@@ -1515,8 +1536,12 @@ def test_decided_sell_moves_stock_and_gold():
         f"ruler had {before_ruler:.2f}, now {after_ruler:.2f} — expected -10.00")
     assert after_buyer_stock == pytest.approx(before_buyer_stock + 10.00, rel=1e-9), (
         f"buyer had {before_buyer_stock:.2f}, now {after_buyer_stock:.2f} — expected +10.00")
-    assert after_buyer_gold == pytest.approx(before_buyer_gold - 14.76, rel=1e-2), (
-        f"buyer gold had {before_buyer_gold:.2f}, now {after_buyer_gold:.2f} — expected -14.76")
+    # the buy verb debits the buyer's gold by share_price(ent) * moved pct,
+    # measured on the pre-trade market — compute the same price here.
+    from gilded.society.schemes import share_price
+    expected_cost = share_price(ent, game) * 10.0
+    assert after_buyer_gold == pytest.approx(before_buyer_gold - expected_cost, abs=0.01), (
+        f"buyer gold had {before_buyer_gold:.2f}, now {after_buyer_gold:.2f} — expected -{expected_cost:.2f}")
 
 
 def test_oversized_buy_is_refused_with_the_ladders_own_reason():
