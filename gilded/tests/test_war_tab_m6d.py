@@ -6,7 +6,7 @@ New test file for Stage 6D. Existing test files are frozen per T2/T4.
 from gilded.chassis import GildedGame
 from gilded.fronts import WarGoal, declare_war
 
-SEED = 42
+SEED = 26  # C5 wave-1 atlas: seed 42 has no house border; 26 keeps one
 
 
 def _game():
@@ -83,7 +83,7 @@ def test_muster_press_without_ironworks_raises_regiment_and_drains_population():
     from gilded.ui.actions import ACTIONS
     from gilded.fronts import REGIMENT_POP_COST
 
-    state = new_app_state(seed=42)
+    state = new_app_state(seed=26)  # C5 wave-1: seed 42 has no house border for the player
     g, h = state.game, state.house
 
     # Ensure the house is at war
@@ -143,7 +143,7 @@ def test_muster_press_with_ironworks_still_steel_gated():
     from gilded.enterprises import Enterprise
     from gilded.fronts import REGIMENT_STEEL_COST
 
-    state = new_app_state(seed=42)
+    state = new_app_state(seed=26)  # C5 wave-1: seed 42 has no house border for the player
     g, h = state.game, state.house
 
     # Ensure the house is at war
