@@ -9,7 +9,7 @@ from gilded.docket import DOMAIN_SEAT, Petition, PetitionOption
 from gilded.fronts import WarGoal, declare_war
 from gilded.society.characters import modify_opinion
 
-SEED = 42
+SEED = 26  # C5 wave-1 atlas: seed 42 has no house border; 26 keeps one
 
 
 def _game() -> GildedGame:
@@ -728,36 +728,37 @@ def _works(g):
 
 def test_s17_a_province_is_not_offered_a_works_it_already_carries():
     """B6-taken: a province already carrying a works is not offered another of the same kind.
-    Province 45 has Brandtner's mill (taken). 45 is also the richer spot (timber:3 vs farmland:1),
-    so the mutant that empties `taken` picks ('mill', 45) instead of ('estate', 22)."""
+    Province 130 has Brandtner's mill (taken). 130 is also the richer spot (timber:3 vs farmland:1),
+    so the mutant that empties `taken` picks ('mill', 130) instead of ('estate', 73).
+    (C5 wave-1 atlas: Brandtner's provinces are 73/75/91/130/164 at seed 26.)"""
     g = _game()
     realm = g.realms[HOUSE]
-    _only_endowments(g, {45: {"timber": 3}, 22: {"farmland": 1}})
+    _only_endowments(g, {130: {"timber": 3}, 73: {"farmland": 1}})
     mill = [e for e in g.enterprises if e.house == HOUSE and e.kind == "mill"][0]
-    assert mill.province == 45
+    assert mill.province == 130
     assert mill.kind == "mill"
     result = _found_spot(g, HOUSE)
-    assert result == ("estate", 22)
+    assert result == ("estate", 73)
 
 
 def test_s17_the_richest_endowment_is_developed_first():
     """B6-rich: the richest endowment is developed first (sort by -richness).
-    Iron:3 (richness 3) at pid 24 vs farmland:1 (richness 1) at pid 22.
+    Iron:3 (richness 3) at pid 75 vs farmland:1 (richness 1) at pid 73.
     The mutant that flips -rich to rich picks the poorer spot."""
     g = _game()
-    _only_endowments(g, {22: {"farmland": 1}, 24: {"iron": 3}})
+    _only_endowments(g, {73: {"farmland": 1}, 75: {"iron": 3}})
     result = _found_spot(g, HOUSE)
-    assert result == ("ironworks", 24)
+    assert result == ("ironworks", 75)
 
 
 def test_s17_a_richness_tie_goes_to_the_lower_province_id():
     """B6-first: with equal richness the lower pid wins (options[0] after sort).
-    farmland:2 at pid 22, iron:2 at pid 46 — same richness, pid 22 < 46.
+    farmland:2 at pid 73, iron:2 at pid 75 — same richness, pid 73 < 75.
     The mutant that reads options[-1] picks the higher pid."""
     g = _game()
-    _only_endowments(g, {22: {"farmland": 2}, 46: {"iron": 2}})
+    _only_endowments(g, {73: {"farmland": 2}, 75: {"iron": 2}})
     result = _found_spot(g, HOUSE)
-    assert result == ("estate", 22)
+    assert result == ("estate", 73)
 
 
 def test_s17_a_works_under_construction_is_not_expanded_again():
@@ -863,7 +864,7 @@ def test_s17_founding_needs_more_gold_than_the_price():
     b.under_construction = 0
     a.director_id = realm.ruler.id
     b.director_id = realm.ruler.id
-    _only_endowments(g, {24: {"iron": 3}})
+    _only_endowments(g, {75: {"iron": 3}})
     g.agendas[HOUSE] = None
     g.houses[HOUSE].at_war_with.clear()
     for n in g.realms:
@@ -881,7 +882,7 @@ def test_s17_founding_needs_more_gold_than_the_price():
     assert result is not None
     assert result[0] == "found_enterprise"
     assert result[1]["kind"] == "ironworks"
-    assert result[1]["province_pid"] == 24
+    assert result[1]["province_pid"] == 75
 
 
 def test_s17_the_founding_price_is_the_fourth_column_not_the_third():
@@ -897,7 +898,7 @@ def test_s17_the_founding_price_is_the_fourth_column_not_the_third():
     b.under_construction = 0
     a.director_id = realm.ruler.id
     b.director_id = realm.ruler.id
-    _only_endowments(g, {24: {"iron": 3}})
+    _only_endowments(g, {75: {"iron": 3}})
     g.agendas[HOUSE] = None
     g.houses[HOUSE].at_war_with.clear()
     for n in g.realms:
@@ -980,8 +981,10 @@ def test_s18_a_distress_sale_is_five_percent():
 def test_s18_a_child_is_not_a_willing_buyer():
     """B7-age: an infant (age 0) is not a willing buyer.
     Mutation dropping `c.age >= 16` would pick the age-0 child at Karsgate index 2.
-    Board: kill Karsgate index 1 (spouse, alive, adult) so search walks to index 2 (child) then 3.
-    Correct picks index 3; mutant picks index 2 (the child)."""
+    Board: kill Karsgate index 1 (spouse, alive, adult) so search walks to index 2 (child),
+    index 3 (child) then index 4 (adult).
+    Correct picks index 4; mutant picks index 2 (the child).
+    (C5 wave-1 gentry pool: Karsgate's court grew; the adult-after-children is now index 4.)"""
     g = _game()
     realm = _broke(g)
     karsgate = g.realms["Karsgate"]
@@ -990,17 +993,20 @@ def test_s18_a_child_is_not_a_willing_buyer():
     assert karsgate.characters[1].id != karsgate.ruler.id
     assert karsgate.characters[2].is_alive
     assert karsgate.characters[2].age < 16
+    assert karsgate.characters[3].is_alive
+    assert karsgate.characters[3].age < 16
+    assert karsgate.characters[4].age >= 16
     karsgate.characters[1].is_alive = False
     data = _sale(g, realm)
     buyer = [c for c in karsgate.characters if c.id == data["buyer_id"]][0]
     buyer_idx = karsgate.characters.index(buyer)
-    assert buyer_idx == 3, f"Expected buyer at index 3, got index {buyer_idx}"
+    assert buyer_idx == 4, f"Expected buyer at index 4, got index {buyer_idx}"
 
 
 def test_s18_a_dead_courtier_is_not_a_willing_buyer():
     """B7-dead: a corpse is not a willing buyer.
     Mutation dropping `c.is_alive` would pick the dead spouse at Karsgate index 1.
-    Same board as B7-age. Correct picks index 3; mutant picks index 1 (the corpse)."""
+    Same board as B7-age. Correct picks index 4; mutant picks index 1 (the corpse)."""
     g = _game()
     realm = _broke(g)
     karsgate = g.realms["Karsgate"]
@@ -1008,19 +1014,19 @@ def test_s18_a_dead_courtier_is_not_a_willing_buyer():
     data = _sale(g, realm)
     buyer = [c for c in karsgate.characters if c.id == data["buyer_id"]][0]
     buyer_idx = karsgate.characters.index(buyer)
-    assert buyer_idx == 3, f"Expected buyer at index 3, got index {buyer_idx}"
+    assert buyer_idx == 4, f"Expected buyer at index 4, got index {buyer_idx}"
 
 
 def test_s18_the_adulthood_bar_is_sixteen():
     """B7-agebar: the adulthood bar is exactly 16, bracketed from both sides.
-    Age 15: correct code walks past to index 3. Age 16: correct code stops on index 2.
-    Pair (3, 2). Mutant (>= 15) answers (2, 2) — the 15 half carries the discrimination.
+    Age 15: correct code walks past (index 3 is also a child) to index 4. Age 16: correct code stops on index 2.
+    Pair (4, 2). Mutant (>= 15) answers (2, 2) — the 15 half carries the discrimination.
     The 16 half alone is answered identically by the deletion mutant; the pair pins the number."""
     g = _game()
     realm = _broke(g)
     karsgate = g.realms["Karsgate"]
     karsgate.characters[1].is_alive = False
-    # Side 1: age 15 — correct code walks past to index 3
+    # Side 1: age 15 — correct code walks past to index 4
     karsgate.characters[2].age = 15
     data1 = _sale(g, realm)
     buyer1 = [c for c in karsgate.characters if c.id == data1["buyer_id"]][0]
@@ -1030,7 +1036,7 @@ def test_s18_the_adulthood_bar_is_sixteen():
     data2 = _sale(g, realm)
     buyer2 = [c for c in karsgate.characters if c.id == data2["buyer_id"]][0]
     idx_16 = karsgate.characters.index(buyer2)
-    assert idx_15 == 3, f"At age 15, expected index 3, got {idx_15}"
+    assert idx_15 == 4, f"At age 15, expected index 4, got {idx_15}"
     assert idx_16 == 2, f"At age 16, expected index 2, got {idx_16}"
 
 
