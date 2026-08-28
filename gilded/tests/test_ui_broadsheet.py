@@ -32,7 +32,7 @@ from gilded.tests._fixtures import make_one_seller, no_sellers
 EXPECTED_REGIONS = {
     "House": 26,         # rule x3, dismiss_seat x6, cycle_exec, set_stance x5 (House edicts — the dissolved Policies tab re-homed), open_ambition_picker, open_heir_picker, open_scheme_picker, clear_heir, tab x3, save, open, end_turn, narrate
     "Powers": 19,        # place_informant x11, rule, tab x3, save, open, end_turn, narrate
-    "Atlas": 39,         # select_province, tour_province x3, declare_war x6, propose_marriage x6, acquire_minor x5, build_rail x10 (+a/b variants), tab x3, save, open, end_turn, narrate
+    "Atlas": 29,         # select_province, tour_province x3, acquire_minor x12, build_rail x7, toggle_war_drawer (war verbs moved behind the drawer), tab x3, quicksave, quickload, end_turn, narrate, rule
 }
 
 
@@ -563,7 +563,11 @@ def test_clicking_the_takeover_button_starts_a_campaign():
     g, v = _enterprises_view(seed=42, turns=4)
     a = _takeover_descriptor(v)
     target = a["action"]["attack_takeover"]
-    assert not g.takeovers, "fixture premise broken: a campaign already runs"
+    # The premise is scoped to the player house: the C5 world spawns
+    # takeovers between OTHER houses (here Ferrenholt's), which the
+    # click-under-test neither starts nor completes.
+    assert not [t for t in g.takeovers if t.buyer_house == v.house], (
+        "fixture premise broken: the player house already runs a campaign")
     ACTIONS["attack_takeover"].dispatch(g, v.house, v, a["action"])
     mine = [t for t in g.takeovers if t.buyer_house == v.house]
     assert len(mine) == 1, (
