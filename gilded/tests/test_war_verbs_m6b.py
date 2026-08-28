@@ -1,4 +1,4 @@
-"""Stage 6B — War verbs press tests: each verb routes through docket.initiative,
+﻿"""Stage 6B â€” War verbs press tests: each verb routes through docket.initiative,
 refuses with a reason when it cannot act, and changes the simulation when it can.
 
 Every case runs alone on its own fresh game to avoid process-global pollution.
@@ -11,9 +11,9 @@ from gilded.fronts import declare_war, WarGoal, _contested_pairs, allocate
 from gilded.ai import _executor_for
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-def _state(seed=42):
+def _state(seed=26):
     return new_app_state(seed=seed)
 
 
@@ -45,7 +45,7 @@ def _ensure_pool(game, house, n=3):
         setattr(game, "_raised_regiments", pool)
 
 
-# ── declare_war tests ───────────────────────────────────────────────────────
+# â”€â”€ declare_war tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_declare_war_refuses_when_at_peace_no_contested_border():
     """Declare war should refuse if there's no contested border."""
@@ -63,7 +63,7 @@ def test_declare_war_refuses_when_at_peace_no_contested_border():
 
 def test_declare_war_opens_war_and_creates_fronts():
     """A valid declaration opens a war with at least one front."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     target = None
     for t in g.houses:
@@ -84,7 +84,7 @@ def test_declare_war_opens_war_and_creates_fronts():
 
 def test_declare_war_refuses_when_under_truce():
     """Declare war should refuse when there's an active truce."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     house_obj = g.houses[h]
     for t in g.houses:
@@ -98,13 +98,19 @@ def test_declare_war_refuses_when_under_truce():
             break
 
 
-# ── muster tests ────────────────────────────────────────────────────────────
+# â”€â”€ muster tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_muster_costs_steel_from_pool():
-    """Muster must deduct steel from the capacity pool — measured as a DELTA."""
-    state = _state(42)
+    """Muster must deduct steel from the capacity pool â€” measured as a DELTA."""
+    state = _state(26)
     g, h = state.game, state.house
     _ensure_war(state)  # muster requires an active war
+    # Inject an ironworks so the steel gate applies (seed 26 player has none)
+    from gilded.enterprises import Enterprise
+    procs0 = g.provinces_of(h)
+    g.enterprises.append(Enterprise(eid=999, kind="ironworks",
+                                    name="Test Ironworks", house=h,
+                                    province=procs0[0].pid, tier=1))
     # End turn to populate capacity from enterprises
     g.end_turn()
     cap = g.capacity.get(h)
@@ -126,10 +132,15 @@ def test_muster_costs_steel_from_pool():
 
 
 def test_muster_refuses_when_broke():
-    """Muster refuses when the house cannot afford the steel cost — measured as DELTA against solvent House's refusal set."""
-    state = _state(42)
+    """Muster refuses when the house cannot afford the steel cost â€” measured as DELTA against solvent House's refusal set."""
+    state = _state(26)
     g, h = state.game, state.house
     _ensure_war(state)  # muster requires an active war
+    # Inject an ironworks so the steel gate applies (seed 26 player has none)
+    from gilded.enterprises import Enterprise
+    g.enterprises.append(Enterprise(eid=999, kind="ironworks",
+                                    name="Test Ironworks", house=h,
+                                    province=g.provinces_of(h)[0].pid, tier=1))
     g.end_turn()  # populate capacity from enterprises
     # Zero out capacity
     cap = getattr(g, "capacity", None)
@@ -147,11 +158,11 @@ def test_muster_refuses_when_broke():
             f"Broke muster did not refuse with reason: {msgs}"
 
 
-# ── commit tests ────────────────────────────────────────────────────────────
+# â”€â”€ commit tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_commit_moves_regiment_to_front():
     """Commit must move regiments from pool to a front."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     war = _ensure_war(state)[0]
     _ensure_pool(g, h, 3)
@@ -170,7 +181,7 @@ def test_commit_moves_regiment_to_front():
 
 def test_commit_refuses_when_no_pool():
     """Commit refuses when there are no uncommitted regiments."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     war = _ensure_war(state)[0]
     g._raised_regiments = {h: 0}
@@ -182,11 +193,11 @@ def test_commit_refuses_when_no_pool():
     assert msgs
 
 
-# ── appoint_commander tests ─────────────────────────────────────────────────
+# â”€â”€ appoint_commander tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_appoint_commander_places_named_man():
     """Appoint must place a character as commander on the front."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     war = _ensure_war(state)[0]
     _ensure_pool(g, h, 1)
@@ -205,7 +216,7 @@ def test_appoint_commander_places_named_man():
 
 def test_appoint_commander_refuses_no_war():
     """Appoint refuses when the house has no active war."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     # Ensure no wars exist
     if hasattr(g, "wars"):
@@ -219,15 +230,15 @@ def test_appoint_commander_refuses_no_war():
     assert msgs
 
 
-# ── negotiate_peace tests ──────────────────────────────────────────────────
+# â”€â”€ negotiate_peace tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_negotiate_peace_ends_war_and_sets_truce():
     """A successful peace negotiation ends the war and creates a truce."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     war = _ensure_war(state)[0]
     other = war.defender if war.aggressor == h else war.aggressor
-    war.war_score = 0.0  # neutral — should accept
+    war.war_score = 0.0  # neutral â€” should accept
     realm = g.realms[h]
     executor = _executor_for(g, realm, "war")
     war_idx = _wars_of(g, h).index(war)
@@ -235,13 +246,13 @@ def test_negotiate_peace_ends_war_and_sets_truce():
     assert msgs
 
 
-# ── garrison stub tests ────────────────────────────────────────────────────
+# â”€â”€ garrison stub tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_garrison_stub_returns_no_milestone():
     """The garrison verb called on a House that IS at war must not raise,
     must return no string carrying a milestone identifier, and must either
     move the fronts or say why it cannot."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     _ensure_war(state)
     realm = g.realms[h]
@@ -254,7 +265,7 @@ def test_garrison_stub_returns_no_milestone():
 
 def test_garrison_refuses_when_no_war():
     """Garrison refuses when the house is at peace."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     realm = g.realms[h]
     executor = _executor_for(g, realm, "war")
@@ -263,11 +274,11 @@ def test_garrison_refuses_when_no_war():
     assert any("no active war" in m.lower() for m in msgs)
 
 
-# ── war_id routing tests ───────────────────────────────────────────────────
+# â”€â”€ war_id routing tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_commit_war_id_as_index():
     """Commit accepts war_id as a zero-based index into the wars list."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     war = _ensure_war(state)[0]
     _ensure_pool(g, h, 2)
@@ -281,7 +292,7 @@ def test_commit_war_id_as_index():
 
 def test_appoint_commander_war_id_as_index():
     """Appoint commander accepts war_id as a zero-based index."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     war = _ensure_war(state)[0]
     _ensure_pool(g, h, 1)
@@ -298,11 +309,11 @@ def test_appoint_commander_war_id_as_index():
         assert msgs
 
 
-# ── action message display tests ──────────────────────────────────────────
+# â”€â”€ action message display tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_action_messages_cleared_after_draw():
     """Action messages must be cleared after draw so they don't persist."""
-    state = _state(42)
+    state = _state(26)
     view = state.view
     view._action_messages.append("test message")
     assert len(view._action_messages) == 1
@@ -312,7 +323,7 @@ def test_action_messages_cleared_after_draw():
 
 def test_action_messages_populated_by_dispatch():
     """Dispatch result strings must appear in action_messages."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     view = state.view
     realm = g.realms[h]
@@ -322,7 +333,7 @@ def test_action_messages_populated_by_dispatch():
     assert isinstance(msgs, list)
 
 
-# ── determinism test ──────────────────────────────────────────────────────
+# â”€â”€ determinism test â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_seed_42_no_input_reaches_same_wars():
     """Seed 42 played 10 turns with no input must reach the same wars."""
@@ -339,11 +350,11 @@ def test_seed_42_no_input_reaches_same_wars():
     assert wars1 == wars2
 
 
-# ── refusal reason tests ──────────────────────────────────────────────────
+# â”€â”€ refusal reason tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_declare_war_refusal_carries_reason():
     """A refused declaration must carry a readable reason."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     house_obj = g.houses[h]
     target = None
@@ -361,7 +372,7 @@ def test_declare_war_refusal_carries_reason():
 
 def test_muster_refusal_carries_reason():
     """A refused muster must carry a readable reason."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     _ensure_war(state)  # muster requires an active war
     cap = getattr(g, "capacity", None)
@@ -378,7 +389,7 @@ def test_muster_refusal_carries_reason():
 
 def test_commit_refusal_carries_reason():
     """A refused commit must carry a readable reason."""
-    state = _state(42)
+    state = _state(26)
     g, h = state.game, state.house
     g._raised_regiments = {h: 0}
     war = _ensure_war(state)[0]
