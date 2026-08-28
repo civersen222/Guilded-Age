@@ -1163,11 +1163,12 @@ def test_enterprises_banner_carries_the_market_ticker():
 # ─────────────────────────────────────────────────────────────────
 
 
-def _distinct_enterprises_view(seed=314, turns=5):
+def _distinct_enterprises_view(seed=314, turns=8):
     """Fixture with five pairwise-distinct figures and a non-kin predator.
-    
-    Tries seed=314 first (original), falls back to seed=42 if the predicate
-    no longer holds after AI changes.
+
+    Tries seeds in order; the warring world delays the first non-kin
+    predator to around turn 6, so advance 8 turns (seeds 49 and 86
+    satisfy the full predicate there).
     """
     from gilded.chassis import GildedGame
     from gilded.ui.broadsheet import BroadsheetView
