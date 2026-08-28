@@ -7,7 +7,7 @@ from gilded.chassis import GildedGame
 from gilded.fronts import (Front, War, WarGoal, allocate, appoint, declare_war,
                            raise_regiments, resolve_front, supply, tick_wars)
 
-SEED = 42
+SEED = 26  # C5 wave-1 world: seed 42's houses no longer touch; seed 26 keeps a symmetric contested border (equal supply both sides)
 
 
 class MidpointRng(random.Random):
