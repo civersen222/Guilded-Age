@@ -2,7 +2,7 @@
 
 import pytest
 from gilded.ai import (_executor_for, _found_spot, _pick_initiative, _policy_targets,
-                       set_policy, _strength, _weaker_neighbor, ai_peace_check, ai_turn)
+                       set_policy, _strength, _war_target, ai_peace_check, ai_turn)
 from gilded.chassis import ATTENTION_PER_TURN, GildedGame
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
 from gilded.docket import DOMAIN_SEAT, Petition, PetitionOption
@@ -113,7 +113,7 @@ def test_directives_drift_toward_conviction():
 
 # --- initiatives -------------------------------------------------------------
 
-def test_militarist_marches_on_a_weaker_neighbor():
+def test_militarist_marches_on_a_weaker_rival():
     g = _game()
     h = _bordered_house(g)
     ruler = g.realms[h].ruler
@@ -138,7 +138,7 @@ def test_a_truce_stays_the_militarist_hand():
             for p in g.provinces_of(other):
                 p.population = 0
             g.houses[h].truces[other] = g.turn + 5
-    assert _weaker_neighbor(g, h) is None
+    assert _war_target(g, h) is None
 
 
 def test_ambitious_ruler_expands_the_works():
@@ -554,7 +554,7 @@ def test_s16_strength_counts_the_treasury():
     assert g.houses["Brandtner"].treasury == 0.0
     assert g.houses["Ashworth"].treasury == 50.0
     assert not g.houses["Brandtner"].at_war_with
-    assert _weaker_neighbor(g, "Brandtner") is None
+    assert _war_target(g, "Brandtner") is None
 
 
 def test_s16_strength_converts_population_at_five():
@@ -572,7 +572,7 @@ def test_s16_strength_converts_population_at_five():
     assert p.population == 5
     p = sorted(g.provinces_of("Ashworth"), key=lambda p: p.pid)[0]
     assert p.population == 4
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
 
 
 def test_s16_two_qualifying_rivals_the_first_alphabetically_is_marched_on():
@@ -589,7 +589,7 @@ def test_s16_two_qualifying_rivals_the_first_alphabetically_is_marched_on():
     assert g.houses["Karsgate"].treasury == 0.0
     assert g.houses["Duval-Corse"].treasury == 1000.0
     assert "Ashworth" < "Karsgate"
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
 
 
 def test_s16_a_house_already_at_war_is_not_a_fresh_target():
@@ -605,7 +605,7 @@ def test_s16_a_house_already_at_war_is_not_a_fresh_target():
     g.houses["Brandtner"].at_war_with.add("Ashworth")
     assert "Ashworth" in g.houses["Brandtner"].at_war_with
     assert g.houses["Ashworth"].treasury == 0.0
-    assert _weaker_neighbor(g, "Brandtner") is None
+    assert _war_target(g, "Brandtner") is None
 
 
 def test_s16_a_truce_expiring_this_turn_no_longer_shields():
@@ -622,11 +622,11 @@ def test_s16_a_truce_expiring_this_turn_no_longer_shields():
     # Truce expiring THIS turn → no longer shields, Ashworth is a valid target
     g.houses["Brandtner"].truces["Ashworth"] = g.turn
     assert g.houses["Brandtner"].truces.get("Ashworth", 0) == g.turn
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
     # Truce expiring NEXT turn → still shields
     g.houses["Brandtner"].truces["Ashworth"] = g.turn + 1
     assert g.houses["Brandtner"].truces.get("Ashworth", 0) == g.turn + 1
-    assert _weaker_neighbor(g, "Brandtner") is None
+    assert _war_target(g, "Brandtner") is None
 
 
 def test_s16_the_weaker_rival_is_the_target_not_the_stronger():
@@ -640,7 +640,7 @@ def test_s16_the_weaker_rival_is_the_target_not_the_stronger():
     _shape(g, "Karsgate", 0, 1000)
     assert g.houses["Ashworth"].treasury == 0.0
     assert g.houses["Duval-Corse"].treasury == 1000.0
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
 
 
 def test_s16_weaker_means_seven_tenths_not_merely_poorer():
@@ -657,11 +657,11 @@ def test_s16_weaker_means_seven_tenths_not_merely_poorer():
     _shape(g, "Ashworth", 0, 139)
     assert g.houses["Ashworth"].treasury == 139.0
     assert g.houses["Brandtner"].treasury == 0.0
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
     # Ashworth at 140 — exactly on the bar (140 is NOT < 140)
     _shape(g, "Ashworth", 0, 140)
     assert g.houses["Ashworth"].treasury == 140.0
-    assert _weaker_neighbor(g, "Brandtner") is None
+    assert _war_target(g, "Brandtner") is None
 
 
 def test_s16_war_conviction_bar_is_fifty_and_strict():
@@ -688,7 +688,7 @@ def test_s16_war_conviction_bar_is_fifty_and_strict():
 
     assert g.houses["Brandtner"].treasury == 500.0
     assert not g.houses["Brandtner"].at_war_with
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
 
     # Below the bar: 25.0 < 50.0 → no war
     ruler.dispositions["militarist_pacifist"] = 25.0

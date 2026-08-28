@@ -11,7 +11,7 @@ provinces, gold, shares - and a truce that binds both signatures."""
 
 import math
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from gilded.society.shares import seize_enterprises, transfer_shares
 
@@ -83,9 +83,41 @@ def _contested_pairs(game, aggressor: str, defender: str) -> List[Tuple[int, int
     return pairs
 
 
+def _muster_point(provinces, pids: List[int]) -> Optional[int]:
+    """The house's muster point: its largest province (deterministic tie on
+    pid), the place an army musters from and a front is anchored to."""
+    if not pids:
+        return None
+    return min(pids, key=lambda pid: (-provinces[pid].population, pid))
+
+
+def _contested_corridor(game, aggressor: str, defender: str) -> List[Tuple[int, int]]:
+    """The armies march and meet in the field between two non-touching
+    demesnes: a single front anchored at each house's muster point, along
+    the shortest province corridor linking the two demesnes. Both border
+    pids are real provinces of the atlas (the map draws the front from
+    them) and each side's anchor is a province that house owns, so both
+    armies can muster up to the line. Deterministic given the seed (BFS in
+    sorted order, largest-province anchor)."""
+    provinces = game.atlas.provinces
+    a_pids = [pid for pid in sorted(provinces) if provinces[pid].owner == aggressor]
+    d_pids = [pid for pid in sorted(provinces) if provinces[pid].owner == defender]
+    a_anchor = _muster_point(provinces, a_pids)
+    d_anchor = _muster_point(provinces, d_pids)
+    if a_anchor is None or d_anchor is None:
+        return []
+    # The corridor between the anchors: the front is the pair of anchors
+    # themselves (the meeting line runs through the field between them).
+    return [(a_anchor, d_anchor)]
+
+
 def declare_war(game, aggressor: str, defender: str, goal: WarGoal) -> War:
-    """Open the war: contested border pairs group into connected fronts."""
+    """Open the war: contested border pairs group into connected fronts.
+    When the two demesnes do not touch, the armies meet in the field: a
+    single front along the contested corridor between them."""
     pairs = _contested_pairs(game, aggressor, defender)
+    if not pairs:
+        pairs = _contested_corridor(game, aggressor, defender)
     groups: List[List[Tuple[int, int]]] = []
     group_pids: List[set] = []
     for pair in pairs:
@@ -237,9 +269,14 @@ def _capture(game, war: War, front: Front, winner: str, loser: str,
     front.entrenchment_a = 0
     front.entrenchment_d = 0
     old_pids = {p for pair in front.border for p in pair} | {pid}
-    front.border = [pair for pair in _contested_pairs(game, war.aggressor,
-                                                      war.defender)
-                    if pair[0] in old_pids or pair[1] in old_pids]
+    pairs = [pair for pair in _contested_pairs(game, war.aggressor,
+                                               war.defender)
+             if pair[0] in old_pids or pair[1] in old_pids]
+    if not pairs:
+        # The demesnes still do not touch: re-anchor the meeting line at the
+        # corridor, so the war keeps a fightable front.
+        pairs = _contested_corridor(game, war.aggressor, war.defender)
+    front.border = pairs
     return [f"Front {front.fid}: {provinces[pid].name} falls to House {winner}"]
 
 

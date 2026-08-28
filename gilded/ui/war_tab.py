@@ -114,6 +114,21 @@ def draw_war_tab(
     surface.blit(title, (margin_x, cur_y))
     cur_y += title.get_height() + PAD
 
+    # Garrison button — a global control, drawn at the top so it never
+    # overflows into the bottom bar as the drawer grows.
+    btn_x = margin_x + 20
+    btn_w = w - 2 * PAD - 20
+    label = "Adjust Garrison"
+    action = {"open_garrison_picker": True}
+    regions.add(Region(
+        rect=pygame.Rect(btn_x, cur_y, btn_w, BUTTON_H),
+        action=action,
+        state=RegionState.ENABLED,
+        hint=label,
+        group="war_actions",
+    ))
+    cur_y += BUTTON_H + 8
+
     # ── War report ────────────────────────────────────────────────────────
     report_lines = _war_report_lines(game, house_name)
     for line in report_lines:
@@ -126,29 +141,34 @@ def draw_war_tab(
     # ── Declare War section ───────────────────────────────────────────────
     wars = [w for w in getattr(game, "wars", [])
             if w.aggressor == house_name or w.defender == house_name]
-    other_houses = [n for n in game.houses if n != house_name]
     at_war_with = set()
     for war in wars:
         enemy = war.defender if war.aggressor == house_name else war.aggressor
         at_war_with.add(enemy)
 
-    for target in other_houses:
-        if target in at_war_with:
-            continue
+    for target in list(game.houses):
         btn_x = margin_x + 20
         btn_w = w - 2 * PAD - 20
         btn_y = cur_y
 
-        # Check truce
+        # A refusal is drawn, not omitted: own house, an at-war enemy, a truce.
         h = game.houses[house_name]
         truce_until = h.truces.get(target, 0)
-        truce_active = truce_until > game.turn
+        if target == house_name:
+            reason = "This is your own house"
+        elif target in at_war_with:
+            reason = f"Already at war with House {target}"
+        elif truce_until > game.turn:
+            reason = f"A truce with House {target} holds until turn {truce_until}"
+        else:
+            reason = ""
+        disabled = reason != ""
 
         label = f"Declare War on House {target}"
-        if truce_active:
+        if truce_until > game.turn and target != house_name:
             label += f" (truce until turn {truce_until})"
 
-        if truce_active:
+        if disabled:
             pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
             pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
             btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
@@ -158,14 +178,10 @@ def draw_war_tab(
             btn_txt = font_text.render(label, True, BUTTON_TEXT)
 
         surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
-        if truce_active:
-            reason = f"A truce with House {target} holds until turn {truce_until}"
-        else:
-            reason = ""
         regions.add(Region(
             rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
             action={"declare_war": target},
-            state=RegionState.DISABLED if truce_active else RegionState.ENABLED,
+            state=RegionState.DISABLED if disabled else RegionState.ENABLED,
             reason=reason,
             hint=label,
             group="war_actions",
@@ -362,18 +378,3 @@ def draw_war_tab(
             group="war_actions",
         ))
         cur_y += BUTTON_H + 4
-
-        # Garrison button — opens picker
-        btn_x = margin_x + 20
-        btn_w = w - 2 * PAD - 20
-        btn_y = cur_y
-        label = f"Adjust Garrison"
-        action = {"open_garrison_picker": True}
-        regions.add(Region(
-            rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
-            action=action,
-            state=RegionState.ENABLED,
-            hint=label,
-            group="war_actions",
-        ))
-        cur_y += BUTTON_H + 8

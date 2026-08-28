@@ -291,13 +291,29 @@ def test_r4_truce_at_turn_not_blocking():
 
 
 def test_r4_truce_after_turn_blocking():
-    """Truce expiring one turn after current — target is blocked."""
+    """Truce expiring one turn after current — target is blocked.
+
+    Stage 6b: the picker now weighs every House (the corridor march reaches
+    any demesne), so the test shapes the world so Brandtner is the weakest
+    House but truced, and Karsgate the weakest available. Without the
+    truce guard the picker would still return Brandtner."""
     g = _bordered_game()
     h = "Ashworth"
     # Set truce with Brandtner expiring one turn in the future
     g.houses[h].truces["Brandtner"] = g.turn + 1
-    # Brandtner blocked, weakest neighbor must be Karsgate (the only other borderer)
+    for other in sorted(g.houses):
+        if other == h:
+            continue
+        g.houses[other].treasury = 100000.0
+        for p in g.provinces_of(other):
+            p.population = 0
+    # Brandtner weakest (strength 1) but blocked; Karsgate next (strength 50)
+    g.houses["Brandtner"].treasury = 1.0
+    g.houses["Karsgate"].treasury = 50.0
     assert _weakest_neighbor(g, h) == "Karsgate"
+    # drop the truce and the weakest House wins even though it is not a borderer
+    g.houses[h].truces["Brandtner"] = g.turn
+    assert _weakest_neighbor(g, h) == "Brandtner"
 
 
 # --- R5: marriageable kin at age >= 16, living, not ruler ------------------

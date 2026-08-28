@@ -1245,7 +1245,7 @@ def _init_adjust_garrison(ctx, **kw) -> List[str]:
 
     # If no wars at all, refuse
     if not wars:
-        return [f"The {house} House has no active war to garrison (fronts arrive in G16)"]
+        return [f"The {house} House has no active war to garrison"]
 
     # Ensure we have a uncommitted pool
     pool_attr = "_raised_regiments"
@@ -1422,11 +1422,18 @@ def _init_muster(ctx, province_pid=None, war_id=None, front_fid=None, count=1, *
         if available <= 0:
             return [f"The {house} House has no uncommitted regiments (raise from a province first)"]
 
-    # Commit to a front if specified
+    # Commit to a front if specified (war_id: house-relative or global index)
     if front_fid is not None:
-        war = wars[0] if war_id is None else next((w for w in wars if w.war_score == war_id), None)
-        if war is None:
+        if war_id is None:
             war = wars[0]
+        else:
+            war = None
+            if isinstance(war_id, int) and 0 <= war_id < len(wars):
+                war = wars[war_id]
+            elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+                war = game.wars[war_id]
+            if war is None:
+                war = wars[0]
         front = next((f for f in war.fronts if f.fid == front_fid), None)
         if front is None:
             return [f"No matching front found"]
@@ -1456,12 +1463,18 @@ def _init_commit(ctx, war_id=None, front_fid=None, count=1, **kw) -> List[str]:
     wars = _wars_of(game, house)
     if not wars:
         return [f"The {house} House has no active war to commit to"]
-    if war_id is not None and isinstance(war_id, int) and 0 <= war_id < len(wars):
-        war = wars[war_id]
-    elif war_id is not None:
-        war = next((w for w in wars if w.war_score == war_id), None)
-    else:
+    if war_id is None:
         war = wars[0]
+    else:
+        war = None
+        if isinstance(war_id, int) and 0 <= war_id < len(wars):
+            war = wars[war_id]
+        elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+            war = game.wars[war_id]
+        else:
+            war = next((w for w in wars if w.war_score == war_id), None)
+        if war is None:
+            war = wars[0]
     if war is None:
         return [f"No matching war found"]
     front = next((f for f in war.fronts if f.fid == front_fid), None) if front_fid else (war.fronts[0] if war.fronts else None)
@@ -1481,8 +1494,11 @@ def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, char
     if not wars:
         return [f"The {house} House has no active war to appoint a commander for"]
     if war_id is not None:
+        war = None
         if isinstance(war_id, int) and 0 <= war_id < len(wars):
             war = wars[war_id]
+        elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+            war = game.wars[war_id]
         else:
             war = next((w for w in wars if w.war_score == war_id), None)
         if war is None:

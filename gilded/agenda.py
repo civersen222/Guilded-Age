@@ -75,9 +75,16 @@ def _bordering(game, house_name: str) -> List[str]:
 
 
 def _weakest_neighbor(game, house_name: str) -> Optional[str]:
+    """The weakest house this House may lawfully declare on. The corridor
+    march means armies reach any demesne, so the target pool is every house
+    rather than only bordering ones — demesnes are islands in the tiered
+    world, so a bordering-only pool is empty and Conquest goals would never
+    ripen."""
     house = game.houses[house_name]
     cands = []
-    for other in _bordering(game, house_name):
+    for other in sorted(game.houses):
+        if other == house_name:
+            continue
         if other in house.at_war_with:
             continue
         if house.truces.get(other, 0) > game.turn:

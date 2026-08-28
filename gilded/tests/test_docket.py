@@ -319,7 +319,7 @@ def test_initiative_guardrails():
     realm = g.realms[h]
     g.rng = SeqRng([0.0])
     msgs = initiative(g, h, "adjust_garrison", realm.ruler)
-    assert any("G16" in m for m in msgs)
+    assert any("no active war" in m for m in msgs)
     assert initiative(g, h, "nonsense", realm.ruler) == ["No such initiative 'nonsense'"]
 
 

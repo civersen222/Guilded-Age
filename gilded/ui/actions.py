@@ -974,10 +974,14 @@ def _commit_eligible(game, house, action):
     if war_id is None or front_fid is None:
         return False, "Select a war and front to commit to"
     wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
-    if war_id is not None and isinstance(war_id, int) and 0 <= war_id < len(wars):
-        war = wars[war_id]
-    elif war_id is not None:
-        war = next((w for w in wars if w.war_score == war_id), None)
+    war = None
+    if war_id is not None:
+        if isinstance(war_id, int) and 0 <= war_id < len(wars):
+            war = wars[war_id]
+        elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+            war = game.wars[war_id]
+        else:
+            war = next((w for w in wars if w.war_score == war_id), None)
     else:
         war = wars[0] if wars else None
     if war is None:
@@ -1015,9 +1019,12 @@ def _appoint_commander_eligible(game, house, action):
     if war_id is None or front_fid is None:
         return False, "Select a war and front"
     wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
-    if war_id >= len(wars):
+    if isinstance(war_id, int) and 0 <= war_id < len(wars):
+        war = wars[war_id]
+    elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+        war = game.wars[war_id]
+    else:
         return False, "No such war"
-    war = wars[war_id]
     front = next((f for f in war.fronts if f.fid == front_fid), None)
     if front is None:
         return False, "No such front"

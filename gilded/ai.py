@@ -65,17 +65,17 @@ def _strength(game, house_name: str) -> float:
     return pop // REGIMENT_POP_COST + game.houses[house_name].treasury
 
 
-def _weaker_neighbor(game, house_name: str) -> Optional[str]:
+def _war_target(game, house_name: str) -> Optional[str]:
+    """The weakest house this House may lawfully declare on. The corridor
+    march means armies reach any demesne, so the target pool is every house,
+    not just bordering ones — demesnes are islands in the tiered world."""
     house = game.houses[house_name]
-    neighbors = set()
-    for p in game.provinces_of(house_name):
-        for n in p.neighbors:
-            o = game.atlas.provinces[n].owner
-            if o and o != house_name and o in game.houses:
-                neighbors.add(o)
     me = _strength(game, house_name)
     from gilded import pacts
-    for other in sorted(neighbors):
+    cands = []
+    for other in game.houses:
+        if other == house_name:
+            continue
         if other in house.at_war_with:
             continue
         if house.truces.get(other, 0) > game.turn:
@@ -83,8 +83,11 @@ def _weaker_neighbor(game, house_name: str) -> Optional[str]:
         if not pacts.may_declare_war(game, house_name, other):
             continue
         if _strength(game, other) < WEAKER * me:
-            return other
-    return None
+            cands.append((_strength(game, other), other))
+    if not cands:
+        return None
+    cands.sort()
+    return cands[0][1]
 
 
 def _found_spot(game, house_name: str) -> Optional[Tuple[str, int]]:
@@ -147,7 +150,7 @@ def _pick_initiative(game, house_name: str, realm, goal=None):
                 return "found_enterprise", {"kind": kind, "province_pid": pid}
  
     if _conviction(ruler, "war") > WAR_CONVICTION and not house.at_war_with:
-        target = _weaker_neighbor(game, house_name)
+        target = _war_target(game, house_name)
         if target is not None:
             return "declare_war", {"target_house": target}
     adults = [c for c in realm.dynasty.all_characters.values()

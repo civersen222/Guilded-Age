@@ -83,7 +83,7 @@ def test_pact_blocks_both_pickers():
     g = GildedGame(seed=7)
     form_pact(g, "Brandtner", "Ashworth")
     # the AI picker must never name the ally (None or another target is fine)
-    assert ai._weaker_neighbor(g, "Brandtner") not in allies_of(g, "Brandtner")
+    assert ai._war_target(g, "Brandtner") not in allies_of(g, "Brandtner")
     # the Conquest picker must not name the ally
     goal = agenda.Goal(family="Conquest", target="Ashworth",
                        opened_turn=g.turn, commit_turns=0, why="test")
