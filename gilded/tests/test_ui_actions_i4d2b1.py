@@ -75,18 +75,19 @@ def test_r2_sell_counterparties_non_empty():
 
 
 def test_r2_richest_first():
-    """Richest candidate (000000ec, Ragnar Ferrenholt, 152.88 gold) appears
-    before 0000014f (Borte Brandtner, 138.92)."""
+    """Richest candidate (00000001, Semiramis Vantrell, 210.15 gold) appears
+    before 0000014f (Borte Brandtner, 127.43) — re-measured at the C5 head;
+    the old fixture's 000000ec dropped out of the top two."""
     game, house = _fixture()
     eid = 1
     opts = sell_share_counterparties(game, house, eid)
     ids = [o["id"] for o in opts]
-    assert "000000ec" in ids, "richest candidate (000000ec) missing"
+    assert "00000001" in ids, "richest candidate (00000001) missing"
     assert "0000014f" in ids, "second richest (0000014f) missing"
-    idx_ec = ids.index("000000ec")
+    idx_top = ids.index("00000001")
     idx_14f = ids.index("0000014f")
-    assert idx_ec < idx_14f, (
-        f"000000ec (idx {idx_ec}) must come before 0000014f (idx {idx_14f}) "
+    assert idx_top < idx_14f, (
+        f"00000001 (idx {idx_top}) must come before 0000014f (idx {idx_14f}) "
         "— list must be sorted richest first."
     )
 

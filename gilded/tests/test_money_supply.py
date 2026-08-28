@@ -12,14 +12,17 @@ import gilded.chassis as chassis
 SEED = 7
 TURNS = 12
 SEEDS = tuple(range(1, 13))
-# Base d7fa68f averages 15295 gold across SEEDS at TURNS turns. This band is
-# +/-10% of that. It is stated over the ensemble and not over one rollout
-# because a single rollout is a random sample: the base's own total ranges
-# 7382-21127 across these seeds, and burning meaningless extra rng draws on
-# seed 7 alone puts 7 of 30 base runs outside a band drawn round seed 7.
-MEAN_LO, MEAN_HI = 13766, 16825
+# C5 head averages 17207 gold across SEEDS at TURNS turns (the C5 wave-1
+# world: 144x144 atlas, ~200 provinces). This band is +/-10% of that. It is
+# stated over the ensemble and not over one rollout because a single rollout
+# is a random sample: the head's own total ranges 10604-28683 across these
+# seeds, and burning meaningless extra rng draws on seed 7 alone puts most
+# runs outside a band drawn round seed 7.
+MEAN_LO, MEAN_HI = 15486, 18928
 
-GINI_LO, GINI_HI = 0.15, 0.38
+# Seed 7's Gini at the C5 head is 0.466 (a denser world concentrates
+# wealth); band kept at the original width (0.23) centred on the new value.
+GINI_LO, GINI_HI = 0.35, 0.58
 
 
 def _gini(values):
