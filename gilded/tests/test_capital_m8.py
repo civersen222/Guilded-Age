@@ -50,19 +50,29 @@ def _capital_view(seed=42, turns=1):
     return g, v
 
 
-def _war_view(seed=42, turns=1):
-    """Game + view on War tab, advanced `turns` turns, player = house with most enterprises."""
+def _war_view(seed=26, turns=1):
+    """Game + view on War tab (drawer open), advanced `turns` turns, player = a bordered house.
+
+    Seed 26: the C5 wave-1 atlas left seed 42's houses with no direct border,
+    so the garrison tests' declare_war fallback could never open a war. Pick
+    the first (sorted) house that shares a border with another house so the
+    fallback can declare. The garrison/raise controls sit in the right-column
+    war drawer, now closed by default — open it here.
+    """
     from gilded import agenda
+    from gilded.fronts import _contested_pairs
     pygame.init()
     g = GildedGame(seed=seed)
     for h in g.houses:
         agenda.ensure_agenda(g, h)
     for _ in range(turns):
         g.end_turn()
-    player = _house_with_most_enterprises(g)
+    player = next(h for h in sorted(g.houses)
+                  if any(_contested_pairs(g, h, t) for t in g.houses if t != h))
     g.houses[player].is_player = True
     v = BroadsheetView(g, player)
     v.active_tab = "War"
+    v.war_drawer = True
     return g, v
 
 
@@ -435,6 +445,7 @@ def test_m8_commit_press_with_pool():
                     break
 
     war = [w for w in g.wars if house in (w.aggressor, w.defender)][0]
+    war_idx = g.wars.index(war)
     front = war.fronts[0]
     side = "attacker" if war.aggressor == house else "defender"
 
@@ -451,7 +462,7 @@ def test_m8_commit_press_with_pool():
     pool_before = g._raised_regiments[house]
 
     # Commit action
-    action = {"commit": {"war_id": 0, "front_fid": front.fid, "count": 1}}
+    action = {"commit": {"war_id": war_idx, "front_fid": front.fid, "count": 1}}
     state_obj = type('S', (), {'game': g, 'house': house, 'view': v})()
     _apply_action(state_obj, action)
 
