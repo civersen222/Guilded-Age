@@ -159,12 +159,10 @@ def test_goal_initiative_dynasty_skips_when_already_tied():
 
 def test_goal_initiative_conquest_acts_only_on_declared_target():
     """Conquest initiative declares war on its declared target — unconditional."""
-    g = GildedGame(seed=5)
-    while g.turn < 13:
-        g.end_turn()
-    h = "Ferrenholt"
+    g = _bordered_game()
+    h = "Ashworth"
     tgt = _weakest_neighbor(g, h)
-    assert tgt == "Karsgate"
+    assert tgt == "Brandtner"
     out = goal_initiative(g, h, Goal("Conquest", tgt, g.turn, 10, "war"))
     assert out is not None
     verb, kw = out
@@ -196,6 +194,26 @@ def _fixture_game():
     g = GildedGame(seed=5)
     while g.turn < 13:
         g.end_turn()
+    return g
+
+
+def _bordered_game():
+    """Game at seed 26, turn 13, with a known two-neighbor border state.
+
+    The C5 wave-1 atlas left most Houses with no direct border (seed 5's
+    Ferrenholt borders nobody), but seed 26's Ashworth borders Brandtner.
+    Re-assigning two provinces (a known-state construction, no rng) makes
+    Ashworth border [Brandtner, Karsgate]:
+      prov 75 (Brandtner's, adjacent to Ashworth) -> Karsgate
+      prov 69 (empty, adjacent to Ashworth)       -> Brandtner
+    Brandtner (treasury ~794) is strictly weaker than Karsgate (~4141), so
+    _weakest_neighbor is value-decided, not a tie-break.
+    """
+    g = GildedGame(seed=26)
+    while g.turn < 13:
+        g.end_turn()
+    g.atlas.provinces[75].owner = "Karsgate"
+    g.atlas.provinces[69].owner = "Brandtner"
     return g
 
 
@@ -253,10 +271,10 @@ def test_r2_strength_formula():
 
 def test_r3_bordering_sorted_ascending():
     """_bordering returns Houses in ascending name order."""
-    g = _fixture_game()
-    h = "Ferrenholt"
+    g = _bordered_game()
+    h = "Ashworth"
     result = _bordering(g, h)
-    assert result == ["Ashworth", "Karsgate"]
+    assert result == ["Brandtner", "Karsgate"]
     assert result == sorted(result)
 
 
@@ -264,22 +282,22 @@ def test_r3_bordering_sorted_ascending():
 
 def test_r4_truce_at_turn_not_blocking():
     """Truce recorded at exactly g.turn has expired — target is eligible."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    # Set truce with Ashworth expiring exactly at current turn
-    g.houses[h].truces["Ashworth"] = g.turn
-    # Ashworth truce expired — but Karsgate is weakest neighbor
-    assert _weakest_neighbor(g, h) == "Karsgate"
+    g = _bordered_game()
+    h = "Ashworth"
+    # Set truce with Karsgate expiring exactly at current turn
+    g.houses[h].truces["Karsgate"] = g.turn
+    # Karsgate truce expired — but Brandtner is the weakest neighbor
+    assert _weakest_neighbor(g, h) == "Brandtner"
 
 
 def test_r4_truce_after_turn_blocking():
     """Truce expiring one turn after current — target is blocked."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    # Set truce with Karsgate expiring one turn in the future
-    g.houses[h].truces["Karsgate"] = g.turn + 1
-    # Karsgate blocked, weakest neighbor must be Ashworth (the only other borderer)
-    assert _weakest_neighbor(g, h) == "Ashworth"
+    g = _bordered_game()
+    h = "Ashworth"
+    # Set truce with Brandtner expiring one turn in the future
+    g.houses[h].truces["Brandtner"] = g.turn + 1
+    # Brandtner blocked, weakest neighbor must be Karsgate (the only other borderer)
+    assert _weakest_neighbor(g, h) == "Karsgate"
 
 
 # --- R5: marriageable kin at age >= 16, living, not ruler ------------------
@@ -630,28 +648,28 @@ def test_r4_consolidation_domain_is_labor():
 def test_r5_dominion_backed_by_industry():
     """Dominion family uses the court's INDUSTRY stat, not intrigue.
 
-    Uses Brandtner at the base fixture where industry=11, intrigue=13,
+    Uses Duval-Corse at the base fixture where industry=12, intrigue=11,
     and _found_spot returns None (no +10). With ambitious_content=0,
-    Dominion should score 11.0 (industry), not 13.0 (intrigue).
+    Dominion should score 12.0 (industry), not 11.0 (intrigue).
     """
     g = _fixture_game()
-    h = "Brandtner"
+    h = "Duval-Corse"
     realm = g.realms[h]
     ruler = realm.ruler
 
-    # Assert premise: industry != intrigue at Brandtner
+    # Assert premise: industry != intrigue at Duval-Corse
     industry = _stat(realm, "industry")
     intrigue = _stat(realm, "intrigue")
     assert industry != intrigue, "Fixture premise broken: industry == intrigue"
-    assert industry == 11
-    assert intrigue == 13
+    assert industry == 12
+    assert intrigue == 11
 
     # Assert premise: no found spot (no +10 bonus)
     assert _found_spot(g, h) is None
 
     ruler.dispositions["ambitious_content"] = 0.0
     score = _score_family(g, h, "Dominion", ruler, realm)
-    assert score == 11.0, f"Dominion should score industry (11.0), got {score}"
+    assert score == 12.0, f"Dominion should score industry (12.0), got {score}"
 
 
 # --- R6: Buyout penalty when no rival exists ---------------------------------
