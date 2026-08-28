@@ -1,6 +1,7 @@
 """Stage 11K: the takeover's door.
 
-Seed 7, twelve turns, driven by end_turn() ONLY. The signature verb
+Seed 11 (seed 7's purchases now fund wars — 80 debited, not 100), twelve
+turns, driven by end_turn() ONLY. The signature verb
 (quiet share purchase via a House's disloyal holders) must actually
 fire: the door must open for at least one House a live campaign is
 targeting, advance() must find sellers on at least five separate
@@ -11,7 +12,7 @@ import gilded.society.realm as realm_mod
 from gilded.chassis import GildedGame
 
 
-def _run(seed=7, turns=12):
+def _run(seed=11, turns=12):
     """Play *turns* of seed *seed* with end_turn() only.
 
     Returns (game, track) where track records, per Takeover.advance
@@ -46,7 +47,7 @@ def _label_debits(game, label):
                 for (_t, l, amt) in h.journal if l == label)
 
 
-def test_seed7_share_purchase_debits_at_least_100():
+def test_seed11_share_purchase_debits_at_least_100():
     game, _track = _run()
     spent = _label_debits(game, "share purchase")
     assert spent >= 100, f"share purchase debited {spent:.1f}, need >= 100"
