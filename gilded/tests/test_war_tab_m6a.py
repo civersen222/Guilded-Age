@@ -13,7 +13,7 @@ from gilded.fronts import (TRUCE_TURNS, PeaceTerms, WarGoal,
                            ai_acceptable, allocate, declare_war,
                            negotiate_peace, raise_regiments)
 
-SEED = 42
+SEED = 26  # C5 wave-1 atlas: seed 42's houses no longer share a border; 26 keeps one
 
 
 class ZeroRng(random.Random):
