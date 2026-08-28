@@ -290,11 +290,12 @@ def test_input_cost_deducted_from_consumer_enterprise_dividend():
     from gilded.market import CONSUMES
 
     g = GildedGame(seed=42)
-    consumer_ent = None
-    for ent in g.enterprises:
-        if ent.kind in CONSUMES:
-            consumer_ent = ent
-            break
+    consumers = [e for e in g.enterprises if e.kind in CONSUMES]
+    # The AI expands each house's first consumer enterprise during the turn
+    # (eid 1 and 9 are mid-construction by dividend time, so their input
+    # cost is 0); pick a consumer that is measured to still be operating
+    # after the turn.
+    consumer_ent = consumers[1]
     assert consumer_ent is not None
 
     house = consumer_ent.house

@@ -449,7 +449,11 @@ def test_takeover_max_shares_per_turn():
 
     assert len(houses) >= 2, "Need at least 2 houses with enterprises"
 
-    target_house = list(houses.keys())[0]
+    from gilded.society.realm import disloyal_shareholders
+    # The target must actually have a disloyal shareholder: at seed 42 the
+    # first house with enterprises (Ashworth) has none.
+    target_house = next(h for h in houses
+                        if disloyal_shareholders(g.realms.get(h), g.enterprises))
     buyer_house = None
     for h in houses:
         if h != target_house:
