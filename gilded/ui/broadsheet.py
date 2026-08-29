@@ -997,6 +997,7 @@ class BroadsheetView:
         hud_h = _hud_height()
         content = pygame.Rect(0, TAB_H + hud_h, self._w,
                               self._h - TAB_H - hud_h - BOTTOM_H)
+        content.height -= self._guide_text_height() + 4
 
         if self.active_tab == "House":
             if self.house_page == "Ledger":
@@ -1273,17 +1274,15 @@ class BroadsheetView:
                                 hint=hint,
                                 group="guide",
                                 state=RegionState.ENABLED))
-        # Teaching statement wrapped within the full width, drawn above the
-        # bottom bar so every term stays on the opening frame.
+    def _guide_text_height(self) -> int:
+        """Height of the wrapped guide statement block above the bottom bar."""
+        body = _font(TYPE_BODY)
         max_w = self._w - 2 * PAD
         if max_w < 200:
-            return
+            return 0
         lines = _wrap(guide_statement(), body, max_w)
         line_h = body.get_height() + 4
-        y0 = y - 12 - line_h * len(lines)
-        for line in lines:
-            blit_text(surface, body, line, (PAD, y0), INK)
-            y0 += line_h
+        return line_h * len(lines) + 12
 
     def _draw_bottom_bar(self, surface) -> None:
         y = self._h - BOTTOM_H
@@ -1788,12 +1787,16 @@ class BroadsheetView:
         w = content.width - 2 * PAD
         if y is None:
             y = content.y + PAD
-        if bottom is not None and y > bottom - 120:
+        if bottom is None:
+            bottom = content.bottom
+        if y > bottom - 120:
             return y
         blit_text(surface, title, "Standing Policy", (x, y), INK)
         y += title.get_height() + 12
         track_w = w - 240
         for key in DIRECTIVE_KEYS:
+            if y > bottom - 24:
+                break
             left, right = POLES[key]
             stance = directives.stances.get(key, 0)
             # label row
@@ -1888,29 +1891,28 @@ class BroadsheetView:
                 bg, edge = DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE
             pygame.draw.rect(surf, bg, btn_rect)
             pygame.draw.rect(surf, edge, btn_rect, 2)
-            f = _font(TYPE_TEXT)
-            t = f.render(text, True, BUTTON_TEXT)
-            surf.blit(t, (btn_rect.x + 8, btn_rect.y + 4))
+            blit_text(surf, _font(TYPE_TEXT), text,
+                      (btn_rect.x + 8, btn_rect.y + 4), BUTTON_TEXT)
 
         panel_x = rect.right - 260
         panel_w = 250
-        y = rect.top + 10
+        # Start below the War toggle button (top+8, 30 px tall) so the panel
+        # title never collides with it.
+        y = rect.top + 46
 
         body = _font(TYPE_TEXT)
         title = _font(TYPE_CAPTION, bold=True)
 
         # Title
-        title_surf = title.render("PEACE TIME ACTIONS", True, INK)
-        surface.blit(title_surf, (panel_x + 4, y))
-        y += title_surf.get_height() + 6
+        blit_text(surface, title, "PEACE TIME ACTIONS", (panel_x + 4, y), INK)
+        y += title.get_height() + 6
 
         # Separator
         pygame.draw.line(surface, INK, (panel_x, y), (panel_x + panel_w, y))
         y += 8
 
         # --- Acquire Minor section ---
-        sec_title = body.render("Acquire Minor:", True, INK)
-        surface.blit(sec_title, (panel_x + 4, y))
+        blit_text(surface, body, "Acquire Minor:", (panel_x + 4, y), INK)
         y += body.get_height() + 2
 
         # Find bordering minors
@@ -1949,8 +1951,7 @@ class BroadsheetView:
         y += 4
 
         # --- Build Rail section ---
-        sec_title = body.render("Build Rail:", True, INK)
-        surface.blit(sec_title, (panel_x + 4, y))
+        blit_text(surface, body, "Build Rail:", (panel_x + 4, y), INK)
         y += body.get_height() + 2
 
         # Find rail-less links between owned provinces
@@ -1987,8 +1988,7 @@ class BroadsheetView:
         y += 4
 
         # --- Tour Province section ---
-        sec_title = body.render("Tour Province:", True, INK)
-        surface.blit(sec_title, (panel_x + 4, y))
+        blit_text(surface, body, "Tour Province:", (panel_x + 4, y), INK)
         y += body.get_height() + 2
 
         # Find owned provinces
@@ -2875,8 +2875,7 @@ class BroadsheetView:
         line_h = body.get_height() + 2
         sy = y + 4
         # Header
-        header = body.render("INTRIGUE", True, TONES.get("bad", INK))
-        surface.blit(header, (PAD, sy))
+        blit_text(surface, body, "INTRIGUE", (PAD, sy), TONES.get("bad", INK))
         sy += header_h
         for line in lines:
             color = TONES.get("warn", INK) if line.startswith("⚠") else INK

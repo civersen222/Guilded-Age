@@ -421,9 +421,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         # "Designate Heir" button — opens the heir picker
         y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
 
-    # Draw text lines
+    # Draw text lines — stop above the ambition button zone when view is set
+    max_bottom = (content.bottom - 58) if view is not None else content.bottom
     for line in lines:
-        if y > content.bottom:
+        if y > max_bottom:
             break
         color = INK
         if line.startswith("  ?"):

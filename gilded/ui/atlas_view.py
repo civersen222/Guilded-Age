@@ -176,7 +176,7 @@ def atlas_glyph_rects(game, transform, rect: pygame.Rect,
             if not collide:
                 drawn.append((pid, gr))
                 all_rects.append(gr)
-            y_offset += g.get_height()
+            y_offset += gh
     return drawn
 
 
