@@ -998,7 +998,8 @@ class BroadsheetView:
         surface.fill(PAPER_BG)
         hud_h = _hud_height()
         content = pygame.Rect(0, TAB_H + hud_h, self._w,
-                              self._h - TAB_H - hud_h - BOTTOM_H)
+                              self._h - TAB_H - hud_h - BOTTOM_H
+                              - self._guide_strip_h())
 
         if self.active_tab == "House":
             if self.house_page == "Ledger":
@@ -1248,6 +1249,17 @@ class BroadsheetView:
             y += 10  # paragraph gap
             if y + line_h > h - BOTTOM_H - 20:
                 break
+
+    def _guide_strip_h(self) -> int:
+        """Height the guide strip reserves above the bottom bar: the wrapped
+        teaching statement lines plus its 12px offset, or 0 when it cannot
+        fit (matches the early return in _draw_guide)."""
+        max_w = self._w - 2 * PAD
+        if max_w < 200:
+            return 0
+        body = _font(TYPE_BODY)
+        lines = _wrap(guide_statement(), body, max_w)
+        return 12 + (body.get_height() + 4) * len(lines)
 
     def _draw_guide(self, surface) -> None:
         """Persistent guide strip above the bottom bar: a teaching statement
@@ -2730,14 +2742,18 @@ class BroadsheetView:
         from gilded.peerage import report as peerage_report
         from gilded.ui.court_actions import _get_appointment_pool
         rpt = peerage_report(self.game, self.house)
-        y = draw_house_tab(surface, content, rpt, self)
+        # Reserve the bottom band: _draw_ambition_controls pins its button
+        # at content.bottom - 30; the tab's text flow must stop above it.
+        tab_content = content.copy()
+        tab_content.bottom -= 60
+        y = draw_house_tab(surface, tab_content, rpt, self)
         # spec §2: the Briefing's ladder + agenda re-homed here (the House
         # spine is their home now); the agenda cards are the docket's decisions.
-        y = self._draw_ladder_and_agenda(surface, content, y + 8,
-                                         bottom=content.bottom - 40)
+        y = self._draw_ladder_and_agenda(surface, tab_content, y + 8,
+                                         bottom=content.bottom - 60)
         # Draw intrigue section (plot visibility)
-        y = self._draw_intrigue(surface, content, y,
-                                bottom=content.bottom - 40)
+        y = self._draw_intrigue(surface, tab_content, y,
+                                bottom=content.bottom - 60)
         # C2: the Set Ambition button, then the family picker when open
         self._draw_ambition_controls(surface, content)
         if self._ambition_picker:
