@@ -395,8 +395,11 @@ def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
 
 
 def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = None,
-                accent_log=None) -> Dict[int, List[Tuple[int, int]]]:
+                accent_log=None, label_rect=None) -> Dict[int, List[Tuple[int, int]]]:
     """Paint the whole map onto surface within rect; returns the polygons it used.
+    label_rect, when given, is the region province labels and endowment glyphs
+    are placed in — pass a rect narrowed from the right when the tab overlays
+    a side panel (the action panel) so labels never land under it.
 
     accent_log, when given, is appended with the accent marks the pass
     actually draws: ("vermillion", is_player) for live war fronts and
@@ -460,15 +463,18 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                                      transform.apply(ca),
                                      transform.apply(cd), 3)
 
-        # province labels
-        labels = atlas_label_rects(game, transform, rect, selected_pid)
+        # province labels and endowment glyphs are placed in lr_bound
+        # (rect narrowed from the right when the tab overlays the action
+        # panel) so they never land under it.
+        lr_bound = label_rect if label_rect is not None else rect
+        labels = atlas_label_rects(game, transform, lr_bound, selected_pid)
         font = _font(TYPE_CAPTION)
         for pid, lr in labels:
             prov = game.atlas.provinces[pid]
             blit_text(surface, font, prov.name, lr.topleft, NAME_COLOR)
 
         # endowment glyphs
-        glyphs = atlas_glyph_rects(game, transform, rect, selected_pid)
+        glyphs = atlas_glyph_rects(game, transform, lr_bound, selected_pid)
         glyph_font = _font(TYPE_CAPTION)
         # One rect per endowment glyph; stack order matches sorted endowments
         per_pid: dict = {}

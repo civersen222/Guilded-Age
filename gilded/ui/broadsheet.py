@@ -1847,8 +1847,14 @@ class BroadsheetView:
             rect = pygame.Rect(0, TAB_H + hud_h, self._w,
                                self._h - TAB_H - hud_h - BOTTOM_H
                                - self._guide_strip_h())
+        # Narrow the label region from the right: the action panel
+        # (_draw_atlas_actions) overlays the last 260px of the content rect.
+        label_rect = pygame.Rect(rect)
+        if rect.w > 520:
+            label_rect.right -= 264
         self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid,
-                                       accent_log=self._accent_log)
+                                       accent_log=self._accent_log,
+                                       label_rect=label_rect)
         self.regions.add(Region(rect=rect,
                                 action={"select_province": None},
                                 hint="Click a province to inspect it.",
