@@ -530,10 +530,9 @@ class Table:
         # draw headers
         for i, col in enumerate(self.cols):
             hr = lay.header_rects[i]
-            text = f_header.render(col.header, True, INK)
             x = hr.left + 4
-            y = hr.centery - text.get_height() // 2
-            surface.blit(text, (x, y))
+            y = hr.centery - f_header.size(col.header)[1] // 2
+            blit_text(surface, f_header, col.header, (x, y), INK)
 
         # draw rule
         if self.row_rule:
@@ -545,8 +544,7 @@ class Table:
             for col_idx in range(len(self.cols)):
                 cell = row[col_idx] if col_idx < len(row) else ""
                 tr = lay.text_rects[row_idx][col_idx]
-                text = f_body.render(cell, True, INK)
-                surface.blit(text, (tr.x, tr.y))
+                blit_text(surface, f_body, cell, (tr.x, tr.y), INK)
 
         return lay
 
@@ -560,9 +558,7 @@ def _place_text(
 ) -> pygame.Rect:
     if not text.strip():
         return pygame.Rect(cell.x + 4, cell.centery - line_h // 2, 0, line_h)
-    surf = f.render(text, True, (0, 0, 0))
-    tw = surf.get_width()
-    th = surf.get_height()
+    tw, th = f.size(text)
     inset = 4
     y = cell.centery - th // 2
     if align == "right":
@@ -647,23 +643,17 @@ class Meter:
 
     def layout(self, rect: pygame.Rect) -> MeterLayout:
         f = font(self.size)
-        label_surf = f.render(self.label, True, INK)
-        value_surf = f.render(self.value_text(), True, INK)
-        arrow_surf = None
+        label_w, label_h = f.size(self.label)
+        value_w, value_h = f.size(self.value_text())
         if self.delta is not None:
-            arrow_surf = f.render(self.arrow(), True, TONES.get(self.delta_tone(), INK))
-
-        label_w = label_surf.get_width()
-        label_h = label_surf.get_height()
-        value_w = value_surf.get_width()
-        value_h = value_surf.get_height()
-        arrow_w = arrow_surf.get_width() if arrow_surf else 0
-        arrow_h = arrow_surf.get_height() if arrow_surf else 0
+            arrow_w, arrow_h = f.size(self.arrow())
+        else:
+            arrow_w, arrow_h = 0, 0
 
         gap = 6
         # horizontal: label | bar | arrow | value
         # arrow sits inline between bar and value when present
-        arrow_reserve = (arrow_w + gap) if arrow_surf else 0
+        arrow_reserve = (arrow_w + gap) if self.delta is not None else 0
         right_reserve = arrow_reserve + value_w
         available = rect.width - label_w - gap - right_reserve
         if available < 0:
@@ -681,7 +671,7 @@ class Meter:
         label_rect = pygame.Rect(rect.left, rect.top, label_w, label_h)
 
         arrow_rect: pygame.Rect | None = None
-        if arrow_surf:
+        if self.delta is not None:
             # place arrow inline between bar and value
             ax = bar_rect.right + gap
             ay = bar_top + (bar_h - arrow_h) // 2
@@ -714,8 +704,7 @@ class Meter:
         f = font(self.size)
 
         # label
-        label_surf = f.render(self.label, True, INK)
-        surface.blit(label_surf, lay.label_rect.topleft)
+        blit_text(surface, f, self.label, lay.label_rect.topleft, INK)
 
         # bar outline
         pygame.draw.rect(surface, CARD_EDGE, lay.bar_rect, 1)
@@ -726,14 +715,12 @@ class Meter:
             pygame.draw.rect(surface, tone_color, lay.fill_rect)
 
         # value
-        value_surf = f.render(self.value_text(), True, INK)
-        surface.blit(value_surf, lay.value_rect.topleft)
+        blit_text(surface, f, self.value_text(), lay.value_rect.topleft, INK)
 
         # arrow
         if lay.arrow_rect is not None:
             arrow_color = TONES.get(self.delta_tone(), INK)
-            arrow_surf = f.render(self.arrow(), True, arrow_color)
-            surface.blit(arrow_surf, lay.arrow_rect.topleft)
+            blit_text(surface, f, self.arrow(), lay.arrow_rect.topleft, arrow_color)
 
         return lay
 
@@ -766,18 +753,18 @@ class Chip:
 
     def size(self) -> tuple[int, int]:
         f = font(self.pt)
-        surf = f.render(self.text, True, (0, 0, 0))
-        return (surf.get_width() + _CHIP_PAD_X * 2, surf.get_height() + _CHIP_PAD_Y * 2)
+        tw, th = f.size(self.text)
+        return (tw + _CHIP_PAD_X * 2, th + _CHIP_PAD_Y * 2)
 
     def draw(self, surface: pygame.Surface, pos: tuple[int, int]) -> pygame.Rect:
         s = self.size()
         rect = pygame.Rect(pos[0], pos[1], s[0], s[1])
         pygame.draw.rect(surface, self.bg(), rect, border_radius=6)
         f = font(self.pt)
-        text_surf = f.render(self.text, True, self.ink())
+        tw, th = f.size(self.text)
         tx = rect.left + _CHIP_PAD_X
-        ty = rect.centery - text_surf.get_height() // 2
-        surface.blit(text_surf, (tx, ty))
+        ty = rect.centery - th // 2
+        blit_text(surface, f, self.text, (tx, ty), self.ink())
         return rect
 
 
@@ -826,8 +813,7 @@ class Panel:
         # draw title
         if self.title:
             f = font(self.size, bold=True)
-            title_surf = f.render(self.title, True, INK)
             tx = self.rect.left + _PANEL_PAD + _PANEL_BORDER
             ty = self.rect.top + _PANEL_PAD + _PANEL_BORDER
-            surface.blit(title_surf, (tx, ty))
+            blit_text(surface, f, self.title, (tx, ty), INK)
         return self.inner()

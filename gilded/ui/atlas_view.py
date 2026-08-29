@@ -117,9 +117,8 @@ def atlas_label_rects(game, transform, rect: pygame.Rect,
     for pid in pids:
         prov = game.atlas.provinces[pid]
         cx, cy = transform.apply(prov.center)
-        label = name_font.render(prov.name, True, NAME_COLOR)
-        lr = pygame.Rect(cx - label.get_width() // 2, cy - label.get_height() // 2,
-                         label.get_width(), label.get_height())
+        lw, lh = name_font.size(prov.name)
+        lr = pygame.Rect(cx - lw // 2, cy - lh // 2, lw, lh)
         # Must be inside content rect
         if not (rect.left <= lr.left and lr.right <= rect.right and
                 rect.top <= lr.top and lr.bottom <= rect.bottom):
@@ -162,9 +161,8 @@ def atlas_glyph_rects(game, transform, rect: pygame.Rect,
         # Stack each endowment glyph below center, one rect per glyph
         y_offset = 2
         for endowment in sorted(prov.endowments.keys()):
-            g = glyph_font.render(_ENDOWMENT_GLYPH[endowment], True, GLYPH_COLOR)
-            gr = pygame.Rect(cx - g.get_width() // 2, cy + y_offset,
-                             g.get_width(), g.get_height())
+            gw, gh = glyph_font.size(_ENDOWMENT_GLYPH[endowment])
+            gr = pygame.Rect(cx - gw // 2, cy + y_offset, gw, gh)
             # Must be inside content rect
             if not (rect.left <= gr.left and gr.right <= rect.right and
                     rect.top <= gr.top and gr.bottom <= rect.bottom):
@@ -178,7 +176,7 @@ def atlas_glyph_rects(game, transform, rect: pygame.Rect,
             if not collide:
                 drawn.append((pid, gr))
                 all_rects.append(gr)
-            y_offset += g.get_height()
+            y_offset += gh
     return drawn
 
 

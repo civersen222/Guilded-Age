@@ -278,13 +278,12 @@ def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
     if "revolution" in model.chips:
         row3_keys.append("revolution")
     for key in row3_keys:
-        surf = fs.render(model.chips[key].text, True, INK)
-        w = surf.get_width() + 16
+        w = fs.size(model.chips[key].text)[0] + 16
         chip_specs.append((key, w))
-    surf_era = fs.render(model.texts["era"], True, INK)
-    surf_era_sub = fs.render(model.texts["era_sub"], True, INK)
-    chip_specs.append(("era", surf_era.get_width() + 8))
-    chip_specs.append(("era_sub", surf_era_sub.get_width() + 4))
+    era_w = fs.size(model.texts["era"])[0] + 8
+    era_sub_w = fs.size(model.texts["era_sub"])[0] + 4
+    chip_specs.append(("era", era_w))
+    chip_specs.append(("era_sub", era_sub_w))
 
     n_items = len(chip_specs)
     total_gap = (n_items - 1) * 12
@@ -302,10 +301,8 @@ def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
     y += row3_h + _ROW_GAP
 
     # --- Row 4: rival label + rank (both text, drawn in HUD_INK) ---
-    surf_rival = fs.render(model.texts["rival"], True, INK)
-    rival_w = surf_rival.get_width() + 8
-    surf_rank = fs.render(model.texts["rank"], True, INK)
-    rank_w = surf_rank.get_width() + 8
+    rival_w = fs.size(model.texts["rival"])[0] + 8
+    rank_w = fs.size(model.texts["rank"])[0] + 8
     result["rival"] = pygame.Rect(x0, y, rival_w, rh)
     result["rank"] = pygame.Rect(x0 + rival_w + 12, y, rank_w, rh)
 
@@ -475,15 +472,13 @@ class PowersTable(Table):
         if not text.strip():
             return text
         max_w = cell.width - 8
-        surf = f.render(text, True, BLACK)
-        if surf.get_width() <= max_w:
+        if f.size(text)[0] <= max_w:
             return text  # fits, no truncation needed
         # Text is too long — shorten and append ellipsis
         ellipsis = "…"
         while len(text) > 1:
             candidate = text + ellipsis
-            surf = f.render(candidate, True, BLACK)
-            if surf.get_width() <= max_w:
+            if f.size(candidate)[0] <= max_w:
                 return candidate
             text = text[:-1]
         return text + ellipsis
@@ -1101,8 +1096,7 @@ class BroadsheetView:
                 pygame.draw.rect(surface, CARD_EDGE, rect, 1)
                 cy = rect.top + pad
                 for line in lines:
-                    surf_t = font.render(line, True, PAPER_BG)
-                    surface.blit(surf_t, (rect.left + pad, cy))
+                    blit_text(surface, font, line, (rect.left + pad, cy), PAPER_BG)
                     cy += line_h
                 surface.set_clip(old_clip)
                 self.tooltip_text = text
@@ -1131,10 +1125,10 @@ class BroadsheetView:
             ))
             if name == self.active_tab:
                 pygame.draw.rect(surface, TAB_ACTIVE, rect)
-            label = font.render(name, True,
-                                INK if name == self.active_tab else TAB_TEXT)
-            surface.blit(label, (rect.centerx - label.get_width() / 2,
-                                 rect.centery - label.get_height() / 2))
+            w, h = font.size(name)
+            blit_text(surface, font, name,
+                      (rect.centerx - w / 2, rect.centery - h / 2),
+                      INK if name == self.active_tab else TAB_TEXT)
 
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
@@ -1153,13 +1147,15 @@ class BroadsheetView:
                 model.meters[key].draw(surface, rect)
             elif key in model.chips:
                 chip = model.chips[key]
-                chip_surf = fs.render(chip.text, True, INK)
                 pygame.draw.rect(surface, chip.bg(), rect, border_radius=4)
-                surface.blit(chip_surf, (rect.left + 6, rect.centery - chip_surf.get_height() // 2))
+                chip_pos = (rect.left + 6,
+                           rect.centery - fs.size(chip.text)[1] // 2)
+                blit_text(surface, fs, chip.text, chip_pos, INK)
             elif key in model.texts:
                 text = model.texts[key]
-                text_surf = fs.render(text, True, HUD_INK)
-                surface.blit(text_surf, (rect.left, rect.centery - text_surf.get_height() // 2))
+                text_pos = (rect.left,
+                           rect.centery - fs.size(text)[1] // 2)
+                blit_text(surface, fs, text, text_pos, HUD_INK)
 
         # Draw intent text in row 5
         spotlight = b.rival_name or (
@@ -1170,8 +1166,9 @@ class BroadsheetView:
         else:
             intent_text = "No clear threat"
         intent_rect = layout["intent"]
-        intent_surf = fs.render(intent_text, True, HUD_INK)
-        surface.blit(intent_surf, (intent_rect.left, intent_rect.centery - intent_surf.get_height() // 2))
+        intent_pos = (intent_rect.left,
+                     intent_rect.centery - fs.size(intent_text)[1] // 2)
+        blit_text(surface, fs, intent_text, intent_pos, HUD_INK)
 
     def _draw_action_messages(self, surface) -> None:
         """Draw action result messages in the bottom bar area above the turn button."""
@@ -1195,9 +1192,9 @@ class BroadsheetView:
             if current:
                 parts.append(current)
             for line in reversed(parts):
-                surf = font.render(line, True, INK)
-                surface.blit(surf, (PAD, y - surf.get_height()))
-                y -= surf.get_height() + 2
+                line_h = font.size(line)[1]
+                blit_text(surface, font, line, (PAD, y - line_h), INK)
+                y -= line_h + 2
             break  # Show only the most recent message
 
     def _draw_ending_overlay(self, surface, content) -> None:
@@ -1217,18 +1214,16 @@ class BroadsheetView:
         y = TAB_H + 20
         f_title = _font(TYPE_TITLE, bold=True)
         ending_name = epilogue.ending_key
-        title_surf = f_title.render(ending_name, True, INK)
-        surface.blit(title_surf, (PAD, y))
-        y += title_surf.get_height() + 30
+        blit_text(surface, f_title, ending_name, (PAD, y), INK)
+        y += f_title.size(ending_name)[1] + 30
 
         # Four axis scores
         f_axis = _font(TYPE_SUBTITLE, bold=True)
         for axis_name in ("capital", "standing", "blood", "world"):
             score = epilogue.axes[axis_name]
             label = f"{axis_name.title()}: {score:.2f}"
-            surf = f_axis.render(label, True, INK)
-            surface.blit(surf, (PAD, y))
-            y += surf.get_height() + 6
+            blit_text(surface, f_axis, label, (PAD, y), INK)
+            y += f_axis.size(label)[1] + 6
 
         # Divider
         y += 10
@@ -1248,8 +1243,7 @@ class BroadsheetView:
             for line in wrapped:
                 if y + line_h > h - BOTTOM_H - 20:
                     break
-                surf = f_body.render(line, True, INK)
-                surface.blit(surf, (PAD, y))
+                blit_text(surface, f_body, line, (PAD, y), INK)
                 y += line_h
             y += 10  # paragraph gap
             if y + line_h > h - BOTTOM_H - 20:
@@ -1270,10 +1264,10 @@ class BroadsheetView:
         # Fit the label into the button; trim from the right if too wide.
         while body.size(label)[0] > 138:
             label = label[:-6].rstrip(" ,.:") + "…"
-        nlabel = body.render(label, True, BUTTON_TEXT)
+        label_pos = (btn.x + 10, btn.centery - body.size(label)[1] // 2)
         pygame.draw.rect(surface, GUIDE_BG, btn)
         pygame.draw.rect(surface, GUIDE_EDGE, btn, 2)
-        surface.blit(nlabel, (btn.x + 10, btn.centery - nlabel.get_height() // 2))
+        blit_text(surface, body, label, label_pos, BUTTON_TEXT)
         self.regions.add(Region(rect=btn,
                                 action=action,
                                 hint=hint,
@@ -1288,8 +1282,7 @@ class BroadsheetView:
         line_h = body.get_height() + 4
         y0 = y - 12 - line_h * len(lines)
         for line in lines:
-            surf = body.render(line, True, INK)
-            surface.blit(surf, (PAD, y0))
+            blit_text(surface, body, line, (PAD, y0), INK)
             y0 += line_h
 
     def _draw_bottom_bar(self, surface) -> None:
@@ -1297,10 +1290,11 @@ class BroadsheetView:
         pygame.draw.rect(surface, TAB_BG, (0, y, self._w, BOTTOM_H))
         attn = self.game.attention.get(self.house, 0)
         font = _font(TYPE_TEXT, bold=True)
-        label = font.render(f"Attention: {attn}", True, ATTN_COLOR)
-        surface.blit(label, (PAD, y + (BOTTOM_H - label.get_height()) / 2))
+        attn_text = f"Attention: {attn}"
+        aw, ah = font.size(attn_text)
+        blit_text(surface, font, attn_text, (PAD, y + (BOTTOM_H - ah) // 2), ATTN_COLOR)
         from gilded.save import quicksave_path
-        save_x = PAD + max(label.get_width(), 118) + 14
+        save_x = PAD + max(aw, 118) + 14
         for action_key, btn_label in (("quicksave", "Save"),
                                       ("quickload", "Open")):
             disabled = action_key == "quickload" and not os.path.exists(quicksave_path())
@@ -1323,25 +1317,25 @@ class BroadsheetView:
                                         action={action_key: True},
                                         hint=hint,
                                         group="chrome"))
-            blabel = font.render(btn_label, True,
-                                 DISABLED_TEXT if disabled else TAB_TEXT)
+            bw, bh = font.size(btn_label)
             pygame.draw.rect(surface,
                              DISABLED_FILL if disabled else EXEC_BG, rect)
-            surface.blit(blabel, (rect.centerx - blabel.get_width() // 2,
-                                  rect.centery - blabel.get_height() // 2))
+            blit_text(surface, font, btn_label,
+                      (rect.centerx - bw // 2, rect.centery - bh // 2),
+                      DISABLED_TEXT if disabled else TAB_TEXT)
             save_x += bwidth + 8
-        nlabel = font.render(
-            f"Narrate: {'on' if self.narrate_on else 'off'}", True, TAB_TEXT)
-        nrect = pygame.Rect(self._w - 170 - nlabel.get_width() - 36,
-                            y + 10, nlabel.get_width() + 20, BOTTOM_H - 20)
+        ntext = f"Narrate: {'on' if self.narrate_on else 'off'}"
+        nw, nh = font.size(ntext)
+        nrect = pygame.Rect(self._w - 170 - nw - 36,
+                            y + 10, nw + 20, BOTTOM_H - 20)
         self._narrate_rect = nrect
         self.regions.add(Region(rect=nrect,
                                 action={"toggle_narrate": True},
                                 hint="Turn the narrator's prose on or off.",
                                 group="chrome"))
         pygame.draw.rect(surface, EXEC_BG, nrect)
-        surface.blit(nlabel, (nrect.centerx - nlabel.get_width() / 2,
-                              nrect.centery - nlabel.get_height() / 2))
+        blit_text(surface, font, ntext,
+                  (nrect.centerx - nw // 2, nrect.centery - nh // 2), TAB_TEXT)
         rect = pygame.Rect(self._w - 170, y + 10, 154, BOTTOM_H - 20)
         self._end_turn_rect = rect
         self.regions.add(Region(rect=rect,
@@ -1349,9 +1343,9 @@ class BroadsheetView:
                                 hint="Close the session and let the world move.",
                                 group="chrome"))
         pygame.draw.rect(surface, ENDTURN_BG, rect)
-        et = font.render("End Turn", True, BUTTON_TEXT)
-        surface.blit(et, (rect.centerx - et.get_width() / 2,
-                          rect.centery - et.get_height() / 2))
+        ew, eh = font.size("End Turn")
+        blit_text(surface, font, "End Turn",
+                  (rect.centerx - ew // 2, rect.centery - eh // 2), BUTTON_TEXT)
 
     # --- the Council briefing ------------------------------------------------
 
@@ -1383,10 +1377,10 @@ class BroadsheetView:
     def _draw_briefing(self, surface, content: pygame.Rect) -> None:
         board = scoreboard(self.game, self.house)
         d = delta(self.prev_board, board)
-        title = _font(TYPE_TITLE, bold=True).render(
-            f"COUNCIL BRIEFING - {board.year}", True, INK)
-        surface.blit(title, (PAD, content.y + 6))
-        y = content.y + 6 + title.get_height() + 8
+        title_font = _font(TYPE_TITLE, bold=True)
+        title_text = f"COUNCIL BRIEFING - {board.year}"
+        blit_text(surface, title_font, title_text, (PAD, content.y + 6), INK)
+        y = content.y + 6 + title_font.size(title_text)[1] + 8
         head = _font(TYPE_SUBTITLE, bold=True)
         body = _font(TYPE_TEXT)
         width = content.width - 2 * PAD
@@ -1474,12 +1468,11 @@ class BroadsheetView:
                 hy += body.get_height() + 2
             bx = PAD + 10
             for opt in p.options:
-                blabel = small.render(opt.text, True, BUTTON_TEXT)
-                bw = blabel.get_width() + 20
+                bw = small.size(opt.text)[0] + 20
                 brect = pygame.Rect(bx, hy + 4, bw, 26)
                 pygame.draw.rect(surface, BUTTON_BG, brect)
                 pygame.draw.rect(surface, BUTTON_EDGE, brect, 1)
-                surface.blit(blabel, (brect.x + 10, brect.y + 5))
+                blit_text(surface, small, opt.text, (brect.x + 10, brect.y + 5), BUTTON_TEXT)
                 ex = self._chosen_executor(p.pid)
                 exec_id = None if ex is None else ex.id
                 self._option_hits.append(
@@ -1492,11 +1485,11 @@ class BroadsheetView:
             ex = self._chosen_executor(p.pid)
             ex_name = ("executor: default" if ex is None
                        else f"executor: {ex.name}")
-            elabel = small.render(ex_name, True, BUTTON_TEXT)
-            erect = pygame.Rect(bx, hy + 4, elabel.get_width() + 20, 26)
+            ew = small.size(ex_name)[0]
+            erect = pygame.Rect(bx, hy + 4, ew + 20, 26)
             pygame.draw.rect(surface, EXEC_BG, erect)
             pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
-            surface.blit(elabel, (erect.x + 10, erect.y + 5))
+            blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5), BUTTON_TEXT)
             self._exec_hits.append((erect, p.pid))
             self.regions.add(Region(rect=erect,
                                     action={"cycle_exec": p.pid},
@@ -1516,11 +1509,10 @@ class BroadsheetView:
         items = {"Gazette": report.gazette, "Ledger": report.ledger,
                  "Letters": report.letters}[section]
         head_font = _font(TYPE_TITLE, bold=True)
-        head = head_font.render(
-            f"THE {section.upper()} - {report.year}", True, INK)
-        surface.blit(head, (PAD, content.y + 6))
+        head_text = f"THE {section.upper()} - {report.year}"
+        blit_text(surface, head_font, head_text, (PAD, content.y + 6), INK)
         # Horizontal rule under the head, in the gap before body text
-        rule_y = content.y + 6 + head.get_height() + 4
+        rule_y = content.y + 6 + head_font.size(head_text)[1] + 4
         pygame.draw.line(surface, INK,
                          (PAD, rule_y),
                          (content.width - PAD, rule_y), 1)
@@ -1540,13 +1532,12 @@ class BroadsheetView:
         # Continuation marker when overflow > 0
         if result.overflow > 0:
             marker_text = f"+ {result.overflow} more"
-            marker = body.render(marker_text, True, FADED)
             # Place marker at bottom of last column that has content
             last_ci = max(p[3] for p in result.placements) if result.placements else 0
             cols = column_plan(body_rect, body)
             mx = cols[last_ci].x
-            my = content.bottom - marker.get_height() - 8
-            surface.blit(marker, (mx, my))
+            my = content.bottom - body.size(marker_text)[1] - 8
+            blit_text(surface, body, marker_text, (mx, my), FADED)
 
     def _draw_ledger(self, surface, content: pygame.Rect) -> None:
         """Draw the Ledger tab: financial page built on the house journal."""
@@ -1566,25 +1557,18 @@ class BroadsheetView:
         overflow_items = 0
 
         # Title
-        title = f_title.render("LEDGER", True, INK)
-        surface.blit(title, (PAD, y))
-        y += title.get_height() + 6
+        blit_text(surface, f_title, "LEDGER", (PAD, y), INK)
+        y += f_title.size("LEDGER")[1] + 6
 
         # Turn and treasury line
-        turn_line = f_body.render(
-            f"Turn {model.turn}  |  Treasury: {gold(model.treasury)} gold",
-            True, INK,
-        )
-        surface.blit(turn_line, (PAD, y))
-        y += turn_line.get_height() + 10
+        turn_text = f"Turn {model.turn}  |  Treasury: {gold(model.treasury)} gold"
+        blit_text(surface, f_body, turn_text, (PAD, y), INK)
+        y += f_body.size(turn_text)[1] + 10
 
         # Totals bar
-        totals_text = f_body.render(
-            totals_line(model),
-            True, INK,
-        )
-        surface.blit(totals_text, (PAD, y))
-        y += totals_text.get_height() + 8
+        tl_text = totals_line(model)
+        blit_text(surface, f_body, tl_text, (PAD, y), INK)
+        y += f_body.size(tl_text)[1] + 8
 
         # Horizontal rule
         pygame.draw.line(surface, INK,
@@ -1605,9 +1589,8 @@ class BroadsheetView:
             # Draw table header
             f_h = _font(tbl.size, bold=True)
             for i, col in enumerate(tbl.cols):
-                txt = f_h.render(col.header, True, INK)
                 text_rect = tbl_layout.header_text_rects[i]
-                surface.blit(txt, text_rect)
+                blit_text(surface, f_h, col.header, text_rect.topleft, INK)
 
             # Draw rule
             pygame.draw.line(surface, INK,
@@ -1623,10 +1606,8 @@ class BroadsheetView:
                     overflow_items += len(tbl.data) - row_idx
                     break
                 for col_idx, cell in enumerate(row):
-                    cell_rect = tbl_layout.cell_rects[row_idx][col_idx]
                     text_rect = tbl_layout.text_rects[row_idx][col_idx]
-                    txt = f_b.render(cell, True, INK)
-                    surface.blit(txt, text_rect)
+                    blit_text(surface, f_b, cell, text_rect.topleft, INK)
                 drawn_rows += 1
             if drawn_rows > 0:
                 y = tbl_layout.cell_rects[drawn_rows - 1][0].bottom + 10
@@ -1634,16 +1615,14 @@ class BroadsheetView:
                 y = tbl_layout.rule_y + 10
         else:
             # Empty turn placeholder
-            placeholder = f_small.render("No financial activity this turn.", True, FADED)
-            surface.blit(placeholder, (PAD, y))
-            y += placeholder.get_height() + 10
+            blit_text(surface, f_small, "No financial activity this turn.", (PAD, y), FADED)
+            y += f_small.size("No financial activity this turn.")[1] + 10
 
         # History table
         if model.history and y < bottom:
-            hist_title = f_title.render("HISTORY", True, INK)
-            hist_title_h = hist_title.get_height() + 6
+            hist_title_h = f_title.size("HISTORY")[1] + 6
             if y + hist_title_h < bottom:
-                surface.blit(hist_title, (PAD, y))
+                blit_text(surface, f_title, "HISTORY", (PAD, y), INK)
                 y += hist_title_h
 
             h_cols = [Column("Turn", width=0.8, align="right"),
@@ -1658,9 +1637,8 @@ class BroadsheetView:
 
             f_h = _font(h_tbl.size, bold=True)
             for i, col in enumerate(h_tbl.cols):
-                txt = f_h.render(col.header, True, INK)
                 text_rect = h_tbl_layout.header_text_rects[i]
-                surface.blit(txt, text_rect)
+                blit_text(surface, f_h, col.header, text_rect.topleft, INK)
 
             pygame.draw.line(surface, INK,
                              (h_tbl_rect.left, h_tbl_layout.rule_y),
@@ -1674,10 +1652,8 @@ class BroadsheetView:
                     overflow_items += len(h_tbl.data) - row_idx
                     break
                 for col_idx, cell in enumerate(row):
-                    cell_rect = h_tbl_layout.cell_rects[row_idx][col_idx]
                     text_rect = h_tbl_layout.text_rects[row_idx][col_idx]
-                    txt = f_b.render(cell, True, INK)
-                    surface.blit(txt, text_rect)
+                    blit_text(surface, f_b, cell, text_rect.topleft, INK)
                 drawn_rows += 1
             if drawn_rows > 0:
                 y = h_tbl_layout.cell_rects[drawn_rows - 1][0].bottom + 10
@@ -1688,10 +1664,9 @@ class BroadsheetView:
 
         # Summary table
         if model.summary and y < bottom:
-            sum_title = f_title.render("SUMMARY", True, INK)
-            sum_title_h = sum_title.get_height() + 6
+            sum_title_h = f_title.size("SUMMARY")[1] + 6
             if y + sum_title_h < bottom:
-                surface.blit(sum_title, (PAD, y))
+                blit_text(surface, f_title, "SUMMARY", (PAD, y), INK)
                 y += sum_title_h
 
             s_cols = [Column("Label", width=2.0, align="left"),
@@ -1704,9 +1679,8 @@ class BroadsheetView:
 
             f_h = _font(s_tbl.size, bold=True)
             for i, col in enumerate(s_tbl.cols):
-                txt = f_h.render(col.header, True, INK)
                 text_rect = s_tbl_layout.header_text_rects[i]
-                surface.blit(txt, text_rect)
+                blit_text(surface, f_h, col.header, text_rect.topleft, INK)
 
             pygame.draw.line(surface, INK,
                              (s_tbl_rect.left, s_tbl_layout.rule_y),
@@ -1720,10 +1694,8 @@ class BroadsheetView:
                     overflow_items += len(s_tbl.data) - row_idx
                     break
                 for col_idx, cell in enumerate(row):
-                    cell_rect = s_tbl_layout.cell_rects[row_idx][col_idx]
                     text_rect = s_tbl_layout.text_rects[row_idx][col_idx]
-                    txt = f_b.render(cell, True, INK)
-                    surface.blit(txt, text_rect)
+                    blit_text(surface, f_b, cell, text_rect.topleft, INK)
                 drawn_rows += 1
             if drawn_rows > 0:
                 y = s_tbl_layout.cell_rects[drawn_rows - 1][0].bottom + 10
@@ -1734,36 +1706,34 @@ class BroadsheetView:
 
         # Notices
         if model.notices and y < bottom:
-            notice_title = f_title.render("NOTICES", True, INK)
-            notice_title_h = notice_title.get_height() + 6
+            notice_title_h = f_title.size("NOTICES")[1] + 6
             if y + notice_title_h < bottom:
-                surface.blit(notice_title, (PAD, y))
+                blit_text(surface, f_title, "NOTICES", (PAD, y), INK)
                 y += notice_title_h
 
             for notice in model.notices:
                 if notice:
-                    n_surf = f_small.render(notice, True, INK)
-                    if y + n_surf.get_height() > bottom:
+                    if y + f_small.size(notice)[1] > bottom:
                         overflow_items += 1
                         break
-                    surface.blit(n_surf, (PAD, y))
-                    y += n_surf.get_height() + 3
+                    blit_text(surface, f_small, notice, (PAD, y), INK)
+                    y += f_small.size(notice)[1] + 3
         elif model.notices:
             overflow_items += len([n for n in model.notices if n])
 
         # Overflow marker — always placed at the bottom of the content area
         if overflow_items > 0:
-            marker = f_small.render(f"+ {overflow_items} more", True, FADED)
-            my = bottom - marker.get_height() - 4
+            marker_text = f"+ {overflow_items} more"
+            my = bottom - f_small.size(marker_text)[1] - 4
             if my >= content.y:
-                surface.blit(marker, (PAD, my))
+                blit_text(surface, f_small, marker_text, (PAD, my), FADED)
 
         surface.set_clip(None)
 
     def _draw_docket(self, surface, content: pygame.Rect) -> None:
-        title = _font(TYPE_TITLE, bold=True).render("THE DOCKET", True, INK)
-        surface.blit(title, (PAD, content.y + 6))
-        y = content.y + 6 + title.get_height() + 10
+        title_font = _font(TYPE_TITLE, bold=True)
+        blit_text(surface, title_font, "THE DOCKET", (PAD, content.y + 6), INK)
+        y = content.y + 6 + title_font.size("THE DOCKET")[1] + 10
         self._draw_petition_cards(surface, content, y)
 
     def _draw_policies(self, surface, content, y: int = None,
@@ -1893,8 +1863,7 @@ class BroadsheetView:
             pygame.draw.rect(surf, bg, btn_rect)
             pygame.draw.rect(surf, edge, btn_rect, 2)
             f = _font(TYPE_TEXT)
-            t = f.render(text, True, BUTTON_TEXT)
-            surf.blit(t, (btn_rect.x + 8, btn_rect.y + 4))
+            blit_text(surf, f, text, (btn_rect.x + 8, btn_rect.y + 4), BUTTON_TEXT)
 
         panel_x = rect.right - 260
         panel_w = 250
@@ -1904,17 +1873,15 @@ class BroadsheetView:
         title = _font(TYPE_CAPTION, bold=True)
 
         # Title
-        title_surf = title.render("PEACE TIME ACTIONS", True, INK)
-        surface.blit(title_surf, (panel_x + 4, y))
-        y += title_surf.get_height() + 6
+        blit_text(surface, title, "PEACE TIME ACTIONS", (panel_x + 4, y), INK)
+        y += title.size("PEACE TIME ACTIONS")[1] + 6
 
         # Separator
         pygame.draw.line(surface, INK, (panel_x, y), (panel_x + panel_w, y))
         y += 8
 
         # --- Acquire Minor section ---
-        sec_title = body.render("Acquire Minor:", True, INK)
-        surface.blit(sec_title, (panel_x + 4, y))
+        blit_text(surface, body, "Acquire Minor:", (panel_x + 4, y), INK)
         y += body.get_height() + 2
 
         # Find bordering minors
@@ -1953,8 +1920,7 @@ class BroadsheetView:
         y += 4
 
         # --- Build Rail section ---
-        sec_title = body.render("Build Rail:", True, INK)
-        surface.blit(sec_title, (panel_x + 4, y))
+        blit_text(surface, body, "Build Rail:", (panel_x + 4, y), INK)
         y += body.get_height() + 2
 
         # Find rail-less links between owned provinces
@@ -1991,8 +1957,7 @@ class BroadsheetView:
         y += 4
 
         # --- Tour Province section ---
-        sec_title = body.render("Tour Province:", True, INK)
-        surface.blit(sec_title, (panel_x + 4, y))
+        blit_text(surface, body, "Tour Province:", (panel_x + 4, y), INK)
         y += body.get_height() + 2
 
         # Find owned provinces
@@ -2065,8 +2030,7 @@ class BroadsheetView:
 
         # Title
         f_title = _font(TYPE_HEADING, bold=True)
-        title_surf = f_title.render("THE POWERS", True, INK)
-        surface.blit(title_surf, (title_rect.left, title_rect.top))
+        blit_text(surface, f_title, "THE POWERS", (title_rect.left, title_rect.top), INK)
 
         # Table
         tbl = model.table
@@ -2077,9 +2041,8 @@ class BroadsheetView:
         for i, col in enumerate(tbl.cols):
             if i < len(tbl_layout.header_rects):
                 h_rect = tbl_layout.header_rects[i]
-                txt = f_h.render(col.header, True, INK)
                 text_rect = tbl_layout.header_text_rects[i]
-                surface.blit(txt, text_rect)
+                blit_text(surface, f_h, col.header, text_rect.topleft, INK)
 
         # Draw rule
         pygame.draw.line(surface, INK,
@@ -2102,14 +2065,13 @@ class BroadsheetView:
 
         # Overflow warning
         if model.overflow_name is not None:
-            warn = f_b.render(f"⚠ {model.overflow_name}", True, TONES.get("warn", INK))
-            surface.blit(warn, (tbl_rect.left, tbl_rect.bottom + 4))
+            blit_text(surface, f_b, f"⚠ {model.overflow_name}",
+                     (tbl_rect.left, tbl_rect.bottom + 4), TONES.get("warn", INK))
 
         # Empty roster message
         if not lines:
             empty_text = model.texts.get("empty", "(no rival House stands against you)")
-            empty_surf = f_b.render(empty_text, True, INK)
-            surface.blit(empty_surf, (detail_rect.left + 8, detail_rect.top + 4))
+            blit_text(surface, f_b, empty_text, (detail_rect.left + 8, detail_rect.top + 4), INK)
 
         # Informant buttons
         self._informant_hits.clear()
@@ -2118,13 +2080,13 @@ class BroadsheetView:
         for ri in model.informant_rows:
             house = model.row_houses[ri]
             btn_label = f"Place informant: {house}"
-            btn_surf = f_b.render(btn_label, True, INK)
+            tw, th = f_b.size(btn_label)
             btn_x = btn_rect.left + 8
-            btn_h = btn_surf.get_height() + 4
-            btn_r = pygame.Rect(btn_x, btn_y, btn_surf.get_width() + 12, btn_h)
+            btn_h = th + 4
+            btn_r = pygame.Rect(btn_x, btn_y, tw + 12, btn_h)
             pygame.draw.rect(surface, CARD_BG, btn_r)
             pygame.draw.rect(surface, CARD_EDGE, btn_r, 1)
-            surface.blit(btn_surf, (btn_r.left + 6, btn_r.top + 2))
+            blit_text(surface, f_b, btn_label, (btn_r.left + 6, btn_r.top + 2), INK)
             self._informant_hits.append((btn_r, {"place_informant": house}))
             self.regions.add(Region(rect=btn_r,
                                     action={"place_informant": house},
@@ -2883,8 +2845,7 @@ class BroadsheetView:
         line_h = body.get_height() + 2
         sy = y + 4
         # Header
-        header = body.render("INTRIGUE", True, TONES.get("bad", INK))
-        surface.blit(header, (PAD, sy))
+        blit_text(surface, body, "INTRIGUE", (PAD, sy), TONES.get("bad", INK))
         sy += header_h
         for line in lines:
             color = TONES.get("warn", INK) if line.startswith("⚠") else INK

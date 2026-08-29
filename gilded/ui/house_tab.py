@@ -153,8 +153,7 @@ def _draw_button(surface: pygame.Surface, text: str, x: int, y: int,
     pygame.draw.rect(surface, bg, rect)
     pygame.draw.rect(surface, edge, rect, 2)
     body = _font(TYPE_TEXT)
-    surf = body.render(text, True, BUTTON_TEXT)
-    surface.blit(surf, (x + 8, y + 4))
+    blit_text(surface, body, text, (x + 8, y + 4), BUTTON_TEXT)
     return rect
 
 
@@ -354,11 +353,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     their sections below without overlapping.
     """
     PAD = 12
-    title = _font(TYPE_TITLE, bold=True).render(
-        f"HOUSE {report.house.upper()}", True, INK
-    )
-    surface.blit(title, (PAD, content.y + 6))
-    y = content.y + 6 + title.get_height() + 10
+    title_font = _font(TYPE_TITLE, bold=True)
+    title_text = f"HOUSE {report.house.upper()}"
+    blit_text(surface, title_font, title_text, (PAD, content.y + 6), INK)
+    y = content.y + 6 + title_font.size(title_text)[1] + 10
 
     body = _font(TYPE_TEXT)
     lines = _house_tab_lines(report)
