@@ -423,6 +423,7 @@ def _apply_setting_action(state: AppState, action: dict) -> None:
         s = state.settings = Settings()
     if key == "mute":
         s.mute = not s.mute
+        audio.play("ui_press", s)
     elif key == "narrate":
         s.narrate = not s.narrate
     elif key == "back":

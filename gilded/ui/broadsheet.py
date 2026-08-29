@@ -427,13 +427,14 @@ class PowersTable(Table):
             # adjacent text rects can never overlap.  Rows that would be
             # clipped at the bottom are omitted — the powers model's overflow
             # warning already names the first omitted house.
+            # row_h already includes the inter-row gap (rows step by row_h)
             row_h = max(body_h, f_body.get_height()) + gap
             n_rows = min(row_count, max(0, available_data_h // row_h))
             row_rects = []
             y = data_top
             for i in range(n_rows):
-                row_rects.append(pygame.Rect(rect.left, y, rect.width, row_h))
-                y += row_h + gap
+                row_rects.append(pygame.Rect(rect.left, y, rect.width, row_h - gap))
+                y += row_h
 
             cell_rects = []
             text_rects = []
@@ -1423,12 +1424,12 @@ class BroadsheetView:
         head = _font(TYPE_SUBTITLE, bold=True)
         body = _font(TYPE_TEXT)
         bottom = bottom if bottom is not None else content.bottom
+        rows = self.game.ladder()
+        self._ladder_rows = rows
         if y > bottom - 120:
             return y
         blit_text(surface, head, "The Ladder", (PAD, y), INK)
         y += head.get_height() + 4
-        rows = self.game.ladder()
-        self._ladder_rows = rows
         for row in rows[:5]:
             who = row.house + (" (you)" if row.house == self.house else "")
             line = f"{row.rank}. {who}  {row.composite:.0f}"

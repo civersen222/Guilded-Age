@@ -20,6 +20,7 @@ from gilded.ui.widgets import (
     TYPE_TITLE,
     TONES,
     Region, RegionState,
+    blit_text,
 )
 
 _BAND_COLOR: dict = {
@@ -289,7 +290,7 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
     candidates = [c for c in order if c.id != ruler_id]
 
     # Title
-    surface.blit(body.render("Select Heir:", True, INK), (PAD, y))
+    blit_text(surface, body, "Select Heir:", (PAD, y), INK)
     y += body.get_height() + 6
 
     # Cancel button
@@ -343,11 +344,14 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
 
 
 def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
-                   report: CourtReport, view: Any = None) -> None:
+                   report: CourtReport, view: Any = None) -> int:
     """Draw the House tab on *surface* within *content* rect.
 
     When *view* is provided, draws interactive Region controls for court seats
     at the top of the tab, so the text content follows below.
+
+    Returns the y position after the last drawn line so callers can chain
+    their sections below without overlapping.
     """
     PAD = 12
     title = _font(TYPE_TITLE, bold=True).render(
@@ -430,8 +434,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         elif "* " in line:
             color = TONES.get("good", INK)
 
-        surface.blit(body.render(line, True, color), (PAD, y))
+        blit_text(surface, body, line, (PAD, y), color)
         y += body.get_height() + 2
+
+    return y
 
 
 __all__ = ["draw_house_tab", "_house_tab_lines"]

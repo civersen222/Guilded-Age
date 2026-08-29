@@ -157,6 +157,125 @@ def turn_deltas(game, turn: int) -> List[tuple]:
     return out
 
 
+# --- C6: onboarding - the cold-open player learns the verbs in prose ----
+# facet -> (prose, dotted source). Each names its verb and what it is for.
+_ONBOARDING = {
+    "win": ("You rule the {house} House for a budgeted century. The world "
+            "closes on you when the last turn is spent or your mandate ends - "
+            "win by outlasting the century with a prosperous, loyal House; "
+            "the Epilogue judges your standing on four axes.",
+            "endings.check_ending"),
+    "orders": ("Four Orders rule the realm - Bank, Church, Gazette, Combine - "
+               "each with a head who holds a private want. Hold an Order's "
+               "seat with hold_seat() and its honest lever plays in your "
+               "House's favour; leave it unheld and it presses against you.",
+            "orders.tick_orders"),
+    "ambitions": ("Declare your House's stake with set_ambition(): a target "
+                  "and a family's private wants. The banner's clock then "
+                  "counts the turns you have to commit it.",
+            "ambitions.AmbitionsFacade.status"),
+    "war": ("Houses wage war over borders. A front between your provinces "
+            "bleeds garrisons and gold every turn it stands; negotiate peace "
+            "when the score swings your way. The Atlas shows every front.",
+            "fronts.War"),
+    "turn": ("Each press of end_turn() advances the world a season: "
+             "dividends credit, the Orders re-aim, the rival Houses read the "
+             "morning paper. The century is budgeted - spend the turns on "
+             "intention, not waiting.",
+            "chassis.end_turn"),
+}
+
+_ONBOARD_ORDER = ("win", "orders", "ambitions", "war", "turn")
+
+
+def _player_house(game):
+    return next((h for h in game.houses if game.houses[h].is_player), None)
+
+
+# --- C6: the three long chains, one per act ------------------------------
+# Each watches real state and lands three beats - the situation arrives,
+# escalates, and resolves with a measured consequence the Epilogue can name.
+def _province_stats(game, player):
+    provs = game.provinces_of(player)
+    unrest = [p.unrest for p in provs]
+    worst = max(provs, key=lambda p: (p.unrest, -p.pid)) if provs else None
+    garrison = sum(p.garrison for p in provs)
+    return provs, (sum(unrest) / len(unrest) if unrest else 0.0), worst, garrison
+
+
+def _enterprise_lines(game, base, house, stage):
+    ents = [e for e in game.enterprises if e.house == house]
+    provs, _, _, _ = _province_stats(game, house)
+    if stage == 1:
+        base["gold"] = house.treasury
+        text = (f"Your {len(ents)} enterprises open their ledgers across "
+                f"{len(provs)} provinces; the treasury stands at "
+                f"{house.treasury:.0f} gold.")
+        source = "treasury.treasury"
+    elif stage == 2:
+        delta = house.treasury - base["gold"]
+        text = (f"The dividends compound: {delta:+.0f} gold since the ledgers "
+                f"opened, the treasury at {house.treasury:.0f}.")
+        source = "treasury.dividends"
+    else:
+        text = (f"Your enterprises stand at {len(ents)} houses in "
+                f"{len(provs)} provinces; {house.treasury:.0f} gold in hand "
+                f"for the quarter's reckoning.")
+        source = "treasury.treasury"
+    return text, source
+
+
+def _labor_lines(game, base, house, stage):
+    provs, avg, worst, _ = _province_stats(game, house)
+    movements = [mv for mv in getattr(game, "movements", []) or []
+                 if getattr(mv, "state", "") == "striking"]
+    if stage == 1:
+        base["unrest"] = avg
+        text = (f"Your {len(provs)} provinces rest at {avg:.2f} unrest; "
+                f"{len(movements)} movement(s) are striking.")
+        source = "society.labor.Movement.state"
+    elif stage == 2:
+        text = (f"The labour mood has moved {avg - base['unrest']:+.2f} "
+                f"since your provinces first settled; {len(movements)} "
+                f"movement(s) strike.")
+        source = "society.labor.tick_movement"
+    else:
+        worst_name = worst.name if worst is not None else "no province"
+        text = (f"The labour balance settles at {avg:.2f} unrest; the "
+                f"Orders' eyes fall hardest on {worst_name}.")
+        source = "society.labor.Movement.state"
+    return text, source
+
+
+def _war_lines(game, base, house, stage):
+    wars = list(game.wars)
+    fronts = sum(len(w.fronts) for w in wars)
+    _, _, _, garrison = _province_stats(game, house)
+    score = sum(w.war_score for w in wars) / len(wars) if wars else 0.0
+    if stage == 1:
+        base["wars"] = len(wars)
+        text = (f"{len(wars)} war(s) rage across the realm; {fronts} front(s) "
+                f"stand open.")
+        source = "fronts.War"
+    elif stage == 2:
+        text = (f"The fronts stand at a mean score of {score:+.0f} against "
+                f"your {garrison} garrisoned troops.")
+        source = "fronts.War.war_score"
+    else:
+        text = (f"The century's wars close at a mean score of {score:+.0f}; "
+                f"{len(wars)} war(s) still rage, {garrison} troops mustered.")
+        source = "fronts.War"
+    return text, source
+
+
+# chain id -> (arrival, escalation, resolution, lines function)
+_CHAIN_ACTS = (
+    ("enterprise", 2, 12, 24, _enterprise_lines),
+    ("labor", 26, 38, 49, _labor_lines),
+    ("war", 51, 60, 69, _war_lines),
+)
+
+
 class BeatsFacade:
     """`game.beats` - the beat log as an object the UI and the gate consume
     directly.
@@ -174,6 +293,8 @@ class BeatsFacade:
         self.log: List[Beat] = []
         self._deltas: Dict[int, List[tuple]] = {}
         self._known_movements = set()
+        self._chain_base: Dict[str, Dict[str, float]] = {}
+        self._chain_stage: Dict[str, int] = {}
 
     # --- callable compatibility (game.beats(house) == beats_for(game, house))
     def __call__(self, house: Optional[str] = None,
@@ -222,6 +343,56 @@ class BeatsFacade:
                 "beats.turn_deltas",
                 att.causes, None, att))
         self._scan_deflections(turn)
+        # C6: the cold-open player is taught, and the world's long chains run
+        self._emit_onboarding(game, turn)
+        self._emit_chains(game, turn)
+
+    # --- C6: onboarding, then the three long chains -----------------------
+    def _emit_onboarding(self, game, turn: int) -> None:
+        """The first five turns each teach one verb, in a stranger's prose.
+        Each facet fires once, on the turn it is due, from the player's
+        own state."""
+        if turn > 5:
+            return
+        player = _player_house(game)
+        if player is None:
+            return
+        facet = _ONBOARD_ORDER[turn - 1]
+        if any(b.kind == "onboarding" and b.facet == facet for b in self.log):
+            return
+        text, source = _ONBOARDING[facet]
+        text = text.format(house=game.houses[player].name if hasattr(game.houses[player], "name") else player)
+        self.append(Beat(
+            turn, "onboarding", player, text, source,
+            (Cause(f"teaching the {facet} verb", 0.0, source),),
+            None, None, facet=facet))
+
+    def _emit_chains(self, game, turn: int) -> None:
+        """Three chains, one per act: a situation arrives, escalates, and
+        resolves - each a real measurement of the player's own House, so the
+        Epilogue can name the consequence. A stage fires once at its turn."""
+        player = _player_house(game)
+        if player is None:
+            return
+        house = game.houses[player]
+        for chain_id, t1, t2, t3, lines_fn in _CHAIN_ACTS:
+            if turn == t1:
+                stage = 1
+            elif turn == t2:
+                stage = 2
+            elif turn == t3:
+                stage = 3
+            else:
+                continue
+            if self._chain_stage.get(chain_id) == stage:
+                continue
+            self._chain_stage[chain_id] = stage
+            base = self._chain_base.setdefault(chain_id, {})
+            text, source = lines_fn(game, base, house, stage)
+            self.append(Beat(
+                turn, "chain", player, text, source,
+                (Cause(f"{chain_id} chain, {stage} of 3", 0.0, source),),
+                None, None, facet=chain_id))
 
     # --- deflections: the world thwarts the player, never silently --------
     def _scan_deflections(self, turn: int) -> None:
