@@ -132,6 +132,30 @@ class RegionSet:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Text-row ledger (C6.5): one (Rect, str) per text line drawn this pass.
+# Rebuilt every draw; tabs append through blit_text().
+# ────────────────────────────────────────────────────────────────────────────
+
+_text_rows: list[tuple[pygame.Rect, str]] = []
+
+
+def blit_text(surface, f: pygame.font.Font, text: str, pos,
+              color) -> pygame.Rect:
+    """Render + blit one line of text and record its rect for text_rows."""
+    img = f.render(text, True, color)
+    rect = img.get_rect(topleft=pos)
+    surface.blit(img, rect)
+    _text_rows.append((rect, text))
+    return rect
+
+
+def take_text_rows() -> list[tuple[pygame.Rect, str]]:
+    rows = list(_text_rows)
+    _text_rows.clear()
+    return rows
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # TONES – colour meaning
 # ────────────────────────────────────────────────────────────────────────────
 

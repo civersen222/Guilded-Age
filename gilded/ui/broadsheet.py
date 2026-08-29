@@ -848,6 +848,12 @@ class BroadsheetView:
     _found_picker: Optional[bool]
 
     @property
+    def text_rows(self) -> list:
+        """(pygame.Rect, str) per text line drawn on the last draw pass."""
+        from gilded.ui.widgets import _text_rows
+        return list(_text_rows)
+
+    @property
     def active_tab(self) -> str:
         return self._active_tab
 
@@ -984,6 +990,8 @@ class BroadsheetView:
         self._director_picker_hits = []
         self._found_picker_hits = []
         self._accent_log = []
+        from gilded.ui.widgets import take_text_rows as _take_text_rows
+        _take_text_rows()  # clear the C6.5 ledger before this pass
         surface.fill(PAPER_BG)
         hud_h = _hud_height()
         content = pygame.Rect(0, TAB_H + hud_h, self._w,
