@@ -26,12 +26,16 @@ from gilded.ui.widgets import (
     HOUSE_COLORS, MINOR_COLOR, OCEAN_COLOR, FRONT_COLOR,
     BORDER_COLOR, NAME_COLOR, GLYPH_COLOR, RAIL_COLOR, SELECT_COLOR,
     PANEL_BG,
+    blit_text,
     font as _font,
     TYPE_CAPTION, TYPE_BODY,
 )
 
 _ENDOWMENT_GLYPH = {"coalfield": "C", "iron": "I", "timber": "T",
                     "farmland": "F", "harbor": "H"}
+
+
+
 
 # --- transform ----------------------------------------------------------------
 
@@ -155,7 +159,7 @@ def atlas_glyph_rects(game, transform, rect: pygame.Rect,
         if not prov.endowments:
             continue
         cx, cy = transform.apply(prov.center)
-        # Stack glyphs below center
+        # Stack each endowment glyph below center, one rect per glyph
         y_offset = 2
         for endowment in sorted(prov.endowments.keys()):
             g = glyph_font.render(_ENDOWMENT_GLYPH[endowment], True, GLYPH_COLOR)
@@ -387,8 +391,7 @@ def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
                 txt = row.label
                 pygame.draw.rect(surface, row.color,
                                  (lx + 4, ry + 2, 14, row_h - 4))
-            t = font.render(txt, True, NAME_COLOR)
-            surface.blit(t, (lx + 24, ry + 1))
+            blit_text(surface, font, txt, (lx + 24, ry + 1), NAME_COLOR)
     _draw_col(col1, 0)
     return legend_rect
 
@@ -464,18 +467,20 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
         font = _font(TYPE_CAPTION)
         for pid, lr in labels:
             prov = game.atlas.provinces[pid]
-            t = font.render(prov.name, True, NAME_COLOR)
-            surface.blit(t, lr.topleft)
+            blit_text(surface, font, prov.name, lr.topleft, NAME_COLOR)
 
         # endowment glyphs
         glyphs = atlas_glyph_rects(game, transform, rect, selected_pid)
         glyph_font = _font(TYPE_CAPTION)
+        # One rect per endowment glyph; stack order matches sorted endowments
+        per_pid: dict = {}
         for pid, gr in glyphs:
+            per_pid.setdefault(pid, []).append(gr)
+        for pid, grs in per_pid.items():
             prov = game.atlas.provinces[pid]
-            for end in prov.endowments:
+            for end, gr in zip(sorted(prov.endowments.keys()), grs):
                 char = _ENDOWMENT_GLYPH.get(end, "?")
-                t = glyph_font.render(char, True, GLYPH_COLOR)
-                surface.blit(t, gr.topleft)
+                blit_text(surface, glyph_font, char, gr.topleft, GLYPH_COLOR)
 
         # legend
         _draw_legend(surface, game, rect)

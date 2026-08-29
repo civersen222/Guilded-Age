@@ -47,7 +47,7 @@ from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 from gilded.ui.widgets import (
     CARD_BG, CARD_EDGE, FADED, INK, PAPER_BG,
-    Chip, Column, Meter, Table, TableLayout, font as _font, wrap as _wrap,
+    Chip, Column, Meter, Table, TableLayout, blit_text, font as _font, wrap as _wrap,
     column_plan, flow_columns, FlowResult,
     TYPE_CAPTION, TYPE_BODY, TYPE_TEXT, TYPE_SUBTITLE, TYPE_HEADING, TYPE_TITLE,
 )
@@ -418,15 +418,22 @@ class PowersTable(Table):
             cell_rects: list[list[pygame.Rect]] = []
             text_rects: list[list[pygame.Rect]] = []
         else:
-            row_h = available_data_h // row_count
+            # C6: never squeeze rows below the rendered text height —
+            # adjacent text rects would overlap.  Rows that don't fit are
+            # omitted from the layout (the powers model's overflow warning
+            # already names the first omitted house).
+            # C6: every data row gets a constant height at least tall enough
+            # for its text (body linesize + the rendered glyph height), so two
+            # adjacent text rects can never overlap.  Rows that would be
+            # clipped at the bottom are omitted — the powers model's overflow
+            # warning already names the first omitted house.
+            row_h = max(body_h, f_body.get_height()) + gap
+            n_rows = min(row_count, max(0, available_data_h // row_h))
             row_rects = []
             y = data_top
-            for i in range(row_count):
-                h = row_h
-                if i == row_count - 1:
-                    h = data_bottom - y
-                row_rects.append(pygame.Rect(rect.left, y, rect.width, h))
-                y += h + 2
+            for i in range(n_rows):
+                row_rects.append(pygame.Rect(rect.left, y, rect.width, row_h))
+                y += row_h + gap
 
             cell_rects = []
             text_rects = []
@@ -1383,23 +1390,23 @@ class BroadsheetView:
         body = _font(TYPE_TEXT)
         width = content.width - 2 * PAD
 
-        surface.blit(head.render("Since last session", True, INK), (PAD, y))
+        blit_text(surface, head, "Since last session", (PAD, y), INK)
         y += head.get_height() + 4
         for line in self._delta_lines(d, board):
-            surface.blit(body.render(line, True, INK), (PAD + 10, y))
+            blit_text(surface, body, line, (PAD + 10, y), INK)
             y += body.get_height() + 2
         y += 8
 
         report = compose(self.game, self.house)
         events = report.gazette[:2] + report.ledger[:2] + report.letters[:1]
         if events:
-            surface.blit(head.render("What the papers say", True, INK), (PAD, y))
+            blit_text(surface, head, "What the papers say", (PAD, y), INK)
             y += head.get_height() + 4
             for ev in events:
                 for line in _wrap(ev, body, width - 10):
                     if y > content.bottom - 170:
                         break
-                    surface.blit(body.render(line, True, INK), (PAD + 10, y))
+                    blit_text(surface, body, line, (PAD + 10, y), INK)
                     y += body.get_height() + 2
                 y += 4
         y += 8
@@ -1408,44 +1415,44 @@ class BroadsheetView:
     # --- the public ladder + the docket's agenda (House's ambition banner) --
 
     def _draw_ladder_and_agenda(self, surface, content: pygame.Rect,
-                                y: int) -> None:
+                                y: int, bottom: int = None) -> int:
         """spec §2: the Briefing's ladder and Agenda re-homed to the House
         spine — the ladder stays public, the docket's decisions are the
         agenda cards (its old tab dies; its content lives here and at the
         Atlas desk strip)."""
         head = _font(TYPE_SUBTITLE, bold=True)
         body = _font(TYPE_TEXT)
-        if y > content.bottom - 120:
-            return
-        surface.blit(head.render("The Ladder", True, INK), (PAD, y))
+        bottom = bottom if bottom is not None else content.bottom
+        if y > bottom - 120:
+            return y
+        blit_text(surface, head, "The Ladder", (PAD, y), INK)
         y += head.get_height() + 4
         rows = self.game.ladder()
         self._ladder_rows = rows
         for row in rows[:5]:
             who = row.house + (" (you)" if row.house == self.house else "")
             line = f"{row.rank}. {who}  {row.composite:.0f}"
-            surface.blit(body.render(line, True,
-                                     INK if row.rank == 1 else FADED),
-                         (PAD + 10, y))
+            blit_text(surface, body, line, (PAD + 10, y),
+                      INK if row.rank == 1 else FADED)
             y += body.get_height() + 2
         top = rows[0]
         if y < content.bottom - 170:
             axis = max(top.axes.values(), key=lambda a: a.value)
             if axis.causes:
                 why_line = f"{top.house} leads on {axis.causes[0].label}."
-                surface.blit(body.render(why_line, True, FADED),
-                             (PAD + 10, y))
+                blit_text(surface, body, why_line, (PAD + 10, y), FADED)
                 y += body.get_height() + 2
         y += 8
 
-        surface.blit(head.render("The Agenda", True, INK), (PAD, y))
+        blit_text(surface, head, "The Agenda", (PAD, y), INK)
         y += head.get_height() + 6
         self._draw_petition_cards(surface, content, y)
+        return y
 
     # --- shared petition renderer (Docket + Agenda) --------------------------
 
     def _draw_petition_cards(self, surface, content: pygame.Rect,
-                             y: int) -> None:
+                             y: int) -> int:
         petitions = self.game.docket_by_house.get(self.house, [])
         body = _font(TYPE_TEXT)
         small = _font(TYPE_BODY, bold=True)
@@ -1459,11 +1466,10 @@ class BroadsheetView:
             pygame.draw.rect(surface, CARD_BG, card)
             pygame.draw.rect(surface, CARD_EDGE, card, 1)
             hy = y + 8
-            surface.blit(small.render(f"[{p.domain}] {p.kind}", True, FADED),
-                         (PAD + 10, hy))
+            blit_text(surface, small, f"[{p.domain}] {p.kind}", (PAD + 10, hy), FADED)
             hy += small.get_height() + 4
             for line in lines:
-                surface.blit(body.render(line, True, INK), (PAD + 10, hy))
+                blit_text(surface, body, line, (PAD + 10, hy), INK)
                 hy += body.get_height() + 2
             bx = PAD + 10
             for opt in p.options:
@@ -1496,6 +1502,7 @@ class BroadsheetView:
                                     hint="Choose who carries out this ruling.",
                                     group=f"petition:{p.pid}"))
             y += card_h + 10
+        return y
 
     def _draw_paper(self, surface, content: pygame.Rect,
                     section: str = None) -> None:
@@ -1527,7 +1534,7 @@ class BroadsheetView:
         result = flow_columns(items, body, body_rect, line_gap=4)
 
         for (text, x, y, _ci) in result.placements:
-            surface.blit(body.render(text, True, INK), (x, y))
+            blit_text(surface, body, text, (x, y), INK)
 
         # Continuation marker when overflow > 0
         if result.overflow > 0:
@@ -1758,7 +1765,8 @@ class BroadsheetView:
         y = content.y + 6 + title.get_height() + 10
         self._draw_petition_cards(surface, content, y)
 
-    def _draw_policies(self, surface, content) -> None:
+    def _draw_policies(self, surface, content, y: int = None,
+                        bottom: int = None) -> int:
         from gilded import policy
         from gilded.society import labor
         from gilded.directives import (DIRECTIVE_KEYS, DIRECTIVE_CONVICTION,
@@ -1781,19 +1789,21 @@ class BroadsheetView:
         small = _font(TYPE_BODY)
         x = content.x + PAD
         w = content.width - 2 * PAD
-        y = content.y + PAD
-        surface.blit(title.render("Standing Policy", True, INK), (x, y))
+        if y is None:
+            y = content.y + PAD
+        if bottom is not None and y > bottom - 120:
+            return y
+        blit_text(surface, title, "Standing Policy", (x, y), INK)
         y += title.get_height() + 12
         track_w = w - 240
         for key in DIRECTIVE_KEYS:
             left, right = POLES[key]
             stance = directives.stances.get(key, 0)
             # label row
-            surface.blit(label.render(f"{left}", True, FADED), (x, y))
-            rlabel = label.render(right, True, FADED)
-            surface.blit(rlabel, (x + track_w - rlabel.get_width(), y))
+            blit_text(surface, label, f"{left}", (x, y), FADED)
+            blit_text(surface, label, right, (x + track_w - label.size(right)[0], y), FADED)
             sign = f"(+{stance})" if stance > 0 else f"({stance})"
-            surface.blit(label.render(sign, True, INK), (x + track_w + 16, y))
+            blit_text(surface, label, sign, (x + track_w + 16, y), INK)
             y += label.get_height() + 6
             # track + marker
             track_y = y + 8
@@ -1830,7 +1840,7 @@ class BroadsheetView:
                 line = (f"relations {eff.relations_drift:+.1f}/turn · trade +"
                         f"{eff.trade_income:.1f} · legitimacy "
                         f"{eff.legitimacy_mod:+.1f}")
-            surface.blit(small.render(line, True, INK), (x, y))
+            blit_text(surface, small, line, (x, y), INK)
             y += small.get_height() + 4
             # friction flag
             seat = realm.court.positions.get(DOMAIN_SEAT[key])
@@ -1841,9 +1851,10 @@ class BroadsheetView:
                     flag = (f"! {seat.name} leans "
                             f"{left if conviction < 0 else right} — straining "
                             f"{turns}/4")
-                    surface.blit(small.render(flag, True, FADED), (x, y))
+                    blit_text(surface, small, flag, (x, y), FADED)
                     y += small.get_height() + 4
             y += 16
+        return y
 
     def _draw_atlas(self, surface, rect: pygame.Rect = None) -> None:
         if rect is None:
@@ -2023,7 +2034,7 @@ class BroadsheetView:
         y = rect.y + PAD
         for i, line in enumerate(lines):
             f = _font(TYPE_TEXT, bold=True) if i == 0 else font
-            surface.blit(f.render(line, True, TAB_TEXT), (rect.x + PAD, y))
+            blit_text(surface, f, line, (rect.x + PAD, y), TAB_TEXT)
             y += font.get_height() + 2
 
     def powers_lines(self) -> List[str]:
@@ -2086,8 +2097,7 @@ class BroadsheetView:
                     continue
                 cell_rect = tbl_layout.cell_rects[ri][ci]
                 text_rect = tbl_layout.text_rects[ri][ci]
-                txt = f_b.render(cell, True, INK)
-                surface.blit(txt, text_rect)
+                blit_text(surface, f_b, cell, text_rect.topleft, INK)
 
         # Overflow warning
         if model.overflow_name is not None:
@@ -2757,12 +2767,14 @@ class BroadsheetView:
         from gilded.peerage import report as peerage_report
         from gilded.ui.court_actions import _get_appointment_pool
         rpt = peerage_report(self.game, self.house)
-        draw_house_tab(surface, content, rpt, self)
+        y = draw_house_tab(surface, content, rpt, self)
         # spec §2: the Briefing's ladder + agenda re-homed here (the House
         # spine is their home now); the agenda cards are the docket's decisions.
-        self._draw_ladder_and_agenda(surface, content, content.y + 8)
+        y = self._draw_ladder_and_agenda(surface, content, y + 8,
+                                         bottom=content.bottom - 40)
         # Draw intrigue section (plot visibility)
-        self._draw_intrigue(surface, content)
+        y = self._draw_intrigue(surface, content, y,
+                                bottom=content.bottom - 40)
         # C2: the Set Ambition button, then the family picker when open
         self._draw_ambition_controls(surface, content)
         if self._ambition_picker:
@@ -2775,7 +2787,7 @@ class BroadsheetView:
             self._draw_scheme_picker(surface, content)
         # spec §2: the dissolved Policies tab survives as the House edicts
         # block — each dial move is a signed decision.
-        self._draw_policies(surface, content)
+        y = self._draw_policies(surface, content, y)
 
     def _draw_ambition_controls(self, surface, content: pygame.Rect) -> None:
         """C2: the Set Ambition button under the court section."""
@@ -2831,8 +2843,13 @@ class BroadsheetView:
             group="ambition_picker",
         ))
 
-    def _draw_intrigue(self, surface, content: pygame.Rect) -> None:
-        """Draw intrigue section: plots affecting the played House."""
+    def _draw_intrigue(self, surface, content: pygame.Rect,
+                        y: int = None, bottom: int = None) -> int:
+        """Draw intrigue section: plots affecting the played House.
+
+        Starts at *y* (or the bottom of *content* when omitted) and returns
+        the y after the section so callers can chain below it.
+        """
         from gilded.ui.widgets import INK, Region, RegionState, TONES
         from gilded.ui.house_tab import _draw_button
         from gilded.ui.actions import _open_scheme_picker_eligible, _start_scheme_eligible
@@ -2844,8 +2861,10 @@ class BroadsheetView:
         our_ids = {c.id for c in realm.characters}
         # Find plots: against us (target is ours) and by us (agent is ours)
         schemes = getattr(game, 'scheme_mgr', None)
+        if y is None:
+            y = content.bottom - 20
         if not schemes:
-            return
+            return y
         lines = []
         for s in schemes.schemes:
             target_is_ours = s.target.id in our_ids
@@ -2854,26 +2873,25 @@ class BroadsheetView:
                 lines.append(f"⚠ {s.agent.name} plots a {s.scheme_type} against {s.target.name}")
             elif agent_is_ours:
                 lines.append(f"→ {s.agent.name} schemes against {s.target.name} ({s.scheme_type})")
-        # Draw section — button is unconditional (conduct), lines are conditional (sight)
-        y = content.bottom - 20
+        # Draw section — button is unconditional (conduct), lines are conditional (sight).
+        # C6: flow the section DOWN from y (vertical chaining) so it never draws
+        # above the previous section's end — the old upward anchor overwrote the
+        # ladder/succession rows.
         header_h = body.get_height() + 4
         btn_h = body.get_height() + 8
         line_h = body.get_height() + 2
-        section_h = len(lines) * line_h + header_h + btn_h
-        section_y = max(content.y + 10, y - section_h)
+        sy = y + 4
         # Header
         header = body.render("INTRIGUE", True, TONES.get("bad", INK))
-        surface.blit(header, (PAD, section_y))
-        sy = section_y + header_h
+        surface.blit(header, (PAD, sy))
+        sy += header_h
         for line in lines:
-            if sy > content.bottom - 10:
-                break
             color = TONES.get("warn", INK) if line.startswith("⚠") else INK
-            surface.blit(body.render(line, True, color), (PAD, sy))
+            blit_text(surface, body, line, (PAD, sy), color)
             sy += line_h
         # Button to open scheme picker — always drawn (conduct, not sight)
         btn_w = 160
-        if sy + btn_h <= content.bottom - 10:
+        if True:
             ok, reason = _open_scheme_picker_eligible(game, house, {})
             btn_rect = _draw_button(surface, "Start Scheme", PAD, sy, btn_w, btn_h, ok)
             if ok:
@@ -2892,6 +2910,8 @@ class BroadsheetView:
                     hint="Open the intrigue picker",
                     group="intrigue",
                 ))
+            sy += btn_h + 6
+        return sy
 
     def _draw_house_page_header(self, surface, content: pygame.Rect,
                                 title: str) -> None:
@@ -3010,7 +3030,7 @@ class BroadsheetView:
         btn_h = body.get_height() + 8
         btn_w = 200
 
-        surface.blit(body.render(f"Select appointee for {pos_name}:", True, INK), (PAD, y))
+        blit_text(surface, body, f"Select appointee for {pos_name}:", (PAD, y), INK)
         y += body.get_height() + 8
 
         # Back button
@@ -3058,7 +3078,7 @@ class BroadsheetView:
         if overlay_h > 0:
             surface.fill(CARD_BG, (content.x, y, content.w, overlay_h))
 
-        surface.blit(body.render("Select province to raise regiments from:", True, INK), (content.x + PAD, y))
+        blit_text(surface, body, "Select province to raise regiments from:", (content.x + PAD, y), INK)
         y += body.get_height() + 8
 
         # Back button
@@ -3124,7 +3144,7 @@ class BroadsheetView:
         btn_h = body.get_height() + 8
         btn_w = 280
         y = content.y + 120
-        surface.blit(body.render("INTRIGUE — Select target and scheme type:", True, INK), (PAD, y))
+        blit_text(surface, body, "INTRIGUE — Select target and scheme type:", (PAD, y), INK)
         y += body.get_height() + 10
         # Collect potential targets (living characters not in played House's court)
         game = self.game
