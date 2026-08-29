@@ -531,8 +531,8 @@ class Table:
         for i, col in enumerate(self.cols):
             hr = lay.header_rects[i]
             x = hr.left + 4
-            y = hr.centery - f_header.size(col.header)[1] // 2
-            blit_text(surface, f_header, col.header, (x, y), INK)
+            _, th = f_header.size(col.header)
+            blit_text(surface, f_header, col.header, (x, hr.centery - th // 2), INK)
 
         # draw rule
         if self.row_rule:
@@ -543,6 +543,8 @@ class Table:
             row = self.data[row_idx] if row_idx < len(self.data) else []
             for col_idx in range(len(self.cols)):
                 cell = row[col_idx] if col_idx < len(row) else ""
+                if not cell.strip():
+                    continue
                 tr = lay.text_rects[row_idx][col_idx]
                 blit_text(surface, f_body, cell, (tr.x, tr.y), INK)
 
@@ -645,15 +647,14 @@ class Meter:
         f = font(self.size)
         label_w, label_h = f.size(self.label)
         value_w, value_h = f.size(self.value_text())
-        if self.delta is not None:
-            arrow_w, arrow_h = f.size(self.arrow())
-        else:
-            arrow_w, arrow_h = 0, 0
+        arrow_w, arrow_h = (f.size(self.arrow())
+                            if self.delta is not None else (0, 0))
+        has_arrow = self.delta is not None
 
         gap = 6
         # horizontal: label | bar | arrow | value
         # arrow sits inline between bar and value when present
-        arrow_reserve = (arrow_w + gap) if self.delta is not None else 0
+        arrow_reserve = (arrow_w + gap) if has_arrow else 0
         right_reserve = arrow_reserve + value_w
         available = rect.width - label_w - gap - right_reserve
         if available < 0:
@@ -671,7 +672,7 @@ class Meter:
         label_rect = pygame.Rect(rect.left, rect.top, label_w, label_h)
 
         arrow_rect: pygame.Rect | None = None
-        if self.delta is not None:
+        if has_arrow:
             # place arrow inline between bar and value
             ax = bar_rect.right + gap
             ay = bar_top + (bar_h - arrow_h) // 2
@@ -720,7 +721,8 @@ class Meter:
         # arrow
         if lay.arrow_rect is not None:
             arrow_color = TONES.get(self.delta_tone(), INK)
-            blit_text(surface, f, self.arrow(), lay.arrow_rect.topleft, arrow_color)
+            blit_text(surface, f, self.arrow(), lay.arrow_rect.topleft,
+                      arrow_color)
 
         return lay
 
@@ -761,9 +763,8 @@ class Chip:
         rect = pygame.Rect(pos[0], pos[1], s[0], s[1])
         pygame.draw.rect(surface, self.bg(), rect, border_radius=6)
         f = font(self.pt)
-        tw, th = f.size(self.text)
         tx = rect.left + _CHIP_PAD_X
-        ty = rect.centery - th // 2
+        ty = rect.centery - f.size(self.text)[1] // 2
         blit_text(surface, f, self.text, (tx, ty), self.ink())
         return rect
 

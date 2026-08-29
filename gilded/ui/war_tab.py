@@ -15,6 +15,7 @@ from gilded.ui.widgets import (
     CARD_BG,
     INK,
     font as _font,
+    blit_text,
     TYPE_TEXT,
     TYPE_TITLE,
     TONES,
@@ -110,9 +111,9 @@ def draw_war_tab(
 
     # Title
     title_font = _font(TYPE_TITLE)
-    title = title_font.render("War & Diplomacy", True, INK)
-    surface.blit(title, (margin_x, cur_y))
-    cur_y += title.get_height() + PAD
+    r = blit_text(surface, title_font, "War & Diplomacy",
+                  (margin_x, cur_y), INK)
+    cur_y += r.height + PAD
 
     # Garrison button — a global control, drawn at the top so it never
     # overflows into the bottom bar as the drawer grows.
@@ -132,8 +133,7 @@ def draw_war_tab(
     # ── War report ────────────────────────────────────────────────────────
     report_lines = _war_report_lines(game, house_name)
     for line in report_lines:
-        txt = font_text.render(line, True, INK)
-        surface.blit(txt, (margin_x, cur_y))
+        blit_text(surface, font_text, line, (margin_x, cur_y), INK)
         cur_y += LINE_H
 
     cur_y += 4
@@ -171,13 +171,14 @@ def draw_war_tab(
         if disabled:
             pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
             pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
+            blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                      DISABLED_BUTTON_EDGE)
         else:
             pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
             pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                      BUTTON_TEXT)
 
-        surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
         regions.add(Region(
             rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
             action={"declare_war": target},
@@ -190,8 +191,7 @@ def draw_war_tab(
 
     # ── Marriage proposals ────────────────────────────────────────────────
     from gilded.ui.actions import ACTIONS
-    diplomacy_title = font_text.render("MARRIAGE PROPOSALS", True, INK)
-    surface.blit(diplomacy_title, (margin_x, cur_y))
+    blit_text(surface, font_text, "MARRIAGE PROPOSALS", (margin_x, cur_y), INK)
     cur_y += LINE_H + 2
     for other_name in game.houses:
         if other_name == house_name:
@@ -206,12 +206,13 @@ def draw_war_tab(
         if ok:
             pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
             pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                      BUTTON_TEXT)
         else:
             pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
             pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
-        surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+            blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                      DISABLED_BUTTON_EDGE)
         regions.add(Region(
             rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
             action=action,
@@ -228,8 +229,8 @@ def draw_war_tab(
         side = "attacker" if war.aggressor == house_name else "defender"
 
         cur_y += 4
-        war_title = font_text.render(f"War with House {enemy} ({side})", True, INK)
-        surface.blit(war_title, (margin_x, cur_y))
+        blit_text(surface, font_text, f"War with House {enemy} ({side})",
+                  (margin_x, cur_y), INK)
         cur_y += LINE_H + 2
 
         # Muster button — one per war, uses first border province owned by the house
@@ -257,12 +258,13 @@ def draw_war_tab(
             if ok:
                 pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
                 pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-                btn_txt = font_text.render(label, True, BUTTON_TEXT)
+                blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                          BUTTON_TEXT)
             else:
                 pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
                 pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-                btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
-            surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+                blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                          DISABLED_BUTTON_EDGE)
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
                 action=action,
@@ -284,8 +286,7 @@ def draw_war_tab(
                 f"Front {front.fid}: {a_reg} vs {d_reg} regiments · "
                 f"Line: {front.line:+.2f}"
             )
-            txt = font_text.render(front_line, True, INK)
-            surface.blit(txt, (margin_x + 20, cur_y))
+            blit_text(surface, font_text, front_line, (margin_x + 20, cur_y), INK)
             cur_y += LINE_H
 
             # Commit button
@@ -303,12 +304,13 @@ def draw_war_tab(
             if ok:
                 pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
                 pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-                btn_txt = font_text.render(label, True, BUTTON_TEXT)
+                blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                          BUTTON_TEXT)
             else:
                 pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
                 pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-                btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
-            surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+                blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                          DISABLED_BUTTON_EDGE)
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
                 action=action,
@@ -333,12 +335,13 @@ def draw_war_tab(
             if ok:
                 pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
                 pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-                btn_txt = font_text.render(label, True, BUTTON_TEXT)
+                blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                          BUTTON_TEXT)
             else:
                 pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
                 pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-                btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
-            surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+                blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                          DISABLED_BUTTON_EDGE)
             regions.add(Region(
                 rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
                 action=action,
@@ -363,12 +366,13 @@ def draw_war_tab(
         if ok:
             pygame.draw.rect(surface, BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
             pygame.draw.rect(surface, BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, BUTTON_TEXT)
+            blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                      BUTTON_TEXT)
         else:
             pygame.draw.rect(surface, DISABLED_BUTTON_BG, (btn_x, btn_y, btn_w, BUTTON_H))
             pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, (btn_x, btn_y, btn_w, BUTTON_H), 1)
-            btn_txt = font_text.render(label, True, DISABLED_BUTTON_EDGE)
-        surface.blit(btn_txt, (btn_x + 4, btn_y + 4))
+            blit_text(surface, font_text, label, (btn_x + 4, btn_y + 4),
+                      DISABLED_BUTTON_EDGE)
         regions.add(Region(
             rect=pygame.Rect(btn_x, btn_y, btn_w, BUTTON_H),
             action=action,

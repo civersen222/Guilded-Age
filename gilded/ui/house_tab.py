@@ -353,10 +353,11 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     their sections below without overlapping.
     """
     PAD = 12
-    title_font = _font(TYPE_TITLE, bold=True)
-    title_text = f"HOUSE {report.house.upper()}"
-    blit_text(surface, title_font, title_text, (PAD, content.y + 6), INK)
-    y = content.y + 6 + title_font.size(title_text)[1] + 10
+    title = blit_text(
+        surface, _font(TYPE_TITLE, bold=True),
+        f"HOUSE {report.house.upper()}", (PAD, content.y + 6), INK
+    )
+    y = title.bottom + 10
 
     body = _font(TYPE_TEXT)
     lines = _house_tab_lines(report)
