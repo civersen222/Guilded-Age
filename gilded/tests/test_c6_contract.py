@@ -131,3 +131,41 @@ def test_slice_run_onboards_chains_ends(tmp_path, monkeypatch):
     assert len(good) >= 3, {c: len(bs) for c, bs in chains.items()}
     assert ended_at is not None, "no ending within 70 turns"
     assert judge(g, house).ending_key
+
+
+_COMPLETENESS_PROBE = r"""
+import os
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+import pygame
+rendered = set()
+class _F(pygame.font.Font):
+    def render(self, text, *a, **kw):
+        if isinstance(text, str) and text.strip():
+            rendered.add(text)
+        return super().render(text, *a, **kw)
+pygame.font.Font = _F   # BEFORE any gilded import: widgets caches fonts
+from gilded.ui.app import new_app_state
+s = new_app_state(seed=42)
+for tab in ("House", "Powers", "Atlas"):
+    s.view.active_tab = tab
+    s.view.draw(s.screen)      # warm-up draw fills caches
+    rendered.clear()
+    s.view.draw(s.screen)      # measured draw
+    rows = {t for _, t in s.view.text_rows if t.strip()}
+    missing = rendered - rows
+    assert not missing, (tab, sorted(missing)[:5], len(missing))
+print("COMPLETE")
+"""
+
+
+def test_text_rows_complete(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))))
+    p = subprocess.run(
+        [sys.executable, "-c", _COMPLETENESS_PROBE],
+        cwd=tmp_path, env={**os.environ, "PYTHONPATH": repo},
+        capture_output=True, text=True, timeout=300)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "COMPLETE" in p.stdout

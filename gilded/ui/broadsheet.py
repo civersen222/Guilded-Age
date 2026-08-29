@@ -1437,6 +1437,8 @@ class BroadsheetView:
         blit_text(surface, head, "The Ladder", (PAD, y), INK)
         y += head.get_height() + 4
         for row in rows[:5]:
+            if y > bottom - 24:
+                break
             who = row.house + (" (you)" if row.house == self.house else "")
             line = f"{row.rank}. {who}  {row.composite:.0f}"
             blit_text(surface, body, line, (PAD + 10, y),
@@ -1843,7 +1845,8 @@ class BroadsheetView:
         if rect is None:
             hud_h = _hud_height()
             rect = pygame.Rect(0, TAB_H + hud_h, self._w,
-                               self._h - TAB_H - hud_h - BOTTOM_H)
+                               self._h - TAB_H - hud_h - BOTTOM_H
+                               - self._guide_strip_h())
         self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid,
                                        accent_log=self._accent_log)
         self.regions.add(Region(rect=rect,
@@ -2745,15 +2748,18 @@ class BroadsheetView:
         # Reserve the bottom band: _draw_ambition_controls pins its button
         # at content.bottom - 30; the tab's text flow must stop above it.
         tab_content = content.copy()
-        tab_content.bottom -= 60
+        tab_content.height -= 60
         y = draw_house_tab(surface, tab_content, rpt, self)
         # spec §2: the Briefing's ladder + agenda re-homed here (the House
         # spine is their home now); the agenda cards are the docket's decisions.
         y = self._draw_ladder_and_agenda(surface, tab_content, y + 8,
                                          bottom=content.bottom - 60)
-        # Draw intrigue section (plot visibility)
-        y = self._draw_intrigue(surface, tab_content, y,
-                                bottom=content.bottom - 60)
+        # Draw intrigue section (plot visibility) — only when the band
+        # below the body has room; the button would otherwise bleed into
+        # the guide strip.
+        if y < content.bottom - 60:
+            y = self._draw_intrigue(surface, tab_content, y,
+                                    bottom=content.bottom - 60)
         # C2: the Set Ambition button, then the family picker when open
         self._draw_ambition_controls(surface, content)
         if self._ambition_picker:
@@ -2765,8 +2771,10 @@ class BroadsheetView:
         if self._scheme_picker is not None:
             self._draw_scheme_picker(surface, content)
         # spec §2: the dissolved Policies tab survives as the House edicts
-        # block — each dial move is a signed decision.
-        y = self._draw_policies(surface, content, y)
+        # block — each dial move is a signed decision.  Bounded by the same
+        # band so it cannot bleed into the guide strip / bottom bar.
+        y = self._draw_policies(surface, content, y,
+                                bottom=content.bottom - 60)
 
     def _draw_ambition_controls(self, surface, content: pygame.Rect) -> None:
         """C2: the Set Ambition button under the court section."""
@@ -2860,6 +2868,11 @@ class BroadsheetView:
         btn_h = body.get_height() + 8
         line_h = body.get_height() + 2
         sy = y + 4
+        if bottom is not None:
+            # Keep the whole section (header + lines + button) above the
+            # reserved bottom band; drop oldest lines until it fits.
+            max_lines = max(0, (bottom - sy - header_h - btn_h - 4) // line_h)
+            lines = lines[-max_lines:] if max_lines < len(lines) else lines
         # Header
         blit_text(surface, body, "INTRIGUE", (PAD, sy), TONES.get("bad", INK))
         sy += header_h
