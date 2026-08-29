@@ -1902,8 +1902,9 @@ class BroadsheetView:
         y += 8
 
         # --- Acquire Minor section ---
-        blit_text(surface, body, "Acquire Minor:", (panel_x + 4, y), INK)
-        y += body.get_height() + 2
+        if y + body.get_height() + BUTTON_H <= rect.bottom:
+            blit_text(surface, body, "Acquire Minor:", (panel_x + 4, y), INK)
+            y += body.get_height() + 2
 
         # Find bordering minors
         owned = {p.pid for p in atlas.provinces.values() if p.owner == house}
@@ -1941,8 +1942,9 @@ class BroadsheetView:
         y += 4
 
         # --- Build Rail section ---
-        blit_text(surface, body, "Build Rail:", (panel_x + 4, y), INK)
-        y += body.get_height() + 2
+        if y + body.get_height() + BUTTON_H <= rect.bottom:
+            blit_text(surface, body, "Build Rail:", (panel_x + 4, y), INK)
+            y += body.get_height() + 2
 
         # Find rail-less links between owned provinces
         rail_links = []
@@ -1978,8 +1980,9 @@ class BroadsheetView:
         y += 4
 
         # --- Tour Province section ---
-        blit_text(surface, body, "Tour Province:", (panel_x + 4, y), INK)
-        y += body.get_height() + 2
+        if y + body.get_height() + BUTTON_H <= rect.bottom:
+            blit_text(surface, body, "Tour Province:", (panel_x + 4, y), INK)
+            y += body.get_height() + 2
 
         # Find owned provinces
         owned_provinces = [(pid, atlas.provinces[pid])
@@ -3001,10 +3004,13 @@ class BroadsheetView:
         # just left of the drawer when open so it stays reachable.
         from gilded.ui.house_tab import _draw_button
         label = "Close war" if self.war_drawer else "War"
+        # The atlas tab's right-side action panel owns the last 260px of
+        # the content rect; the toggle sits just left of that band whether
+        # the drawer is open or closed so it never lands on the panel.
         if self.war_drawer:
             btn_x = content.right - 260 - 160
         else:
-            btn_x = content.right - 150
+            btn_x = content.right - 260 - 150
         btn = _draw_button(surface, label, btn_x,
                            content.y + 8, 150, 30, True)
         self.regions.add(Region(
