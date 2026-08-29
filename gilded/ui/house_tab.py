@@ -426,6 +426,8 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     for line in lines:
         if y > max_bottom:
             break
+        if not line.strip():
+            continue
         color = INK
         if line.startswith("  ?"):
             color = TONES.get("warn", INK)

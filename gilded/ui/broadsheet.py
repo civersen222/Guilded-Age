@@ -889,7 +889,7 @@ class BroadsheetView:
         # tabs' content re-homed as pages.  The Atlas desk strip (Letters)
         # and the End Turn gazette are drawn on the Atlas itself.
         self.house_page = "Overview"
-        self.house_pages = ["Overview", "Ledger", "Governance"]
+        self.house_pages = ["Overview", "Policies", "Ledger", "Governance"]
         self.powers_page = "Overview"
         self.powers_pages = ["Overview", "Dossier"]
         self.atlas_desk = False
@@ -1003,6 +1003,9 @@ class BroadsheetView:
             if self.house_page == "Ledger":
                 self._draw_house_page_header(surface, content, "Ledger")
                 self._draw_ledger(surface, content)
+            elif self.house_page == "Policies":
+                self._draw_house_page_header(surface, content, "Policies")
+                self._draw_policies(surface, content)
             elif self.house_page == "Governance":
                 self._draw_house_page_header(surface, content, "Governance")
                 self._draw_enterprises(surface, content)
@@ -1214,16 +1217,16 @@ class BroadsheetView:
         y = TAB_H + 20
         f_title = _font(TYPE_TITLE, bold=True)
         ending_name = epilogue.ending_key
-        title_surf = blit_text(surface, f_title, ending_name, (PAD, y), INK)
-        y += title_surf.get_height() + 30
+        title_rect = blit_text(surface, f_title, ending_name, (PAD, y), INK)
+        y = title_rect.bottom + 10
 
         # Four axis scores
         f_axis = _font(TYPE_SUBTITLE, bold=True)
         for axis_name in ("capital", "standing", "blood", "world"):
             score = epilogue.axes[axis_name]
             label = f"{axis_name.title()}: {score:.2f}"
-            surf = blit_text(surface, f_axis, label, (PAD, y), INK)
-            y += surf.get_height() + 6
+            blit_text(surface, f_axis, label, (PAD, y), INK)
+            y += f_axis.get_height() + 6
 
         # Divider
         y += 10
@@ -1787,15 +1790,13 @@ class BroadsheetView:
         w = content.width - 2 * PAD
         if y is None:
             y = content.y + PAD
-        if bottom is None:
-            bottom = content.bottom
-        if y > bottom - 120:
+        if bottom is not None and y > bottom - 120:
             return y
         blit_text(surface, title, "Standing Policy", (x, y), INK)
         y += title.get_height() + 12
         track_w = w - 240
         for key in DIRECTIVE_KEYS:
-            if y > bottom - 24:
+            if bottom is not None and y > bottom - 24:
                 break
             left, right = POLES[key]
             stance = directives.stances.get(key, 0)
@@ -2778,10 +2779,7 @@ class BroadsheetView:
         # If scheme picker is open, draw it
         if self._scheme_picker is not None:
             self._draw_scheme_picker(surface, content)
-        # spec §2: the dissolved Policies tab survives as the House edicts
-        # block — each dial move is a signed decision.
-        y = self._draw_policies(surface, content, y)
-
+ 
     def _draw_ambition_controls(self, surface, content: pygame.Rect) -> None:
         """C2: the Set Ambition button under the court section."""
         from gilded.ui.widgets import INK, Region, RegionState, TONES
@@ -2918,8 +2916,7 @@ class BroadsheetView:
         cur = (self.powers_page if self.active_tab == "Powers"
                else self.house_page)
         head_font = _font(TYPE_TITLE, bold=True)
-        head = head_font.render(title, True, INK)
-        surface.blit(head, (PAD, content.y + 6))
+        blit_text(surface, head_font, title, (PAD, content.y + 6), INK)
         y = content.y + 30
         body = _font(TYPE_TEXT)
         x = PAD
@@ -2928,7 +2925,8 @@ class BroadsheetView:
             rect = pygame.Rect(x, y, label.get_width() + 16, body.get_height() + 8)
             if p == cur:
                 pygame.draw.rect(surface, palette.rgb(palette.SAGE), rect)
-            surface.blit(label, (rect.x + 8, rect.y + 4))
+            blit_text(surface, body, p, (rect.x + 8, rect.y + 4),
+                      INK if p == cur else INK2)
             self.regions.add(Region(
                 rect=rect,
                 action={"set_spine_page": p},
@@ -2948,26 +2946,29 @@ class BroadsheetView:
             self._draw_powers(surface, content)
             return
         # Draw the full Powers table (with the selected row highlighted),
-        # then the dossier body for the selected power below it.
-        self._draw_powers(surface, content)
+        # then the dossier body for the selected power in the detail area
+        # below the table (clear of the table title and rows).
+        layout = powers_layout(powers_model(
+            powers_report(self.game, self.house),
+            selected=self._powers_selected), content)
+        detail_rect = layout["detail"]
         lines = self.powers_lines()
         font = _font(TYPE_TEXT)
-        head = _font(TYPE_HEADING, bold=True).render(
-            f"DOSSIER - {self._powers_selected}", True, INK)
-        y = content.y + 4
-        surface.blit(head, (PAD, y))
-        y += head.get_height() + 8
+        x = detail_rect.left + 8
+        y = detail_rect.top + 2
+        head_rect = blit_text(surface, _font(TYPE_HEADING, bold=True),
+                              f"DOSSIER - {self._powers_selected}",
+                              (x, y), INK)
+        y = head_rect.bottom + 4
         for line in lines:
             if line.startswith(self._powers_selected) or line.startswith(f"House {self._powers_selected}"):
-                txt = font.render(line, True, INK)
-            else:
-                continue
-            surface.blit(txt, (PAD, y))
-            y += font.get_height() + 4
-            break
+                blit_text(surface, font, line, (x, y), INK)
+                y += font.get_height() + 6
+                break
+        btn_rect = layout["buttons"]
         war = _draw_button(
-            surface, "Declare War", PAD, y, 140,
-            font.get_height() + 8, True)
+            surface, "Declare War", btn_rect.right - 140, btn_rect.top,
+            140, font.get_height() + 8, True)
         self.regions.add(Region(
             rect=war,
             action={"declare_war": self._powers_selected},
