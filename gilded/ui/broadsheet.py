@@ -1845,13 +1845,14 @@ class BroadsheetView:
         if rect is None:
             hud_h = _hud_height()
             rect = pygame.Rect(0, TAB_H + hud_h, self._w,
-                               self._h - TAB_H - hud_h - BOTTOM_H
-                               - self._guide_strip_h())
+                               self._h - TAB_H - hud_h - BOTTOM_H)
         # Narrow the label region from the right: the action panel
         # (_draw_atlas_actions) overlays the last 260px of the content rect.
         label_rect = pygame.Rect(rect)
         if rect.w > 520:
             label_rect.right -= 264
+        # Keep labels above the guide strip that overlays the content's bottom.
+        label_rect.height -= self._guide_strip_h()
         self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid,
                                        accent_log=self._accent_log,
                                        label_rect=label_rect)
@@ -1862,8 +1863,11 @@ class BroadsheetView:
         if self.selected_pid is not None:
             self._draw_panel(surface,
                              province_panel_lines(self.game, self.selected_pid))
-        # Draw action rows on the right side panel
-        self._draw_atlas_actions(surface, rect)
+        # Draw action rows on the right side panel — bounded above the
+        # guide strip that overlays the content's bottom band.
+        panel_rect = pygame.Rect(rect)
+        panel_rect.height -= self._guide_strip_h()
+        self._draw_atlas_actions(surface, panel_rect)
 
     def _draw_atlas_actions(self, surface, rect: pygame.Rect) -> None:
         """Draw interactive rows for acquire_minor, build_rail, tour_province on the atlas tab."""
