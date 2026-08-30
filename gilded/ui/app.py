@@ -462,6 +462,8 @@ def step_once(state: AppState) -> bool:
                 return False
             elif event.key == pygame.K_F5:
                 _quicksave(state)
+        if event.type == pygame.MOUSEMOTION:
+            state.view.handle_hover(event.pos)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             action = state.view.handle_click(event.pos)
             if action is not None:
