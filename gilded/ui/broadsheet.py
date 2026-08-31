@@ -2769,6 +2769,11 @@ class BroadsheetView:
         # Draw intrigue section (plot visibility)
         y = self._draw_intrigue(surface, content, y,
                                 bottom=content.bottom - 40)
+        # spec §2: the dissolved Policies tab is re-homed onto the House
+        # spine — the five standing directive dials (set_stance) must draw on
+        # the Overview page, not a separate tab.
+        y = self._draw_policies(surface, content, y,
+                                bottom=content.bottom - 40)
         # C2: the Set Ambition button, then the family picker when open
         self._draw_ambition_controls(surface, content)
         if self._ambition_picker:
