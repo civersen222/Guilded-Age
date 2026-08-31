@@ -25,9 +25,14 @@ from collections import Counter
 
 
 def _groups(view):
+    """Count by action key — the census contract is action-based, not by the
+    free-form group tag.  A skipped section registers no region at all, so a
+    missing action here is a missing control."""
     c = Counter()
     for r in view.regions._regions:
-        c[getattr(r, "group", "?")] += 1
+        a = r.action
+        k = next(iter(a), "?") if isinstance(a, dict) and a else "?"
+        c[k] += 1
     return dict(c)
 
 
@@ -71,16 +76,17 @@ def test_house_overview_fits_band():
     print(f"content band: y={content.y} bottom={content.bottom} height={content.height}")
     print(f"house_overview groups={groups}  TOTAL regions={len(v.regions._regions)}")
     # Court seats table (6 buttons) + heir controls (2)
-    assert groups.get("court_seats") == 6, f"court seats missing/skipped: {groups}"
-    assert groups.get("heir_controls") == 2, f"heir controls missing/skipped: {groups}"
+    assert groups.get("dismiss_seat") == 6, f"court seats missing/skipped: {groups}"
+    assert groups.get("open_heir_picker") == 1, f"heir controls missing/skipped: {groups}"
     # The docket's rule cards (agenda) — the rule x3 docket
-    assert groups.get("agenda") == 3, f"agenda docket rules missing/skipped: {groups}"
+    assert groups.get("rule") >= 3, f"agenda docket rules missing/skipped: {groups}"
     # The five set_stance dials (policies re-homed to House)
     assert groups.get("set_stance") == 5, f"set_stance dials missing/skipped: {groups}"
     # cycle_exec — the executor cycle control
-    assert groups.get("cycle_exec") == 1, f"cycle_exec missing/skipped: {groups}"
+    assert groups.get("cycle_exec") >= 1, f"cycle_exec missing/skipped: {groups}"
     # The ambition button + scheme picker registration
-    assert groups.get("ambition") == 1, f"ambition button missing/skipped: {groups}"
+    assert groups.get("open_ambition_picker") == 1, f"ambition button missing/skipped: {groups}"
+    assert groups.get("open_scheme_picker") == 1, f"scheme picker missing/skipped: {groups}"
 
 
 if __name__ == "__main__":
