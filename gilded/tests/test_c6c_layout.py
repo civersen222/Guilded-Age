@@ -50,15 +50,15 @@ def _measure(quiet=False):
     y = draw_house_tab(surf, content, rpt, v)
     if not quiet:
         print(f"house_tab: -> {y}  groups={_groups(v)}")
-    v._draw_ladder_and_agenda(surf, content, y + 8, bottom=content.bottom - 40)
+    y = v._draw_ladder_and_agenda(surf, content, y + 8, bottom=content.bottom - 40)
     if not quiet:
-        print(f"ladder_agenda: groups={_groups(v)}")
-    v._draw_intrigue(surf, content, y)
+        print(f"ladder_agenda: -> {y}  groups={_groups(v)}")
+    y = v._draw_intrigue(surf, content, y, bottom=content.bottom - 40)
     if not quiet:
-        print(f"intrigue: groups={_groups(v)}")
-    v._draw_policies(surf, content)
+        print(f"intrigue: -> {y}  groups={_groups(v)}")
+    y = v._draw_policies(surf, content, y, bottom=content.bottom - 40)
     if not quiet:
-        print(f"policies: -> 740  groups={_groups(v)}")
+        print(f"policies: -> {y}  groups={_groups(v)}")
     v._draw_ambition_controls(surf, content)
     if not quiet:
         print(f"ambition: groups={_groups(v)}")
