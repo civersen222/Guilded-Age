@@ -357,13 +357,13 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         surface, _font(TYPE_TITLE, bold=True),
         f"HOUSE {report.house.upper()}", (PAD, content.y + 6), INK
     )
-    y = title.bottom + 10
+    y = title.bottom + 4
 
     body = _font(TYPE_TEXT)
     lines = _house_tab_lines(report)
 
     # Draw seat controls at the top (when view is provided)
-    btn_h = body.get_height() + 8
+    btn_h = body.get_height() + 4
     btn_w = 180
 
     if view is not None:
@@ -421,13 +421,26 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         # "Designate Heir" button — opens the heir picker
         y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
 
-    # Draw text lines — stop above the ambition button zone when view is set
+    # Draw text lines — stop above the ambition button zone when view is set.
+    # Two-column layout halves the vertical footprint so the chained sections
+    # (ladder, agenda, dials, cycle_exec) have room to draw below.
     max_bottom = (content.bottom - 58) if view is not None else content.bottom
-    for line in lines:
-        if y > max_bottom:
+    # Four-column packing: ~17 non-blank rows per column at 13px line pitch
+    # halves the two-column footprint so the chained sections (ladder,
+    # agenda, dials, cycle_exec) keep their room below the table.
+    import math
+    cols = 4
+    col_w = (content.width - PAD * 2) // cols
+    non_blank = [l for l in lines if l.strip()]
+    per = math.ceil(len(non_blank) / cols) if non_blank else 0
+    line_h = body.get_height()
+    cursors = [y] * cols
+    for i, line in enumerate(non_blank):
+        c = i // per
+        if c >= cols:
             break
-        if not line.strip():
-            continue
+        if cursors[c] > max_bottom:
+            break
         color = INK
         if line.startswith("  ?"):
             color = TONES.get("warn", INK)
@@ -435,11 +448,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             color = TONES.get("bad", INK)
         elif "* " in line:
             color = TONES.get("good", INK)
+        blit_text(surface, body, line, (PAD + c * col_w, cursors[c]), color)
+        cursors[c] += line_h
 
-        blit_text(surface, body, line, (PAD, y), color)
-        y += body.get_height() + 2
-
-    return y
+    return max(cursors)
 
 
 __all__ = ["draw_house_tab", "_house_tab_lines"]
