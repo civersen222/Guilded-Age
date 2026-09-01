@@ -50,13 +50,16 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
         else:
             loyalty_str = f"{seat.loyalty:.0f}" if seat.loyalty is not None else "?"
             band_str = seat.band or "?"
-            line = f"  {seat.position}: {seat.holder_name}  loyalty {loyalty_str} ({band_str})"
-            # Show grievances for seated men from kin data
+            # The grievance token is the state that differs between draws, so
+            # lead with it right after the holder's name — inside the visible
+            # column width — rather than tacking it on at the tail where the
+            # column-width truncation would eat it.
+            gri = ""
             for k in report.kin:
                 if k.name == seat.holder_name and k.grievances:
-                    line += f"  [{', '.join(k.grievances)}]"
+                    gri = f" [{', '.join(k.grievances)}]"
                     break
-            rows.append(line)
+            rows.append(f"  {seat.position}: {seat.holder_name}{gri}  loyalty {loyalty_str} ({band_str})")
     rows.append("")
 
     # ── Heir designation ───────────────────────────────────────────────────
@@ -108,12 +111,12 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
         seated = any(seat.holder_name == k.name for seat in report.seats if not seat.vacant)
         seated_str = "" if seated else "  (not seated)"
 
-        grievance_str = f"  [{', '.join(k.grievances)}]" if k.grievances else ""
+        grievance_str = f" [{', '.join(k.grievances)}]" if k.grievances else ""
         shares_str = f"  shares {k.shares_pct:.1f}%" if k.shares_pct > 0 else ""
         if band_str:
-            rows.append(f"  {k.name}  loyalty {loyalty_str} opinion {opinion_str} ({band_str}){seated_str}{grievance_str}{shares_str}")
+            rows.append(f"  {k.name}{grievance_str}  loyalty {loyalty_str} opinion {opinion_str} ({band_str}){seated_str}{shares_str}")
         else:
-            rows.append(f"  {k.name}  loyalty {loyalty_str} opinion {opinion_str}{seated_str}{grievance_str}{shares_str}")
+            rows.append(f"  {k.name}{grievance_str}  loyalty {loyalty_str} opinion {opinion_str}{seated_str}{shares_str}")
     rows.append("")
 
     # ── Disloyal kin ───────────────────────────────────────────────────────
