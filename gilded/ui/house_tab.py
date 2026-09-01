@@ -251,12 +251,11 @@ def _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, P
             group="heir_controls",
         ))
 
-    y += btn_h + 4
-
-    # "Clear Heir" button
+    # "Clear Heir" button — side by side with "Designate Heir" so the two
+    # controls share one row instead of stacking (saves btn_h + 4 of height).
     refuse_clear = _clear_heir_reason(game, house, report)
     btn_text = "Clear Heir"
-    btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, refuse_clear is None)
+    btn_rect = _draw_button(surface, btn_text, PAD + btn_w + 8, y, btn_w, btn_h, refuse_clear is None)
 
     if refuse_clear:
         view.regions.add(Region(
@@ -275,6 +274,7 @@ def _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, P
             group="heir_controls",
         ))
 
+    # Both buttons share this row, so advance once.
     y += btn_h + 4
     return y
 
