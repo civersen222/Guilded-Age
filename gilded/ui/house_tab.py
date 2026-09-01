@@ -442,12 +442,12 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     non_blank = [l for l in lines if l.strip()]
     line_h = small.get_height()
     cursors = [y] * cols
-    max_bottom = y
+    cap = content.bottom - 40
     for i, line in enumerate(non_blank):
         c = i // per
         if c >= cols:
             break
-        if cursors[c] > max_bottom:
+        if cursors[c] > cap:
             break
         color = INK
         if line.startswith("  ?") or line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
@@ -472,8 +472,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                 color = TONES.get("warn", INK)
             blit_text(surface, small, line, (ox, oy), color)
             oy += line_h + 2
-        max_bottom = max(max_bottom, oy)
-    y = max(cursors) + 2
+        y = max(max(cursors), oy) + 2
     return y
 
 
