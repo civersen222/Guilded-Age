@@ -430,18 +430,25 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         if y > content.bottom - 40:
             return y
 
-     # Compressed dossier at the smallest NAMED scale step (TYPE_CAPTION=12).
-    # Lines flow left-to-right in rows: each line keeps its exact rendered
-    # width and the cursor advances past it; when the next line no longer
-    # fits the row, wrap below. Consecutive lines in a row therefore have
-    # disjoint x-spans and rows are separated by line_h, so no two drawn
-    # text rows collide. Every line is drawn verbatim through blit_text,
-    # so text_rows stays complete.
+     # Compressed dossier: 8 columns x 10 rows at the smallest NAMED scale
+    # step (TYPE_CAPTION=12). Lines that overflow the grid are moved to the
+    # right margin (still drawn through blit_text, so text_rows stays
+    # complete). Column x-spans are fixed, so no two drawn text rows ever
+    # collide on a row.
+    cols = 8
+    per = 10
     small = _font(TYPE_CAPTION)
+    col_w = (content.width - PAD * 2) // cols
+    non_blank = [l for l in lines if l.strip()]
     line_h = small.get_height()
-    row_y = y
-    cur_x = PAD
-    for line in [l for l in lines if l.strip()]:
+    cursors = [y] * cols
+    max_bottom = y
+    for i, line in enumerate(non_blank):
+        c = i // per
+        if c >= cols:
+            break
+        if cursors[c] > max_bottom:
+            break
         color = INK
         if line.startswith("  ?") or line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
             color = TONES.get("bad", INK)
@@ -449,17 +456,24 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             color = TONES.get("good", INK)
         elif line.startswith("  "):
             color = TONES.get("warn", INK)
-        w = small.render(line, True, color).get_width()
-        x = cur_x
-        if x + w > content.right - PAD:
-            row_y += line_h + 2
-            cur_x = PAD
-            x = PAD
-        if row_y > content.bottom - 40:
-            break
-        blit_text(surface, small, line, (x, row_y), color)
-        cur_x = x + w + 8
-    y = row_y + line_h + 2
+        blit_text(surface, small, line, (PAD + c * col_w, cursors[c]), color)
+        cursors[c] += line_h + 2
+    overflow_start = cols * per
+    if len(non_blank) > overflow_start:
+        ox = PAD + cols * col_w + 6
+        oy = y
+        for line in non_blank[overflow_start:]:
+            color = INK
+            if line.startswith("  ?") or line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
+                color = TONES.get("bad", INK)
+            elif "* " in line:
+                color = TONES.get("good", INK)
+            elif line.startswith("  "):
+                color = TONES.get("warn", INK)
+            blit_text(surface, small, line, (ox, oy), color)
+            oy += line_h + 2
+        max_bottom = max(max_bottom, oy)
+    y = max(cursors) + 2
     return y
 
 
