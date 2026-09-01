@@ -363,7 +363,11 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     lines = _house_tab_lines(report)
 
     # Draw seat controls at the top (when view is provided)
-    btn_h = body.get_height() + 4
+    # The heir controls + heir picker keep their committed shared row height
+    # (get_height()+8); the court-seats table gets its OWN compressed height so
+    # it can shrink without disturbing the picker's measured 8-rows-per-480px.
+    btn_h = body.get_height() + 8
+    seat_h = body.get_height() + 4
     btn_w = 180
 
     if view is not None:
@@ -377,7 +381,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             col = idx % cols
             row = idx // cols
             btn_x = PAD + col * col_w
-            btn_y = y + row * (btn_h + 2)
+            btn_y = y + row * (seat_h + 2)
 
             pk = _position_key(seat)
 
@@ -393,7 +397,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             else:
                 btn_text = f"Dismiss {seat.holder_name}"
 
-            btn_rect = _draw_button(surface, btn_text, btn_x, btn_y, col_w - 4, btn_h, refusal is None)
+            btn_rect = _draw_button(surface, btn_text, btn_x, btn_y, col_w - 4, seat_h, refusal is None)
             hint = _seat_action_label(seat)
 
             if refusal:
@@ -415,11 +419,13 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                     group="court_seats",
                 ))
 
-        y += 2 * (btn_h + 2) + 8
+        y += 2 * (seat_h + 2) + 8
 
         # ── Heir controls (row 3 of buttons) ──────────────────────────────
         # "Designate Heir" button — opens the heir picker
         y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
+    if __import__("os").environ.get("C6_DEBUG"):
+        print("DEBUG y_after_heir=", y)
 
     # Draw text lines — stop above the ambition button zone when view is set.
     # Two-column layout halves the vertical footprint so the chained sections
