@@ -5,6 +5,7 @@ buttons for court seat appointment and dismissal, registered as proper
 Regions in the view's RegionSet.
 """
 
+import math
 from typing import Any, List, Optional
 
 import pygame
@@ -419,32 +420,26 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                     group="court_seats",
                 ))
 
-        # Advance the cursor by the SHARED btn_h (not the thinner seat_h) so
-        # the heir controls and heir picker start at exactly the committed y
-        # and keep their measured row budget — the seats table compresses its
-        # own buttons without shifting the shared controls below it.
-        y += 2 * (btn_h + 2) + 8
-
-        # ── Heir controls (row 3 of buttons) ──────────────────────────────
-        # "Designate Heir" button — opens the heir picker
+        # Advance by the SHARED btn_h pitch (not the thinner seat_h) so the
+        # heir controls / heir picker start at exactly the committed y and
+        # keep their measured row budget — the seats table compresses its own
+        # buttons without shifting the shared controls below it.
+        y += math.ceil(len(report.seats) / cols) * (btn_h + 2) + 8
         y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
-    if __import__("os").environ.get("C6_DEBUG"):
-        print("DEBUG y_after_heir=", y)
+        if y > content.bottom - 40:
+            return y
 
-    # Draw text lines — stop above the ambition button zone when view is set.
-    # Two-column layout halves the vertical footprint so the chained sections
-    # (ladder, agenda, dials, cycle_exec) have room to draw below.
-    max_bottom = (content.bottom - 58) if view is not None else content.bottom
-    # Four-column packing: ~17 non-blank rows per column at 13px line pitch
-    # halves the two-column footprint so the chained sections (ladder,
-    # agenda, dials, cycle_exec) keep their room below the table.
-    import math
-    cols = 4
+    # Compressed dossier: 8 columns x 10 rows at scale-pinned 11pt. Lines that
+    # overflow the grid are moved to the right margin (still drawn through
+    # blit_text, so text_rows stays complete).
+    cols = 8
+    per = 10
+    small = _font(11)
     col_w = (content.width - PAD * 2) // cols
     non_blank = [l for l in lines if l.strip()]
-    per = math.ceil(len(non_blank) / cols) if non_blank else 0
-    line_h = body.get_height()
+    line_h = small.get_height()
     cursors = [y] * cols
+    max_bottom = y
     for i, line in enumerate(non_blank):
         c = i // per
         if c >= cols:
@@ -452,16 +447,31 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         if cursors[c] > max_bottom:
             break
         color = INK
-        if line.startswith("  ?"):
-            color = TONES.get("warn", INK)
-        elif line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
+        if line.startswith("  ?") or line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
             color = TONES.get("bad", INK)
         elif "* " in line:
             color = TONES.get("good", INK)
-        blit_text(surface, body, line, (PAD + c * col_w, cursors[c]), color)
-        cursors[c] += line_h
-
-    return max(cursors)
+        elif line.startswith("  "):
+            color = TONES.get("warn", INK)
+        blit_text(surface, small, line, (PAD + c * col_w, cursors[c]), color)
+        cursors[c] += line_h + 2
+    overflow_start = cols * per
+    if len(non_blank) > overflow_start:
+        ox = PAD + cols * col_w + 6
+        oy = y
+        for line in non_blank[overflow_start:]:
+            color = INK
+            if line.startswith("  ?") or line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
+                color = TONES.get("bad", INK)
+            elif "* " in line:
+                color = TONES.get("good", INK)
+            elif line.startswith("  "):
+                color = TONES.get("warn", INK)
+            blit_text(surface, small, line, (ox, oy), color)
+            oy += line_h + 2
+        max_bottom = max(max_bottom, oy)
+    y = max(cursors) + 2
+    return y
 
 
 __all__ = ["draw_house_tab", "_house_tab_lines"]
