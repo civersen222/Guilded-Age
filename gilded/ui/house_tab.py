@@ -357,7 +357,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         surface, _font(TYPE_TITLE, bold=True),
         f"HOUSE {report.house.upper()}", (PAD, content.y + 6), INK
     )
-    y = title.bottom + 4
+    y = title.bottom + 1
 
     body = _font(TYPE_TEXT)
     lines = _house_tab_lines(report)
@@ -419,7 +419,11 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                     group="court_seats",
                 ))
 
-        y += 2 * (seat_h + 2) + 8
+        # Advance the cursor by the SHARED btn_h (not the thinner seat_h) so
+        # the heir controls and heir picker start at exactly the committed y
+        # and keep their measured row budget — the seats table compresses its
+        # own buttons without shifting the shared controls below it.
+        y += 2 * (btn_h + 2) + 8
 
         # ── Heir controls (row 3 of buttons) ──────────────────────────────
         # "Designate Heir" button — opens the heir picker
