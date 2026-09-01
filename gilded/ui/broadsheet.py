@@ -1445,7 +1445,7 @@ class BroadsheetView:
 
         blit_text(surface, head, "The Agenda", (PAD, y), INK)
         y += head.get_height() + 6
-        self._draw_petition_cards(surface, content, y)
+        y = self._draw_petition_cards(surface, content, y)
         return y
 
     # --- shared petition renderer (Docket + Agenda) --------------------------
@@ -1458,7 +1458,7 @@ class BroadsheetView:
         width = content.width - 2 * PAD
         for p in petitions:
             lines = _wrap(p.text, body, width - 20)
-            card_h = 30 + len(lines) * (body.get_height() + 2) + 44
+            card_h = 16 + len(lines) * (body.get_height() + 2) + 26
             if y + card_h > content.bottom - 10:
                 break
             card = pygame.Rect(PAD, y, width, card_h)
