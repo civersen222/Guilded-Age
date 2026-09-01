@@ -19,6 +19,7 @@ from gilded.ui.widgets import (
     font as _font,
     TYPE_CAPTION,
     TYPE_TEXT,
+    TYPE_HEADING,
     TYPE_TITLE,
     TONES,
     Region, RegionState,
@@ -360,7 +361,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     """
     PAD = 12
     title = blit_text(
-        surface, _font(TYPE_TITLE, bold=True),
+        surface, _font(TYPE_HEADING, bold=True),
         f"HOUSE {report.house.upper()}", (PAD, content.y + 6), INK
     )
     y = title.bottom + 1
