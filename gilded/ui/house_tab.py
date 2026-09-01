@@ -457,12 +457,16 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             color = TONES.get("good", INK)
         elif line.startswith("  "):
             color = TONES.get("warn", INK)
-        x = PAD + c * col_w
-        for seg in _wrap(line, small, col_w - 4):
-            if cursors[c] > cap:
-                break
-            blit_text(surface, small, seg, (x, cursors[c]), color)
-            cursors[c] += line_h + 2
+        # Truncate to the column width — one line per cell, so the grid
+        # stays a fixed 10 rows tall and never overflows its column.
+        seg = line
+        max_w = col_w - 4
+        if small.size(seg)[0] > max_w:
+            while len(seg) > 1 and small.size(seg + "…")[0] > max_w:
+                seg = seg[:-1]
+            seg = seg.rstrip() + "…"
+        blit_text(surface, small, seg, (PAD + c * col_w, cursors[c]), color)
+        cursors[c] += line_h + 2
     overflow_start = cols * per
     if len(non_blank) > overflow_start:
         ox = PAD + cols * col_w + 6
