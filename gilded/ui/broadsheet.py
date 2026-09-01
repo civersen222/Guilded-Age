@@ -1458,7 +1458,11 @@ class BroadsheetView:
         width = content.width - 2 * PAD
         for p in petitions:
             lines = _wrap(p.text, body, width - 20)
-            card_h = 16 + len(lines) * (body.get_height() + 2) + 26
+            # Header + wrapped text + a full button row (height 26) + padding —
+            # the row is drawn at hy+4 and must fit inside the card.
+            card_h = (8 + small.get_height() + 4
+                      + len(lines) * (body.get_height() + 2)
+                      + 4 + 26 + 6)
             if y + card_h > content.bottom - 10:
                 break
             card = pygame.Rect(PAD, y, width, card_h)
@@ -1477,7 +1481,8 @@ class BroadsheetView:
                 brect = pygame.Rect(bx, hy + 4, bw, 26)
                 pygame.draw.rect(surface, BUTTON_BG, brect)
                 pygame.draw.rect(surface, BUTTON_EDGE, brect, 1)
-                surface.blit(blabel, (brect.x + 10, brect.y + 5))
+                blit_text(surface, small, opt.text, (brect.x + 10, brect.y + 5),
+                         BUTTON_TEXT)
                 ex = self._chosen_executor(p.pid)
                 exec_id = None if ex is None else ex.id
                 self._option_hits.append(
@@ -1494,7 +1499,8 @@ class BroadsheetView:
             erect = pygame.Rect(bx, hy + 4, elabel.get_width() + 20, 26)
             pygame.draw.rect(surface, EXEC_BG, erect)
             pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
-            surface.blit(elabel, (erect.x + 10, erect.y + 5))
+            blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5),
+                      BUTTON_TEXT)
             self._exec_hits.append((erect, p.pid))
             self.regions.add(Region(rect=erect,
                                     action={"cycle_exec": p.pid},
