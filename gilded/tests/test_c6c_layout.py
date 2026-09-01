@@ -79,7 +79,7 @@ def test_house_overview_fits_band():
     assert groups.get("dismiss_seat") == 6, f"court seats missing/skipped: {groups}"
     assert groups.get("open_heir_picker") == 1, f"heir controls missing/skipped: {groups}"
     # The docket's rule cards (agenda) — the rule x3 docket
-    assert groups.get("rule") >= 3, f"agenda docket rules missing/skipped: {groups}"
+    assert (groups.get("rule") or 0) >= 3, f"agenda docket rules missing/skipped: {groups}"
     # The five set_stance dials (policies re-homed to House)
     assert groups.get("set_stance") == 5, f"set_stance dials missing/skipped: {groups}"
     # cycle_exec — the executor cycle control
