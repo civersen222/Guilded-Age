@@ -23,6 +23,7 @@ from gilded.ui.widgets import (
     TONES,
     Region, RegionState,
     blit_text,
+    wrap as _wrap,
 )
 
 _BAND_COLOR: dict = {
@@ -431,10 +432,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             return y
 
      # Compressed dossier: 8 columns x 10 rows at the smallest NAMED scale
-    # step (TYPE_CAPTION=12). Lines that overflow the grid are moved to the
-    # right margin (still drawn through blit_text, so text_rows stays
-    # complete). Column x-spans are fixed, so no two drawn text rows ever
-    # collide on a row.
+    # step (TYPE_CAPTION=12). Each line is wrapped to its column width so
+    # no drawn row ever spills into the adjacent column's x-span. Lines
+    # that overflow the grid are moved to the right margin (still drawn
+    # through blit_text, so text_rows stays complete).
     cols = 8
     per = 10
     small = _font(TYPE_CAPTION)
@@ -456,8 +457,12 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             color = TONES.get("good", INK)
         elif line.startswith("  "):
             color = TONES.get("warn", INK)
-        blit_text(surface, small, line, (PAD + c * col_w, cursors[c]), color)
-        cursors[c] += line_h + 2
+        x = PAD + c * col_w
+        for seg in _wrap(line, small, col_w - 4):
+            if cursors[c] > cap:
+                break
+            blit_text(surface, small, seg, (x, cursors[c]), color)
+            cursors[c] += line_h + 2
     overflow_start = cols * per
     if len(non_blank) > overflow_start:
         ox = PAD + cols * col_w + 6
@@ -473,6 +478,8 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             blit_text(surface, small, line, (ox, oy), color)
             oy += line_h + 2
         y = max(max(cursors), oy) + 2
+    else:
+        y = max(cursors) + 2
     return y
 
 
