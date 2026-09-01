@@ -17,6 +17,7 @@ from gilded.ui.widgets import (
     DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE,
     INK,
     font as _font,
+    TYPE_CAPTION,
     TYPE_TEXT,
     TYPE_TITLE,
     TONES,
@@ -429,12 +430,13 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         if y > content.bottom - 40:
             return y
 
-    # Compressed dossier: 8 columns x 10 rows at scale-pinned 11pt. Lines that
-    # overflow the grid are moved to the right margin (still drawn through
-    # blit_text, so text_rows stays complete).
+     # Compressed dossier: 8 columns x 10 rows at the smallest NAMED scale
+    # step (TYPE_CAPTION=12). Lines that overflow the grid are moved to the
+    # right margin (still drawn through blit_text, so text_rows stays
+    # complete).
     cols = 8
     per = 10
-    small = _font(11)
+    small = _font(TYPE_CAPTION)
     col_w = (content.width - PAD * 2) // cols
     non_blank = [l for l in lines if l.strip()]
     line_h = small.get_height()
