@@ -447,6 +447,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     col_w = (content.width - PAD * 2) // cols
     non_blank = [l for l in lines if l.strip()]
     line_h = small.get_height()
+    if len(non_blank) > cols * per:
+        # Late-game rosters exceed the 9-row grid and would spill into one
+        # tall margin column. Grow the grid so every line stays in-grid.
+        per = max(per, -(-len(non_blank) // cols))
     # Compressed dossier grid: pitch line_h + 1 (the caption glyph is 17px
     # tall at a 16px font height) so the tab's honest bottom fits the 430px
     # target without dropping any line or letting rows touch.

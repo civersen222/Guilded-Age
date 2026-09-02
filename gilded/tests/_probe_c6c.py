@@ -36,35 +36,35 @@ def main():
     v.regions._regions.clear()
 
     print(f"BOTTOM_H={B.BOTTOM_H} band: y={content.y} bottom={content.bottom} h={content.height}")
+    # where does the bottom bar (Attention) draw its text?
+    import re, io
+    src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui", "broadsheet.py")).read()
+    m = re.search(r"attn_label = f\"Attention: \{attn\}\"(.*?)y = ", src, re.S)
+    print("attn draw context:\n", m.group(0)[:600] if m else "not found")
     print(f"pinned SetAmbition top ~ {content.bottom - 30}  (content.bottom-30)")
-    print(f"pinned Attention bar top = {v._h - B.BOTTOM_H}")
+    print(f"pinned Attention bar top = {900 - B.BOTTOM_H}")
 
-    y = draw_house_tab(surf, content, rpt, v)
-    print(f"[house]      {content.y} -> {y}  ({y - content.y})")
-
-    # instrument: log every text row's y in ladder/agenda
-    rows = []
-    real_blit = B.blit_text
-    def spy_blit(surface, font, text, pos, color=None):
-        rows.append((pos[1], text[:40]))
-        return real_blit(surface, font, text, pos, color)
-    B.blit_text = spy_blit
-    try:
-        y2 = v._draw_ladder_and_agenda(surf, content, y + 8, bottom=content.bottom - 40)
-        y3 = v._draw_intrigue(surf, content, y2, bottom=content.bottom - 40)
-        y4 = v._draw_policies(surf, content, y3, bottom=content.bottom - 40)
-    finally:
-        B.blit_text = real_blit
-    print(f"[ladder]     {y + 8} -> {y2}  ({y2 - (y + 8)})")
-    print(f"[intrigue]   {y2} -> {y3}  ({y3 - y2})")
-    print(f"[policies]   {y3} -> {y4}  ({y4 - y3})")
+    y3 = draw_house_tab(surf, content, rpt, v)
+    print(f"[house]      {content.y} -> {y3}  ({y3 - content.y})")
+    y = v._draw_ladder_and_agenda(surf, content, y3 + 8)
+    print(f"[ladder]     {y3 + 8} -> {y}  ({y - y3 - 8})")
+    rows = [(r.top, t) for r, t in v.text_rows]
+    y2 = v._draw_intrigue(surf, content, y)
+    print(f"[intrigue]   {y} -> {y2}  ({y2 - y})")
+    y4 = v._draw_policies(surf, content, y2)
+    print(f"[policies]   {y2} -> {y4}  ({y4 - y2})")
 
     print("--- ladder text rows ---")
     for yy, t in rows:
-        if yy >= y + 8:
+        if yy >= y3 + 8:
             print(f"  y={yy:4d}  {t}")
     print(f"TOTAL regions={len(v.regions._regions)}")
     print(f"groups={_groups(v)}")
+    print("--- region rects (label-ish) ---")
+    for r in sorted(v.regions._regions, key=lambda r: r.rect.top):
+        a = r.action
+        k = next(iter(a), "?") if isinstance(a, dict) and a else "?"
+        print(f"  y={r.rect.top:4d}..{r.rect.bottom:4d} {k}")
 
 
 if __name__ == "__main__":
