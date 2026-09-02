@@ -1454,31 +1454,32 @@ class BroadsheetView:
                              y: int) -> int:
         petitions = self.game.docket_by_house.get(self.house, [])
         body = _font(TYPE_TEXT)
-        small = _font(TYPE_BODY, bold=True)
+        small = _font(TYPE_CAPTION, bold=True)
         width = content.width - 2 * PAD
         for p in petitions:
             lines = _wrap(p.text, body, width - 20)
-            # Header + wrapped text + a full button row (height 26) + padding —
-            # the row is drawn at hy+4 and must fit inside the card.
-            card_h = (8 + small.get_height() + 4
-                      + len(lines) * (body.get_height() + 2)
-                      + 4 + 26 + 6)
+            # Header + wrapped text + a full button row (height 20) + padding —
+            # the row is drawn at hy+2 and must fit inside the card.
+            # W10 shrink: header down to caption, line pitch -1, button row 20.
+            card_h = (6 + small.get_height() + 2
+                      + len(lines) * (body.get_height() + 1)
+                      + 2 + 20 + 4)
             if y + card_h > content.bottom - 10:
                 break
             card = pygame.Rect(PAD, y, width, card_h)
             pygame.draw.rect(surface, CARD_BG, card)
             pygame.draw.rect(surface, CARD_EDGE, card, 1)
-            hy = y + 8
+            hy = y + 6
             blit_text(surface, small, f"[{p.domain}] {p.kind}", (PAD + 10, hy), FADED)
-            hy += small.get_height() + 4
+            hy += small.get_height() + 2
             for line in lines:
                 blit_text(surface, body, line, (PAD + 10, hy), INK)
-                hy += body.get_height() + 2
+                hy += body.get_height() + 1
             bx = PAD + 10
             for opt in p.options:
                 blabel = small.render(opt.text, True, BUTTON_TEXT)
                 bw = blabel.get_width() + 20
-                brect = pygame.Rect(bx, hy + 4, bw, 26)
+                brect = pygame.Rect(bx, hy + 2, bw, 20)
                 pygame.draw.rect(surface, BUTTON_BG, brect)
                 pygame.draw.rect(surface, BUTTON_EDGE, brect, 1)
                 blit_text(surface, small, opt.text, (brect.x + 10, brect.y + 5),
@@ -1496,7 +1497,7 @@ class BroadsheetView:
             ex_name = ("executor: default" if ex is None
                        else f"executor: {ex.name}")
             elabel = small.render(ex_name, True, BUTTON_TEXT)
-            erect = pygame.Rect(bx, hy + 4, elabel.get_width() + 20, 26)
+            erect = pygame.Rect(bx, hy + 2, elabel.get_width() + 20, 20)
             pygame.draw.rect(surface, EXEC_BG, erect)
             pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
             blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5),
@@ -1506,7 +1507,7 @@ class BroadsheetView:
                                     action={"cycle_exec": p.pid},
                                     hint="Choose who carries out this ruling.",
                                     group=f"petition:{p.pid}"))
-            y += card_h + 10
+            y += card_h + 6
         return y
 
     def _draw_paper(self, surface, content: pygame.Rect,
