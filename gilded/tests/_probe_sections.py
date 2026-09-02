@@ -14,9 +14,7 @@ v = s.view
 v.active_tab = "House"
 
 import gilded.ui.house_tab as HT
-import gilded.ui.broadsheet as B
 
-# trace house_tab return
 orig_dht = HT.draw_house_tab
 def dht(surf, content, rpt, view=None):
     r = orig_dht(surf, content, rpt, view)
@@ -24,10 +22,9 @@ def dht(surf, content, rpt, view=None):
     return r
 HT.draw_house_tab = dht
 
-# trace section returns
 def trace(name, orig):
-    def w(self, surface, content, y=None, bottom=None, **k):
-        r = orig(surface, content, y, bottom)
+    def w(surface, content, y=None, bottom=None, **k):
+        r = orig(surface, content, y, bottom=bottom, **k)
         print(f"{name}: {y} -> {r}")
         return r
     return w
