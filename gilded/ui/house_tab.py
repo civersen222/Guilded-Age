@@ -361,7 +361,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     """
     PAD = 12
     title = blit_text(
-        surface, _font(TYPE_HEADING, bold=True),
+        surface, _font(TYPE_TITLE, bold=True),
         f"HOUSE {report.house.upper()}", (PAD, content.y + 6), INK
     )
     y = title.bottom + 1
@@ -374,7 +374,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     # (get_height()+8); the court-seats table gets its OWN compressed height so
     # it can shrink without disturbing the picker's measured 8-rows-per-480px.
     btn_h = body.get_height() + 8
-    seat_h = body.get_height() + 4
+    seat_h = body.get_height() + 2
     btn_w = 180
 
     if view is not None:
@@ -426,10 +426,11 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                     group="court_seats",
                 ))
 
-        # Advance by the SHARED btn_h pitch (not the thinner seat_h) so the
-        # heir controls / heir picker start at exactly the committed y and
-        # keep their measured row budget — the seats table compresses its own
-        # buttons without shifting the shared controls below it.
+        # The seats table compresses its own buttons (seat_h) but still
+        # advances by the shared btn_h pitch so the heir controls / heir
+        # picker start at exactly the committed y and keep their measured
+        # row budget — the seats shrink without shifting the shared
+        # controls below it.
         y += math.ceil(len(report.seats) / cols) * (btn_h + 2) + 8
         y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
         if y > content.bottom - 40:
@@ -441,11 +442,15 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     # that overflow the grid are moved to the right margin (still drawn
     # through blit_text, so text_rows stays complete).
     cols = 8
-    per = 10
+    per = 9
     small = _font(TYPE_CAPTION)
     col_w = (content.width - PAD * 2) // cols
     non_blank = [l for l in lines if l.strip()]
     line_h = small.get_height()
+    # Compressed dossier grid: pitch line_h + 1 (the caption glyph is 17px
+    # tall at a 16px font height) so the tab's honest bottom fits the 430px
+    # target without dropping any line or letting rows touch.
+    pitch = line_h + 1
     cursors = [y] * cols
     cap = content.bottom - 40
     for i, line in enumerate(non_blank):
@@ -470,7 +475,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                 seg = seg[:-1]
             seg = seg.rstrip() + "…"
         blit_text(surface, small, seg, (PAD + c * col_w, cursors[c]), color)
-        cursors[c] += line_h + 2
+        cursors[c] += pitch
     overflow_start = cols * per
     if len(non_blank) > overflow_start:
         ox = PAD + cols * col_w + 6
@@ -485,9 +490,9 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                 color = TONES.get("warn", INK)
             blit_text(surface, small, line, (ox, oy), color)
             oy += line_h + 2
-        y = max(max(cursors), oy) + 2
+        y = max(max(cursors), oy)
     else:
-        y = max(cursors) + 2
+        y = max(cursors)
     return y
 
 
