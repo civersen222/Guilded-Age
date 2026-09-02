@@ -2804,7 +2804,7 @@ class BroadsheetView:
         sy = content.bottom - 10
         btn_w = 140
         btn_h = body.get_height() + 4
-        bx = PAD + 160 + 8
+        bx = content.width - PAD - btn_w
         if sy - 60 <= content.bottom - 10:
             label = f"Ambition: {st['family']}" if st["family"] else "Set Ambition"
             btn_rect = _draw_button(surface, label, bx, sy - 20, btn_w, btn_h, True)
