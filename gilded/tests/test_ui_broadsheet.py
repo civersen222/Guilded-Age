@@ -4024,14 +4024,16 @@ def test_enterprises_picker_open_census():
 
     EXPECTED_REGIONS covers the closed state only; the picker is a second
     layout of the same tab and needs its own number. Measured: 8 candidate
-    rows + 1 back button + 11 base controls (end_turn, quickload,
-    quicksave, rule, set_spine_page x3, tab x3, toggle_narrate) = 20."""
+    rows + 1 back button + 12 base controls (end_turn, quickload,
+    quicksave, rule, set_spine_page x4, tab x3, toggle_narrate) = 21.
+    The 4th spine page (Policies) is a committed control the House census
+    of 26 already counts; the picker-open layout carries it too."""
     g, v = _drawn("Enterprises")
     appoint = _region_with(v, "appoint_director")
     v.handle_click(appoint.rect.center)
     v.draw(pygame.Surface((1280, 900)))
-    assert len(v.regions) == 20, (
-        f"picker-open census moved: {len(v.regions)} regions, expected 20")
+    assert len(v.regions) == 21, (
+        f"picker-open census moved: {len(v.regions)} regions, expected 21")
 
 
 # ── I3d — a refused control is visible and says why ──────────────────────

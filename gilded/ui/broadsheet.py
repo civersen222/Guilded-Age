@@ -1886,7 +1886,7 @@ class BroadsheetView:
         from gilded.world import MINOR_OWNER
         from gilded.docket import RAIL_COST
         from gilded.ui.actions import ACTIONS
-        BUTTON_H = 28
+        BUTTON_H = 26
         game = self.game
         house = self.house
         atlas = game.atlas
@@ -2771,19 +2771,11 @@ class BroadsheetView:
         y = draw_house_tab(surface, content, rpt, self)
         # spec §2: the Briefing's ladder + agenda re-homed here (the House
         # spine is their home now); the agenda cards are the docket's decisions.
-        # C6C: two-column layout — the spine text (ladder + intrigue) in the
-        # left column, the interactive controls (policies dials) in the right
-        # column at band top. Both share the content bottom, so everything
-        # ends <= content.bottom (fixes the 45px spill; registers set_stance
-        # x5 inside the band).
-        left = pygame.Rect(content.x, content.y, 400, content.height)
-        right = pygame.Rect(content.x + 414, content.y,
-                            content.width - 414, content.height)
-        y_left = self._draw_ladder_and_agenda(surface, left, y + 2,
-                                              bottom=content.bottom - 40)
-        # Draw intrigue section (plot visibility) in the left column.
-        self._draw_intrigue(surface, left, y_left,
-                            bottom=content.bottom - 40)
+        y = self._draw_ladder_and_agenda(surface, content, y + 8,
+                                         bottom=content.bottom - 40)
+        # Draw intrigue section (plot visibility)
+        y = self._draw_intrigue(surface, content, y,
+                                bottom=content.bottom - 40)
         # spec §2: the dissolved Policies tab is re-homed onto the House
         # spine — the five standing directive dials (set_stance) draw on the
         # Overview page (right column at band top), not a separate tab.
