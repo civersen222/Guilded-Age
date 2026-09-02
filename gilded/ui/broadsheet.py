@@ -1433,18 +1433,18 @@ class BroadsheetView:
             line = f"{row.rank}. {who}  {row.composite:.0f}"
             blit_text(surface, body, line, (PAD + 10, y),
                       INK if row.rank == 1 else FADED)
-            y += body.get_height() + 2
+            y += body.get_height()
         top = rows[0]
         if y < content.bottom - 170:
             axis = max(top.axes.values(), key=lambda a: a.value)
             if axis.causes:
                 why_line = f"{top.house} leads on {axis.causes[0].label}."
                 blit_text(surface, body, why_line, (PAD + 10, y), FADED)
-                y += body.get_height() + 2
-        y += 8
+                y += body.get_height()
+        y += 4
 
         blit_text(surface, head, "The Agenda", (PAD, y), INK)
-        y += head.get_height() + 6
+        y += head.get_height() + 4
         y = self._draw_petition_cards(surface, content, y)
         return y
 
@@ -2771,16 +2771,24 @@ class BroadsheetView:
         y = draw_house_tab(surface, content, rpt, self)
         # spec §2: the Briefing's ladder + agenda re-homed here (the House
         # spine is their home now); the agenda cards are the docket's decisions.
-        y = self._draw_ladder_and_agenda(surface, content, y + 8,
-                                         bottom=content.bottom - 40)
-        # Draw intrigue section (plot visibility)
-        y = self._draw_intrigue(surface, content, y,
-                                bottom=content.bottom - 40)
+        # C6C: two-column layout — the spine text (ladder + intrigue) in the
+        # left column, the interactive controls (policies dials) in the right
+        # column at band top. Both share the content bottom, so everything
+        # ends <= content.bottom (fixes the 45px spill; registers set_stance
+        # x5 inside the band).
+        left = pygame.Rect(content.x, content.y, 400, content.height)
+        right = pygame.Rect(content.x + 414, content.y,
+                            content.width - 414, content.height)
+        y_left = self._draw_ladder_and_agenda(surface, left, y + 2,
+                                              bottom=content.bottom - 40)
+        # Draw intrigue section (plot visibility) in the left column.
+        self._draw_intrigue(surface, left, y_left,
+                            bottom=content.bottom - 40)
         # spec §2: the dissolved Policies tab is re-homed onto the House
-        # spine — the five standing directive dials (set_stance) must draw on
-        # the Overview page, not a separate tab.
-        y = self._draw_policies(surface, content, y,
-                                bottom=content.bottom - 40)
+        # spine — the five standing directive dials (set_stance) draw on the
+        # Overview page (right column at band top), not a separate tab.
+        self._draw_policies(surface, right, content.y + 40,
+                            bottom=content.bottom - 40)
         # C2: the Set Ambition button, then the family picker when open
         self._draw_ambition_controls(surface, content)
         if self._ambition_picker:
