@@ -2778,8 +2778,8 @@ class BroadsheetView:
                                 bottom=content.bottom - 40)
         # spec §2: the dissolved Policies tab is re-homed onto the House
         # spine — the five standing directive dials (set_stance) draw on the
-        # Overview page (right column at band top), not a separate tab.
-        self._draw_policies(surface, right, content.y + 40,
+        # Overview page, not a separate tab.
+        self._draw_policies(surface, content, y,
                             bottom=content.bottom - 40)
         # C2: the Set Ambition button, then the family picker when open
         self._draw_ambition_controls(surface, content)
