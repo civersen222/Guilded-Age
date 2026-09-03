@@ -449,7 +449,12 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     cols = 8
     per = 7
     small = _font(TYPE_CAPTION)
-    col_w = (content.width - PAD * 2) // cols
+    # When view is present the right column holds the policies dials (x>=430);
+    # cap the dossier grid to the 400px left column so no row collides with a
+    # dial. Height is unchanged: 8 cols keep per=9 (68 lines), so the grid
+    # stays 153px tall — only the per-cell truncation tightens.
+    grid_w = min(content.width, 400) if view is not None else content.width
+    col_w = (grid_w - PAD * 2) // cols
     non_blank = [l for l in lines if l.strip()]
     line_h = small.get_height()
     if len(non_blank) > cols * per:
