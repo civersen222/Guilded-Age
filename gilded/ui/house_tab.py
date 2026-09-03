@@ -441,20 +441,15 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         if y > content.bottom - 40:
             return y
 
-     # Compressed dossier: 8 columns x 7 rows at the smallest NAMED scale
+    # Compressed dossier: 8 columns x 7 rows at the smallest NAMED scale
     # step (TYPE_CAPTION=12). Each line is wrapped to its column width so
     # no drawn row ever spills into the adjacent column's x-span. Lines
     # that overflow the grid are moved to the right margin (still drawn
     # through blit_text, so text_rows stays complete).
-    # The grid lives in the 400px left column: the right column (policies
-    # dials + intrigue, drawn at x >= 414) must stay clear of every row.
-    # Without a view there is no right column (plain full-width tab), so
-    # the cap only applies when the two-column layout is active.
-    grid_w = min(content.width, 400) if view is not None else content.width
-    cols = 4
+    cols = 8
     per = 7
     small = _font(TYPE_CAPTION)
-    col_w = (grid_w - PAD * 2) // cols
+    col_w = (content.width - PAD * 2) // cols
     non_blank = [l for l in lines if l.strip()]
     line_h = small.get_height()
     if len(non_blank) > cols * per:
