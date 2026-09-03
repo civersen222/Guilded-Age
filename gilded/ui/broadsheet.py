@@ -1428,7 +1428,7 @@ class BroadsheetView:
             return y
         blit_text(surface, head, "The Ladder", (PAD, y), INK)
         y += head.get_height() + 4
-        for row in rows[:5]:
+        for row in rows[:4]:
             who = row.house + (" (you)" if row.house == self.house else "")
             line = f"{row.rank}. {who}  {row.composite:.0f}"
             blit_text(surface, body, line, (PAD + 10, y),
@@ -2769,17 +2769,29 @@ class BroadsheetView:
         from gilded.ui.court_actions import _get_appointment_pool
         rpt = peerage_report(self.game, self.house)
         y = draw_house_tab(surface, content, rpt, self)
+        # C6C: two-column layout — the spine text (ladder + agenda + intrigue)
+        # in the left column, the interactive controls (policies dials) in the
+        # right column at band top. Both share the content bottom, so
+        # everything ends <= content.bottom (the 45px spill healed; the
+        # set_stance dials register inside the band).
+        left = pygame.Rect(content.x, y + 2, 400, content.bottom - (y + 2))
+        right = pygame.Rect(content.x + 414, content.y + 40,
+                            content.width - 414,
+                            content.bottom - (content.y + 40))
         # spec §2: the Briefing's ladder + agenda re-homed here (the House
-        # spine is their home now); the agenda cards are the docket's decisions.
-        y = self._draw_ladder_and_agenda(surface, content, y + 8,
-                                         bottom=content.bottom - 40)
-        # Draw intrigue section (plot visibility)
-        y = self._draw_intrigue(surface, content, y,
-                                bottom=content.bottom - 40)
+        # spine is their home now); the agenda cards are the docket's
+        # decisions. The left column carries only the spine text so it stays
+        # short enough to fit the band.
+        self._draw_ladder_and_agenda(surface, left, left.y,
+                                     bottom=content.bottom - 40)
         # spec §2: the dissolved Policies tab is re-homed onto the House
         # spine — the five standing directive dials (set_stance) draw on the
-        # Overview page, not a separate tab.
-        self._draw_policies(surface, content, y,
+        # Overview page (right column at band top), not a separate tab.
+        y_right = self._draw_policies(surface, right, right.y,
+                                      bottom=content.bottom - 40)
+        # The intrigue section (plot visibility) stacks under the policies
+        # dials in the right column so the left column never overflows the band.
+        self._draw_intrigue(surface, right, y_right,
                             bottom=content.bottom - 40)
         # C2: the Set Ambition button, then the family picker when open
         self._draw_ambition_controls(surface, content)
@@ -2856,7 +2868,9 @@ class BroadsheetView:
         from gilded.ui.widgets import INK, Region, RegionState, TONES
         from gilded.ui.house_tab import _draw_button
         from gilded.ui.actions import _open_scheme_picker_eligible, _start_scheme_eligible
-        PAD = 12
+        # C6C two-column: the section is passed the right-column rect, so
+        # x offsets are relative to content.x (same as _draw_policies).
+        PAD = content.x + 12
         body = _font(TYPE_TEXT)
         game = self.game
         house = self.house

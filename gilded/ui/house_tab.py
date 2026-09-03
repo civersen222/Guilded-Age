@@ -381,9 +381,13 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         game = getattr(view, 'game', None)
         house = getattr(view, 'house', None)
 
-        # Draw 6 seat buttons in a 3x2 grid at the top
+        # Draw 6 seat buttons in a 3x2 grid at the top.  The grid is
+        # constrained to the left column (400px wide): the right column is
+        # reserved for the policies dials drawn by _draw_house, and a
+        # full-width grid's 3rd column would collide with them.
         cols = 3
-        col_w = (content.width - PAD * 2) // cols
+        grid_w = min(content.width, 400)
+        col_w = (grid_w - PAD * 2) // cols
         for idx, seat in enumerate(report.seats):
             col = idx % cols
             row = idx // cols
@@ -399,12 +403,13 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             elif seat.vacant and game is not None and house is not None:
                 refusal = _appointment_reason(game, house, seat)
 
-            if seat.vacant:
-                btn_text = f"Appoint {seat.position}"
-            else:
-                btn_text = f"Dismiss {seat.holder_name}"
+            # The 400px left column gives each seat ~125px; a full
+            # "Dismiss <holder>" label (176px) would collide with the
+            # next seat's button.  Narrow to the seat name only (max
+            # 109px) — the verb + full name live in the hint.
+            btn_text = seat.position
 
-            btn_rect = _draw_button(surface, btn_text, btn_x, btn_y, col_w - 4, seat_h, refusal is None)
+            btn_rect = _draw_button(surface, btn_text, btn_x, btn_y, col_w - 4, max(14, seat_h), refusal is None)
             hint = _seat_action_label(seat)
 
             if refusal:
@@ -436,15 +441,20 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         if y > content.bottom - 40:
             return y
 
-     # Compressed dossier: 8 columns x 10 rows at the smallest NAMED scale
+     # Compressed dossier: 8 columns x 7 rows at the smallest NAMED scale
     # step (TYPE_CAPTION=12). Each line is wrapped to its column width so
     # no drawn row ever spills into the adjacent column's x-span. Lines
     # that overflow the grid are moved to the right margin (still drawn
     # through blit_text, so text_rows stays complete).
-    cols = 8
-    per = 9
+    # The grid lives in the 400px left column: the right column (policies
+    # dials + intrigue, drawn at x >= 414) must stay clear of every row.
+    # Without a view there is no right column (plain full-width tab), so
+    # the cap only applies when the two-column layout is active.
+    grid_w = min(content.width, 400) if view is not None else content.width
+    cols = 4
+    per = 7
     small = _font(TYPE_CAPTION)
-    col_w = (content.width - PAD * 2) // cols
+    col_w = (grid_w - PAD * 2) // cols
     non_blank = [l for l in lines if l.strip()]
     line_h = small.get_height()
     if len(non_blank) > cols * per:
@@ -471,7 +481,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         elif line.startswith("  "):
             color = TONES.get("warn", INK)
         # Truncate to the column width — one line per cell, so the grid
-        # stays a fixed 10 rows tall and never overflows its column.
+        # stays a fixed 7 rows tall and never overflows its column.
         seg = line
         max_w = col_w - 4
         if small.size(seg)[0] > max_w:

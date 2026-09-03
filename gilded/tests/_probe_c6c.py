@@ -24,12 +24,19 @@ print(f"content band: y={content.y} bottom={content.bottom} height={content.heig
 v.regions._regions.clear()
 y1 = draw_house_tab(surf, content, rpt, v)
 print(f"house_tab: -> {y1}  (band ends {content.bottom})")
-y2 = v._draw_ladder_and_agenda(surf, content, y1 + 8, bottom=content.bottom - 40)
+# Mirror the two-column House layout in _draw_house: left column carries
+# ladder + agenda (spine text), the right column the policies dials at band
+# top with intrigue stacked beneath them. Both share the content bottom.
+left = pygame.Rect(content.x, y1 + 2, 400, content.bottom - (y1 + 2))
+right = pygame.Rect(content.x + 414, content.y + 40,
+                    content.width - 414,
+                    content.bottom - (content.y + 40))
+y2 = v._draw_ladder_and_agenda(surf, left, left.y, bottom=content.bottom - 40)
 print(f"ladder_agenda: -> {y2}")
-y3 = v._draw_intrigue(surf, content, y2, bottom=content.bottom - 40)
-print(f"intrigue: -> {y3}")
-y4 = v._draw_policies(surf, content, y3, bottom=content.bottom - 40)
+y4 = v._draw_policies(surf, right, right.y, bottom=content.bottom - 40)
 print(f"policies: -> {y4}")
+y3 = v._draw_intrigue(surf, right, y4, bottom=content.bottom - 40)
+print(f"intrigue: -> {y3}")
 v._draw_ambition_controls(surf, content)
 n = len(v.regions._regions)
 print(f"TOTAL regions={n}")
