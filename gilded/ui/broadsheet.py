@@ -1426,22 +1426,48 @@ class BroadsheetView:
         self._ladder_rows = rows
         if y > bottom - 120:
             return y
-        blit_text(surface, head, "The Ladder", (PAD, y), INK)
-        y += head.get_height() + 4
-        for row in rows[:4]:
-            who = row.house + (" (you)" if row.house == self.house else "")
-            line = f"{row.rank}. {who}  {row.composite:.0f}"
-            blit_text(surface, body, line, (PAD + 10, y),
-                      INK if row.rank == 1 else FADED)
-            y += body.get_height()
-        top = rows[0]
-        if y < content.bottom - 170:
-            axis = max(top.axes.values(), key=lambda a: a.value)
-            if axis.causes:
-                why_line = f"{top.house} leads on {axis.causes[0].label}."
-                blit_text(surface, body, why_line, (PAD + 10, y), FADED)
-                y += body.get_height()
-        y += 4
+        body_h = body.get_height()
+        width = content.width - 2 * PAD
+        petitions = self.game.docket_by_house.get(self.house, [])
+        # The agenda is the spine's action content: reserve its room first so
+        # it always draws (its cycle_exec registers), then give the public
+        # ladder only the space that remains above it.  On a tall column the
+        # ladder keeps all four rows; on a short one it yields rows (and its
+        # why-line) so the docket's decisions stay visible.
+        if petitions:
+            card_h = (6 + _font(TYPE_CAPTION, bold=True).get_height() + 2
+                      + len(_wrap(petitions[0].text, body, width - 20))
+                      * (body_h + 1) + 2 + 20 + 4)
+        else:
+            card_h = 0
+        # Two section headers + n ladder rows + why-line (only if >=2 rows)
+        # + 4px gap + card_h must fit before bottom-10.
+        space = (bottom - 10) - y
+        ladder_rows = 0
+        for n in range(4, 0, -1):
+            need = (2 * (head.get_height() + 4)
+                    + n * body_h + (body_h if n >= 2 else 0)
+                    + 4 + card_h)
+            if need <= space:
+                ladder_rows = n
+                break
+        if ladder_rows > 0:
+            blit_text(surface, head, "The Ladder", (PAD, y), INK)
+            y += head.get_height() + 4
+            for row in rows[:ladder_rows]:
+                who = row.house + (" (you)" if row.house == self.house else "")
+                line = f"{row.rank}. {who}  {row.composite:.0f}"
+                blit_text(surface, body, line, (PAD + 10, y),
+                          INK if row.rank == 1 else FADED)
+                y += body_h
+            if ladder_rows >= 2:
+                top = rows[0]
+                axis = max(top.axes.values(), key=lambda a: a.value)
+                if axis.causes:
+                    why_line = f"{top.house} leads on {axis.causes[0].label}."
+                    blit_text(surface, body, why_line, (PAD + 10, y), FADED)
+                    y += body_h
+            y += 4
 
         blit_text(surface, head, "The Agenda", (PAD, y), INK)
         y += head.get_height() + 4
@@ -1458,12 +1484,26 @@ class BroadsheetView:
         width = content.width - 2 * PAD
         for p in petitions:
             lines = _wrap(p.text, body, width - 20)
-            # Header + wrapped text + a full button row (height 20) + padding —
-            # the row is drawn at hy+2 and must fit inside the card.
-            # W10 shrink: header down to caption, line pitch -1, button row 20.
+            # Header + wrapped text + wrapped button rows (height 20 each) +
+            # padding.  The button row wraps inside the column width so the
+            # options never spill into the right column (dials / intrigue).
+            avail = width - 20
+            bw_list = [small.render(opt.text, True, BUTTON_TEXT).get_width()
+                       + 20 for opt in p.options]
+            ex_pre = self._chosen_executor(p.pid)
+            ex_name_pre = ("executor: default" if ex_pre is None
+                           else f"executor: {ex_pre.name}")
+            ew = small.render(ex_name_pre, True, BUTTON_TEXT).get_width() + 20
+            n_btn_rows, cur = 1, 0
+            for bw in bw_list + [ew]:
+                if cur and cur + 8 + bw > avail:
+                    n_btn_rows += 1
+                    cur = bw
+                else:
+                    cur += 8 + bw
             card_h = (6 + small.get_height() + 2
                       + len(lines) * (body.get_height() + 1)
-                      + 2 + 20 + 4)
+                      + 2 + n_btn_rows * 20 + (n_btn_rows - 1) * 4 + 4)
             if y + card_h > content.bottom - 10:
                 break
             card = pygame.Rect(PAD, y, width, card_h)
@@ -1476,16 +1516,20 @@ class BroadsheetView:
                 blit_text(surface, body, line, (PAD + 10, hy), INK)
                 hy += body.get_height() + 1
             bx = PAD + 10
+            by = hy + 2
+            max_x = PAD + width - 10
             for opt in p.options:
                 blabel = small.render(opt.text, True, BUTTON_TEXT)
                 bw = blabel.get_width() + 20
-                brect = pygame.Rect(bx, hy + 2, bw, 20)
+                if bx + bw > max_x:
+                    bx = PAD + 10
+                    by += 24
+                brect = pygame.Rect(bx, by, bw, 20)
                 pygame.draw.rect(surface, BUTTON_BG, brect)
                 pygame.draw.rect(surface, BUTTON_EDGE, brect, 1)
                 blit_text(surface, small, opt.text, (brect.x + 10, brect.y + 5),
                          BUTTON_TEXT)
-                ex = self._chosen_executor(p.pid)
-                exec_id = None if ex is None else ex.id
+                exec_id = None if ex_pre is None else ex_pre.id
                 self._option_hits.append(
                     (brect, ("rule", p.pid, opt.key, exec_id)))
                 self.regions.add(Region(rect=brect,
@@ -1493,11 +1537,12 @@ class BroadsheetView:
                                         hint=opt.text,
                                         group=f"petition:{p.pid}"))
                 bx += bw + 8
-            ex = self._chosen_executor(p.pid)
-            ex_name = ("executor: default" if ex is None
-                       else f"executor: {ex.name}")
-            elabel = small.render(ex_name, True, BUTTON_TEXT)
-            erect = pygame.Rect(bx, hy + 2, elabel.get_width() + 20, 20)
+            ex = ex_pre
+            ex_name = ex_name_pre
+            if bx + ew > max_x:
+                bx = PAD + 10
+                by += 24
+            erect = pygame.Rect(bx, by, ew, 20)
             pygame.draw.rect(surface, EXEC_BG, erect)
             pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
             blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5),
