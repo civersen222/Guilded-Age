@@ -67,6 +67,10 @@ def _measure(quiet=False):
     if not quiet:
         print(f"intrigue: -> {y}  groups={_groups(v)}")
     v._draw_ambition_controls(surf, content)
+    # The persistent guide strip (always drawn above the bottom bar, outside
+    # the content band) carries the next-step button that re-runs the docket's
+    # current ruling — the third rule region the census counts.
+    v._draw_guide(surf)
     if not quiet:
         print(f"ambition: groups={_groups(v)}")
     if not quiet:
