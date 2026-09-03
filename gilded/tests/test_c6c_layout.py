@@ -50,15 +50,22 @@ def _measure(quiet=False):
     y = draw_house_tab(surf, content, rpt, v)
     if not quiet:
         print(f"house_tab: -> {y}  groups={_groups(v)}")
-    y = v._draw_ladder_and_agenda(surf, content, y + 8, bottom=content.bottom - 40)
+    # Mirror the two-column House layout in _draw_house: the spine text
+    # (ladder + agenda) in the left column, the policies dials at the right
+    # column's band top with intrigue stacked beneath them.
+    left = pygame.Rect(content.x, y + 2, 400, content.bottom - (y + 2))
+    right = pygame.Rect(content.x + 414, content.y + 40,
+                        content.width - 414,
+                        content.bottom - (content.y + 40))
+    y = v._draw_ladder_and_agenda(surf, left, left.y, bottom=content.bottom - 40)
     if not quiet:
         print(f"ladder_agenda: -> {y}  groups={_groups(v)}")
-    y = v._draw_intrigue(surf, content, y, bottom=content.bottom - 40)
-    if not quiet:
-        print(f"intrigue: -> {y}  groups={_groups(v)}")
-    y = v._draw_policies(surf, content, y, bottom=content.bottom - 40)
+    y = v._draw_policies(surf, right, right.y, bottom=content.bottom - 40)
     if not quiet:
         print(f"policies: -> {y}  groups={_groups(v)}")
+    y = v._draw_intrigue(surf, right, y, bottom=content.bottom - 40)
+    if not quiet:
+        print(f"intrigue: -> {y}  groups={_groups(v)}")
     v._draw_ambition_controls(surf, content)
     if not quiet:
         print(f"ambition: groups={_groups(v)}")
