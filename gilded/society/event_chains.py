@@ -17,7 +17,7 @@ mirroring the docket's own unattended-paper rule.
 
 from typing import Any, Callable, Dict, List, Optional
 
-from gilded.docket import FESTER_TURNS
+from gilded.docket import FESTER_TURNS, RulingContext
 
 
 class ChainStep:
@@ -103,6 +103,8 @@ class ChainManager:
                 self.active.append(ActiveChain(cdef, ctx))
         done: List[ActiveChain] = []
         for ac in self.active:
+            if ac.waiting_petition is not None:
+                continue   # held at a choice step; resolve_pending advances it
             ac.wait -= 1
             if ac.wait > 0:
                 continue
@@ -153,9 +155,12 @@ class ChainManager:
 
     def resolve_pending(self, game: Any) -> List[str]:
         """Chain petitions the player never touched: once they have festered
-        as long as the docket's own unattended paper, the step rules to its
-        fester key (the ugliest setting) and the chain redirects. Called from
-        the chassis after resolve_unattended, which skipped chain petitions."""
+        as long as the docket's own unattended paper, the step's fester_key
+        option runs at the fumbling scale (the ugliest branch) and the chain
+        redirects. Also advances chains whose petition the player already
+        ruled (the option's apply stores the chosen branch on the
+        petition's ref and removes the paper). Called from the chassis
+        after resolve_unattended, which skipped chain petitions."""
         msgs: List[str] = []
         for ac in list(self.active):
             if ac.waiting_petition is None:
@@ -163,26 +168,42 @@ class ChainManager:
             player = next((h for h in sorted(game.houses)
                            if game.houses[h].is_player), None)
             docket = game.docket_by_house.get(player, []) if player else []
-            pet = next((p for p in docket if p.pid == ac.waiting_petition), None)
-            if pet is not None and pet.turns_waiting < FESTER_TURNS:
-                continue
+            pet = next((p for p in docket if p.pid == ac.waiting_petition),
+                       None)
             step = ac.cdef.steps[ac.step_idx]
-            key = step.fester_key
-            ac.waiting_petition = None
-            # The option's apply already ran (the player ruled it, or the
-            # docket's fester rule ruled the ugliest one) and stored the
-            # choice; only fill in the default if nothing was recorded.
-            if "choice" not in ac.ctx:
-                ac.ctx["choice"] = key
-            ac.choice = ac.ctx["choice"]
+            choice = ac.ctx.get("choice")
+            # Ruled by the player: the option's apply already ran (through
+            # docket.rule) and left the chosen branch in the chain's ctx.
+            # Otherwise wait until the paper has festered as long as the
+            # docket's own unattended paper.
+            if choice is None and (
+                    pet is None or pet.turns_waiting < FESTER_TURNS):
+                continue
+            if choice is not None:
+                key = choice
+                if pet is not None:
+                    docket.remove(pet)
+            else:
+                # Festering out: the ugliest branch at the fumbling scale.
+                key = step.fester_key
+                opt = next((o for o in (pet.options if pet else [])
+                            if o.key == key), None)
+                if opt is not None and player is not None:
+                    realm = game.realms.get(player)
+                    if realm is not None:
+                        ctx = RulingContext(game, player, realm.ruler,
+                                            game.rng, 0.5)
+                        msgs.extend(opt.apply(ctx))
             if step.on_choice is not None:
-                step.on_choice(game, ac, ac.choice)
-            if step.delay:
-                ac.wait = step.delay
-            msgs.append(_line_of(ac.cdef.steps[ac.step_idx], ac)
-                        if ac.step_idx < len(ac.cdef.steps) else
-                        f"{ac.cdef.chain_id} runs its course unattended")
-        return msgs
+                step.on_choice(game, ac, key)
+            ac.choice = key
+            ac.choice_step = ac.step_idx
+            ac.waiting_petition = None
+            ac.ctx.pop("choice", None)
+            ac.step_idx += 1
+            ac.wait = (ac.cdef.steps[ac.step_idx].delay
+                       if ac.step_idx < len(ac.cdef.steps) else 1)
+        return [m for m in msgs if m]
 
 
 def _line_of(step: ChainStep, ac: ActiveChain) -> str:
