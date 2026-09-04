@@ -298,6 +298,8 @@ class GildedGame:
             kinds = {p.kind for p in carried}
             fresh = [p for p in generate_petitions(self, h) if p.kind not in kinds]
             self.docket_by_house[h] = (carried + fresh)[:MAX_PETITIONS]
+        # Chain petitions the player is asked to rule on (C7.3)
+        self.chain_manager.file_pending(self)
 
     def end_turn(self) -> List[TurnEvent]:
         if self.game_over is not None:
@@ -328,6 +330,8 @@ class GildedGame:
         for h in sorted(self.houses):
             out = resolve_unattended(self, h, self.docket_by_house.get(h, []))
             self._emit(out, "letters", h)
+        # 1.1 chain petitions the player never ruled: fester to the ugliest setting
+        self._emit(self.chain_manager.resolve_pending(self), "letters")
 
         # 2. construction, strategic capacity, dividends
         for ent in self.enterprises:

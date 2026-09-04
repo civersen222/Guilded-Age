@@ -1093,6 +1093,18 @@ def resolve_unattended(game, house_name: str, petitions) -> List[str]:
         return msgs
     directives = getattr(game, "directives", {}).get(house_name)
     for p in petitions:
+        # Chain petitions are the player's to rule: a seated minister must not
+        # pre-empt the house's own decision on a chain's branch. If the
+        # player never rules it, it festers like any other unattended paper
+        # and resolves at the ugliest setting.
+        seat = None
+        if p.domain == "chain":
+            # Chain petitions are the player's to rule: a seated minister must
+            # not pre-empt the house's decision, and the docket's own fester
+            # rule must not apply a branch the chain is still choosing. Let it
+            # fester; the chain's own resolve_pending picks the ugliest branch.
+            p.turns_waiting += 1
+            continue
         seat = DOMAIN_SEAT.get(p.domain)
         holder = realm.court.positions.get(seat) if seat is not None else None
         if holder is not None and holder.is_alive:

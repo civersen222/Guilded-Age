@@ -3,20 +3,47 @@
 A chain arms when its trigger reads something true in the live game
 state, then plays its steps over the following turns. Deterministic:
 no RNG, so seeded runs stay reproducible.
+
+C7.3 branching: a step may carry a `file_petition` callback. When that
+step plays, the chain holds at it: the petition is filed onto the house's
+docket (kind "chain:<chain_id>", domain "chain") and the chain waits for
+the ruling. The ruling's option apply() stores the chosen key in
+`ac.ctx["choice"]` and removes the petition; on the next tick
+`on_choice(game, ac, key)` runs and redirects the chain (rewriting
+`ac.step_idx`). A petition the player never rules festers out: after
+FESTER_TURNS it resolves to the step's `fester_key` (the ugliest setting),
+mirroring the docket's own unattended-paper rule.
 """
 
 from typing import Any, Callable, Dict, List, Optional
 
+from gilded.docket import FESTER_TURNS
+
 
 class ChainStep:
-    """One beat: a template line, an optional effect, and a delay."""
+    """One beat: a template line, an optional effect, and a delay.
+
+    `file_petition(game, ac) -> Optional[Petition]` files a petition onto
+    the player's docket when this step plays and holds the chain here until
+    it is ruled. The option's apply() must store the chosen key in
+    `ac.ctx["choice"]`. `on_choice(game, ac, key)` then runs (key may be
+    None if the petition festered or was lost) and may rewrite `ac.steps` /
+    `ac.step_idx` to redirect the chain. `text` may also be a callable
+    `ctx -> str` for lines that depend on the choice.
+    """
 
     def __init__(self, text: str,
                  apply: Optional[Callable[[Any, Dict[str, Any]], List[str]]] = None,
-                 delay: int = 1):
+                 delay: int = 1,
+                 file_petition: Optional[Callable[[Any, "ActiveChain"], Any]] = None,
+                 on_choice: Optional[Callable[[Any, "ActiveChain", Optional[str]], None]] = None,
+                 fester_key: Optional[str] = None):
         self.text = text
         self.apply = apply
         self.delay = delay          # turns after the previous beat
+        self.file_petition = file_petition
+        self.on_choice = on_choice
+        self.fester_key = fester_key  # ruling the step defaults to if never ruled
 
 
 class ChainDef:
@@ -41,6 +68,7 @@ class ActiveChain:
         self.wait = cdef.steps[0].delay
         self.choice: Optional[str] = None
         self.choice_step: Optional[int] = None
+        self.waiting_petition: Optional[int] = None   # pid while a step waits
 
 
 class ChainManager:
@@ -51,13 +79,16 @@ class ChainManager:
         self.active: List[ActiveChain] = []
         self.fired: set = set()
         self.last_steps: List[tuple] = []
+        self.pending_petitions: List[tuple] = []    # (house, Petition) to file
 
     def tick(self, game: Any) -> List[str]:
         """One turn: arm new chains, then advance the ones in motion.
 
         Also fills `last_steps` with the (chain_id, line, face) tuples for
         every step that played this turn, so the chassis can record them as
-        first-class beats (C7) in one place.
+        first-class beats (C7) in one place. Branching steps that file a
+        petition buffer it in `pending_petitions`; call `file_pending`
+        during open_turn to surface it on the docket.
         """
         msgs: List[str] = []
         self.last_steps = []
@@ -76,13 +107,23 @@ class ChainManager:
             if ac.wait > 0:
                 continue
             step = ac.cdef.steps[ac.step_idx]
-            line = step.text.format(**ac.ctx)
+            line = _line_of(step, ac)
             msgs.append(line)
             self.last_steps.append((ac.cdef.chain_id, line, _face_of(ac.ctx)))
             if step.apply is not None:
                 extra = step.apply(game, ac.ctx)
                 if extra:
                     msgs.extend(extra)
+            if step.file_petition is not None and ac.waiting_petition is None:
+                # Hold at this step: the choice is the player's.
+                petition = step.file_petition(game, ac)
+                if petition is not None:
+                    ac.waiting_petition = petition.pid
+                    house = ac.ctx.get("house") or (
+                        game.player_house if hasattr(game, "player_house") else None)
+                    self.pending_petitions.append((house, petition))
+                    ac.wait = step.delay
+                    continue
             ac.step_idx += 1
             if ac.step_idx >= len(ac.cdef.steps):
                 done.append(ac)
@@ -91,6 +132,63 @@ class ChainManager:
         for ac in done:
             self.active.remove(ac)
         return msgs
+
+    def file_pending(self, game: Any) -> None:
+        """Surface buffered chain petitions on the docket (call from
+        open_turn, after the docket is rebuilt, so they survive)."""
+        if not self.pending_petitions:
+            return
+        player = next((h for h in sorted(game.houses)
+                       if game.houses[h].is_player), None)
+        if player is None:
+            self.pending_petitions.clear()
+            return
+        docket = game.docket_by_house.setdefault(player, [])
+        for house, petition in self.pending_petitions:
+            if house is not None:
+                petition.house = house      # the matter concerns that house
+            if not any(p.pid == petition.pid for p in docket):
+                docket.append(petition)
+        self.pending_petitions.clear()
+
+    def resolve_pending(self, game: Any) -> List[str]:
+        """Chain petitions the player never touched: once they have festered
+        as long as the docket's own unattended paper, the step rules to its
+        fester key (the ugliest setting) and the chain redirects. Called from
+        the chassis after resolve_unattended, which skipped chain petitions."""
+        msgs: List[str] = []
+        for ac in list(self.active):
+            if ac.waiting_petition is None:
+                continue
+            player = next((h for h in sorted(game.houses)
+                           if game.houses[h].is_player), None)
+            docket = game.docket_by_house.get(player, []) if player else []
+            pet = next((p for p in docket if p.pid == ac.waiting_petition), None)
+            if pet is not None and pet.turns_waiting < FESTER_TURNS:
+                continue
+            step = ac.cdef.steps[ac.step_idx]
+            key = step.fester_key
+            ac.waiting_petition = None
+            # The option's apply already ran (the player ruled it, or the
+            # docket's fester rule ruled the ugliest one) and stored the
+            # choice; only fill in the default if nothing was recorded.
+            if "choice" not in ac.ctx:
+                ac.ctx["choice"] = key
+            ac.choice = ac.ctx["choice"]
+            if step.on_choice is not None:
+                step.on_choice(game, ac, ac.choice)
+            if step.delay:
+                ac.wait = step.delay
+            msgs.append(_line_of(ac.cdef.steps[ac.step_idx], ac)
+                        if ac.step_idx < len(ac.cdef.steps) else
+                        f"{ac.cdef.chain_id} runs its course unattended")
+        return msgs
+
+
+def _line_of(step: ChainStep, ac: ActiveChain) -> str:
+    if callable(step.text):
+        return step.text(ac.ctx)
+    return step.text.format(**ac.ctx)
 
 
 def _face_of(ctx: Dict[str, Any]) -> Optional[str]:
