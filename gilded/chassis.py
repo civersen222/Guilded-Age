@@ -527,8 +527,12 @@ class GildedGame:
                 self.directives[h].set_stance("labor", -100)
             self._emit(msgs, "gazette", h)
 
-        # 8.4 signature chains (M72, spec 7): arms on the resolved state
-        self._emit(self.chain_manager.tick(self), "gazette")
+        # 8.4 signature chains (M72, spec 7): arms on the resolved state.
+        # C7w2: the first turn ends before any chains may arm - a chain
+        # effect landing on turn 0 would touch character state at generation
+        # time and break the r5 premise (industry == intrigue).
+        if self.turn >= 1:
+            self._emit(self.chain_manager.tick(self), "gazette")
         # C7: every chain step also lands on the beat log as a first-class beat
         self._record_chain_beats()
 

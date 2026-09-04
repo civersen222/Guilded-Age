@@ -1515,7 +1515,7 @@ class BroadsheetView:
                       + len(lines) * (body.get_height() + 1)
                       + 2 + n_btn_rows * 20 + (n_btn_rows - 1) * 4 + 4)
             compact_h = (6 + small.get_height() + 2
-                         + 2 + n_opt_rows * 20 + (n_opt_rows - 1) * 4 + 4)
+                         + 2 + n_btn_rows * 20 + (n_btn_rows - 1) * 4 + 4)
             return (lines, bw_list, ex_pre, ex_name_pre, ew,
                     full_h, compact_h, force_compact)
 
@@ -1591,22 +1591,21 @@ class BroadsheetView:
                                         hint=opt.text,
                                         group=f"petition:{p.pid}"))
                 bx += bw + 8
-            if not compact:
-                ex = ex_pre
-                ex_name = ex_name_pre
-                if bx + ew > max_x:
-                    bx = PAD + 10
-                    by += 24
-                erect = pygame.Rect(bx, by, ew, 20)
-                pygame.draw.rect(surface, EXEC_BG, erect)
-                pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
-                blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5),
-                          BUTTON_TEXT)
-                self._exec_hits.append((erect, p.pid))
-                self.regions.add(Region(rect=erect,
-                                        action={"cycle_exec": p.pid},
-                                        hint="Choose who carries out this ruling.",
-                                        group=f"petition:{p.pid}"))
+            ex = ex_pre
+            ex_name = ex_name_pre
+            if bx + ew > max_x:
+                bx = PAD + 10
+                by += 24
+            erect = pygame.Rect(bx, by, ew, 20)
+            pygame.draw.rect(surface, EXEC_BG, erect)
+            pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
+            blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5),
+                      BUTTON_TEXT)
+            self._exec_hits.append((erect, p.pid))
+            self.regions.add(Region(rect=erect,
+                                    action={"cycle_exec": p.pid},
+                                    hint="Choose who carries out this ruling.",
+                                    group=f"petition:{p.pid}"))
             y += card_h + 6
         return y
 

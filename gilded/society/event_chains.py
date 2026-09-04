@@ -93,8 +93,6 @@ class ChainManager:
         """
         msgs: List[str] = []
         self.last_steps = []
-        if getattr(game, "turn", 0) < 1:
-            return msgs
         for cdef in self.defs:
             if cdef.once and cdef.chain_id in self.fired:
                 continue

@@ -59,7 +59,7 @@ DOMAIN_SEAT = {
 SEAT_DOMAIN = {seat: domain for domain, seat in DOMAIN_SEAT.items()}
 
 DOMAIN_PRIORITY = {               # lower = more urgent when the docket overflows
-    "war": 0, "labor": 1, "family": 2, "capital": 3,
+    "chain": 0, "war": 0, "labor": 1, "family": 2, "capital": 3,
     "press": 4, "diplomacy": 5, "expansion": 6,
 }
 

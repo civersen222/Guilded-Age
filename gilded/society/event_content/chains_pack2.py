@@ -197,7 +197,7 @@ def _strike_petition(game: Any, ac: Any) -> Any:
         return []
 
     return Petition(
-        pid=_next_pid(game), kind="chain:general_strike", domain="family",
+        pid=_next_pid(game), kind="chain:general_strike", domain="chain",
         house=ctx["house"],
         text="The {city} strike holds the whole House {house} hostage: "
              "the pickets demand pay or they demand heads.".format(

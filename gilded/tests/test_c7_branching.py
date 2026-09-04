@@ -1,9 +1,10 @@
 """Mission C7, commit 3 - three chains ask the player.
 
 Seed 42, 80 turns. Two runs: one rules every chain petition with its
-first option, the other with its second. Each run must rule on at least
-two chain petitions through the docket (the other run rules on all three),
-and the two runs must produce different downstream chain beats - the
+first option, the other with its second. Each run must rule all three
+chain petitions through the docket, and the two runs must produce
+different downstream chain beats - at least three chains diverge, and
+each ruled chain diverges - the
 choice is what changed, not the seed. The chain petition is also drawn on
 the House tab as a rule region the player can press.
 
@@ -45,39 +46,40 @@ def _run(option_slot):
     for _ in range(TURN_LIMIT):
         for p in list(g.docket_by_house.get(player, [])):
             if p.kind.startswith("chain:"):
-                # The petition must be drawable and pressable on the
-                # House tab: a rule region for one of its options exists.
+                # The petition must be drawn on the House tab as a rule
+                # region for each option; pressing the region is what
+                # rules it (the dispatch spends attention and runs the
+                # option's apply, which records the choice on the chain).
+                key = p.options[option_slot].key
                 s.view.active_tab = "House"
                 s.view.draw(s.screen)
                 hits = [r for r in s.view.regions._regions
                         if getattr(r, "group", "") == f"petition:{p.pid}"
                         and isinstance(r.action, dict)
-                        and isinstance(r.action.get("rule"), tuple)]
-                if hits and not drawn_region_seen:
-                    act = s.view.handle_click(hits[0].rect.center)
-                    assert act is not None and "rule" in act, \
-                        "the chain petition's rule region is not pressable"
-                    drawn_region_seen = True
-                key = p.options[option_slot].key
-                msgs = rule(g, p, key, ruler)
-                g.docket_by_house[player].remove(p)
+                        and r.action.get("rule") == (p.pid, key, None)]
+                assert hits, \
+                    f"chain petition {p.kind} option {key!r} was not drawn " \
+                    "as a rule region on the House tab"
+                act = s.view.handle_click(hits[0].rect.center)
+                assert act is not None and "rule" in act, \
+                    "the chain petition's rule region is not pressable"
+                _apply_action(s, act)
+                drawn_region_seen = True
                 ruled_kinds.append(p.kind)
         g.end_turn()
     assert drawn_region_seen, "no chain petition was drawn as a rule region"
     beats = [(b.turn, b.facet, b.text) for b in g.beats.log
              if b.kind == "chain"]
-    treasury = getattr(g, "treasury", None)
-    gold = treasury.gold if treasury is not None else 0
+    gold = g.houses[player].treasury
     return set(ruled_kinds), beats, gold
 
 
 def test_two_runs_ruling_the_chain_petitions_diverge():
     ruled1, beats1, gold1 = _run(0)
     ruled2, beats2, gold2 = _run(1)
-    # At least two chains reach the docket in the first-options run;
-    # the heir's break only fires once the heir's stress breaks it,
-    # which the second-options run's branches cause.
-    assert len(ruled1 & CHAIN_KINDS) >= 2, \
+    # All three chains reach the docket in both runs - the heir's stress
+    # breaks on seed 42 either way - and each run rules every petition.
+    assert len(ruled1 & CHAIN_KINDS) >= 3, \
         f"only {sorted(ruled1 & CHAIN_KINDS)} chains reached the docket"
     assert len(ruled2 & CHAIN_KINDS) >= 3, \
         f"only {sorted(ruled2 & CHAIN_KINDS)} chains reached the docket"
@@ -86,14 +88,28 @@ def test_two_runs_ruling_the_chain_petitions_diverge():
     only1 = s1 - s2
     only2 = s2 - s1
     assert only1 or only2, "the two rulings produced identical chain beats"
-    # The divergence is in the branches the ruling chose, not noise:
-    # each run's unique beats come from chains that were ruled on.
-    for facet, text in only1:
-        assert facet in {k.removeprefix("chain:") for k in ruled1}, \
-            f"divergent beat {facet!r} not from a ruled chain"
-    for facet, text in only2:
-        assert facet in {k.removeprefix("chain:") for k in ruled2}, \
-            f"divergent beat {facet!r} not from a ruled chain"
+    # Ruling a chain also moves the sim (unrest, stress, treasury), so
+    # other chains fire on different beats downstream. At least three
+    # chains must diverge between the runs - their later steps were
+    # redirected by the choice, not the seed.
+    fired = {f for _, f, _ in beats1} | {f for _, f, _ in beats2}
+    divergent = []
+    for cid in sorted(fired):
+        set1 = {t for _, f, t in beats1 if f == cid}
+        set2 = {t for _, f, t in beats2 if f == cid}
+        if (set1 - set2) or (set2 - set1):
+            divergent.append(cid)
+    assert len(divergent) >= 3, \
+        f"only {sorted(divergent)} chains diverge downstream"
+    # And the three chains whose petitions were actually ruled diverge
+    # between the runs - the branches the choice selected, not the seed.
+    ruled = ruled1 | ruled2
+    for cid in sorted(ruled & CHAIN_KINDS):
+        facet = cid.removeprefix("chain:")
+        set1 = {t for _, f, t in beats1 if f == facet}
+        set2 = {t for _, f, t in beats2 if f == facet}
+        assert (set1 - set2) or (set2 - set1), \
+            f"ruled chain {cid!r} produced identical beats in both runs"
     # The ruling changes the sim: the buyoff option spends treasury gold
     # the crackdown does not, so the two runs end with different gold.
     assert gold1 != gold2, \
