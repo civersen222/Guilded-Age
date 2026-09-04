@@ -1471,13 +1471,15 @@ class BroadsheetView:
 
         blit_text(surface, head, "The Agenda", (PAD, y), INK)
         y += head.get_height() + 4
-        y = self._draw_petition_cards(surface, content, y)
+        y = self._draw_petition_cards(surface, content, y, bottom)
         return y
+
 
     # --- shared petition renderer (Docket + Agenda) --------------------------
 
     def _draw_petition_cards(self, surface, content: pygame.Rect,
-                             y: int) -> int:
+                             y: int, bottom: int = None) -> int:
+        bottom = bottom if bottom is not None else content.bottom
         from gilded.docket import DOMAIN_PRIORITY
         petitions = sorted(
             self.game.docket_by_house.get(self.house, []),
@@ -1511,25 +1513,34 @@ class BroadsheetView:
                     cur = bw
                 else:
                     cur += 8 + bw
+            # Button rows advance by 24px when wrapping (see the draw pass
+            # below) — the estimate must match or the last row lands past
+            # the limit and draws over the bottom bar.
             full_h = (6 + small.get_height() + 2
                       + len(lines) * (body.get_height() + 1)
-                      + 2 + n_btn_rows * 20 + (n_btn_rows - 1) * 4 + 4)
+                      + 2 + (n_btn_rows - 1) * 24 + 20 + 4)
             compact_h = (6 + small.get_height() + 2
-                         + 2 + n_btn_rows * 20 + (n_btn_rows - 1) * 4 + 4)
+                         + 2 + (n_btn_rows - 1) * 24 + 20 + 4)
             return (lines, bw_list, ex_pre, ex_name_pre, ew,
                     full_h, compact_h, force_compact)
 
         def _fits(h, yy, limit):
-            card_h = h[5]
+            card_h = h[6] if h[7] else h[5]
             compact = h[7]
             if not compact and yy + card_h > limit:
                 compact_h = h[6]
                 if yy + compact_h > limit:
                     return None
                 card_h, compact = compact_h, True
+            if yy + card_h > limit:
+                return None
             return card_h, compact
 
-        limit = content.bottom - 10
+        # The caller may pass a higher bottom (the House spine stops 40px
+        # above the column's foot so the bottom bar keeps its rows).  The
+        # compact pass must honour the same limit or its buttons land on
+        # the Attention / Save / Open strip.
+        limit = min(bottom, content.bottom) - 10
         layouts = []
         dropped = False
         yy = y

@@ -115,3 +115,25 @@ def test_two_runs_ruling_the_chain_petitions_diverge():
     assert gold1 != gold2, \
         f"both runs ended with the same treasury ({gold1}) - the option " \
         "applies changed nothing measurable"
+
+
+def test_turn40_house_tab_zero_overlaps(tmp_path, monkeypatch):
+    """C6.5 t40 seed-42: the compact petition pass must never draw the
+    option buttons onto the bottom bar ("Attention: n" / "Open")."""
+    monkeypatch.chdir(tmp_path)
+    s = new_app_state(seed=SEED, start="menu")
+    _press_new_game(s)
+    g = s.game
+    while g.turn < 40:
+        g.end_turn()
+    s.view.active_tab = "House"
+    s.view.draw(s.screen)
+    rows = s.view.text_rows
+    assert rows, "House tab drew no text rows at t40"
+    bad = []
+    for i in range(len(rows)):
+        for j in range(i + 1, len(rows)):
+            a, b = rows[i], rows[j]
+            if a[0].colliderect(b[0]):
+                bad.append((a[1][:30], b[1][:30]))
+    assert not bad, f"t40 House overlaps: {bad[:5]}"
