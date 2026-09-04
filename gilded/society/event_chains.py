@@ -39,6 +39,8 @@ class ActiveChain:
         self.ctx = ctx
         self.step_idx = 0
         self.wait = cdef.steps[0].delay
+        self.choice: Optional[str] = None
+        self.choice_step: Optional[int] = None
 
 
 class ChainManager:

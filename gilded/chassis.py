@@ -88,7 +88,9 @@ class GildedGame:
         from gilded.society.event_chains import ChainManager
         from gilded.society.event_content.chains_pack1 import build_pack1
         from gilded.society.event_content.chains_pack2 import build_pack2
-        self.chain_manager = ChainManager(build_pack1() + build_pack2())
+        from gilded.society.event_content.chains_pack3 import build_pack3
+        self.chain_manager = ChainManager(
+            build_pack1() + build_pack2() + build_pack3())
         self.pact_seen_wars: set = set()                   # wars already called to arms
         self.wars: List[object] = []                       # fronts.War from G15
         self.events: List[TurnEvent] = []                  # last resolved turn's record
