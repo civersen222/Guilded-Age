@@ -156,13 +156,69 @@ def _circle_burns(game: Any, ctx: Dict[str, Any]) -> List[str]:
     return [note] if note else []
 
 
+# --- branching strikes: the docket decides ----------------------------------
+
+def _strike_redirect(ac: Any, outcome: List) -> None:
+    # The choice (or the festering) selects the ending the strike takes.
+    ac.steps = ac.steps[:ac.step_idx + 1] + outcome
+    ac.step_idx = ac.step_idx + 1
+    ac.wait = ac.steps[ac.step_idx].delay if ac.step_idx < len(ac.steps) else 1
+
+
+def _strike_on_choice(game: Any, ac: Any, key: Any) -> None:
+    # The petition's option apply has already run the sim effect and left
+    # the chosen branch in the chain's ctx; pick the ending and redirect.
+    if key == "buyoff":
+        _strike_redirect(ac, [ChainStep(
+            "The {city} strike is bought off at the {city} works - the men go home with pay",
+            delay=2)])
+    else:
+        _strike_redirect(ac, [ChainStep(
+            "The {city} strike is crushed - the gates open with a different crowd on the other side",
+            delay=2)])
+
+
+def _strike_petition(game: Any, ac: Any) -> Any:
+    from gilded.docket import Petition, PetitionOption, _next_pid
+    ctx = ac.ctx
+
+    def _buyoff(rc: "RulingContext") -> List[str]:
+        ctx["choice"] = "buyoff"
+        treasury = getattr(rc.game, "treasury", None)
+        if treasury is not None:
+            treasury.gold -= int(40 * rc.scale)
+        return []
+
+    def _crackdown(rc: "RulingContext") -> List[str]:
+        ctx["choice"] = "crackdown"
+        city = ctx.get("_city")
+        if city is not None:
+            city.unrest = max(0.0, city.unrest + 8.0)
+        return []
+
+    return Petition(
+        pid=_next_pid(game), kind="chain:general_strike", domain="family",
+        house=ctx["house"],
+        text="The {city} strike holds the whole House {house} hostage: "
+             "the pickets demand pay or they demand heads.".format(
+                 city=ctx["city"], house=ctx["house"]),
+        actors={},
+        options=[
+            PetitionOption("buyoff", "Buy off the strike", 20, _buyoff),
+            PetitionOption("crackdown", "Crack it down", -20, _crackdown),
+        ])
+
+
 def build_pack2() -> List[ChainDef]:
     """Six more signature chains, in priority order (spec 7)."""
     return [
         ChainDef("general_strike", _trig_general_strike, [
             ChainStep("The {city} strike hardens: pickets at every gate, and the trains stand still", delay=1),
             ChainStep("Sympathy walkouts ripple outward from {city} - House {house}'s ledgers bleed", apply=_strike_spreads, delay=2),
-            ChainStep("The {city} strike ends in an arbitration board: bread prices fixed, the gates half-open", apply=_strike_arbitrated, delay=2)]),
+            ChainStep("The pickets' demand reaches the {house} docket: pay, or heads",
+                      file_petition=_strike_petition,
+                      on_choice=_strike_on_choice, fester_key="crackdown",
+                      delay=2)]),
         ChainDef("martyr_ballad", _trig_martyr_ballad, [
             ChainStep("A ballad of {martyr} is sung in the taverns of {city}; the police tear down the broadsheets", delay=1),
             ChainStep("{martyr}'s name becomes a banner: the {city} movement swears it will not be bought", apply=_ballad_banner, delay=2),

@@ -65,6 +65,7 @@ class ActiveChain:
         self.cdef = cdef
         self.ctx = ctx
         self.step_idx = 0
+        self.steps = list(cdef.steps)   # a choice step may redirect these
         self.wait = cdef.steps[0].delay
         self.choice: Optional[str] = None
         self.choice_step: Optional[int] = None
@@ -108,7 +109,7 @@ class ChainManager:
             ac.wait -= 1
             if ac.wait > 0:
                 continue
-            step = ac.cdef.steps[ac.step_idx]
+            step = ac.steps[ac.step_idx]
             line = _line_of(step, ac)
             msgs.append(line)
             self.last_steps.append((ac.cdef.chain_id, line, _face_of(ac.ctx)))
@@ -127,10 +128,10 @@ class ChainManager:
                     ac.wait = step.delay
                     continue
             ac.step_idx += 1
-            if ac.step_idx >= len(ac.cdef.steps):
+            if ac.step_idx >= len(ac.steps):
                 done.append(ac)
             else:
-                ac.wait = ac.cdef.steps[ac.step_idx].delay
+                ac.wait = ac.steps[ac.step_idx].delay
         for ac in done:
             self.active.remove(ac)
         return msgs
@@ -170,7 +171,7 @@ class ChainManager:
             docket = game.docket_by_house.get(player, []) if player else []
             pet = next((p for p in docket if p.pid == ac.waiting_petition),
                        None)
-            step = ac.cdef.steps[ac.step_idx]
+            step = ac.steps[ac.step_idx]
             choice = ac.ctx.get("choice")
             # Ruled by the player: the option's apply already ran (through
             # docket.rule) and left the chosen branch in the chain's ctx.
@@ -194,15 +195,23 @@ class ChainManager:
                         ctx = RulingContext(game, player, realm.ruler,
                                             game.rng, 0.5)
                         msgs.extend(opt.apply(ctx))
-            if step.on_choice is not None:
-                step.on_choice(game, ac, key)
             ac.choice = key
             ac.choice_step = ac.step_idx
             ac.waiting_petition = None
             ac.ctx.pop("choice", None)
-            ac.step_idx += 1
-            ac.wait = (ac.cdef.steps[ac.step_idx].delay
-                       if ac.step_idx < len(ac.cdef.steps) else 1)
+            if step.on_choice is not None:
+                before = ac.step_idx
+                step.on_choice(game, ac, key)
+                if ac.step_idx == before:
+                    # A redirect rewrites ac.steps and lands ac.step_idx on
+                    # the new step; only advance when it did not.
+                    ac.step_idx += 1
+                ac.wait = (ac.steps[ac.step_idx].delay
+                           if ac.step_idx < len(ac.steps) else 1)
+            else:
+                ac.step_idx += 1
+                ac.wait = (ac.steps[ac.step_idx].delay
+                           if ac.step_idx < len(ac.steps) else 1)
         return [m for m in msgs if m]
 
 
