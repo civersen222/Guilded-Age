@@ -52,15 +52,15 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
             loyalty_str = f"{seat.loyalty:.0f}" if seat.loyalty is not None else "?"
             band_str = seat.band or "?"
             # The grievance token is the state that differs between draws, so
-            # lead with it right after the holder's name — inside the visible
-            # column width — rather than tacking it on at the tail where the
-            # column-width truncation would eat it.
+            # lead the line with it — inside the visible column width — rather
+            # than tacking it on at the tail where the column-width
+            # truncation would eat it.
             gri = ""
             for k in report.kin:
                 if k.name == seat.holder_name and k.grievances:
-                    gri = f" [{', '.join(k.grievances)}]"
+                    gri = f"[{', '.join(k.grievances)}] "
                     break
-            rows.append(f"  {seat.position}: {seat.holder_name}{gri}  loyalty {loyalty_str} ({band_str})")
+            rows.append(f"  {gri}{seat.position}: {seat.holder_name}  loyalty {loyalty_str} ({band_str})")
     rows.append("")
 
     # ── Heir designation ───────────────────────────────────────────────────
@@ -112,12 +112,15 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
         seated = any(seat.holder_name == k.name for seat in report.seats if not seat.vacant)
         seated_str = "" if seated else "  (not seated)"
 
-        grievance_str = f" [{', '.join(k.grievances)}]" if k.grievances else ""
+        # Lead with the grievance token — the state that differs between
+        # draws — so it survives the column-width truncation that eats the
+        # tail of the line; the name follows it on the same line.
+        grievance_str = f"[{', '.join(k.grievances)}] " if k.grievances else ""
         shares_str = f"  shares {k.shares_pct:.1f}%" if k.shares_pct > 0 else ""
         if band_str:
-            rows.append(f"  {k.name}{grievance_str}  loyalty {loyalty_str} opinion {opinion_str} ({band_str}){seated_str}{shares_str}")
+            rows.append(f"  {grievance_str}{k.name}  loyalty {loyalty_str} opinion {opinion_str} ({band_str}){seated_str}{shares_str}")
         else:
-            rows.append(f"  {k.name}{grievance_str}  loyalty {loyalty_str} opinion {opinion_str}{seated_str}{shares_str}")
+            rows.append(f"  {grievance_str}{k.name}  loyalty {loyalty_str} opinion {opinion_str}{seated_str}{shares_str}")
     rows.append("")
 
     # ── Disloyal kin ───────────────────────────────────────────────────────
@@ -125,8 +128,8 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
     if disloyal:
         rows.append("DISLOYAL KIN (loyalty < 50)")
         for k in disloyal:
-            grievance_str = f"  [{', '.join(k.grievances)}]" if k.grievances else ""
-            rows.append(f"  {k.name}  loyalty {k.loyalty:.0f}{grievance_str}")
+            grievance_str = f"[{', '.join(k.grievances)}] " if k.grievances else ""
+            rows.append(f"  {grievance_str}{k.name}  loyalty {k.loyalty:.0f}")
         rows.append("")
 
     # ── Grip risks ─────────────────────────────────────────────────────────
