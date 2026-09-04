@@ -131,6 +131,61 @@ def _war_truce(game: Any, ctx: Dict[str, Any]) -> List[str]:
     return []
 
 
+def _war_unrest(game: Any, ctx: Dict[str, Any]) -> List[str]:
+    for p in _provinces(game):
+        if p.owner in (ctx["aggressor"], ctx["defender"]):
+            p.unrest = min(100.0, p.unrest + 5.0)
+    return []
+
+
+def _war_redirect(ac: Any, outcome: List) -> None:
+    ac.steps = ac.steps[:ac.step_idx + 1] + outcome
+    ac.step_idx = ac.step_idx + 1
+    ac.wait = ac.steps[ac.step_idx].delay if ac.step_idx < len(ac.steps) else 1
+
+
+def _war_on_choice(game: Any, ac: Any, key: Any) -> None:
+    if key == "reparations":
+        _war_redirect(ac, [ChainStep(
+            "A truce is signed at the border of the two Houses; the tide of the movement drops with the guns",
+            apply=_war_truce, delay=2)])
+    else:
+        _war_redirect(ac, [ChainStep(
+            "The {defender} fields run red at the {aggressor}'s border; the press prints the toll daily",
+            apply=_war_unrest, delay=2)])
+
+
+def _war_petition(game: Any, ac: Any) -> Any:
+    from gilded.docket import Petition, PetitionOption, _next_pid
+    ctx = ac.ctx
+
+    def _reparations(rc: "RulingContext") -> List[str]:
+        ctx["choice"] = "reparations"
+        treasury = getattr(rc.game, "treasury", None)
+        if treasury is not None:
+            treasury.gold -= int(50 * rc.scale)
+        return []
+
+    def _buyoff(rc: "RulingContext") -> List[str]:
+        ctx["choice"] = "buyoff"
+        for ch in _by_id(rc.game).values():
+            if ch.is_alive:
+                ch.stress = min(300, ch.stress + int(6 * rc.scale))
+        return []
+
+    return Petition(
+        pid=_next_pid(game), kind="chain:war_price", domain="chain",
+        house=ctx["defender"],
+        text="House {defender}'s war against House {aggressor} bleeds gold: "
+             "pay the price, or press it further.".format(
+                 aggressor=ctx["aggressor"], defender=ctx["defender"]),
+        actors={},
+        options=[
+            PetitionOption("reparations", "Pay the price", 15, _reparations),
+            PetitionOption("buyoff", "Press the war", -15, _buyoff),
+        ])
+
+
 # --- 10. The tide turns ------------------------------------------------------
 
 def _trig_tide_turns(game: Any) -> Optional[Dict[str, Any]]:
@@ -175,7 +230,7 @@ def _trig_heir_break(game: Any) -> Optional[Dict[str, Any]]:
     for realm in (getattr(game, "realms", None) or {}).values():
         for ch in realm.characters:
             if (ch.is_alive and getattr(ch, "is_heir", False)
-                    and ch.stress >= 90):
+                    and ch.stress >= 25):
                 return {"heir": ch.name, "house": realm.house_name,
                         "_char": ch}
     return None
@@ -203,6 +258,65 @@ def _heir_recalled(game: Any, ctx: Dict[str, Any]) -> List[str]:
     if legit is not None:
         legit[ctx["house"]] = min(100.0, legit.get(ctx["house"], 70.0) + 2.0)
     return []
+
+
+def _heir_redirect(ac: Any, outcome: List) -> None:
+    ac.steps = ac.steps[:ac.step_idx + 1] + outcome
+    ac.step_idx = ac.step_idx + 1
+    ac.wait = ac.steps[ac.step_idx].delay if ac.step_idx < len(ac.steps) else 1
+
+
+def _heir_on_choice(game: Any, ac: Any, key: Any) -> None:
+    if key == "grief":
+        _heir_redirect(ac, [ChainStep(
+            "The court of {house} grieves in public; the household keeps its doors shut",
+            apply=_heir_grief, delay=2)])
+    else:
+        _heir_redirect(ac, [ChainStep(
+            "The {house} heirs are scattered to the provinces; the register notes the absence",
+            apply=_heir_scattered, delay=2)])
+
+
+def _heir_grief(game: Any, ctx: Dict[str, Any]) -> List[str]:
+    _char = ctx["_char"]
+    _char.stress = max(0, _char.stress - 15)
+    return []
+
+
+def _heir_scattered(game: Any, ctx: Dict[str, Any]) -> List[str]:
+    for ch in _by_id(game).values():
+        if ch.is_alive:
+            ch.stress = min(300, ch.stress + 4)
+    return []
+
+
+def _heir_petition(game: Any, ac: Any) -> Any:
+    from gilded.docket import Petition, PetitionOption, _next_pid
+    ctx = ac.ctx
+
+    def _grief(rc: "RulingContext") -> List[str]:
+        ctx["choice"] = "grief"
+        _char = ctx["_char"]
+        _char.stress = max(0, _char.stress - 10)
+        return []
+
+    def _scatter(rc: "RulingContext") -> List[str]:
+        ctx["choice"] = "scatter"
+        for ch in _by_id(rc.game).values():
+            if ch.is_alive:
+                ch.stress = min(300, ch.stress + int(4 * rc.scale))
+        return []
+
+    return Petition(
+        pid=_next_pid(game), kind="chain:heir_break", domain="chain",
+        house=ctx["house"],
+        text="House {house}'s heir has broken from the board; the household asks "
+             "what to do with the absence.".format(house=ctx["house"]),
+        actors={},
+        options=[
+            PetitionOption("grief", "Grieve in public", 15, _grief),
+            PetitionOption("scatter", "Scatter the heirs", -15, _scatter),
+        ])
 
 
 # --- 12. The ledger scandal --------------------------------------------------
@@ -410,7 +524,10 @@ def build_pack3() -> List[ChainDef]:
             ChainStep("The war between House {aggressor} and House {defender} enters its second month; the field hospitals fill", delay=1),
             ChainStep("The rolls of the war read longer than the muster lists; the families of {defender} keep the candles lit", apply=_war_tolls, delay=2),
             ChainStep("The {aggressor} presses for reparations at the negotiating table; the {defender} counts the cost", apply=_war_reparations, delay=2),
-            ChainStep("A truce is signed at the border of the two Houses; the tide of the movement drops with the guns", apply=_war_truce, delay=2)]),
+            ChainStep("The two Houses' ministers meet at the border; the question is reparations or more war",
+                      file_petition=_war_petition,
+                      on_choice=_war_on_choice, fester_key="buyoff",
+                      delay=2)]),
         ChainDef("tide_turns", _trig_tide_turns, [
             ChainStep("The tide is {phase}: the pamphlet presses of the city print through the night", delay=1),
             ChainStep("Reading circles open in the cellars of the city; the police note the names", apply=_tide_reading_circles, delay=2),
@@ -420,7 +537,11 @@ def build_pack3() -> List[ChainDef]:
             ChainStep("{heir} of House {house} is absent from the board; the staff say nothing, and everyone says everything", delay=1),
             ChainStep("A letter from {heir} reaches a House that will not be read; the seal is unbroken", apply=_heir_letter, delay=2),
             ChainStep("House {house} recalls {heir} from wherever the absence has gone", apply=_heir_recalled, delay=2),
-            ChainStep("The absence ends: {heir} is seen at the {house} gate, and the staff are told to say nothing", apply=_heir_absence, delay=2)]),
+            ChainStep("The {house} household asks the docket what to do with the heir's absence: "
+                      "grieve in public, or scatter the heirs to the provinces",
+                      file_petition=_heir_petition,
+                      on_choice=_heir_on_choice, fester_key="scatter",
+                      delay=2)]),
         ChainDef("ledger_scandal", _trig_ledger_scandal, [
             ChainStep("Sheets from the books of House {house} turn up at a rival's press - LEDGER SCANDAL", delay=1),
             ChainStep("The {house} ledger is read aloud at a rival's dinner; the numbers do not add to the published account", apply=_ledger_sheets, delay=2),

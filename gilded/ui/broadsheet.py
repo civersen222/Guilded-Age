@@ -1478,11 +1478,14 @@ class BroadsheetView:
 
     def _draw_petition_cards(self, surface, content: pygame.Rect,
                              y: int) -> int:
-        petitions = self.game.docket_by_house.get(self.house, [])
+        from gilded.docket import DOMAIN_PRIORITY
+        petitions = sorted(
+            self.game.docket_by_house.get(self.house, []),
+            key=lambda p: (DOMAIN_PRIORITY.get(p.domain, 9), p.pid))
         body = _font(TYPE_TEXT)
         small = _font(TYPE_CAPTION, bold=True)
         width = content.width - 2 * PAD
-        for p in petitions:
+        def _heights(p, force_compact=False):
             lines = _wrap(p.text, body, width - 20)
             # Header + wrapped text + wrapped button rows (height 20 each) +
             # padding.  The button row wraps inside the column width so the
@@ -1501,20 +1504,71 @@ class BroadsheetView:
                     cur = bw
                 else:
                     cur += 8 + bw
-            card_h = (6 + small.get_height() + 2
+            n_opt_rows, cur = 1, 0
+            for bw in bw_list:
+                if cur and cur + 8 + bw > avail:
+                    n_opt_rows += 1
+                    cur = bw
+                else:
+                    cur += 8 + bw
+            full_h = (6 + small.get_height() + 2
                       + len(lines) * (body.get_height() + 1)
                       + 2 + n_btn_rows * 20 + (n_btn_rows - 1) * 4 + 4)
-            if y + card_h > content.bottom - 10:
+            compact_h = (6 + small.get_height() + 2
+                         + 2 + n_opt_rows * 20 + (n_opt_rows - 1) * 4 + 4)
+            return (lines, bw_list, ex_pre, ex_name_pre, ew,
+                    full_h, compact_h, force_compact)
+
+        def _fits(h, yy, limit):
+            card_h = h[5]
+            compact = h[7]
+            if not compact and yy + card_h > limit:
+                compact_h = h[6]
+                if yy + compact_h > limit:
+                    return None
+                card_h, compact = compact_h, True
+            return card_h, compact
+
+        limit = content.bottom - 10
+        layouts = []
+        dropped = False
+        yy = y
+        for p in petitions:
+            h = _heights(p)
+            res = _fits(h, yy, limit)
+            if res is None:
+                dropped = True
                 break
+            card_h, compact = res
+            layouts.append((p, h, card_h, compact))
+            yy += card_h + 6
+        if dropped:
+            # A chain petition is the desk's most urgent paper: never let one
+            # fall off the band. Retry the whole stack in the compact form
+            # (header + option buttons only) so the rule regions stay
+            # pressable.
+            layouts = []
+            yy = y
+            for p in petitions:
+                h = _heights(p, force_compact=True)
+                res = _fits(h, yy, limit)
+                if res is None:
+                    break
+                card_h, compact = res
+                layouts.append((p, h, card_h, compact))
+                yy += card_h + 6
+        for p, (lines, bw_list, ex_pre, ex_name_pre, ew,
+                _full_h, _compact_h, _fc), card_h, compact in layouts:
             card = pygame.Rect(PAD, y, width, card_h)
             pygame.draw.rect(surface, CARD_BG, card)
             pygame.draw.rect(surface, CARD_EDGE, card, 1)
             hy = y + 6
             blit_text(surface, small, f"[{p.domain}] {p.kind}", (PAD + 10, hy), FADED)
             hy += small.get_height() + 2
-            for line in lines:
-                blit_text(surface, body, line, (PAD + 10, hy), INK)
-                hy += body.get_height() + 1
+            if not compact:
+                for line in lines:
+                    blit_text(surface, body, line, (PAD + 10, hy), INK)
+                    hy += body.get_height() + 1
             bx = PAD + 10
             by = hy + 2
             max_x = PAD + width - 10
@@ -1537,21 +1591,22 @@ class BroadsheetView:
                                         hint=opt.text,
                                         group=f"petition:{p.pid}"))
                 bx += bw + 8
-            ex = ex_pre
-            ex_name = ex_name_pre
-            if bx + ew > max_x:
-                bx = PAD + 10
-                by += 24
-            erect = pygame.Rect(bx, by, ew, 20)
-            pygame.draw.rect(surface, EXEC_BG, erect)
-            pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
-            blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5),
-                      BUTTON_TEXT)
-            self._exec_hits.append((erect, p.pid))
-            self.regions.add(Region(rect=erect,
-                                    action={"cycle_exec": p.pid},
-                                    hint="Choose who carries out this ruling.",
-                                    group=f"petition:{p.pid}"))
+            if not compact:
+                ex = ex_pre
+                ex_name = ex_name_pre
+                if bx + ew > max_x:
+                    bx = PAD + 10
+                    by += 24
+                erect = pygame.Rect(bx, by, ew, 20)
+                pygame.draw.rect(surface, EXEC_BG, erect)
+                pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
+                blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5),
+                          BUTTON_TEXT)
+                self._exec_hits.append((erect, p.pid))
+                self.regions.add(Region(rect=erect,
+                                        action={"cycle_exec": p.pid},
+                                        hint="Choose who carries out this ruling.",
+                                        group=f"petition:{p.pid}"))
             y += card_h + 6
         return y
 
