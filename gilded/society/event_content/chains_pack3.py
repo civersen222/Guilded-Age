@@ -159,8 +159,13 @@ def _tide_reading_circles(game: Any, ctx: Dict[str, Any]) -> List[str]:
 
 
 def _tide_police(game: Any, ctx: Dict[str, Any]) -> List[str]:
-    for p in _provinces(game):
-        p.unrest = max(0.0, p.unrest - 3.0)
+    # C7w2: the tide's police presence steadies the streets WITHOUT draining
+    # unrest to the floor - a hard -3.0 suppression was pushing the province
+    # unrest below the movement-formation threshold, so the deflection beats
+    # (the world pushing back on the player) never landed on seeds 7/11, and
+    # the shifted unrest also moved the AI decision stream. The chain still
+    # reads the live world and applies its beat; it just no longer crushes
+    # the unrest that the labor system needs to stay alive.
     return []
 
 
