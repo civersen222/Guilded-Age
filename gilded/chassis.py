@@ -229,6 +229,21 @@ class GildedGame:
             if t:
                 self.events.append(TurnEvent(t, register, house))
 
+    def _record_chain_beats(self) -> None:
+        """C7: every library-chain step that just played lands on the beat
+        log as a first-class beat - kind "chain", facet the chain_id, face the
+        actor when the step's context names one. One place: here, at the
+        single seam where the chassis ticks the chain manager."""
+        steps = getattr(self.chain_manager, "last_steps", None)
+        if not steps:
+            return
+        from gilded.beats import Beat
+        for chain_id, line, face in steps:
+            self.beats.append(Beat(
+                self.turn, "chain", "", line,
+                "society.event_chains.ChainManager.tick",
+                tuple(), face, None, facet=chain_id))
+
     def _seed_enterprises(self) -> None:
         """Every House opens the century with two ventures on its best endowments."""
         eid = 0
@@ -508,6 +523,8 @@ class GildedGame:
 
         # 8.4 signature chains (M72, spec 7): arms on the resolved state
         self._emit(self.chain_manager.tick(self), "gazette")
+        # C7: every chain step also lands on the beat log as a first-class beat
+        self._record_chain_beats()
 
         # 8.5 the Director reads the resolved turn and chronicles it
         self.events.extend(self.director.observe(self))

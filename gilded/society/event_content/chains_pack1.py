@@ -168,6 +168,33 @@ def _coping_chemist(game: Any, ctx: Dict[str, Any]) -> List[str]:
     return []
 
 
+def _coping_ledger(game: Any, ctx: Dict[str, Any]) -> List[str]:
+    ch = ctx["_char"]
+    ch.stress = max(0, ch.stress - 10)
+    ch.secrets.append(Secret(
+        "vice", ch.id, f"{ch.name}'s chemist's ledger reached the household", 20))
+    return []
+
+
+def _ultimatum_council(game: Any, ctx: Dict[str, Any]) -> List[str]:
+    for city in _cities_of(game, ctx["house"]):
+        city.unrest = max(0.0, city.unrest - 8.0)
+    legit = getattr(game, "legitimacy", None)
+    if legit is not None:
+        legit[ctx["house"]] = min(100.0, legit.get(ctx["house"], 70.0) + 4.0)
+    return []
+
+
+def _vultures_settle(game: Any, ctx: Dict[str, Any]) -> List[str]:
+    a, b = ctx["_kin"]
+    modify_opinion(a, b, 5, "the will is sealed")
+    modify_opinion(b, a, 5, "the will is sealed")
+    treasury = getattr(game, "treasury", None)
+    if treasury is not None:
+        treasury.gold += 20
+    return []
+
+
 def build_pack1() -> List[ChainDef]:
     """The six signature chains, in priority order (spec 7)."""
     return [
@@ -185,11 +212,14 @@ def build_pack1() -> List[ChainDef]:
             ChainStep("The public tires of both Houses - and the movement's papers look honest by comparison", apply=_tabloid_tired, delay=2)]),
         ChainDef("revolution_ultimatum", _trig_revolution_ultimatum, [
             ChainStep("An ultimatum is nailed to the gates of House {house}: reform, abdicate, or fall", delay=1),
-            ChainStep("House {house} hesitates; in the tenements, the committees count rifles", apply=_revolution_rifles, delay=2)]),
+            ChainStep("House {house} hesitates; in the tenements, the committees count rifles", apply=_revolution_rifles, delay=2),
+            ChainStep("House {house} opens the gates: a council of bread and work, chaired by the city itself", apply=_ultimatum_council, delay=2)]),
         ChainDef("succession_vultures", _trig_succession_vultures, [
             ChainStep("{ruler} of House {house} grows old; the vultures begin to circle the will", delay=1),
-            ChainStep("Kin arrive 'to help' at {ruler}'s bedside; the shares ledger is read aloud at night", apply=_vultures_bedside, delay=2)]),
+            ChainStep("Kin arrive 'to help' at {ruler}'s bedside; the shares ledger is read aloud at night", apply=_vultures_bedside, delay=2),
+            ChainStep("{ruler} signs the will before the vultures can read it; the shares ledger stays in the house", apply=_vultures_settle, delay=2)]),
         ChainDef("coping_spiral", _trig_coping_spiral, [
             ChainStep("{subject} is not sleeping; the household staff have begun to whisper", delay=1),
-            ChainStep("{subject} finds a chemist who asks no questions", apply=_coping_chemist, delay=2)]),
+            ChainStep("{subject} finds a chemist who asks no questions", apply=_coping_chemist, delay=2),
+            ChainStep("The ledger of the chemist's shop surfaces in the {subject} household", apply=_coping_ledger, delay=2)]),
     ]

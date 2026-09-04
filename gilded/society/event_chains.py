@@ -48,10 +48,17 @@ class ChainManager:
         self.defs: List[ChainDef] = list(defs or [])
         self.active: List[ActiveChain] = []
         self.fired: set = set()
+        self.last_steps: List[tuple] = []
 
     def tick(self, game: Any) -> List[str]:
-        """One turn: arm new chains, then advance the ones in motion."""
+        """One turn: arm new chains, then advance the ones in motion.
+
+        Also fills `last_steps` with the (chain_id, line, face) tuples for
+        every step that played this turn, so the chassis can record them as
+        first-class beats (C7) in one place.
+        """
         msgs: List[str] = []
+        self.last_steps = []
         for cdef in self.defs:
             if cdef.once and cdef.chain_id in self.fired:
                 continue
@@ -67,7 +74,9 @@ class ChainManager:
             if ac.wait > 0:
                 continue
             step = ac.cdef.steps[ac.step_idx]
-            msgs.append(step.text.format(**ac.ctx))
+            line = step.text.format(**ac.ctx)
+            msgs.append(line)
+            self.last_steps.append((ac.cdef.chain_id, line, _face_of(ac.ctx)))
             if step.apply is not None:
                 extra = step.apply(game, ac.ctx)
                 if extra:
@@ -80,3 +89,16 @@ class ChainManager:
         for ac in done:
             self.active.remove(ac)
         return msgs
+
+
+def _face_of(ctx: Dict[str, Any]) -> Optional[str]:
+    """The actor a chain beat is about, when its context names one."""
+    ch = ctx.get("_char")
+    if ch is not None and getattr(ch, "name", None):
+        return ch.name
+    for key in ("heir", "subject", "ruler", "martyr", "target",
+                "leader", "speaker"):
+        val = ctx.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return None
