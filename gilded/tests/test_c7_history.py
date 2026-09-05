@@ -14,6 +14,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 from gilded.ui.app import new_app_state, _apply_action
+from gilded import docket
 
 TURNS = 70
 
@@ -34,7 +35,13 @@ def _run(seed):
     s = new_app_state(seed=seed, start="menu")
     _press_new_game(s)
     g = s.game
+    player = [h for h in g.houses if g.houses[h].is_player][0]
     for _ in range(TURNS):
+        # gate's exact simulation: rule the FIRST option of every chain
+        # petition drawn on the player's docket
+        for p in list(g.docket_by_house.get(player, [])):
+            if p.kind.startswith("chain:") and p.options:
+                docket.rule(g, p, p.options[0].key, g.realms[player].ruler)
         g.end_turn()
     return g
 

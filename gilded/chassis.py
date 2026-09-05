@@ -564,6 +564,9 @@ class GildedGame:
             self.ambitions.resolve_due(h)
         self._gentry_tick()           # C5: the minor gentry turn over
         self.beats.end_turn_close()   # C1: record the turn's beats and deltas
+        # C7w5: the ledger closes over the turn's paper before the turn ends
+        from gilded.society.characters import tick_memory
+        tick_memory(self)
         self.turn += 1
         from gilded.endings import check_ending    # local: endings imports our constants
         judged = next((h for h in sorted(self.houses)

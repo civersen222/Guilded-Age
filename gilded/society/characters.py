@@ -333,6 +333,44 @@ def record_history(character: "Character", game, kind: str, text: str,
         tuple(), name, None, facet=kind))
 
 
+def tick_memory(game) -> None:
+    """C7w5: the ledger closes over the turn's paper. Any living character
+    the beat log names this turn who still has no memory of their own
+    receives one entry quoting the first beat that names them, so the
+    gate's cross-check (an entry at turn T needs a beat at turn T naming
+    the character) holds by construction. No rng — pure and deterministic.
+    Called by the chassis after the last beat of the turn and before the
+    turn increments."""
+    beats = getattr(game, "beats", None)
+    if beats is None or not hasattr(beats, "log"):
+        return
+    turn = int(getattr(game, "turn", 0))
+    named_turn = [b for b in beats.log if int(getattr(b, "turn", 0)) == turn]
+    if not named_turn:
+        return
+    for realm in sorted(getattr(game, "realms", {}).values(),
+                        key=lambda r: id(r)):
+        for c in sorted((c for c in realm.characters if c.is_alive),
+                        key=lambda c: c.id):
+            if getattr(c, "history", None):
+                continue
+            first = next((b for b in named_turn
+                          if c.name in str(getattr(b, "text", ""))), None)
+            if first is None:
+                continue
+            from gilded.beats import Beat
+            beats.log.append(Beat(
+                turn, "gentry", "", first.text,
+                f"society.characters.tick_memory ({c.name})",
+                first.causes, c.name, None, facet="memory"))
+            c.history.append({
+                "turn": turn,
+                "kind": "memory",
+                "text": first.text,
+                "refs": {},
+            })
+
+
 def record_death(character: "Character", game, text: str,
                  refs: Optional[Dict] = None, source: str = "") -> None:
     """C7w4: final history entry for a character who has just died.
