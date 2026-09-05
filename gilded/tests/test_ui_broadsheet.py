@@ -30,7 +30,7 @@ from gilded.tests._fixtures import make_one_seller, no_sellers
 # satisfied by a double registration, which is the specific bug a census
 # exists to catch.
 EXPECTED_REGIONS = {
-    "House": 26,         # rule x3, dismiss_seat x6, cycle_exec, set_stance x5 (House edicts — the dissolved Policies tab re-homed), open_ambition_picker, open_heir_picker, open_scheme_picker, clear_heir, tab x3, save, open, end_turn, narrate
+    "House": 32,         # rule x3, dismiss_seat x6, portrait x6 (C8 engraved court portraits), cycle_exec, set_stance x5 (House edicts — the dissolved Policies tab re-homed), open_ambition_picker, open_heir_picker, open_scheme_picker, clear_heir, tab x3, save, open, end_turn, narrate
     "Powers": 19,        # place_informant x11, rule, tab x3, save, open, end_turn, narrate
     "Atlas": 29,         # select_province, tour_province x3, acquire_minor x12, build_rail x7, toggle_war_drawer (war verbs moved behind the drawer), tab x3, quicksave, quickload, end_turn, narrate, rule
 }

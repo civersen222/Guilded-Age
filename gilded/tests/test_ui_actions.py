@@ -233,6 +233,7 @@ def test_every_drawn_key_is_registered():
         "place_informant", "quicksave", "quickload",
         "rule", "sell_shares", "select_province", "set_spine_page",
         "set_stance", "tab", "toggle_narrate", "tour_province",
+        "portrait",
     }, f"the drawn set moved: {sorted(drawn)}"
 
     unhandled = sorted(drawn - set(act.ACTIONS))
@@ -670,6 +671,10 @@ def _build_action_for_key(key, game, house, view=None):
                 if c.is_alive:
                     return {"start_scheme": True, "target_id": c.id, "scheme_type": "coup"}
         return None
+    elif key == "portrait":
+        # view-local: the court card's engraved portrait region; always
+        # eligible (the click already blitted it), dispatch is a no-op.
+        return {"portrait": "0000009a"}
     return None
 
 

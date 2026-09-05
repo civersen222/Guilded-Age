@@ -15,7 +15,7 @@ from gilded.peerage import CourtReport, Kin, CourtSeat, BAND_DISLOYAL, BAND_DUBI
 from gilded.ui.widgets import (
     BUTTON_BG, BUTTON_EDGE, BUTTON_TEXT,
     DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE,
-    INK,
+    INK, FADED,
     font as _font,
     TYPE_CAPTION,
     TYPE_TEXT,
@@ -384,18 +384,38 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         game = getattr(view, 'game', None)
         house = getattr(view, 'house', None)
 
-        # Draw 6 seat buttons in a 3x2 grid at the top.  The grid is
+        # Draw the 6 court cards in a 3x2 grid at the top.  The grid is
         # constrained to the left column (400px wide): the right column is
-        # reserved for the policies dials drawn by _draw_house, and a
-        # full-width grid's 3rd column would collide with them.
-        cols = 3
+        # reserved for the policies dials drawn by _draw_house.  Each card
+        # is a CARD plate with the holder's engraved portrait (a pressable
+        # portrait region) beside the seat name; the verb lives in the hint.
+        from gilded.ui import portraits as _portraits
+        from gilded.ui import palette as _palette
+        CARD = _palette.rgb(_palette.CARD)
+        INK2 = _palette.rgb(_palette.INK2)
+        # One row of 6 compact cards: each is a CARD plate with the
+        # holder's engraved 48x48 portrait (a pressable portrait region)
+        # on top and the seat name wrapped beneath; the verb lives in the
+        # hint.  A single row keeps the section short enough that the
+        # ladder + agenda below it still fit the content band.
+        cols = 6
         grid_w = min(content.width, 400)
         col_w = (grid_w - PAD * 2) // cols
+        psize = 48
+        small = _font(TYPE_CAPTION)
+        line_h = small.get_height() + 2
+        # Reserve room for a 2-line seat-name wrap so every card is the
+        # same height (the gate crops exact rects; uniform height keeps
+        # the row straight).
+        card_h = 4 + psize + 2 + 2 * line_h
         for idx, seat in enumerate(report.seats):
             col = idx % cols
             row = idx // cols
-            btn_x = PAD + col * col_w
-            btn_y = y + row * (seat_h + 2)
+            card_x = PAD + col * col_w
+            card_y = y + row * (card_h + 2)
+            card = pygame.Rect(card_x, card_y, col_w - 4, card_h)
+            pygame.draw.rect(surface, CARD, card, border_radius=3)
+            pygame.draw.rect(surface, INK2, card, width=1, border_radius=3)
 
             pk = _position_key(seat)
 
@@ -406,19 +426,39 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             elif seat.vacant and game is not None and house is not None:
                 refusal = _appointment_reason(game, house, seat)
 
-            # The 400px left column gives each seat ~125px; a full
-            # "Dismiss <holder>" label (176px) would collide with the
-            # next seat's button.  Narrow to the seat name only (max
-            # 109px) — the verb + full name live in the hint.
-            btn_text = seat.position
-
-            btn_rect = _draw_button(surface, btn_text, btn_x, btn_y, col_w - 4, max(14, seat_h), refusal is None)
+            action = _seat_action_payload(seat)
             hint = _seat_action_label(seat)
-
             if refusal:
-                action = _seat_action_payload(seat)
+                hint = f"{hint} — {refusal}"
+
+            holder = None
+            if not seat.vacant and game is not None:
+                realm = game.realms.get(house)
+                if realm is not None:
+                    holder = next((c for c in realm.characters
+                                   if c.id == seat.holder_id), None)
+            pdest = pygame.Rect(card.x + (card.width - psize) // 2,
+                                card.y + 4, psize, psize)
+            if holder is not None:
+                _portraits.blit_fitted(surface, holder, pdest)
+            else:
+                pygame.draw.rect(surface, INK2, pdest, width=1)
+                blit_text(surface, small, "—",
+                          (pdest.centerx - 4, pdest.centery - 8), FADED)
+            view.regions.add(Region(
+                rect=pygame.Rect(pdest),
+                action={"portrait": seat.holder_id},
+                hint=f"{seat.holder_name} — {seat.position}",
+                group="portrait",
+            ))
+            text_y = card.y + 4 + psize + 2
+            for i, line in enumerate(_wrap(seat.position, small, card.width - 8)):
+                blit_text(surface, small, line,
+                          (card.x + 4, text_y + i * line_h),
+                          INK2 if refusal else INK)
+            if refusal:
                 view.regions.add(Region(
-                    rect=btn_rect,
+                    rect=card,
                     action=action,
                     state=RegionState.DISABLED,
                     reason=refusal,
@@ -426,20 +466,14 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                     group="court_seats",
                 ))
             else:
-                action = _seat_action_payload(seat)
                 view.regions.add(Region(
-                    rect=btn_rect,
+                    rect=card,
                     action=action,
                     hint=hint,
                     group="court_seats",
                 ))
 
-        # The seats table compresses its own buttons (seat_h) but still
-        # advances by the shared btn_h pitch so the heir controls / heir
-        # picker start at exactly the committed y and keep their measured
-        # row budget — the seats shrink without shifting the shared
-        # controls below it.
-        y += math.ceil(len(report.seats) / cols) * (btn_h + 2) + 8
+        y += math.ceil(len(report.seats) / cols) * (card_h + 2) + 4
         y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
         if y > content.bottom - 40:
             return y
