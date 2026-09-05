@@ -1136,6 +1136,11 @@ def resolve_unattended(game, house_name: str, petitions) -> List[str]:
                 ctx = RulingContext(game, house_name, realm.ruler, game.rng, 0.5)
                 msgs.append(f"Left to fester, the {p.kind.replace('_', ' ')} resolves itself")
                 msgs.extend(option.apply(ctx))
+                from gilded.society.characters import record_history
+                record_history(realm.ruler, game, "ruling",
+                               f"{realm.ruler.name} rules the festering "
+                               f"{p.kind.replace('_', ' ')}",
+                               {"petition": p.pid, "option": option.key})
     return msgs
 
 
