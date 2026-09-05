@@ -528,7 +528,15 @@ class GildedGame:
             self._emit(msgs, "gazette", h)
 
         # 8.4 signature chains (M72, spec 7): arms on the resolved state.
-        self._emit(self.chain_manager.tick(self), "gazette")
+        # C7w4 decision (closing the 667299c experiment): the guard IS
+        # needed. On turn 0 a chain can arm AND apply a wait=0 first step
+        # in the same tick, mutating character state at generation time,
+        # before the player's first action. That shifts downstream
+        # deterministic outcomes (court composition, opinions) on seed 5
+        # and broke the r5 fixture premise. Chains arm no earlier than
+        # the close of the first real turn.
+        if self.turn >= 1:
+            self._emit(self.chain_manager.tick(self), "gazette")
         # C7: every chain step also lands on the beat log as a first-class beat
         self._record_chain_beats()
 
