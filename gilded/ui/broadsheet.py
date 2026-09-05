@@ -2932,10 +2932,17 @@ class BroadsheetView:
         # heading, so the agenda keeps its rule regions).  Reserve their
         # room in the spine's budget so the ladder yields rows instead of
         # the memory lines spilling past the band bottom.
+        # Reserve the memory lines only while the spine keeps its 120px
+        # minimum; on a short band the spine gets the full budget and the
+        # memory lines simply yield (the spine's own budget makes the ladder
+        # yield rows first).
+        full_bottom = content.bottom - 40
         mem_reserve = 3 * (_font(TYPE_CAPTION).get_height() + 1)
+        spine_bottom = (full_bottom - mem_reserve
+                        if left.y + 120 <= full_bottom - mem_reserve
+                        else full_bottom)
         y_spine = self._draw_ladder_and_agenda(surface, left, left.y,
-                                               bottom=content.bottom - 40
-                                               - mem_reserve)
+                                               bottom=spine_bottom)
         self._draw_ruler_history(surface, left, y=y_spine,
                                  bottom=content.bottom - 40)
         # spec §2: the dissolved Policies tab is re-homed onto the House
