@@ -15,6 +15,7 @@ FESTER_TURNS it resolves to the step's `fester_key` (the ugliest setting),
 mirroring the docket's own unattended-paper rule.
 """
 
+import random
 from typing import Any, Callable, Dict, List, Optional
 
 from gilded.docket import FESTER_TURNS, RulingContext
@@ -193,7 +194,7 @@ class ChainManager:
                     realm = game.realms.get(player)
                     if realm is not None:
                         ctx = RulingContext(game, player, realm.ruler,
-                                            game.rng, 0.5)
+                                            _chain_rng(game), 0.5)
                         msgs.extend(opt.apply(ctx))
             ac.choice = key
             ac.choice_step = ac.step_idx
@@ -219,6 +220,18 @@ def _line_of(step: ChainStep, ac: ActiveChain) -> str:
     if callable(step.text):
         return step.text(ac.ctx)
     return step.text.format(**ac.ctx)
+
+
+def _chain_rng(game: Any) -> random.Random:
+    """The chain's own chance rolls draw from a chain-local stream, never
+    game.rng: a festered chain petition must not shift the shared sim
+    stream (the saga Director follows the same rule). Per-game-seed,
+    cached on the game so the draws stay a deterministic sub-stream."""
+    rng = getattr(game, "_chain_rng", None)
+    if rng is None:
+        rng = random.Random(game.seed ^ 0xC7A1)
+        game._chain_rng = rng
+    return rng
 
 
 def _face_of(ctx: Dict[str, Any]) -> Optional[str]:
