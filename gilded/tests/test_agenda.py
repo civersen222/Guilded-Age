@@ -673,6 +673,26 @@ def test_r5_dominion_backed_by_industry():
     realm = g.realms[h]
     ruler = realm.ruler
 
+    # Pin the premise explicitly: the fixture court's industry/intrigue
+    # stats are an accident of which chains fired at seed 5 (coping_spiral
+    # and strikebreakers), not a property of the fixture. Set the court
+    # stats this test asserts — industry 12, intrigue 11 — on the Duval-
+    # Corse court directly, so the test pins "Dominion scores industry,
+    # not intrigue" independently of chain content.
+    living = [c for c in realm.court.positions.values()
+              if c and c.is_alive]
+    assert living, "premise: Duval-Corse court has no living courtier"
+    holder = living[0]
+    for c in living:
+        ind_off = c.get_effective_stat("industry") - c.base_stats.get("industry", 0)
+        int_off = c.get_effective_stat("intrigue") - c.base_stats.get("intrigue", 0)
+        target_ind = 12 - ind_off if c is holder else -ind_off
+        target_int = 11 - int_off if c is holder else -int_off
+        c.base_stats["industry"] = target_ind
+        c.base_stats["intrigue"] = target_int
+    assert _stat(realm, "industry") == 12
+    assert _stat(realm, "intrigue") == 11
+
     # Assert premise: industry != intrigue at Duval-Corse
     industry = _stat(realm, "industry")
     intrigue = _stat(realm, "intrigue")
