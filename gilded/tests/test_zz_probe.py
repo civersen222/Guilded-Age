@@ -1,23 +1,22 @@
-import os, sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# C7w3 probe: fixture divergence at seed 5 turn 13 + per-turn secret census.
+# TEMPORARY probe file; deleted before the fix commit.
 from gilded.chassis import GildedGame
 
-def _find(g, name):
-    for h in g.realms.values():
-        for ch in h.characters:
-            if ch.name == name:
-                return ch
-    return None
 
-def test_dump():
+def test_zz_probe_fixture():
     g = GildedGame(seed=5)
-    bjorn = _find(g, "Bjorn")
-    print("\n=== PROBE ===")
-    print("turn", g.turn)
-    if bjorn:
-        print("Bjorn t0 base=", dict(bjorn.base_stats))
-    realm = g.realms["Duval-Corse"]
-    for pos, ch in realm.court.positions.items():
-        if ch is not None:
-            print("t0", pos, ch.name, dict(ch.base_stats))
-    print("=== END ===")
+    for t in range(1, 14):
+        g.end_turn()
+        if t in (7, 9, 13):
+            print(f"\n=== TURN {t} ===")
+            for h in sorted(g.realms):
+                for c in g.realms[h].dynasty.all_characters.values():
+                    if c.secrets:
+                        print(f"  {h} {c.name}: {[(s.description[:40]) for s in c.secrets]}")
+    h = "Ferrenholt"
+    realm = g.realms[h]
+    print(f"\nTURN 13 court {h}:")
+    for pos, c in realm.court.positions.items():
+        if c is not None:
+            print(f"  {pos} = {c.name} base={dict(c.base_stats)} alive={c.is_alive}")
+    print(f"ruler {realm.ruler.name} base={dict(realm.ruler.base_stats)} alive={realm.ruler.is_alive}")
