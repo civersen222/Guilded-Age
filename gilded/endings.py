@@ -165,6 +165,30 @@ def _saga_coda(game) -> str:
     return " ".join(parts)
 
 
+def _memory_paragraph(game, house_name: str) -> str:
+    """C7w4: the epilogue remembers — it names at least two characters who
+    have history and quotes one of their entries verbatim (>= 20 characters)."""
+    realm = game.realms.get(house_name)
+    if realm is None:
+        return ""
+    with_hist = [c for c in (realm.characters or [])
+                 if getattr(c, "history", None)]
+    if len(with_hist) < 2:
+        return ""
+    a = max(with_hist, key=lambda c: (c.name,))
+    b = min(with_hist, key=lambda c: (c.name,))
+    if a.id == b.id:
+        return ""
+    quote = a.history[-1]["text"]
+    if len(quote) < 20:
+        quote = max((e["text"] for c in with_hist for e in c.history),
+                    key=len)
+        if len(quote) < 20:
+            return ""
+    return (f"The House remembers {a.name} and {b.name}. {a.name}: "
+            f'"{quote}"')
+
+
 def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
                    living: List, ever: int, burden: float,
                    heir: bool) -> str:
@@ -204,6 +228,7 @@ def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
         p4 = (f"World: {axes['world']:.0f}. The House holds no province at "
               f"the close; whoever paid the century's bill, it was not them "
               f"- it never is.")
+    p5 = _memory_paragraph(game, house_name)
     coda = _saga_coda(game)
-    paragraphs = [p1, p2, p3, p4] + ([coda] if coda else [])
+    paragraphs = [p1, p2, p3, p4] + ([p5] if p5 else []) + ([coda] if coda else [])
     return "\n\n".join(paragraphs)
