@@ -938,6 +938,9 @@ class BroadsheetView:
         # share picker state: None or {"direction": "buy"/"sell", "eid": int}
         self._share_picker: Optional[dict] = None
         self._share_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        # C8.3: the last page transition requested by a press (tab switch or
+        # End Turn).  The app loop plays it at the frame clock.
+        self.last_transition: Optional[dict] = None
         # garrison picker state: None or True (picker open)
         self._garrison_picker: Optional[bool] = None
         self._garrison_picker_hits: List[Tuple[pygame.Rect, dict]] = []
@@ -3391,7 +3394,10 @@ class BroadsheetView:
                 self.war_drawer = not self.war_drawer
                 return None
             if "tab" in action:
+                self.last_transition = {"kind": "tab", "steps": 6}
                 self.active_tab = action["tab"]
+            if "end_turn" in action:
+                self.last_transition = {"kind": "end_turn", "steps": 6}
             if "set_spine_page" in action:
                 page = action["set_spine_page"]
                 if self.active_tab == "Powers":
@@ -3493,9 +3499,11 @@ class BroadsheetView:
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):
+                self.last_transition = {"kind": "tab", "steps": 6}
                 self.active_tab = name
                 return {"tab": name}
         if self._end_turn_rect is not None and self._end_turn_rect.collidepoint(pos):
+            self.last_transition = {"kind": "end_turn", "steps": 6}
             return {"end_turn": True}
         if self._narrate_rect is not None and self._narrate_rect.collidepoint(pos):
             return {"toggle_narrate": True}

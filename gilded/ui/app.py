@@ -31,6 +31,7 @@ from gilded.save import save_game, load_game, quicksave_path
 from gilded.saga.narrator import select_narrator
 from gilded.ui.actions import ACTIONS
 from gilded.ui.broadsheet import BroadsheetView
+from gilded.ui.transitions import frames as transition_frames
 from gilded.ui.widgets import (
     Region, RegionSet, RegionState,
     blit_text, font as _font, TYPE_TITLE, TYPE_TEXT,
@@ -215,6 +216,10 @@ class AppState:
     _wars_seen: int = 0
     _ending_played: bool = False
     _bed_event: str = ""
+    _pending_frames: object = None
+    _pending_src: object = None
+    _pending_steps: int = 0
+    _transition_index: int = 0
 
 
 def _build_menu_state(screen: pygame.Surface, seed: int, settings: Settings) -> AppState:
@@ -474,6 +479,18 @@ def step_once(state: AppState) -> bool:
     if state.game is None:
         return _step_menu(state)
 
+    # C8.3: play a pending page transition, one cross-fade frame per tick.
+    if state._pending_frames is not None:
+        if state._transition_index < len(state._pending_frames):
+            state.screen.blit(state._pending_frames[state._transition_index], (0, 0))
+            state._transition_index += 1
+            if state._transition_index == len(state._pending_frames):
+                state._pending_frames = None
+                state._transition_index = 0
+        pygame.display.flip()
+        state.clock.tick(FPS)
+        return True
+
     running = True
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -491,6 +508,17 @@ def step_once(state: AppState) -> bool:
                 _apply_action(state, action)
                 if action.get("menu") == "quit":
                     return False
+                if getattr(state.view, "last_transition", None) is not None:
+                    # C8.3: cross-fade from the page just on screen to the
+                    # new page, played one frame per tick at the frame clock.
+                    steps = int(state.view.last_transition.get("steps", 6))
+                    src = state.screen.copy()
+                    tmp = pygame.Surface(state.screen.get_size())
+                    tmp.fill((0, 0, 0))
+                    state.view.draw(tmp)
+                    state._pending_frames = transition_frames(src, tmp, steps)
+                    state._transition_index = 0
+                    state.view.last_transition = None
                 if action.get("end_turn"):
                     audio.play("end_turn", state.settings)
                     _ensure_bed(state)
