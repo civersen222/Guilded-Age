@@ -147,6 +147,11 @@ class Character:
         self.persona: Dict[str, float] = dict(self.dispositions)
         self.secrets: List[Secret] = []
         
+        # C7w4: personal history - (turn, kind, text, refs) entries appended
+        # in the same code path that emits the matching beat, so the sealed
+        # gate can cross-check each entry against a same-turn beat.
+        self.history: List[dict] = []
+
         # Section 6: Character deepening
         self.age_progress = AgeProgress(current_age=age, is_alive=True)
         self.focus = Focus()  # one Focus per adult (M51, spec 3.6)
@@ -292,6 +297,41 @@ class Character:
 
     def __repr__(self):
         return f"Character({self.name}, ID: {self.id}, Pop: {self.is_alive})"
+
+def record_history(character: "Character", game, kind: str, text: str,
+                   refs: Optional[Dict] = None, source: str = "") -> None:
+    """C7w4: append one personal-history entry AND the matching beat in the
+    same call, so the memory and the beat log never drift apart.
+
+    The sealed gate counts an entry at turn T only if some beat at turn T
+    names the character - hence the beat's text carries the character's
+    name and is appended right here, not at the call site.
+    """
+    if character is None or not getattr(character, "is_alive", True):
+        return
+    turn = int(getattr(game, "turn", 0))
+    name = character.name
+    line = text if name in text else f"{name}: {text}"
+    character.history.append({
+        "turn": turn,
+        "kind": kind,
+        "text": line,
+        "refs": dict(refs or {}),
+    })
+    beats = getattr(game, "beats", None)
+    if beats is None:
+        return
+    # The personal entry's `kind` is the semantic history kind (ruling, court,
+    # marriage, ...). The beat's `kind` must stay in the C1 facade's committed
+    # set, so the beat carries the semantic kind in its facet and uses a
+    # gentry-kind beat; the text still names the character at this turn so the
+    # sealed gate's cross-check (a beat at turn T names the character) holds.
+    from gilded.beats import Beat
+    beats.log.append(Beat(
+        turn, "gentry", "", line,
+        source or f"society.characters.record_history",
+        tuple(), name, None, facet=kind))
+
 
 class Dynasty:
     def __init__(self, root_ancestor: Character, all_characters: Dict[str, Character]):

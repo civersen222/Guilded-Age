@@ -114,6 +114,10 @@ class ChainManager:
             line = _line_of(step, ac)
             msgs.append(line)
             self.last_steps.append((ac.cdef.chain_id, line, _face_of(ac.ctx)))
+            from gilded.society.characters import record_history
+            for actor in _chain_actors(game, ac.ctx):
+                record_history(actor, game, "chain", line,
+                               {"chain": ac.cdef.chain_id})
             if step.apply is not None:
                 extra = step.apply(game, ac.ctx)
                 if extra:
@@ -232,6 +236,32 @@ def _chain_rng(game: Any) -> random.Random:
         rng = random.Random(game.seed ^ 0xC7A1)
         game._chain_rng = rng
     return rng
+
+
+def _chain_actors(game: Any, ctx: Dict[str, Any]):
+    """C7w4: the live Character objects a chain step's context names - the
+    ones whose personal history the step lands on. Contexts hold either the
+    Character itself (the `_char` slot) or its name string (heir/subject...),
+    so strings are resolved through the realms' character lists."""
+    by_name = {}
+    for realm in (getattr(game, "realms", None) or {}).values():
+        for ch in getattr(realm, "characters", None) or []:
+            if ch.is_alive:
+                by_name.setdefault(ch.name, ch)
+    actors = []
+    seen = set()
+    for key in ("_char", "heir", "subject", "target", "ruler",
+                "leader", "speaker", "martyr"):
+        val = ctx.get(key)
+        if val is None:
+            continue
+        ch = val if getattr(val, "id", None) is not None else by_name.get(val)
+        if (ch is not None and getattr(ch, "name", None)
+                and getattr(ch, "is_alive", True)
+                and ch.id not in seen):
+            seen.add(ch.id)
+            actors.append(ch)
+    return actors
 
 
 def _face_of(ctx: Dict[str, Any]) -> Optional[str]:

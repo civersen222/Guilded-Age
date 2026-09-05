@@ -25,7 +25,7 @@ from gilded.fronts import (ENTRENCH_MAX, PeaceTerms, WarGoal, ai_acceptable,
                            allocate, declare_war, negotiate_peace,
                            raise_regiments, REGIMENT_POP_COST, REGIMENT_STEEL_COST)
 from gilded.society.court import Court, CourtPosition
-from gilded.society.characters import modify_opinion
+from gilded.society.characters import modify_opinion, record_history
 from gilded.society.dispositions import apply_drift
 from gilded.society.labor import buy_off_leader, cover_up, martyr_leader
 from gilded.society.realm import DIRECTOR_SALARY_PCT
@@ -179,6 +179,7 @@ def _seat_appoint(ctx, *, seat, cand, realm) -> List[str]:
             realm.court.positions[pos] = None
     realm.court.positions[seat] = None
     realm.court.appoint(seat, cand, getattr(ctx.game, "turn", 0))
+    record_history(cand, ctx.game, "court", f"{cand.name} is sworn in as {seat.value}")
     modify_opinion(cand, realm.ruler, int(15 * ctx.scale), "given a seat")
     return [f"{cand.name} is sworn in as {seat.value}"]
 
@@ -353,6 +354,7 @@ def _heir_grant_seat(ctx, *, heir, realm) -> List[str]:
         if holder is None or not holder.is_alive:
             realm.court.positions[seat] = None
             realm.court.appoint(seat, heir, getattr(ctx.game, "turn", 0))
+            record_history(heir, ctx.game, "court", f"{heir.name} takes the seat of {seat.value}")
             modify_opinion(heir, realm.ruler, int(20 * ctx.scale), "given a seat")
             return [f"{heir.name} takes the seat of {seat.value}"]
     modify_opinion(heir, realm.ruler, -int(5 * ctx.scale), "empty promise")
@@ -1080,6 +1082,17 @@ def rule(game, petition, option_key, executor) -> List[str]:
     msgs.extend(_conviction_grind(executor, petition.domain, option.stance_bias))
     ctx = RulingContext(game, petition.house, executor, game.rng, scale)
     msgs.extend(option.apply(ctx))
+    from gilded.society.characters import Character, record_history
+    what = f"{option.text or petition.kind} on the {petition.kind.replace('_', ' ')}"
+    record_history(executor, game, "ruling", f"{executor.name} rules {what}",
+                   {"petition": petition.pid, "option": option.key})
+    petitioner = next((c for c in (petition.actors or {}).values()
+                       if isinstance(c, Character) and c is not executor
+                       and c.is_alive), None)
+    if petitioner is not None:
+        record_history(petitioner, game, "ruling",
+                       f"{petitioner.name}'s {petition.kind.replace('_', ' ')} is ruled",
+                       {"petition": petition.pid, "option": option.key})
     return msgs
 
 
