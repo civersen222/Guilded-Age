@@ -214,6 +214,7 @@ class AppState:
     _beats_seen: int = 0
     _wars_seen: int = 0
     _ending_played: bool = False
+    _bed_event: str = ""
 
 
 def _build_menu_state(screen: pygame.Surface, seed: int, settings: Settings) -> AppState:
@@ -372,6 +373,26 @@ def _play_game_audio(state: AppState) -> None:
         state._ending_played = True
 
 
+def _ensure_bed(state: AppState) -> None:
+    """The ambient bed follows the act: switch it when the turn crosses an
+    act boundary. The bed loops until the next switch."""
+    if state.game is None or state.settings is None:
+        return
+    event = audio.ambient_event_for(state.game)
+    if event != state._bed_event:
+        state._bed_event = event
+        try:
+            snd = audio._loaded.get(event)
+            if snd is None:
+                snd = pygame.mixer.Sound(audio.resolve(event))
+                audio._loaded[event] = snd
+            if not getattr(state.settings, "mute", False):
+                snd.set_num_repeats(-1)
+                snd.play()
+        except Exception:
+            pass
+
+
 def _apply_menu_action(state: AppState, action: dict) -> None:
     """Handle menu verbs when no game is running."""
     menu_key = action.get("menu")
@@ -472,6 +493,7 @@ def step_once(state: AppState) -> bool:
                     return False
                 if action.get("end_turn"):
                     audio.play("end_turn", state.settings)
+                    _ensure_bed(state)
     if state._beats_seen == 0 and state.game is not None:
         audio.play("ambient", state.settings)  # the century hums, once
         state._beats_seen = len(state.game.beats.log)

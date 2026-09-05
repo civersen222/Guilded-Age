@@ -23,6 +23,9 @@ SOUND_EVENTS: Dict[str, str] = {
     "beat": "beat.ogg",
     "ending": "ending.ogg",
     "ambient": "ambient.wav",
+    "ambient_act1": "act1_calm.flac",
+    "ambient_act2": "act2_tense.flac",
+    "ambient_act3": "act3_grand.flac",
 }
 
 _loaded: Dict[str, pygame.mixer.Sound] = {}
@@ -31,6 +34,26 @@ _loaded: Dict[str, pygame.mixer.Sound] = {}
 def resolve(event: str) -> str:
     """The absolute path of an event's file."""
     return os.path.join(_AUDIO_DIR, SOUND_EVENTS[event])
+
+
+def ambient_event_for(game) -> str:
+    """The act bed for the game's current turn (the C7 act bands)."""
+    turn = game.turn if hasattr(game, "turn") else 0
+    if turn <= 25:
+        return "ambient_act1"
+    if turn <= 50:
+        return "ambient_act2"
+    return "ambient_act3"
+
+
+def ambient_event_for(game) -> str:
+    """The act bed for the game's current turn (the C7 act bands)."""
+    turn = game.turn if hasattr(game, "turn") else 0
+    if turn <= 25:
+        return "ambient_act1"
+    if turn <= 50:
+        return "ambient_act2"
+    return "ambient_act3"
 
 
 def _mixer_ok() -> bool:
