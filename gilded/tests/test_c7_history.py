@@ -67,3 +67,26 @@ def test_seed42_history_targets(tmp_path, monkeypatch):
 def test_seed7_history_targets(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _assert_history_gate(_run(7))
+
+
+def test_house_tab_draws_ruler_history(tmp_path, monkeypatch):
+    """COMMIT 2: the House tab draws the ruler's last three memory lines —
+    the first three words of each drawn entry must appear in a string pygame
+    actually rendered while drawing the House tab."""
+    monkeypatch.chdir(tmp_path)
+    s = new_app_state(seed=42, start="menu")
+    _press_new_game(s)
+    g = s.game
+    for _ in range(TURNS):
+        g.end_turn()
+    ruler = g.realms[[h for h in g.houses if g.houses[h].is_player][0]].ruler
+    entries = [e for e in ruler.history if e["turn"] <= g.turn][-3:]
+    assert entries, "ruler has no history to draw"
+    s.view.active_tab = "House"
+    s.view.draw(s.screen)
+    alltext = "\n".join(t for _, t in s.view.text_rows)
+    for e in entries:
+        words = str(e["text"]).split()[:3]
+        needle = " ".join(words)
+        assert needle in alltext, \
+            f"first three words {needle!r} of entry not rendered on House tab"

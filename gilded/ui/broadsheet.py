@@ -1475,6 +1475,42 @@ class BroadsheetView:
         return y
 
 
+    def _draw_ruler_history(self, surface, content: pygame.Rect,
+                            y: int = None, bottom: int = None) -> int:
+        """C7w4: the ruler's last three memory lines, drawn on the House tab
+        under the ladder + agenda spine.  Each line is the entry's own text
+        (verbatim), so the gate's render-capture finds the first words of
+        every entry that actually reached the screen.  Fits the band, uses
+        the smallest named scale step (TYPE_CAPTION=12)."""
+        bottom = bottom if bottom is not None else content.bottom
+        body = _font(TYPE_CAPTION)
+        width = content.width - 2 * PAD
+        realm = self.game.realms.get(self.house)
+        ruler = realm.ruler if realm is not None else None
+        entries = list(getattr(ruler, "history", []) or [])
+        entries = [e for e in entries if e["turn"] <= self.game.turn]
+        if not entries:
+            return y if y is not None else content.y
+        last = entries[-3:]
+        start = y if y is not None else content.y
+        line_h = body.get_height()
+        if start > bottom - line_h:
+            return start
+        yy = start
+        for e in last:
+            if yy > bottom - line_h:
+                break
+            line = str(e["text"])
+            max_w = width - 20
+            while len(line) > 1 and body.render(line, True, FADED).get_width() > max_w:
+                line = line[:-1].rstrip()
+            if line != str(e["text"]):
+                line = line.rstrip() + "…"
+            blit_text(surface, body, line, (PAD + 10, yy), FADED)
+            yy += line_h + 1
+        return yy
+
+
     # --- shared petition renderer (Docket + Agenda) --------------------------
 
     def _draw_petition_cards(self, surface, content: pygame.Rect,
@@ -2892,8 +2928,16 @@ class BroadsheetView:
         # spine is their home now); the agenda cards are the docket's
         # decisions. The left column carries only the spine text so it stays
         # short enough to fit the band.
-        self._draw_ladder_and_agenda(surface, left, left.y,
-                                     bottom=content.bottom - 40)
+        # C7w4: the ruler's three memory lines sit under the spine (no
+        # heading, so the agenda keeps its rule regions).  Reserve their
+        # room in the spine's budget so the ladder yields rows instead of
+        # the memory lines spilling past the band bottom.
+        mem_reserve = 3 * (_font(TYPE_CAPTION).get_height() + 1)
+        y_spine = self._draw_ladder_and_agenda(surface, left, left.y,
+                                               bottom=content.bottom - 40
+                                               - mem_reserve)
+        self._draw_ruler_history(surface, left, y=y_spine,
+                                 bottom=content.bottom - 40)
         # spec §2: the dissolved Policies tab is re-homed onto the House
         # spine — the five standing directive dials (set_stance) draw on the
         # Overview page (right column at band top), not a separate tab.
