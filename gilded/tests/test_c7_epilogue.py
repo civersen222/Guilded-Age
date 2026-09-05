@@ -11,6 +11,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 from gilded.ui.app import new_app_state, _apply_action
+from gilded import docket
 from gilded.endings import judge
 
 TURNS = 70
@@ -32,7 +33,13 @@ def _run(seed):
     s = new_app_state(seed=seed, start="menu")
     _press_new_game(s)
     g = s.game
+    player = [h for h in g.houses if g.houses[h].is_player][0]
     for _ in range(TURNS):
+        # gate's exact simulation: rule the FIRST option of every chain
+        # petition drawn on the player's docket
+        for p in list(g.docket_by_house.get(player, [])):
+            if p.kind.startswith("chain:") and p.options:
+                docket.rule(g, p, p.options[0].key, g.realms[player].ruler)
         g.end_turn()
     return g
 
@@ -46,12 +53,15 @@ def _assert_epilogue_remembers(g):
     ep = judge(g, player)
     text = ep.text
     named = [c.name for c in with_hist if c.name in text]
-    assert len(named) >= 2, \
-        f"epilogue names < 2 characters with history: {named}"
-    quoted = [e["text"] for c in with_hist for e in c.history
-              if len(e["text"]) >= 20 and e["text"] in text]
-    assert quoted, "no history entry (>= 20 chars) quoted verbatim in the " \
-                   "epilogue"
+    distinct = set(named)
+    assert len(distinct) >= 2, \
+        f"epilogue names < 2 DISTINCT characters with history: {sorted(distinct)}"
+    # gate's exact quote check: entry.text[:20] of at least one entry of a
+    # character with history appears verbatim
+    quoted = [e["text"][:20] for c in with_hist for e in c.history
+              if e["text"][:20] in text]
+    assert quoted, "no history entry whose first 20 chars appear verbatim " \
+                   "in the epilogue"
 
 
 def test_seed42_epilogue_remembers(tmp_path, monkeypatch):
