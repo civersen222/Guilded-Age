@@ -127,7 +127,7 @@ class MarriageRegistry:
         return contract
 
     def _wed(self, house_a, house_b, ra, rb, a, b, houses,
-             enterprises_by_house, rng) -> str:
+             enterprises_by_house, rng, game=None) -> str:
         """The match itself: b joins a's realm and house, the merger
         contract is negotiated and applied, relations warm."""
         if b in rb.characters:
@@ -155,10 +155,17 @@ class MarriageRegistry:
         if _relation(houses, house_a, house_b) < 60:
             _modify_relation(houses, house_a, house_b,
                              MARRIAGE_RELATION_BONUS + (10 if contract.alliance else 0))
-        return f"{a.name} weds {b.name} - {house_a} and {house_b} are bound by marriage"
+        line = f"{a.name} weds {b.name} - {house_a} and {house_b} are bound by marriage"
+        if game is not None:
+            from gilded.society.characters import record_history
+            record_history(a, game, "marriage", line,
+                           source="society.marriages.wedding")
+            record_history(b, game, "marriage", line,
+                           source="society.marriages.wedding")
+        return line
 
     def _maybe_arrange_match(self, realms, houses, enterprises_by_house,
-                             rng) -> Optional[str]:
+                             rng, game=None) -> Optional[str]:
         if rng.random() >= MARRIAGE_CHANCE:
             return None
         names = list(realms)
@@ -180,11 +187,12 @@ class MarriageRegistry:
                     continue
                 b = rng.choice(cand_b)
                 return self._wed(house_a, house_b, ra, rb, a, b, houses,
-                                 enterprises_by_house, rng)
+                                 enterprises_by_house, rng, game)
         return None
 
     def arrange_match_between(self, house_a: str, house_b: str, realms, houses,
-                              enterprises_by_house, rng) -> Optional[str]:
+                              enterprises_by_house, rng,
+                              game=None) -> Optional[str]:
         """A deliberate match between two named Houses: the AI binds a
         friend the way the ambient tick does, but on purpose - kin
         preferred, best bloodline first, the same merger contract."""
@@ -204,22 +212,16 @@ class MarriageRegistry:
             return None
         b = max(cand_b, key=bloodline_quality)
         return self._wed(house_a, house_b, ra, rb, a, b, houses,
-                         enterprises_by_house, rng)
+                         enterprises_by_house, rng, game)
 
     def wed_match(self, house_a: str, house_b: str, a, b, realms, houses,
-                  enterprises_by_house, rng) -> Optional[str]:
-        """Wed two specific Characters chosen at petition time.
-
-        `a` is from house_a's realm, `b` is from house_b's realm.
-        Returns a reason string and weds NOBODY if the named pair is
-        unavailable (dead, already married, etc).
-        """
+                  enterprises_by_house, rng, game=None) -> Optional[str]:
+        """Wed two specific Characters chosen at petition time."""
         ra, rb = realms.get(house_a), realms.get(house_b)
         if ra is None or rb is None:
             return None
         if _at_war(houses, house_a, house_b):
             return None
-        # Check the named pair
         if not a.is_alive:
             return f"{a.name} is no longer living — the match cannot proceed"
         if not b.is_alive:
@@ -229,7 +231,8 @@ class MarriageRegistry:
         if b.id in self.married_ids:
             return f"{b.name} is already wed — the match with {house_a} falls through"
         return self._wed(house_a, house_b, ra, rb, a, b, houses,
-                         enterprises_by_house, rng)
+                         enterprises_by_house, rng, game)
+
 
     def _blood_ties(self, realms, houses, rng) -> List[str]:
         """Living cross-house couples slowly pull their houses together."""
@@ -271,13 +274,15 @@ class MarriageRegistry:
                         msgs.append(f"A child of the union, {child.name}, is born into House {house_name}")
         return msgs
 
-    def tick(self, realms, houses, enterprises_by_house, rng) -> List[str]:
+    def tick(self, realms, houses, enterprises_by_house, rng,
+             game=None) -> List[str]:
         """Arrange cross-house matches, then let existing ones pull the
         houses together."""
         self.turns += 1
         msgs: List[str] = []
         if len(realms) >= 2:
-            m = self._maybe_arrange_match(realms, houses, enterprises_by_house, rng)
+            m = self._maybe_arrange_match(realms, houses, enterprises_by_house,
+                                           rng, game)
             if m:
                 msgs.append(m)
         msgs.extend(self._blood_ties(realms, houses, rng))

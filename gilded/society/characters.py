@@ -333,6 +333,33 @@ def record_history(character: "Character", game, kind: str, text: str,
         tuple(), name, None, facet=kind))
 
 
+def record_death(character: "Character", game, text: str,
+                 refs: Optional[Dict] = None, source: str = "") -> None:
+    """C7w4: final history entry for a character who has just died.
+    record_history() refuses dead characters; death is the one kind that must
+    be written AFTER is_alive is False. Same beat contract: the beat at this
+    turn names the character, so the gate's cross-check holds."""
+    if character is None:
+        return
+    turn = int(getattr(game, "turn", 0))
+    name = character.name
+    line = text if name in text else f"{name}: {text}"
+    character.history.append({
+        "turn": turn,
+        "kind": "death",
+        "text": line,
+        "refs": dict(refs or {}),
+    })
+    beats = getattr(game, "beats", None)
+    if beats is None:
+        return
+    from gilded.beats import Beat
+    beats.log.append(Beat(
+        turn, "gentry", "", line,
+        source or f"society.characters.record_death",
+        tuple(), name, None, facet="death"))
+
+
 class Dynasty:
     def __init__(self, root_ancestor: Character, all_characters: Dict[str, Character]):
         self.root = root_ancestor

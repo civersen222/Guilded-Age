@@ -280,7 +280,7 @@ def _betrothal_accept(ctx, *, other, our_person, their_person) -> List[str]:
     msg = ctx.game.marriages.wed_match(
         ctx.house, other, our_person, their_person,
         ctx.game.realms, ctx.game.houses,
-        _ents_by_house(ctx.game), ctx.rng)
+        _ents_by_house(ctx.game), ctx.rng, ctx.game)
     if msg is None:
         return [f"The match with {other} falls through at the altar"]
     return [msg]
@@ -1172,7 +1172,7 @@ def _init_propose_marriage(ctx, target_house=None, **kw) -> List[str]:
             return [f"Cannot propose marriage to House {target_house} while at war"]
     msg = game.marriages.arrange_match_between(
         ctx.house, target_house, game.realms, game.houses,
-        _ents_by_house(game), ctx.rng)
+        _ents_by_house(game), ctx.rng, game)
     if msg is None:
         h = game.houses.get(ctx.house)
         t = game.houses.get(target_house)

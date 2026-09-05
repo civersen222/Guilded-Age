@@ -401,6 +401,8 @@ class GildedGame:
                        "gazette", province.owner)
 
         # 4. society
+        _alive_before = {c.id: c for realm in self.realms.values()
+                         for c in realm.characters if c.is_alive}
         for h in sorted(self.realms):
             realm = self.realms[h]
             old_ruler = realm.ruler
@@ -415,7 +417,7 @@ class GildedGame:
         self._emit(tick_relationships(self.realms, self.scheme_mgr,
                                       self.turn, self.rng), "gazette")
         self._emit(self.scheme_mgr.advance_all(self.realms, self.legitimacy,
-                                               self.rng), "gazette")
+                                               self.rng, self), "gazette")
         for tk in list(self.takeovers):
             if tk.complete:
                 # A finished campaign stays in the list so the fall remains
@@ -435,7 +437,15 @@ class GildedGame:
                        "gazette", h)
         self.scheme_mgr.pending_successions.clear()
         self._emit(self.marriages.tick(self.realms, self.houses,
-                                       self._ents_by_house(), self.rng), "gazette")
+                                       self._ents_by_house(), self.rng,
+                                       self), "gazette")
+        # C7w4: deaths this turn become personal history (death is the one
+        # history kind written after is_alive flips; record_death handles it).
+        from gilded.society.characters import record_death
+        for c in _alive_before.values():
+            if not c.is_alive:
+                record_death(c, self, f"{c.name} dies",
+                             source="chassis.society.death")
         from gilded import pacts
         self._emit(pacts.pact_tick(self), "gazette")
         for h in sorted(self.realms):
