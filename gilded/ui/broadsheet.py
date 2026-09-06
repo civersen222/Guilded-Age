@@ -893,6 +893,9 @@ class BroadsheetView:
         self.powers_page = "Overview"
         self.powers_pages = ["Overview", "Dossier"]
         self.atlas_desk = False
+        # C8.1: the map's tier (continent/region/parish); Region stays the
+        # default so C1..C7 draws are unchanged.
+        self.atlas_tier = "region"
         # C4 residual (C5): the war panel left the map field.  The desk strip
         # carries a War toggle; when open it draws the war panel as a
         # right-column drawer that can never shadow a province centroid.
@@ -2019,16 +2022,51 @@ class BroadsheetView:
             rect = pygame.Rect(0, TAB_H + hud_h, self._w,
                                self._h - TAB_H - hud_h - BOTTOM_H)
         self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid,
-                                       accent_log=self._accent_log)
+                                       accent_log=self._accent_log,
+                                       tier=self.atlas_tier)
         self.regions.add(Region(rect=rect,
                                 action={"select_province": None},
                                 hint="Click a province to inspect it.",
                                 group="atlas"))
+        # After the map backdrop region so the strip wins the hit-test.
+        self._draw_atlas_zoom(surface, rect)
         if self.selected_pid is not None:
             self._draw_panel(surface,
                              province_panel_lines(self.game, self.selected_pid))
         # Draw action rows on the right side panel
         self._draw_atlas_actions(surface, rect)
+
+    def _draw_atlas_zoom(self, surface, rect: pygame.Rect) -> None:
+        """C8.1: three tier controls in the atlas's top-right corner
+        (the war toggle sits at right - 204, so the zoom strip keeps clear of
+        it). Pressing one sets view.atlas_tier; the next draw paints that tier."""
+        from gilded.ui.atlas_view import ATLAS_TIERS
+        font = _font(TYPE_CAPTION)
+        labels = {"continent": "Continent", "region": "Region", "parish": "Parish"}
+        w = 84
+        h = font.get_height() + 8
+        gap = 4
+        # Below the tier legend (top-left) — the legend's own width bounds the
+        # strip's start, so it never sits on a province centroid or the right-
+        # column action buttons.
+        from gilded.ui.atlas_view import legend_rect_for
+        lg = legend_rect_for(self.game, rect, self.atlas_tier)
+        x0 = lg.left
+        y0 = max(rect.top + 4, lg.bottom + 6)
+        for i, tier in enumerate(ATLAS_TIERS):
+            r = pygame.Rect(x0 + i * (w + gap), y0, w, h)
+            on = (self.atlas_tier == tier)
+            fill = CARD_BG if on else PANEL_BG
+            pygame.draw.rect(surface, fill, r)
+            pygame.draw.rect(surface, INK if on else FADED, r, 2 if on else 1)
+            tw, th = font.size(labels[tier])
+            blit_text(surface, font, labels[tier],
+                      (r.centerx - tw // 2, r.centery - th // 2),
+                      INK if on else FADED)
+            self.regions.add(Region(rect=r,
+                                    action={"zoom": tier},
+                                    hint=f"Zoom to the {labels[tier]} tier.",
+                                    group="atlas_zoom"))
 
     def _draw_atlas_actions(self, surface, rect: pygame.Rect) -> None:
         """Draw interactive rows for acquire_minor, build_rail, tour_province on the atlas tab."""
@@ -3392,6 +3430,9 @@ class BroadsheetView:
             action = region.action
             if "toggle_war_drawer" in action:
                 self.war_drawer = not self.war_drawer
+                return None
+            if "zoom" in action:
+                self.atlas_tier = action["zoom"]
                 return None
             if "tab" in action:
                 self.last_transition = {"kind": "tab", "steps": 6}

@@ -170,9 +170,10 @@ def _collect_standard(view, collected):
             for k in region.action:
                 if k == "char_id":
                     continue
-                if k == "toggle_war_drawer":
-                    # view-internal control (toggles the war drawer rect),
-                    # not a registered PlayerAction — handled directly in the view.
+                if k in ("toggle_war_drawer", "zoom"):
+                    # view-internal control (toggles the war drawer rect / sets
+                    # view.atlas_tier), not a registered PlayerAction — handled
+                    # directly in the view.
                     continue
                 if k in ("build_rail_a", "build_rail_b"):
                     collected.add("build_rail")

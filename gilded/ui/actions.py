@@ -1302,7 +1302,7 @@ ACTIONS: dict[str, PlayerAction] = {
         attention_cost=0, gold_cost=0,
         eligible=_noop_eligible, dispatch=_noop_dispatch,
     ),
-    # court verbs (House tab)
+     # court verbs (House tab)
     "dismiss_seat": PlayerAction(
         key="dismiss_seat", label="Dismiss from Court", domain="house",
         attention_cost=0, gold_cost=0,
