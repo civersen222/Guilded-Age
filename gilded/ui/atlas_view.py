@@ -17,9 +17,10 @@ import pygame
 from gilded.world import MINOR_OWNER
 from gilded.ui import palette
 
-# Neutral slate for railway lines that are not the player's own — gold is
-# reserved for the player's own lines (accent law: gold = the player only).
-NEUTRAL_RAIL = palette.SLATE
+# C8 art pass: every atlas hue is one of the 13 pinned inks (C4). RIVER stays
+# reserved (never drawn). Houses are told apart by border weight + the capital
+# glyph, not by new hues.
+NEUTRAL_RAIL = palette.rgb(palette.SLATE)
 
 # Re-export palette names from widgets.py so existing imports continue to work.
 from gilded.ui.widgets import (
@@ -29,6 +30,27 @@ from gilded.ui.widgets import (
     blit_text,
     font as _font,
     TYPE_CAPTION, TYPE_BODY,
+)
+
+# Pinned-ink atlas re-ink (the map law's three tiers share these).
+# All values are palette.rgb() tuples — pygame draws need RGB tuples.
+OCEAN_COLOR = palette.rgb(palette.SLATE)       # the sea sits on the slate
+MINOR_COLOR = palette.rgb(palette.DIM)         # minor owners in the dim ink
+FRONT_COLOR = palette.rgb(palette.VERMILLION)  # live fronts: the consequence mark
+BORDER_COLOR = palette.rgb(palette.INK)        # province borders in the ink
+SELECT_COLOR = palette.rgb(palette.PAPER)      # the selected outline stands out
+RAIL_COLOR = palette.rgb(palette.INK2)         # neutral rail dashes
+NAME_COLOR = palette.rgb(palette.INK)          # labels: ink on a CARD plate
+GLYPH_COLOR = palette.rgb(palette.WHEAT)       # endowment glyphs
+
+# Owner fills: five light pinned inks, cycled by house index (fills repeat —
+# border weight + capital glyph tell the houses apart, not new hues).
+_FILLS = (
+    palette.rgb(palette.SAGE),
+    palette.rgb(palette.WHEAT),
+    palette.rgb(palette.CARD),
+    palette.rgb(palette.FIELD),
+    palette.rgb(palette.PAPER),
 )
 
 _ENDOWMENT_GLYPH = {"coalfield": "C", "iron": "I", "timber": "T",
@@ -313,7 +335,7 @@ def _owner_color(game, owner: str) -> Tuple[int, int, int]:
         return MINOR_COLOR
     order = sorted(game.houses)
     idx = order.index(owner) if owner in order else 0
-    return HOUSE_COLORS[idx % len(HOUSE_COLORS)]
+    return _FILLS[idx % len(_FILLS)]
 
 
 def _dashed_line(surface, color, start, end, dash: int = 8, gap: int = 6,
