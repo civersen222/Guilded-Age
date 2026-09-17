@@ -3433,7 +3433,7 @@ class BroadsheetView:
                 return None
             if "zoom" in action:
                 self.atlas_tier = action["zoom"]
-                return None
+                return {"zoom": action["zoom"]}
             if "tab" in action:
                 self.last_transition = {"kind": "tab", "steps": 6}
                 self.active_tab = action["tab"]

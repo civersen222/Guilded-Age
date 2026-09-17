@@ -319,6 +319,11 @@ def _apply_action(state: AppState, action: dict) -> None:
     if key is None:
         return
 
+    if key == "zoom":
+        # C8.1: view-internal tier switch (kept out of the ACTIONS registry).
+        state.view.atlas_tier = action["zoom"]
+        return
+
     if key == "adjust_garrison":
         from gilded.ui.actions import _adjust_garrison_eligible, _adjust_garrison_dispatch
         ok, _reason = _adjust_garrison_eligible(state.game, state.house, action)

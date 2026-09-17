@@ -441,7 +441,7 @@ def _draw_legend(surface, game, rect: pygame.Rect,
     surface.blit(bg, legend_rect.topleft)
     # Draw rows
     def _draw_col(col_rows, col_x):
-        y = col_x + 4  # use col_x as x offset, compute y
+        base = lx + col_x
         for i, row in enumerate(col_rows):
             ry = ly + 4 + i * row_h
             if row.kind == "endowment":
@@ -449,14 +449,15 @@ def _draw_legend(surface, game, rect: pygame.Rect,
             elif row.kind in ("rail", "front"):
                 txt = row.label
                 pygame.draw.line(surface, row.color,
-                                 (lx + 4, ry + row_h // 2),
-                                 (lx + 20, ry + row_h // 2), 3)
+                                 (base + 4, ry + row_h // 2),
+                                 (base + 20, ry + row_h // 2), 3)
             else:
                 txt = row.label
                 pygame.draw.rect(surface, row.color,
-                                 (lx + 4, ry + 2, 14, row_h - 4))
-            blit_text(surface, font, txt, (lx + 24, ry + 1), NAME_COLOR)
+                                 (base + 4, ry + 2, 14, row_h - 4))
+            blit_text(surface, font, txt, (base + 24, ry + 1), NAME_COLOR)
     _draw_col(col1, 0)
+    _draw_col(col2, col_w)
     return legend_rect
 
 
@@ -640,7 +641,9 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
         cap_font = _font(TYPE_BODY)
         cap_txt = tier.upper()
         cw, ch = cap_font.size(cap_txt)
-        cap_rect = pygame.Rect(rect.centerx - cw // 2 - 6, rect.top + 4,
+        # Bottom-left corner: ocean in every tier, clear of the legend
+        # (top-left), the zoom strip, and the war toggle (top-right).
+        cap_rect = pygame.Rect(rect.left + 4, rect.bottom - ch - 10,
                                cw + 12, ch + 6)
         plate = pygame.Surface((cap_rect.w, cap_rect.h))
         plate.set_alpha(200)
@@ -661,8 +664,9 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
         if tier == "region" and selected_pid is not None:
             grs = atlas_glyph_rects(game, transform, rect, selected_pid)
             glyph_font = _font(TYPE_BODY)
-            for (end, _g), gr in zip(sorted(p for p in
-                                            game.atlas.provinces[selected_pid].endowments.keys()), grs):
+            rects = [gr for pid, gr in grs if pid == selected_pid]
+            ends = sorted(game.atlas.provinces[selected_pid].endowments.keys())
+            for end, gr in zip(ends, rects):
                 char = _ENDOWMENT_GLYPH.get(end, "?")
                 blit_text(surface, glyph_font, char, gr.topleft, GLYPH_COLOR)
 
