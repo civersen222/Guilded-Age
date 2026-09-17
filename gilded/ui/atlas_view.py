@@ -52,6 +52,8 @@ _FILLS = (
     palette.rgb(palette.CARD),
     palette.rgb(palette.FIELD),
     palette.rgb(palette.PAPER),
+    palette.rgb(palette.SLATE),
+    palette.rgb(palette.INK2),
 )
 
 _ENDOWMENT_GLYPH = {"coalfield": "C", "iron": "I", "timber": "T",
