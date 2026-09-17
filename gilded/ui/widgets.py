@@ -23,7 +23,7 @@ INK = (28, 24, 20)
 FADED = (96, 88, 78)
 PAPER_BG = (238, 232, 218)
 CARD_BG = (248, 244, 234)
-CARD_EDGE = (120, 108, 92)
+CARD_EDGE = (132, 135, 111)  # DIM
 
 # ────────────────────────────────────────────────────────────────────────────
 # Screen palette — colours shared across all rendered screens
@@ -32,7 +32,7 @@ CARD_EDGE = (120, 108, 92)
 BLACK = (0, 0, 0)
 PANEL_BG = (18, 16, 14)
 TAB_BG = (54, 48, 42)
-TAB_ACTIVE = (206, 176, 108)
+TAB_ACTIVE = (168, 132, 44)  # GOLD
 TAB_TEXT = (232, 226, 210)
 HUD_BG = (44, 40, 34)
 HUD_INK = (232, 226, 210)
@@ -41,8 +41,8 @@ BUTTON_EDGE = (30, 46, 30)
 BUTTON_TEXT = (238, 240, 232)
 DISABLED_BUTTON_BG = (30, 30, 30)
 DISABLED_BUTTON_EDGE = (35, 35, 35)
-EXEC_BG = (78, 66, 96)
-ENDTURN_BG = (140, 60, 52)
+EXEC_BG = (68, 81, 63)  # INK2
+ENDTURN_BG = (142, 41, 23)  # VERMILLION_DARK
 ATTN_COLOR = (150, 110, 40)
 SKIM_HIGHLIGHT = (240, 220, 210)
 PICKER_BACK_BG = (70, 70, 50)
@@ -59,7 +59,7 @@ HOUSE_COLORS = [(122, 74, 58), (58, 90, 122), (74, 106, 74), (140, 120, 60),
 MINOR_COLOR = (90, 90, 90)
 OCEAN_COLOR = (26, 35, 51)
 FRONT_COLOR = (208, 64, 64)
-GUIDE_BG = (58, 50, 40)
+GUIDE_BG = (31, 45, 38)  # INK
 GUIDE_EDGE = (150, 122, 60)
 BORDER_COLOR = (12, 12, 12)
 NAME_COLOR = (232, 226, 210)
@@ -163,7 +163,7 @@ TONES: dict[str, tuple[int, int, int]] = {
     "good": (34, 120, 68),
     "bad": (180, 50, 40),
     "warn": (200, 150, 30),
-    "neutral": (97, 97, 106),
+    "neutral": (132, 135, 111),  # DIM
     "dead": (160, 160, 165),
 }
 
