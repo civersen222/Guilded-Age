@@ -26,22 +26,27 @@ NEUTRAL_RAIL = palette.rgb(palette.SLATE)
 from gilded.ui.widgets import (
     HOUSE_COLORS, MINOR_COLOR, OCEAN_COLOR, FRONT_COLOR,
     BORDER_COLOR, NAME_COLOR, GLYPH_COLOR, RAIL_COLOR, SELECT_COLOR,
-    PANEL_BG,
+    PANEL_BG, MASK_CLEAR, MASK_FULL, MASK_WHITE, MASK_BLACK,
     blit_text,
     font as _font,
     TYPE_CAPTION, TYPE_BODY,
 )
 
-# Pinned-ink atlas re-ink (the map law's three tiers share these).
-# All values are palette.rgb() tuples — pygame draws need RGB tuples.
-OCEAN_COLOR = palette.rgb(palette.SLATE)       # the sea sits on the slate
-MINOR_COLOR = palette.rgb(palette.DIM)         # minor owners in the dim ink
-FRONT_COLOR = palette.rgb(palette.VERMILLION)  # live fronts: the consequence mark
-BORDER_COLOR = palette.rgb(palette.INK)        # province borders in the ink
-SELECT_COLOR = palette.rgb(palette.PAPER)      # the selected outline stands out
-RAIL_COLOR = palette.rgb(palette.INK2)         # neutral rail dashes
-NAME_COLOR = palette.rgb(palette.INK)          # labels: ink on a CARD plate
-GLYPH_COLOR = palette.rgb(palette.WHEAT)       # endowment glyphs
+# The public OCEAN/MINOR/FRONT/BORDER/SELECT/RAIL/NAME/GLYPH names stay the
+# widget-era values (re-exported above; C1..C7 tests pin them). The atlas
+# itself is drawn in the 13 pinned inks (C8.5) via the *_DC drawing constants:
+# sea on the slate, minors in the dim ink, fronts in the consequence mark,
+# borders in the ink, rails in INK2, labels in ink on a CARD plate, glyphs
+# in wheat. RIVER stays reserved (never drawn). Houses are told apart by
+# border weight + the capital glyph, not new hues.
+OCEAN_DC = palette.rgb(palette.SLATE)
+MINOR_DC = palette.rgb(palette.DIM)
+FRONT_DC = palette.rgb(palette.VERMILLION)
+BORDER_DC = palette.rgb(palette.INK)
+SELECT_DC = palette.rgb(palette.PAPER)
+RAIL_DC = palette.rgb(palette.INK2)
+NAME_DC = palette.rgb(palette.INK)
+GLYPH_DC = palette.rgb(palette.WHEAT)
 REGIMENT_COLOR = palette.rgb(palette.INK2)     # parish-tier regiment marks
 
 # Owner fills: five light pinned inks, cycled by house index (fills repeat —
@@ -377,7 +382,7 @@ def pick_province(atlas, polygons: Dict[int, List[Tuple[int, int]]],
 
 def _owner_color(game, owner: str) -> Tuple[int, int, int]:
     if owner == MINOR_OWNER:
-        return MINOR_COLOR
+        return MINOR_DC
     order = sorted(game.houses)
     idx = order.index(owner) if owner in order else 0
     return _FILLS[idx % len(_FILLS)]
@@ -457,7 +462,7 @@ def _draw_legend(surface, game, rect: pygame.Rect,
                 txt = row.label
                 pygame.draw.rect(surface, row.color,
                                  (base + 4, ry + 2, 14, row_h - 4))
-            blit_text(surface, font, txt, (base + 24, ry + 1), NAME_COLOR)
+            blit_text(surface, font, txt, (base + 24, ry + 1), NAME_DC)
     _draw_col(col1, 0)
     _draw_col(col2, col_w)
     return legend_rect
@@ -486,11 +491,11 @@ def _draw_hatch(surface, poly, step: int, color):
         pygame.draw.line(diag, color + (190,), (d - h, 0), (d, h), 1)
         d += step
     surf = pygame.Surface((w, h))
-    surf.fill((255, 255, 255))
+    surf.fill(MASK_WHITE)
     surf.blit(diag, (0, 0))
     mask = pygame.Surface((w, h), pygame.SRCALPHA)
-    mask.fill((0, 0, 0, 0))
-    pygame.draw.polygon(mask, (255, 255, 255, 255),
+    mask.fill(MASK_CLEAR)
+    pygame.draw.polygon(mask, MASK_FULL,
                         [(int(x - x0), int(y - y0)) for (x, y) in poly])
     surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
     surface.blit(surf, (int(x0), int(y0)))
@@ -504,8 +509,8 @@ def _draw_dots(surface, poly, step: int, color):
     w = max(1, int(x1 - x0))
     h = max(1, int(y1 - y0))
     mask = pygame.Surface((w, h), pygame.SRCALPHA)
-    mask.fill((0, 0, 0, 0))
-    pygame.draw.polygon(mask, (255, 255, 255, 255),
+    mask.fill(MASK_CLEAR)
+    pygame.draw.polygon(mask, MASK_FULL,
                         [(int(x - x0), int(y - y0)) for (x, y) in poly])
     dots = pygame.Surface((w, h), pygame.SRCALPHA)
     yy = 0
@@ -516,7 +521,7 @@ def _draw_dots(surface, poly, step: int, color):
             xx += step
         yy += step
     surf = pygame.Surface((w, h))
-    surf.fill((255, 255, 255))
+    surf.fill(MASK_WHITE)
     surf.blit(dots, (0, 0))
     surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
     surface.blit(surf, (int(x0), int(y0)))
@@ -557,14 +562,14 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
     surface.set_clip(rect)
 
     try:
-        surface.fill(OCEAN_COLOR, rect)
+        surface.fill(OCEAN_DC, rect)
 
         caps = _capital_pids(game)
         for pid, prov in game.atlas.provinces.items():
             poly = polys[pid]
             if len(poly) >= 3:
                 pygame.draw.polygon(surface, _owner_color(game, prov.owner), poly)
-                border = SELECT_COLOR if pid == selected_pid else BORDER_COLOR
+                border = SELECT_DC if pid == selected_pid else BORDER_DC
                 pygame.draw.polygon(surface, border, poly,
                                     3 if pid == selected_pid else 1)
                 if tier == "continent":
@@ -572,20 +577,20 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                     _draw_hatch(surface, poly, 9, palette.rgb(palette.INK2))
                 elif tier == "parish":
                     # A tight wheat dot grid sits on the fine-grained level.
-                    _draw_dots(surface, poly, 6, GLYPH_COLOR)
+                    _draw_dots(surface, poly, 6, GLYPH_DC)
 
         # tier furniture
         if tier == "continent":
             for pid in caps:
                 _draw_star(surface, transform.apply(
-                    game.atlas.provinces[pid].center), 9, GLYPH_COLOR)
+                    game.atlas.provinces[pid].center), 9, GLYPH_DC)
         elif tier == "parish":
             plus_font = _font(TYPE_CAPTION)
             excl_font = _font(TYPE_BODY)
             for pid, prov in game.atlas.provinces.items():
                 c = transform.apply(prov.center)
                 # city sized by population
-                pygame.draw.circle(surface, NAME_COLOR, c,
+                pygame.draw.circle(surface, NAME_DC, c,
                                    max(2, min(9, prov.population // 40)))
                 # regiments where armies stand
                 if prov.garrison > 0:
@@ -597,7 +602,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                     if accent_log is not None:
                         accent_log.append(("vermillion", False))
                     blit_text(surface, excl_font, "!", (c[0] - 5, c[1] - 14),
-                              FRONT_COLOR)
+                              FRONT_DC)
 
         # rail links as gold dashes between province centres
         # Accent law: gold marks are the player's only. A railway is a
@@ -615,7 +620,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                              and pa == player_house and pb == player_house)
                 if is_player:
                     accent_log.append(("gold", True))
-                _dashed_line(surface, RAIL_COLOR if is_player else NEUTRAL_RAIL,
+                _dashed_line(surface, RAIL_DC if is_player else NEUTRAL_RAIL,
                              transform.apply(ca),
                              transform.apply(cb))
 
@@ -635,7 +640,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
                 for (ap, dp) in segments:
                     ca = game.atlas.provinces[ap].center
                     cd = game.atlas.provinces[dp].center
-                    pygame.draw.line(surface, FRONT_COLOR,
+                    pygame.draw.line(surface, FRONT_DC,
                                      transform.apply(ca),
                                      transform.apply(cd), 3)
 
@@ -651,7 +656,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
         plate.set_alpha(200)
         plate.fill(PANEL_BG)
         surface.blit(plate, cap_rect.topleft)
-        blit_text(surface, cap_font, cap_txt, cap_rect.midtop, NAME_COLOR)
+        blit_text(surface, cap_font, cap_txt, cap_rect.midtop, NAME_DC)
 
         # province labels: the region (today) and parish tiers keep them;
         # the continent tier is houses + capitals only.
@@ -660,7 +665,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
             font = _font(TYPE_CAPTION)
             for pid, lr in labels:
                 prov = game.atlas.provinces[pid]
-                blit_text(surface, font, prov.name, lr.topleft, NAME_COLOR)
+                blit_text(surface, font, prov.name, lr.topleft, NAME_DC)
 
         # endowment glyphs (the region tier's selected-province furniture)
         if tier == "region" and selected_pid is not None:
@@ -670,7 +675,7 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
             ends = sorted(game.atlas.provinces[selected_pid].endowments.keys())
             for end, gr in zip(ends, rects):
                 char = _ENDOWMENT_GLYPH.get(end, "?")
-                blit_text(surface, glyph_font, char, gr.topleft, GLYPH_COLOR)
+                blit_text(surface, glyph_font, char, gr.topleft, GLYPH_DC)
 
         # legend
         _draw_legend(surface, game, rect, tier=tier)

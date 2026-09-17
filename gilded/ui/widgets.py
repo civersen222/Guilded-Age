@@ -66,6 +66,10 @@ NAME_COLOR = (232, 226, 210)
 GLYPH_COLOR = (250, 240, 200)
 RAIL_COLOR = (198, 164, 84)
 SELECT_COLOR = (245, 245, 235)
+MASK_CLEAR = (0, 0, 0, 0)
+MASK_FULL = (255, 255, 255, 255)
+MASK_WHITE = (255, 255, 255)
+MASK_BLACK = (0, 0, 0)
 
 # ────────────────────────────────────────────────────────────────────────────
 # Typographic constants (Wave 5)

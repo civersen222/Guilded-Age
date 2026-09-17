@@ -35,7 +35,7 @@ from gilded.ui.transitions import frames as transition_frames
 from gilded.ui.widgets import (
     Region, RegionSet, RegionState,
     blit_text, font as _font, TYPE_TITLE, TYPE_TEXT,
-    PAPER_BG, INK, FADED,
+    PAPER_BG, INK, FADED, MASK_BLACK,
 )
 from gilded.settings import Settings, load_settings, save_settings
 from gilded import audio
@@ -519,7 +519,7 @@ def step_once(state: AppState) -> bool:
                     steps = int(state.view.last_transition.get("steps", 6))
                     src = state.screen.copy()
                     tmp = pygame.Surface(state.screen.get_size())
-                    tmp.fill((0, 0, 0))
+                    tmp.fill(MASK_BLACK)
                     state.view.draw(tmp)
                     state._pending_frames = transition_frames(src, tmp, steps)
                     state._transition_index = 0
