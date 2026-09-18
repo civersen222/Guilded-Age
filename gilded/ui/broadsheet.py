@@ -2049,10 +2049,19 @@ class BroadsheetView:
         # Below the tier legend (top-left) — the legend's own width bounds the
         # strip's start, so it never sits on a province centroid or the right-
         # column action buttons.
+        # Fixed, tier-independent anchor: the strip must sit in the same
+        # place on every redraw (legends differ in row count per tier), so
+        # a centre press from an earlier draw still lands after a redraw.
+        # A constant height below the legend's max possible bottom keeps it
+        # inside the content band (y >= 160 at 1280x900).
+        from gilded.ui.atlas_view import ATLAS_TIERS as _tiers
         from gilded.ui.atlas_view import legend_rect_for
-        lg = legend_rect_for(self.game, rect, self.atlas_tier)
-        x0 = lg.left
-        y0 = max(rect.top + 4, lg.bottom + 6)
+        worst_bottom = 0
+        for _t in _tiers:
+            worst_bottom = max(worst_bottom,
+                               legend_rect_for(self.game, rect, _t).bottom)
+        x0 = 4
+        y0 = rect.top + 4 + (worst_bottom - (rect.top + 4)) + 6
         for i, tier in enumerate(ATLAS_TIERS):
             r = pygame.Rect(x0 + i * (w + gap), y0, w, h)
             on = (self.atlas_tier == tier)
