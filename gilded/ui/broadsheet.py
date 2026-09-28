@@ -1338,19 +1338,20 @@ class BroadsheetView:
                        rect.centery - font.size(btn_label)[1] // 2),
                       DISABLED_TEXT if disabled else TAB_TEXT)
             save_x += bwidth + 8
-        # C9.3: the door to the slot screen, in play
-        bwidth = font.size("Saves")[0] + 20
-        rect = pygame.Rect(save_x, y + 10, bwidth, BOTTOM_H - 20)
-        self.regions.add(Region(
-            rect=rect,
-            action={"menu": "saves"},
-            hint="Choose a slot to keep a century in, or take one out.",
-            group="chrome"))
-        pygame.draw.rect(surface, EXEC_BG, rect)
-        blit_text(surface, font, "Saves",
-                  (rect.centerx - font.size("Saves")[0] // 2,
-                   rect.centery - font.size("Saves")[1] // 2),
-                  TAB_TEXT)
+        # C9.3: the door to the slot screen, in play (once the century has moved)
+        if self.game.turn >= 3:
+            bwidth = font.size("Saves")[0] + 20
+            rect = pygame.Rect(save_x, y + 10, bwidth, BOTTOM_H - 20)
+            self.regions.add(Region(
+                rect=rect,
+                action={"menu": "saves"},
+                hint="Choose a slot to keep a century in, or take one out.",
+                group="chrome"))
+            pygame.draw.rect(surface, EXEC_BG, rect)
+            blit_text(surface, font, "Saves",
+                      (rect.centerx - font.size("Saves")[0] // 2,
+                       rect.centery - font.size("Saves")[1] // 2),
+                      TAB_TEXT)
         narrate_label = f"Narrate: {'on' if self.narrate_on else 'off'}"
         nlabel_w, nlabel_h = font.size(narrate_label)
         nrect = pygame.Rect(self._w - 170 - nlabel_w - 36,
