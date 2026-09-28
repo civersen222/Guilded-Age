@@ -15,6 +15,8 @@ import pygame
 
 from gilded import settings as gsettings
 from gilded import save as gsave
+from gilded.chassis import GildedGame
+from gilded.ui import widgets
 from gilded.ui.app import new_app_state, step_once, _apply_action
 
 
@@ -293,6 +295,91 @@ def test_c92c_rebind_persists(tmp_path, monkeypatch):
     assert os.path.isfile(s4.save_path)
     with open(s4.save_path, "rb") as f:
         assert f.read(11) == b"GILDEDSAVE "
+
+
+# ── C9.3 — saves screen: slots that save and load the WHOLE game ─────────────
+
+
+def _saves_opener(s):
+    for r in _regions(s):
+        a = r.action
+        if a.get("saves") is not None or "saves" in a.values():
+            return r
+    raise AssertionError("no drawn region opens the saves screen")
+
+
+def _slot_regions(s):
+    """Drawn regions carrying a slot id: {"load_slot": id} / {"save_slot": id},
+    or {<any key>: "load_slot" | "save_slot", "slot": id}."""
+    out = []
+    for r in _regions(s):
+        a = r.action
+        sid = a.get("slot")
+        if sid is None:
+            continue
+        kind = (a.get("load_slot") or a.get("save_slot")
+                or next((v for v in a.values()
+                         if v in ("load_slot", "save_slot")), None))
+        if kind is not None:
+            out.append((kind, sid, r))
+    return out
+
+
+def test_c93a_saves_screen(tmp_path, monkeypatch):
+    _clean(tmp_path, monkeypatch)
+    s = new_app_state(seed=7, start="menu")
+    _press(s, _saves_opener(s))
+    s.view.draw(s.screen)
+    rows = widgets.take_text_rows()
+    slot_re = _slot_regions(s)
+    ids = {sid for _, sid, _ in slot_re}
+    assert len(ids) >= 2, f"need >= 2 slots, drew {ids!r}"
+    labels = {}
+    for kind, sid, r in slot_re:
+        hits = [t for rect, t in rows if rect.colliderect(r.rect)]
+        assert hits, f"slot {sid} has no label text"
+        labels.setdefault(sid, hits[0])
+    assert len(set(labels.values())) >= 2, labels
+
+
+def test_c93b_save_round_trips_state(tmp_path, monkeypatch):
+    _clean(tmp_path, monkeypatch)
+    svd = os.path.join(os.getcwd(), "saves")
+    if os.path.isdir(svd):
+        for f in os.listdir(svd):
+            if f.endswith(".gsave"):
+                os.remove(os.path.join(svd, f))
+    s = _relaunch(7, "game")
+    house = s.house
+    s.game.end_turn()
+    s.game.end_turn()
+    s.game.end_turn()
+    s.game.houses[house].treasury += 777.25
+    turn, treas = s.game.turn, round(s.game.houses[house].treasury, 4)
+    _press(s, _saves_opener(s))
+    kind, sid, r = next(x for x in _slot_regions(s)
+                        if x[0] == "save_slot")
+    _press(s, r)
+    files = [os.path.join(svd, f) for f in os.listdir(svd)
+             if f.endswith(".gsave")]
+    files = [f for f in files
+             if open(f, "rb").read(11) == b"GILDEDSAVE "]
+    assert files, "no slot file under <cwd>/saves/"
+    g = gsave.load_game(files[0])
+    assert isinstance(g, GildedGame)
+    assert (g.turn, round(g.houses[house].treasury, 4)) == (turn, treas)
+
+    s2 = _relaunch(7, "menu")
+    _press(s2, _saves_opener(s2))
+    load_r = next(r for kind, sid2, r in _slot_regions(s2)
+                  if kind == "load_slot" and sid2 == sid)
+    _press(s2, load_r)
+    assert s2.game is not None
+    assert (s2.game.turn, round(s2.game.houses[house].treasury, 4)) \
+        == (turn, treas)
+    s3 = _relaunch(7, "game")
+    assert (s3.game.turn, round(s3.game.houses[house].treasury, 4)) \
+        != (turn, treas)
 
 
 # ── C9.5 — packaging ──────────────────────────────────────────────────────────

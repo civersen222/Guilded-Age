@@ -23,8 +23,7 @@ import os
 import pygame
 
 from gilded.save import save_game, load_game
-from gilded.ui.palette import INK, INK2, FADED, PAPER_BG
-from gilded.ui.widgets import Region, RegionState, _text_rows
+from gilded.ui.widgets import INK, FADED, PAPER_BG, Region, RegionState, _text_rows
 
 SLOT_COUNT = 4
 SLOTS_DIR = "saves"
@@ -127,7 +126,7 @@ def draw_saves_screen(view, surface: pygame.Surface, game=None) -> None:
 def _draw_slot_button(view, surface, font, rect: pygame.Rect, label: str,
                       state: RegionState, reason: str) -> None:
     from gilded.ui.widgets import blit_text
-    from gilded.ui.palette import INK, FADED
+    from gilded.ui.widgets import INK, FADED
     enabled = state is RegionState.ENABLED
     pygame.draw.rect(surface, PAPER_BG, rect, border_radius=4)
     pygame.draw.rect(surface, INK if enabled else FADED, rect, width=1,
