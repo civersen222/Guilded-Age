@@ -882,6 +882,7 @@ class BroadsheetView:
     def __init__(self, game, house_name: str, narrator=None):
         self.game = game
         self.house = house_name
+        self.showing_saves = False
         # the narrator rewrites the Gazette's prose only; templated is identity.
         self.narrator = narrator if narrator is not None else NarratorTemplated()
         self.narrate_on = True
@@ -986,6 +987,10 @@ class BroadsheetView:
     def draw(self, surface) -> None:
         self._w, self._h = surface.get_size()
         self.regions.clear()
+        if self.showing_saves:
+            from gilded.ui.saves_view import draw_saves_screen
+            draw_saves_screen(self, surface, self.game)
+            return
         self._option_hits = []
         self._exec_hits = []
         self._dial_hits = []
@@ -1333,6 +1338,19 @@ class BroadsheetView:
                        rect.centery - font.size(btn_label)[1] // 2),
                       DISABLED_TEXT if disabled else TAB_TEXT)
             save_x += bwidth + 8
+        # C9.3: the door to the slot screen, in play
+        bwidth = font.size("Saves")[0] + 20
+        rect = pygame.Rect(save_x, y + 10, bwidth, BOTTOM_H - 20)
+        self.regions.add(Region(
+            rect=rect,
+            action={"menu": "saves"},
+            hint="Choose a slot to keep a century in, or take one out.",
+            group="chrome"))
+        pygame.draw.rect(surface, EXEC_BG, rect)
+        blit_text(surface, font, "Saves",
+                  (rect.centerx - font.size("Saves")[0] // 2,
+                   rect.centery - font.size("Saves")[1] // 2),
+                  TAB_TEXT)
         narrate_label = f"Narrate: {'on' if self.narrate_on else 'off'}"
         nlabel_w, nlabel_h = font.size(narrate_label)
         nrect = pygame.Rect(self._w - 170 - nlabel_w - 36,

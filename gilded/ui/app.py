@@ -58,6 +58,7 @@ class MenuView:
         self._menu_rects: dict[str, pygame.Rect] = {}
         self._settings_rects: dict[str, pygame.Rect] = {}
         self.showing_settings = False
+        self.showing_saves = False
         self.message = ""
         self._rebinding = None
         self._w, self._h = screen.get_size()
@@ -68,6 +69,11 @@ class MenuView:
         surface.fill(PAPER_BG)
         self.regions.clear()
         w, h = self._w, self._h
+
+        if self.showing_saves:
+            from gilded.ui.saves_view import draw_saves_screen
+            draw_saves_screen(self, surface, getattr(self, "game", None))
+            return
 
         # Title
         title_font = _font(TYPE_TITLE, bold=True)
@@ -103,6 +109,7 @@ class MenuView:
         buttons = [
             ("new_game", "New Game", True, ""),
             ("continue", "Continue", has_save, "No save found in current directory" if not has_save else ""),
+            ("saves", "Saves", True, ""),
             ("settings", "Settings", True, ""),
             ("quit", "Quit", True, ""),
         ]
@@ -442,6 +449,19 @@ def _apply_menu_action(state: AppState, action: dict) -> None:
     elif menu_key == "settings":
         if hasattr(state.view, 'showing_settings'):
             state.view.showing_settings = True
+    elif menu_key == "saves":
+        state.view.showing_saves = True
+    elif menu_key == "back":
+        if hasattr(state.view, "showing_saves"):
+            state.view.showing_saves = False
+        if hasattr(state.view, "showing_settings"):
+            state.view.showing_settings = False
+    elif menu_key == "save_slot":
+        from gilded.ui.saves_view import _do_save_slot
+        _do_save_slot(state, action["slot"])
+    elif menu_key == "load_slot":
+        from gilded.ui.saves_view import _do_load_slot
+        _do_load_slot(state, action["slot"])
     elif menu_key == "quit":
         pass  # handled by the caller
 
