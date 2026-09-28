@@ -160,6 +160,7 @@ class MenuView:
         settings_buttons = [
             ("mute", f"Mute: {'ON' if s.mute else 'OFF'}"),
             ("narrate", f"Narrate: {'ON' if s.narrate else 'OFF'}"),
+            ("resolution", f"Resolution: {s.window_size[0]}x{s.window_size[1]}"),
             ("back", "Back"),
         ]
 
@@ -210,6 +211,7 @@ class AppState:
     save_path: str
     narrator: object
     settings: Settings = None
+    target_fps: int = FPS
     seed: int = 0
     start: str = "game"
     _beats_seen: int = 0
@@ -233,6 +235,7 @@ def _build_menu_state(screen: pygame.Surface, seed: int, settings: Settings) -> 
         save_path=quicksave_path(),
         narrator=None,
         settings=settings,
+        target_fps=settings.target_fps if isinstance(settings.target_fps, int) else FPS,
         seed=seed,
         start="menu",
     )
@@ -256,6 +259,7 @@ def _boot_play(state: AppState, player_house: Optional[str] = None) -> AppState:
         save_path=state.save_path,
         narrator=narrator,
         settings=state.settings,
+        target_fps=state.target_fps,
         seed=state.seed,
         start="game",
     )
@@ -296,6 +300,7 @@ def new_app_state(seed: int, player_house: Optional[str] = None,
         save_path=save_path,
         narrator=narrator,
         settings=settings,
+        target_fps=settings.target_fps or FPS,
         seed=seed,
         start="game",
     )
@@ -452,6 +457,10 @@ def _apply_setting_action(state: AppState, action: dict) -> None:
     s = state.settings
     if s is None:
         s = state.settings = Settings()
+    if key == "resolution":
+        _cycle_resolution(state)
+        save_settings(s)
+        return
     if key == "mute":
         s.mute = not s.mute
         audio.play("ui_press", s)
@@ -469,6 +478,23 @@ def _quicksave(state: AppState) -> str:
     return state.save_path
 
 
+def _cycle_resolution(state: AppState) -> None:
+    """C9.1: move to the next resolution preset, resize the live window, persist."""
+    s = state.settings
+    presets = [(r[0], r[1]) for r in (s.resolutions or ())]
+    if not presets:
+        return
+    idx = presets.index(tuple(s.window_size)) if tuple(s.window_size) in presets else -1
+    s.window_size = presets[(idx + 1) % len(presets)]
+    screen = pygame.display.set_mode(s.window_size)
+    state.screen = screen
+    view = state.view
+    if hasattr(view, "screen"):
+        view.screen = screen
+    if hasattr(view, "_w"):
+        view._w, view._h = screen.get_size()
+
+
 def _report_frame_failure(state: AppState) -> None:
     """Print and reset after a draw failure; the loop must not die on a frame."""
     import traceback
@@ -481,6 +507,14 @@ def step_once(state: AppState) -> bool:
 
     Returns False when the app should quit.
     """
+    live = pygame.display.get_surface()
+    if live is not None and state.screen is not live:
+        # a fresh launch replaced the display; point the old state at it
+        state.screen = live
+        if hasattr(state.view, "screen"):
+            state.view.screen = live
+        if hasattr(state.view, "_w"):
+            state.view._w, state.view._h = live.get_size()
     if state.game is None:
         return _step_menu(state)
 
@@ -493,7 +527,7 @@ def step_once(state: AppState) -> bool:
                 state._pending_frames = None
                 state._transition_index = 0
         pygame.display.flip()
-        state.clock.tick(FPS)
+        state.clock.tick(state.target_fps)
         return True
 
     running = True
@@ -535,7 +569,7 @@ def step_once(state: AppState) -> bool:
     _play_game_audio(state)
     state.view.draw(state.screen)
     pygame.display.flip()
-    state.clock.tick(FPS)
+    state.clock.tick(state.target_fps)
     return True
 
 
@@ -556,7 +590,7 @@ def _step_menu(state: AppState) -> bool:
                     return False
     state.view.draw(state.screen)
     pygame.display.flip()
-    state.clock.tick(FPS)
+    state.clock.tick(state.target_fps)
     return True
 
 

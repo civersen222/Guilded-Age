@@ -21,6 +21,10 @@ class Settings:
     narrate: bool = True
     volume: float = 0.7
     mute: bool = False
+    # C9.1: the resolution presets the Settings screen cycles through.
+    resolutions: tuple = ((1280, 900), (1024, 768), (800, 600), (1440, 900))
+    # C9.4: the frame clock's target.
+    target_fps: int = 60
 
 
 def settings_path(path=None) -> str:
@@ -47,6 +51,20 @@ def load_settings(path=None) -> Settings:
                 s.window_size = (int(ws[0]), int(ws[1]))
             except (TypeError, ValueError):
                 pass
+        fps = data.get("target_fps")
+        if isinstance(fps, int) and not isinstance(fps, bool) and fps > 0:
+            s.target_fps = fps
+        res = data.get("resolutions")
+        if isinstance(res, (list, tuple)) and len(res) >= 2:
+            pairs = []
+            for r in res:
+                if isinstance(r, (list, tuple)) and len(r) == 2:
+                    try:
+                        pairs.append((int(r[0]), int(r[1])))
+                    except (TypeError, ValueError):
+                        continue
+            if pairs:
+                s.resolutions = tuple(pairs)
         if isinstance(data.get("narrate"), bool):
             s.narrate = data["narrate"]
         if isinstance(data.get("volume"), (int, float)):
@@ -61,6 +79,7 @@ def save_settings(settings: Settings, path=None) -> str:
     p = settings_path(path)
     d = asdict(settings)
     d["window_size"] = list(settings.window_size)
+    d["resolutions"] = [list(r) for r in settings.resolutions]
     with open(p, "w", encoding="utf-8") as f:
         json.dump(d, f, indent=2)
     return p
