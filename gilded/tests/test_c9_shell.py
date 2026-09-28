@@ -39,6 +39,7 @@ def _press(s, region):
     action = s.view.handle_click(region.rect.center)
     assert action is not None, f"press refused: {getattr(region, 'reason', None)!r}"
     _apply_action(s, action)
+    return action
 
 
 def _res_regions(s):
@@ -186,3 +187,109 @@ def test_c9_4b_fps_follows_settings(tmp_path, monkeypatch):
     for _ in range(3):
         step_once(s3)
     assert all(a == third for a in s3.clock.args)
+
+
+# ---------------------------------------------------------------------------
+# C9.2 keybinds: a table in the settings file, a rebind on the Settings
+# screen, a loop that obeys it.
+# ---------------------------------------------------------------------------
+
+def _post_keydown(s, key_name):
+    code = pygame.key.key_code(key_name)
+    assert code is not None, f"key name {key_name!r} does not resolve"
+    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=code))
+    step_once(s)
+    pygame.event.clear()
+
+
+def _rebind_save_region(s):
+    """The Settings-screen region that rebinds the 'save' action."""
+    for r in _regions(s):
+        a = r.action
+        if a.get("bind") == "save" or a.get("rebind") == "save":
+            return r
+    raise AssertionError("no drawn region rebinds 'save'")
+
+
+def test_c92a_keybinds_table(tmp_path, monkeypatch):
+    _clean(tmp_path, monkeypatch)
+    s = _relaunch(7, "menu")
+    kb = s.settings.keybinds
+    assert isinstance(kb, dict)
+    assert len(kb) >= 4, kb
+    codes = set()
+    for action_name, key_name in kb.items():
+        code = pygame.key.key_code(key_name)
+        assert code is not None, f"{key_name!r} does not resolve to a keycode"
+        assert code not in codes, f"two actions share key {key_name!r}"
+        codes.add(code)
+    assert "save" in kb, kb
+
+
+def test_c92b_keybind_drives_game(tmp_path, monkeypatch):
+    _clean(tmp_path, monkeypatch)
+    s = _relaunch(7, "game")
+    assert s.game is not None
+    if os.path.isfile(s.save_path):
+        os.remove(s.save_path)
+    _post_keydown(s, s.settings.keybinds["save"])
+    assert os.path.isfile(s.save_path), "save keydown did not write the quicksave"
+    with open(s.save_path, "rb") as f:
+        assert f.read(11) == b"GILDEDSAVE "
+
+
+def test_c92c_rebind_persists(tmp_path, monkeypatch):
+    _clean(tmp_path, monkeypatch)
+    s = _relaunch(7, "menu")
+    _press(s, next(r for r in _regions(s)
+                   if r.action == {"menu": "settings"}))
+    row = _press(s, _rebind_save_region(s))
+    assert row == {"setting": "rebind", "bind": "save"}, row
+    old_key = s.settings.keybinds["save"]
+    new_key = next(k for k in ("f9", "f10", "f11", "f12", "f8", "f7", "f6")
+                   if k not in s.settings.keybinds.values())
+    _post_keydown(s, new_key)
+    assert s.settings.keybinds["save"] == new_key
+    with open(gsettings.settings_path(), "r", encoding="utf-8") as f:
+        data = json.load(f)
+    assert pygame.key.key_code(data["keybinds"]["save"]) == pygame.key.key_code(new_key)
+    assert "window_size" in data, "rebind stripped the other settings"
+    bytes_ = open(gsettings.settings_path(), "rb").read()
+
+    # fresh launch, file deleted: back on the old key (file is the source)
+    os.remove(gsettings.settings_path())
+    s2 = _relaunch(7, "menu")
+    assert s2.settings.keybinds["save"] == old_key
+    if os.path.isfile(s2.save_path):
+        os.remove(s2.save_path)
+    _post_keydown(s2, new_key)
+    assert not os.path.isfile(s2.save_path), "new key fired on a fresh default launch"
+
+    # file written back: the new key is obeyed in a fresh game
+    open(gsettings.settings_path(), "wb").write(bytes_)
+    s3 = _relaunch(7, "game")
+    assert s3.settings.keybinds["save"] == new_key
+    if os.path.isfile(s3.save_path):
+        os.remove(s3.save_path)
+    _post_keydown(s3, new_key)
+    assert os.path.isfile(s3.save_path)
+    os.remove(s3.save_path)
+    _post_keydown(s3, old_key)
+    assert not os.path.isfile(s3.save_path), "old key must not fire once rebound"
+
+    # gate-written JSON with a third key the game never captured
+    with open(gsettings.settings_path(), "r", encoding="utf-8") as f:
+        data = json.load(f)
+    third = next(k for k in ("f9", "f10", "f11", "f12", "f8", "f7", "f6")
+                 if k not in data["keybinds"].values())
+    data["keybinds"]["save"] = third
+    with open(gsettings.settings_path(), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    s4 = _relaunch(7, "game")
+    assert s4.settings.keybinds["save"] == third
+    if os.path.isfile(s4.save_path):
+        os.remove(s4.save_path)
+    _post_keydown(s4, third)
+    assert os.path.isfile(s4.save_path)
+    with open(s4.save_path, "rb") as f:
+        assert f.read(11) == b"GILDEDSAVE "

@@ -25,6 +25,13 @@ class Settings:
     resolutions: tuple = ((1280, 900), (1024, 768), (800, 600), (1440, 900))
     # C9.4: the frame clock's target.
     target_fps: int = 60
+    # C9.2: action -> pygame key name. save defaults to f5 (today's behaviour).
+    keybinds: dict = None
+
+    def __post_init__(self):
+        if self.keybinds is None:
+            self.keybinds = {"save": "f5", "load": "f9",
+                             "end_turn": "f8", "quit": "f7"}
 
 
 def settings_path(path=None) -> str:
@@ -54,6 +61,11 @@ def load_settings(path=None) -> Settings:
         fps = data.get("target_fps")
         if isinstance(fps, int) and not isinstance(fps, bool) and fps > 0:
             s.target_fps = fps
+        kb = data.get("keybinds")
+        if isinstance(kb, dict):
+            binds = {str(k): str(v) for k, v in kb.items()}
+            if binds:
+                s.keybinds = binds
         res = data.get("resolutions")
         if isinstance(res, (list, tuple)) and len(res) >= 2:
             pairs = []
@@ -80,6 +92,7 @@ def save_settings(settings: Settings, path=None) -> str:
     d = asdict(settings)
     d["window_size"] = list(settings.window_size)
     d["resolutions"] = [list(r) for r in settings.resolutions]
+    d["keybinds"] = dict(settings.keybinds or {})
     with open(p, "w", encoding="utf-8") as f:
         json.dump(d, f, indent=2)
     return p

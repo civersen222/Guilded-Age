@@ -59,6 +59,7 @@ class MenuView:
         self._settings_rects: dict[str, pygame.Rect] = {}
         self.showing_settings = False
         self.message = ""
+        self._rebinding = None
         self._w, self._h = screen.get_size()
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -161,13 +162,21 @@ class MenuView:
             ("mute", f"Mute: {'ON' if s.mute else 'OFF'}"),
             ("narrate", f"Narrate: {'ON' if s.narrate else 'OFF'}"),
             ("resolution", f"Resolution: {s.window_size[0]}x{s.window_size[1]}"),
-            ("back", "Back"),
         ]
+        # C9.2: one rebind row per keybound action
+        for action_name, key_name in sorted((s.keybinds or {}).items()):
+            settings_buttons.append(
+                ("rebind", f"{action_name} key: {key_name}  (press the row, then a new key)"))
+            settings_buttons[-1] = (("rebind", action_name), settings_buttons[-1][1])
+        settings_buttons.append(("back", "Back"))
 
         for i, (key, label) in enumerate(settings_buttons):
             y = start_y + i * gap
             rect = pygame.Rect(cx, y, btn_w, btn_h)
-            action = {"setting": key}
+            if isinstance(key, tuple) and key[0] == "rebind":
+                action = {"setting": "rebind", "bind": key[1]}
+            else:
+                action = {"setting": key}
             pygame.draw.rect(surface, PAPER_BG, rect, border_radius=4)
             pygame.draw.rect(surface, INK, rect, width=1, border_radius=4)
             img = btn_font.render(label, True, INK)
@@ -461,6 +470,12 @@ def _apply_setting_action(state: AppState, action: dict) -> None:
         _cycle_resolution(state)
         save_settings(s)
         return
+    if key == "rebind":
+        # C9.2: arm a capture; the next KEYDOWN step_once sees rebinds this action.
+        view = state.view
+        if hasattr(view, "_rebinding"):
+            view._rebinding = action.get("bind")
+        return
     if key == "mute":
         s.mute = not s.mute
         audio.play("ui_press", s)
@@ -476,6 +491,58 @@ def _apply_setting_action(state: AppState, action: dict) -> None:
 def _quicksave(state: AppState) -> str:
     save_game(state.game, state.save_path)
     return state.save_path
+
+
+def _keybind_map(state: AppState) -> dict:
+    """C9.2: keycode -> action name, from the settings table."""
+    m = {}
+    s = state.settings
+    for action_name, key_name in (s.keybinds or {}).items():
+        try:
+            code = pygame.key.key_code(key_name)
+        except (AttributeError, KeyError, ValueError):
+            continue
+        if code is not None:
+            m[code] = action_name
+    return m
+
+
+def _keybind_dispatch(state: AppState, event) -> bool:
+    """C9.2: route a KEYDOWN through the settings keybind table.
+    Returns True when the frame should end (quit)."""
+    code = event.key
+    view = state.view
+    # C9.2c: an armed capture turns the next KEYDOWN into a new binding.
+    if getattr(view, "_rebinding", None):
+        action_name = view._rebinding
+        view._rebinding = None
+        key_name = pygame.key.name(code)
+        s = state.settings
+        if s is None:
+            s = state.settings = Settings()
+        s.keybinds[action_name] = key_name
+        save_settings(s)
+        return False
+    s = state.settings
+    if s is None:
+        return False
+    action_name = _keybind_map(state).get(code)
+    if action_name is None:
+        return False
+    if action_name == "save":
+        if state.game is not None:
+            _quicksave(state)
+    elif action_name == "load":
+        if state.game is not None and os.path.isfile(state.save_path):
+            state.game = load_game(state.save_path)
+            if hasattr(state.view, "game"):
+                state.view.game = state.game
+    elif action_name == "end_turn":
+        if state.game is not None:
+            state.game.end_turn()
+    elif action_name == "quit":
+        return True
+    return False
 
 
 def _cycle_resolution(state: AppState) -> None:
@@ -537,8 +604,8 @@ def step_once(state: AppState) -> bool:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 return False
-            elif event.key == pygame.K_F5:
-                _quicksave(state)
+            elif _keybind_dispatch(state, event):
+                return False
         if event.type == pygame.MOUSEMOTION:
             state.view.handle_hover(event.pos)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -581,6 +648,8 @@ def _step_menu(state: AppState) -> bool:
             return False
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
+                return False
+            elif _keybind_dispatch(state, event):
                 return False
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             action = state.view.handle_click(event.pos)
