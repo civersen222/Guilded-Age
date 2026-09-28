@@ -293,3 +293,131 @@ def test_c92c_rebind_persists(tmp_path, monkeypatch):
     assert os.path.isfile(s4.save_path)
     with open(s4.save_path, "rb") as f:
         assert f.read(11) == b"GILDEDSAVE "
+
+
+# ── C9.5 — packaging ──────────────────────────────────────────────────────────
+
+import re
+import shutil
+import subprocess
+import sys
+import tomllib
+import zipfile
+
+_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def test_c9_5a_packaging_declares():
+    with open(os.path.join(_REPO, "pyproject.toml"), "rb") as f:
+        doc = tomllib.load(f)
+    bs = doc["build-system"]
+    assert bs.get("requires"), "build-system requires must be non-empty"
+    assert bs["build-backend"] == "setuptools.build_meta"
+    proj = doc["project"]
+    assert "gild" in proj["name"]
+    assert proj.get("version")
+    entries = sorted(proj["scripts"].items())
+    script, target = entries[0]
+    module, _, callable_ = target.partition(":")
+    assert callable_
+    assert module == "gilded" or module.startswith("gilded.")
+    find = doc["tool"]["setuptools"]["packages"]["find"]
+    assert "gilded*" in find.get("include", [])
+
+
+def test_c9_5b_packaging_launches(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CIVKINGS_HEADLESS_FRAMES", "3")
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    import gilded.ui.app as app
+    import gilded.__main__ as gmain
+    captured = {}
+    real_step = app.step_once
+
+    def spy(state):
+        running = real_step(state)
+        if len(captured) < 3:
+            size = pygame.display.get_surface().get_size()
+            keys = [r.action for r in state.view.regions._regions
+                    if isinstance(r.action, dict)]
+            captured[len(captured)] = (
+            size, bytes(state.screen.convert().get_buffer()), keys)
+        return running
+
+    monkeypatch.setattr(app, "step_once", spy)
+    sys.argv = ["gilded"]
+    result = gmain.main([])
+    assert result in (0, None)
+    assert len(captured) >= 1, "the launcher never flipped the display"
+    size, last, keys = captured[len(captured) - 1]
+    data = last
+    n = len(data)
+    assert n
+    top = max(set(data), key=data.count)
+    assert data.count(top) / n < 0.995, "the last frame is blank"
+    first_keys = captured[0][2]
+    assert {"menu": "new_game"} in first_keys, "the menu was never drawn"
+    # run_app quit pygame; re-open the display, re-init the font
+    # module, and drop the cached Font objects (invalid after quit)
+    # so later tests in the session can still draw and render.
+    from gilded.ui import widgets as _w
+    _w._font_cache.clear()
+    pygame.font.init()
+    pygame.display.set_mode((1280, 900))
+
+
+def test_c9_5c_packaging_builds(tmp_path):
+    """Build the wheel from a COPY of the repo (never inside it)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for name in os.listdir(_REPO):
+        if name in {"__pycache__", "build", "dist", "saves", "salvage",
+                "docs", "legacy"}:
+            continue
+        if name.startswith("."):
+            continue
+        if name.endswith(".egg-info"):
+            continue
+        if name.startswith((".venv", "venv", "node_modules", ".claude",
+                            ".cursor", ".vscode", ".idea")):
+            continue
+        src = os.path.join(_REPO, name)
+        if name == "gilded" and os.path.isdir(src):
+            dst = repo / name
+            for root, dirs, files in os.walk(src):
+                dirs[:] = [d for d in dirs if d != "__pycache__"
+                           and not d.endswith(".egg-info")]
+                for fn in files:
+                    if fn.endswith(".gsave"):
+                        continue
+                    rel = os.path.relpath(os.path.join(root, fn), src)
+                    target = dst / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(os.path.join(root, fn), target)
+        else:
+            shutil.copy2(src, repo / name)
+    outdir = tmp_path / "wheelout"
+    outdir.mkdir()
+    env = dict(os.environ)
+    env.update(
+        SDL_VIDEODRIVER="dummy",
+        SDL_AUDIODRIVER="dummy",
+        PYTHONIOENCODING="utf-8",
+    )
+    script = "import setuptools.build_meta as b; b.build_wheel(r'%s')" % outdir
+    proc = subprocess.run([sys.executable, "-c", script], cwd=repo,
+                          env=env, capture_output=True, text=True,
+                          timeout=600)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    wheels = list(outdir.glob("*.whl"))
+    assert wheels, "no wheel came out of the build"
+    z = zipfile.ZipFile(wheels[0])
+    names = z.namelist()
+    assert "gilded/__main__.py" in names
+    assert "gilded/ui/app.py" in names
+    ep = z.read([n for n in names if n.endswith("entry_points.txt")][0]).decode()
+    assert "gilded = gilded.__main__:main" in ep
+    assets = [n for n in names if n.startswith("gilded/assets/")]
+    assert len(assets) >= 50, f"only {len(assets)} assets in the wheel"
+    assert not any(n == "legacy" or n.startswith("legacy/") for n in names)

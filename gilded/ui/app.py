@@ -685,9 +685,18 @@ def _step_menu(state: AppState) -> bool:
 
 def run_app(seed: int, player_house: Optional[str] = None,
             start: str = "menu") -> None:
-    """Open the window and play the century until the age closes or you quit."""
+    """Open the window and play the century until the age closes or you quit.
+
+    With CIVKINGS_HEADLESS_FRAMES=N the loop runs exactly N frames and
+    returns on its own (a headless launcher seam)."""
     state = new_app_state(seed, player_house, start=start)
+    headless_frames = os.environ.get("CIVKINGS_HEADLESS_FRAMES")
+    frames_left = int(headless_frames) if headless_frames else None
     running = True
     while running:
+        if frames_left is not None:
+            frames_left -= 1
+            if frames_left <= 0:
+                break
         running = step_once(state)
     pygame.quit()
