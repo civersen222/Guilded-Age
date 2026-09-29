@@ -14,7 +14,6 @@ never stops the loop.
 
 import json
 import os
-import pickle
 import shlex
 import time
 import traceback
@@ -27,6 +26,7 @@ from gilded.docket import DOMAIN_SEAT, initiative as docket_initiative, rule as 
 from gilded.endings import judge
 from gilded.papers import compose, format_broadsheet
 from gilded.saga.narrator import select_narrator
+from gilded.save import SaveError, load_game, save_game
 from gilded.society.court import CourtPosition
 
 POLL_SECONDS = 0.05
@@ -265,25 +265,18 @@ class Console:
                 "text": ep.text}
 
     def cmd_save(self, name):
-        # The docket carries petition options as live closures, which do not
-        # pickle; drop it for the write and rebuild the morning's paper on load.
-        path = os.path.join(self.bridge_dir, f"{name}.pkl")
-        saved = self.game.docket_by_house
-        self.game.docket_by_house = {}
-        try:
-            with open(path, "wb") as f:
-                pickle.dump(self.game, f)
-        finally:
-            self.game.docket_by_house = saved
+        path = os.path.join(self.bridge_dir, f"{name}.gsave")
+        save_game(self.game, path)
         return {"ok": True, "path": path}
 
     def cmd_load(self, name):
-        path = os.path.join(self.bridge_dir, f"{name}.pkl")
-        with open(path, "rb") as f:
-            self.game = pickle.load(f)
+        path = os.path.join(self.bridge_dir, f"{name}.gsave")
+        try:
+            self.game = load_game(path)
+        except (SaveError, OSError) as e:
+            return {"ok": False, "error": f"the save could not be loaded: {e}"}
         if self.house not in self.game.houses:
             self.house = sorted(self.game.houses)[0]
-        self.game.open_turn()          # the paper the pickle could not carry
         return {"ok": True, "turn": self.game.turn, "house": self.house}
 
     def cmd_quit(self, *args):

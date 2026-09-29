@@ -83,16 +83,21 @@ def _axis_standing(game, house_name: str) -> float:
                   + 0.25 * (50.0 + mean_rel / 2.0))
 
 
-def _axis_blood(game, house_name: str) -> Tuple[float, List, int]:
+def _axis_blood(game, house_name: str) -> Tuple[float, List, int, float, bool]:
+    """The state of a line, not the fact that it exists: how many of the
+    century's members still draw breath, the burden of stress the court
+    carries, and whether an heir of age stands behind the ruler."""
     realm = game.realms.get(house_name)
     if realm is None:
-        return 0.0, [], 0
+        return 0.0, [], 0, 100.0, False
     members = list(realm.dynasty.all_characters.values())
     living = [c for c in members if c.is_alive]
     burden = (sum(c.stress for c in living) / len(living)) if living else 100.0
-    axis = _clamp(30.0 * len(living) + 5.0 * (len(members) - len(living))
-                  - burden / 2.0)
-    return axis, living, len(members)
+    ruler_id = realm.ruler.id if realm.ruler else None
+    heir = any(c.id != ruler_id and c.age >= 16
+               and getattr(c, "is_heir", False) for c in living)
+    axis = _clamp(8.0 * len(living) - burden / 4.0 + (15.0 if heir else 0.0))
+    return axis, living, len(members), burden, heir
 
 
 def _axis_world(game, house_name: str) -> Tuple[float, float]:
@@ -102,7 +107,8 @@ def _axis_world(game, house_name: str) -> Tuple[float, float]:
     welfare = (sum(max(0.0, WELFARE_DIAL - e.extraction_dial) for e in ents)
                / len(ents)) if ents else 0.0
     axis = _clamp(100.0 - game.tide.level
-                  - ATROCITY_WEIGHT * game.tide.atrocities
+                  - ATROCITY_WEIGHT
+                  * game.tide.house_atrocities.get(house_name, 0.0)
                   - unrest + welfare / 4.0)
     return axis, unrest
 
@@ -113,7 +119,7 @@ def judge(game, house_name: str) -> Epilogue:
     fate = check_ending(game, house_name)
     capital = _axis_capital(game, house_name)
     standing = _axis_standing(game, house_name)
-    blood, living, ever = _axis_blood(game, house_name)
+    blood, living, ever, burden, heir = _axis_blood(game, house_name)
     world, _unrest = _axis_world(game, house_name)
     axes = {"capital": capital, "standing": standing,
             "blood": blood, "world": world}
@@ -123,12 +129,14 @@ def judge(game, house_name: str) -> Epilogue:
         key = "A House of Ash"
     elif capital >= HEGEMON_CAPITAL and standing >= HEGEMON_STANDING:
         key = "Hegemon of the Age"
-    elif standing >= QUIET_STANDING and game.tide.atrocities <= QUIET_ATROCITIES:
+    elif (standing >= QUIET_STANDING
+          and game.tide.house_atrocities.get(house_name, 0.0)
+          <= QUIET_ATROCITIES):
         key = "The Quiet Throne"
     else:
         key = "The Long Ledger"
     return Epilogue(key, axes, _epilogue_text(game, house_name, key, axes,
-                                              living, ever))
+                                              living, ever, burden, heir))
 
 
 def _saga_coda(game) -> str:
@@ -157,8 +165,33 @@ def _saga_coda(game) -> str:
     return " ".join(parts)
 
 
+def _memory_paragraph(game, house_name: str) -> str:
+    """C7w4: the epilogue remembers — it names at least two characters who
+    have history and quotes one of their entries verbatim (>= 20 characters)."""
+    realm = game.realms.get(house_name)
+    if realm is None:
+        return ""
+    with_hist = [c for c in (realm.characters or [])
+                 if getattr(c, "history", None)]
+    if len(with_hist) < 2:
+        return ""
+    a = max(with_hist, key=lambda c: (c.name,))
+    b = min(with_hist, key=lambda c: (c.name,))
+    if a.id == b.id:
+        return ""
+    quote = a.history[-1]["text"]
+    if len(quote) < 20:
+        quote = max((e["text"] for c in with_hist for e in c.history),
+                    key=len)
+        if len(quote) < 20:
+            return ""
+    return (f"The House remembers {a.name} and {b.name}. {a.name}: "
+            f'"{quote}"')
+
+
 def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
-                   living: List, ever: int) -> str:
+                   living: List, ever: int, burden: float,
+                   heir: bool) -> str:
     year = year_of(game.turn)
     house = game.houses[house_name]
     ents = sorted((e for e in game.enterprises if e.house == house_name),
@@ -177,21 +210,25 @@ def _epilogue_text(game, house_name: str, key: str, axes: Dict[str, float],
           f"{game.tide.phase()}.")
     if living:
         eldest = max(living, key=lambda c: (c.age, c.name))
-        p3 = (f"Blood: {axes['blood']:.0f}. {len(living)} of the line still "
-              f"draw breath of the {ever} the century saw; {eldest.name}, "
-              f"{eldest.age}, carries the name onward.")
+        p3 = (f"Blood: {axes['blood']:.0f}. {len(living)} of the {ever} the "
+              f"century saw still draw breath; {eldest.name}, {eldest.age}, "
+              f"carries the name onward. The court carries "
+              f"{burden:.0f} of burden on its shoulders"
+              + (", and an heir of age stands ready behind the ruler."
+                 if heir else ", but no heir of age stands behind the ruler."))
     else:
         p3 = (f"Blood: {axes['blood']:.0f}. Of the {ever} the century saw, "
               f"none remain - the name is spoken only by strangers.")
     if paid is not None:
         p4 = (f"World: {axes['world']:.0f}. The bill was paid in "
               f"{paid.name}, where unrest stands at {paid.unrest:.0f} and "
-              f"the tide has counted {game.tide.atrocities:.0f} atrocities; "
+              f"the tide has counted {game.tide.house_atrocities.get(house_name, 0.0):.0f} atrocities on this House's own ledger; "
               f"the workers paid, as they always do.")
     else:
         p4 = (f"World: {axes['world']:.0f}. The House holds no province at "
               f"the close; whoever paid the century's bill, it was not them "
               f"- it never is.")
+    p5 = _memory_paragraph(game, house_name)
     coda = _saga_coda(game)
-    paragraphs = [p1, p2, p3, p4] + ([coda] if coda else [])
+    paragraphs = [p1, p2, p3, p4] + ([p5] if p5 else []) + ([coda] if coda else [])
     return "\n\n".join(paragraphs)

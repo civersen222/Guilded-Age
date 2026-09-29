@@ -39,13 +39,15 @@ def _buyout_price(ent, owner_id, game):
     return stake_cost(ent, pct, game)
 
 
+import os
+
 from gilded.papers import compose
 from gilded.saga.narrator import NarratorTemplated
 from gilded.ui.atlas_view import (
     OCEAN_COLOR, draw_atlas, pick_province, province_panel_lines)
 from gilded.ui.widgets import (
     CARD_BG, CARD_EDGE, FADED, INK, PAPER_BG,
-    Chip, Column, Meter, Table, TableLayout, font as _font, wrap as _wrap,
+    Chip, Column, Meter, Table, TableLayout, blit_text, font as _font, wrap as _wrap,
     column_plan, flow_columns, FlowResult,
     TYPE_CAPTION, TYPE_BODY, TYPE_TEXT, TYPE_SUBTITLE, TYPE_HEADING, TYPE_TITLE,
 )
@@ -59,6 +61,7 @@ from gilded.ui.ledger import (
 )
 from gilded.ui.figures import figure
 from gilded.ui.house_tab import draw_house_tab, _house_tab_lines
+from gilded.endings import judge as _judge_ending
 from gilded.ui.widgets import (
     INK, Region, RegionSet, RegionState,
     BLACK, PANEL_BG, TAB_BG, TAB_ACTIVE, TAB_TEXT, HUD_BG, HUD_INK,
@@ -67,9 +70,29 @@ from gilded.ui.widgets import (
     SKIM_HIGHLIGHT, PICKER_BACK_BG, PICKER_ROW_BG,
     DISABLED_FILL, DISABLED_EDGE, DISABLED_TEXT,
     PICKER_SUBTITLE, PICKER_ROW_ALT_BG, OFFERABLE_BG, OFFERABLE_EDGE,
+    GUIDE_BG, GUIDE_EDGE,
 )
 
-TABS = ("Briefing", "Gazette", "Ledger", "Letters", "Docket", "Policies", "Enterprises", "Atlas", "Powers", "House")
+TABS = ("House", "Powers", "Atlas")
+
+# spec §2 fate table — the dissolved 11-tab names still address their re-homed
+# content: (spine, House page or Powers page).  Assigning a dissolved name
+# to BroadsheetView.active_tab navigates to the home the content moved to.
+LEGACY_TABS = {
+    "Briefing": ("House", "Overview"),      # agenda card -> House ambition banner; alerts -> desk letters
+    "Gazette": ("Atlas", None),            # the End Turn beat over the map; archived at the desk
+    "Ledger": ("House", "Ledger"),
+    "Letters": ("Atlas", None),            # desk strip on the Atlas
+    "Docket": ("House", "Overview"),       # its decisions are the desk strip
+    "Policies": ("House", "Overview"),     # edicts signed from the Court in Session
+    "Enterprises": ("House", "Governance"),
+    "War": ("Atlas", None),                # wars are drawn on the map
+}
+
+# The paper sections of the Atlas desk/archive: the dissolved Gazette and
+# Letters tabs and the House Ledger page all render through _draw_paper, which
+# is addressed by these section keys — a separate axis from the spine.
+PAPER_SECTIONS = {"Gazette", "Ledger", "Letters"}
 
 TAB_H = 40
 BOTTOM_H = 56
@@ -77,6 +100,19 @@ BOTTOM_H = 56
 # Danger thresholds
 LEGIT_DANGER = 20.0
 TIDE_DANGER = 70.0
+
+# S17: the guide strip — a teaching statement and one next-step button drawn
+# on every frame so a stranger's first click has a target. (GUIDE_BG and
+# GUIDE_EDGE live in widgets.py with the rest of the palette.)
+def guide_statement() -> str:
+    """The opening guide text, built from the live TURN_BUDGET constant."""
+    from gilded.chassis import TURN_BUDGET
+    return (
+        f"Your aim this century: raise your house to victory. "
+        f"You win by keeping your capital and your standing high. "
+        f"Your gold lives in the treasury; spend your attention wisely. "
+        f"The century ends after {TURN_BUDGET} turns, or sooner in ruin — then the game ends."
+    )
 
 # HUD geometry: 3 rows (axes + legitimacy/tide, chips + texts, rival row always reserved)
 _HUD_ROWS = 3
@@ -198,7 +234,8 @@ def hud_model(board, d: Delta) -> HudModel:
         )
 
     # Texts
-    texts["era"] = f"{board.era_title} · {board.year} ({board.century_pct * 100:.0f}%)"
+    texts["era"] = f"{board.era_title} ·"
+    texts["era_sub"] = f" {board.year} ({board.century_pct * 100:.0f}%)"
     texts["rank"] = f"Rank #{board.rank}"
     # intent placeholder — filled by _draw_hud when game object is available
     texts["intent"] = ""
@@ -241,12 +278,10 @@ def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
     if "revolution" in model.chips:
         row3_keys.append("revolution")
     for key in row3_keys:
-        surf = fs.render(model.chips[key].text, True, INK)
-        w = surf.get_width() + 16
+        w = fs.size(model.chips[key].text)[0] + 16
         chip_specs.append((key, w))
-    surf_era = fs.render(model.texts["era"], True, INK)
-    era_w = surf_era.get_width() + 8
-    chip_specs.append(("era", era_w))
+    chip_specs.append(("era", fs.size(model.texts["era"])[0] + 8))
+    chip_specs.append(("era_sub", fs.size(model.texts["era_sub"])[0] + 4))
 
     n_items = len(chip_specs)
     total_gap = (n_items - 1) * 12
@@ -264,10 +299,8 @@ def hud_layout(model: HudModel, band: pygame.Rect) -> Dict[str, pygame.Rect]:
     y += row3_h + _ROW_GAP
 
     # --- Row 4: rival label + rank (both text, drawn in HUD_INK) ---
-    surf_rival = fs.render(model.texts["rival"], True, INK)
-    rival_w = surf_rival.get_width() + 8
-    surf_rank = fs.render(model.texts["rank"], True, INK)
-    rank_w = surf_rank.get_width() + 8
+    rival_w = fs.size(model.texts["rival"])[0] + 8
+    rank_w = fs.size(model.texts["rank"])[0] + 8
     result["rival"] = pygame.Rect(x0, y, rival_w, rh)
     result["rank"] = pygame.Rect(x0 + rival_w + 12, y, rank_w, rh)
 
@@ -380,15 +413,23 @@ class PowersTable(Table):
             cell_rects: list[list[pygame.Rect]] = []
             text_rects: list[list[pygame.Rect]] = []
         else:
-            row_h = available_data_h // row_count
+            # C6: never squeeze rows below the rendered text height —
+            # adjacent text rects would overlap.  Rows that don't fit are
+            # omitted from the layout (the powers model's overflow warning
+            # already names the first omitted house).
+            # C6: every data row gets a constant height at least tall enough
+            # for its text (body linesize + the rendered glyph height), so two
+            # adjacent text rects can never overlap.  Rows that would be
+            # clipped at the bottom are omitted — the powers model's overflow
+            # warning already names the first omitted house.
+            # row_h already includes the inter-row gap (rows step by row_h)
+            row_h = max(body_h, f_body.get_height()) + gap
+            n_rows = min(row_count, max(0, available_data_h // row_h))
             row_rects = []
             y = data_top
-            for i in range(row_count):
-                h = row_h
-                if i == row_count - 1:
-                    h = data_bottom - y
-                row_rects.append(pygame.Rect(rect.left, y, rect.width, h))
-                y += h + 2
+            for i in range(n_rows):
+                row_rects.append(pygame.Rect(rect.left, y, rect.width, row_h - gap))
+                y += row_h
 
             cell_rects = []
             text_rects = []
@@ -407,12 +448,21 @@ class PowersTable(Table):
                     row_text_rects.append(text_rect)
                 text_rects.append(row_text_rects)
 
+        header_text_rects = []
+        for col_idx in range(len(self.cols)):
+            align = self._resolve_align(col_idx)
+            h_rect = header_rects[col_idx]
+            header_text = self.cols[col_idx].header
+            text_rect = _place_text(header_text, f_header, h_rect, align, header_h)
+            header_text_rects.append(text_rect)
+
         return TableLayout(
             header_rects=header_rects,
             rule_y=rule_y,
             row_rects=row_rects,
             cell_rects=cell_rects,
             text_rects=text_rects,
+            header_text_rects=header_text_rects,
         )
 
     @staticmethod
@@ -420,15 +470,13 @@ class PowersTable(Table):
         if not text.strip():
             return text
         max_w = cell.width - 8
-        surf = f.render(text, True, BLACK)
-        if surf.get_width() <= max_w:
+        if f.size(text)[0] <= max_w:
             return text  # fits, no truncation needed
         # Text is too long — shorten and append ellipsis
         ellipsis = "…"
         while len(text) > 1:
             candidate = text + ellipsis
-            surf = f.render(candidate, True, BLACK)
-            if surf.get_width() <= max_w:
+            if f.size(candidate)[0] <= max_w:
                 return candidate
             text = text[:-1]
         return text + ellipsis
@@ -472,6 +520,18 @@ def powers_report(game, house) -> Tuple[PowerLine, ...]:
             apparent_intent=r.apparent_intent,
             can_place_informant=can_place,
         ))
+    # the four Orders: a head (face) the player knows, and a goal the fog
+    # gates - an informant within an Order reads its pursuit
+    for name in sorted(getattr(game, "orders", {})):
+        r = intel_report(game, house, name)
+        lines.append(PowerLine(
+            house=name,
+            tier=r.tier,
+            breakdown=tuple(r.breakdown),
+            apparent_intent=r.apparent_intent,
+            can_place_informant=(attention > 0
+                                 and (house, name) not in game.informants),
+        ))
     return tuple(lines)
 
 
@@ -484,6 +544,20 @@ def _intel_tone(tier: int) -> str:
         return "neutral"
     else:
         return "good"
+
+
+# The four Orders. A Powers row whose name is an Order is titled by its own
+# name (no "House" prefix) so Order rows never read "House Combine".
+ORDER_NAMES = frozenset({"Combine", "Bank", "Church", "Gazette"})
+
+
+def power_row_title(line) -> str:
+    """The rendered title cell for a Powers row: rival houses keep a
+    "House " prefix; Orders are named as themselves (never "House Combine")."""
+    name = line.house
+    if name in ORDER_NAMES:
+        return name
+    return f"House {name}"
 
 
 def powers_model(lines, selected=None) -> PowersModel:
@@ -512,7 +586,7 @@ def powers_model(lines, selected=None) -> PowersModel:
             return s.replace("|", "")
 
         rows.append([
-            _clean(f"House {ln.house}"),
+            _clean(power_row_title(ln)),
             threat_str,
             intel_str,
             _clean(ties_str),
@@ -774,14 +848,69 @@ def enterprises_layout(model, content: pygame.Rect) -> Dict[str, pygame.Rect]:
 class BroadsheetView:
     _found_picker: Optional[bool]
 
+    @property
+    def text_rows(self) -> list:
+        """(pygame.Rect, str) per text line drawn on the last draw pass."""
+        from gilded.ui.widgets import _text_rows
+        return list(_text_rows)
+
+    @property
+    def active_tab(self) -> str:
+        return self._active_tab
+
+    @active_tab.setter
+    def active_tab(self, name: str) -> None:
+        # spec §2 fate table: a dissolved tab name navigates to the home its
+        # content moved to (spine + inner page).  "House"/"Powers"/"Atlas"
+        # stay the three spines.
+        if name in LEGACY_TABS:
+            spine, page = LEGACY_TABS[name]
+            self._active_tab = spine
+            if page == "Ledger":
+                self.house_page = "Ledger"
+            elif page == "Governance":
+                self.house_page = "Governance"
+            else:
+                self.house_page = "Overview"
+            if spine == "Atlas":
+                self.atlas_desk = True
+            self.paper_section = name if name in PAPER_SECTIONS else None
+        else:
+            self._active_tab = name
+            self.paper_section = None
+
     def __init__(self, game, house_name: str, narrator=None):
         self.game = game
         self.house = house_name
+        self.showing_saves = False
         # the narrator rewrites the Gazette's prose only; templated is identity.
         self.narrator = narrator if narrator is not None else NarratorTemplated()
         self.narrate_on = True
+        # Inner pages of the three spines (spec §2 fate table): the dissolved
+        # tabs' content re-homed as pages.  The Atlas desk strip (Letters)
+        # and the End Turn gazette are drawn on the Atlas itself.
+        self.house_page = "Overview"
+        self.house_pages = ["Overview", "Policies", "Ledger", "Governance"]
+        self.powers_page = "Overview"
+        self.powers_pages = ["Overview", "Dossier"]
+        self.atlas_desk = False
+        # C8.1: the map's tier (continent/region/parish); Region stays the
+        # default so C1..C7 draws are unchanged.
+        self.atlas_tier = "region"
+        # C4 residual (C5): the war panel left the map field.  The desk strip
+        # carries a War toggle; when open it draws the war panel as a
+        # right-column drawer that can never shadow a province centroid.
+        self.war_drawer = False
+        self.paper_section = None
         self.active_tab = TABS[0]
+        self.gazette_page = None
+        # Accent ledger (registry.ACCENTS): entries ("vermillion", is_player)
+        # or ("gold", is_player) that THIS draw pass actually made.  Cleared
+        # at the start of every draw(); registry/probe count what is drawn.
+        self._accent_log: List[tuple] = []
+        self._ladder_rows = None
         self.selected_pid: Optional[int] = None
+        self._powers_selected: Optional[str] = None
         # the previous turn's board, retained by app.py across end_turn so the
         # briefing can show "since last session"; None means first session.
         self.prev_board = None
@@ -802,6 +931,7 @@ class BroadsheetView:
 
         # court appointment picker state: None or position_key
         self._court_picker: Optional[str] = None
+        self._ambition_picker: bool = False
         # heir picker state: None or True (picker open)
         self._heir_picker: Optional[bool] = None
         # director picker state: None or eid whose picker is open
@@ -812,6 +942,16 @@ class BroadsheetView:
         # share picker state: None or {"direction": "buy"/"sell", "eid": int}
         self._share_picker: Optional[dict] = None
         self._share_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        # C8.3: the last page transition requested by a press (tab switch or
+        # End Turn).  The app loop plays it at the frame clock.
+        self.last_transition: Optional[dict] = None
+        # garrison picker state: None or True (picker open)
+        self._garrison_picker: Optional[bool] = None
+        self._garrison_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        # scheme picker state: None or True (picker open)
+        self._scheme_picker: Optional[bool] = None
+        self._scheme_picker_hits: List[Tuple[pygame.Rect, dict]] = []
+        self._action_messages: List[str] = []
         self.hover_pos: Tuple[int, int] | None = None
         self.regions = RegionSet()
         self.hovered: Optional[Region] = None
@@ -819,6 +959,8 @@ class BroadsheetView:
         self.tooltip_rect: pygame.Rect | None = None
         self._w = 0
         self._h = 0
+        # epilogue cache — computed once when game_over is set
+        self._epilogue = None
 
     # --- executor candidates -------------------------------------------------
 
@@ -845,6 +987,10 @@ class BroadsheetView:
     def draw(self, surface) -> None:
         self._w, self._h = surface.get_size()
         self.regions.clear()
+        if self.showing_saves:
+            from gilded.ui.saves_view import draw_saves_screen
+            draw_saves_screen(self, surface, self.game)
+            return
         self._option_hits = []
         self._exec_hits = []
         self._dial_hits = []
@@ -855,35 +1001,55 @@ class BroadsheetView:
 
         self._director_picker_hits = []
         self._found_picker_hits = []
+        self._accent_log = []
+        from gilded.ui.widgets import take_text_rows as _take_text_rows
+        _take_text_rows()  # clear the C6.5 ledger before this pass
         surface.fill(PAPER_BG)
         hud_h = _hud_height()
         content = pygame.Rect(0, TAB_H + hud_h, self._w,
                               self._h - TAB_H - hud_h - BOTTOM_H)
+        content.height -= self._guide_text_height() + 4
 
-        if self.active_tab == "Briefing":
-            self._draw_briefing(surface, content)
+        if self.active_tab == "House":
+            if self.house_page == "Ledger":
+                self._draw_house_page_header(surface, content, "Ledger")
+                self._draw_ledger(surface, content)
+            elif self.house_page == "Policies":
+                self._draw_house_page_header(surface, content, "Policies")
+                self._draw_policies(surface, content)
+            elif self.house_page == "Governance":
+                self._draw_house_page_header(surface, content, "Governance")
+                self._draw_enterprises(surface, content)
+            else:
+                self._draw_house(surface, content)
+        elif self.active_tab == "Powers":
+            if self.powers_page == "Dossier":
+                self._draw_house_page_header(surface, content, "Dossier")
+                self._draw_powers_dossier(surface, content)
+            else:
+                self._draw_powers(surface, content)
         elif self.active_tab == "Atlas":
             self._draw_atlas(surface)
-        elif self.active_tab == "Gazette":
-            self._draw_paper(surface, content)
-        elif self.active_tab == "Ledger":
-            self._draw_ledger(surface, content)
-        elif self.active_tab == "Letters":
-            self._draw_paper(surface, content)
-        elif self.active_tab == "Docket":
-            self._draw_docket(surface, content)
-        elif self.active_tab == "Policies":
-            self._draw_policies(surface, content)
-        elif self.active_tab == "Powers":
-            self._draw_powers(surface, content)
-        elif self.active_tab == "Enterprises":
-            self._draw_enterprises(surface, content)
-        elif self.active_tab == "House":
-            self._draw_house(surface, content)
+            # spec §2: the War tab dies — wars are drawn on the map; the
+            # garrison/raise controls ride in a right-column drawer so the
+            # panel never shadows a province centroid (C4 residual).
+            if self.war_drawer:
+                self._draw_war(surface, self._war_drawer_rect(content))
+            self._draw_war_toggle(surface, content)
+
+        # ── Ending overlay when the age closes ──────────────────────────────
+        if self.game.game_over is not None:
+            if self._epilogue is None:
+                self._epilogue = _judge_ending(self.game, self.house)
+            self._draw_ending_overlay(surface, content)
+            return  # skip tab bar, hud, bottom bar — ending is the page
 
         self._draw_tab_bar(surface)
         self._draw_hud(surface)
+        self._draw_action_messages(surface)
+        self._action_messages.clear()
         self._draw_bottom_bar(surface)
+        self._draw_guide(surface)
 
         # ── I3e: re-resolve hover and draw tooltip ──────────────────────────
         self.tooltip_text = None
@@ -943,8 +1109,7 @@ class BroadsheetView:
                 pygame.draw.rect(surface, CARD_EDGE, rect, 1)
                 cy = rect.top + pad
                 for line in lines:
-                    surf_t = font.render(line, True, PAPER_BG)
-                    surface.blit(surf_t, (rect.left + pad, cy))
+                    blit_text(surface, font, line, (rect.left + pad, cy), PAPER_BG)
                     cy += line_h
                 surface.set_clip(old_clip)
                 self.tooltip_text = text
@@ -956,16 +1121,9 @@ class BroadsheetView:
         font = _font(TYPE_TEXT, bold=True)
         self._tab_rects = {}
         TAB_HINTS = {
-            "Briefing": "Your command post — see what changed and act on it.",
-            "Gazette": "Read the world's news in full prose.",
-            "Ledger": "Track your money, income, and spending.",
-            "Letters": "Private correspondence from your network.",
-            "Docket": "Standing rules and appointments before the council.",
-            "Policies": "Set your house's five standing directives.",
-            "Enterprises": "Manage your ventures and their directors.",
-            "Atlas": "Survey the realm's map and your territory.",
+            "House": "Your court, your people, your ledger, and your ventures.",
             "Powers": "See the other houses, their axes, and their moves.",
-            "House": "Your court, your people, and your standing.",
+            "Atlas": "Survey the realm's map, its wars, and your letters.",
         }
         for i, name in enumerate(TABS):
             rect = pygame.Rect(i * tabw, 0, tabw, TAB_H)
@@ -980,10 +1138,10 @@ class BroadsheetView:
             ))
             if name == self.active_tab:
                 pygame.draw.rect(surface, TAB_ACTIVE, rect)
-            label = font.render(name, True,
-                                INK if name == self.active_tab else TAB_TEXT)
-            surface.blit(label, (rect.centerx - label.get_width() / 2,
-                                 rect.centery - label.get_height() / 2))
+            blit_text(surface, font, name,
+                     (rect.centerx - font.size(name)[0] / 2,
+                      rect.centery - font.size(name)[1] / 2),
+                     INK if name == self.active_tab else TAB_TEXT)
 
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
@@ -1002,13 +1160,15 @@ class BroadsheetView:
                 model.meters[key].draw(surface, rect)
             elif key in model.chips:
                 chip = model.chips[key]
-                chip_surf = fs.render(chip.text, True, INK)
                 pygame.draw.rect(surface, chip.bg(), rect, border_radius=4)
-                surface.blit(chip_surf, (rect.left + 6, rect.centery - chip_surf.get_height() // 2))
+                blit_text(surface, fs, chip.text,
+                          (rect.left + 6,
+                           rect.centery - fs.size(chip.text)[1] // 2), INK)
             elif key in model.texts:
                 text = model.texts[key]
-                text_surf = fs.render(text, True, HUD_INK)
-                surface.blit(text_surf, (rect.left, rect.centery - text_surf.get_height() // 2))
+                blit_text(surface, fs, text,
+                          (rect.left,
+                           rect.centery - fs.size(text)[1] // 2), HUD_INK)
 
         # Draw intent text in row 5
         spotlight = b.rival_name or (
@@ -1019,28 +1179,192 @@ class BroadsheetView:
         else:
             intent_text = "No clear threat"
         intent_rect = layout["intent"]
-        intent_surf = fs.render(intent_text, True, HUD_INK)
-        surface.blit(intent_surf, (intent_rect.left, intent_rect.centery - intent_surf.get_height() // 2))
+        blit_text(surface, fs, intent_text,
+                  (intent_rect.left,
+                   intent_rect.centery - fs.size(intent_text)[1] // 2),
+                  HUD_INK)
+
+    def _draw_action_messages(self, surface) -> None:
+        """Draw action result messages in the bottom bar area above the turn button."""
+        msgs = list(self._action_messages) if self._action_messages else []
+        if not msgs:
+            return
+        font = _font(TYPE_TEXT)
+        y = self._h - BOTTOM_H - 10
+        max_w = self._w - 2 * PAD
+        for msg in reversed(msgs):
+            parts = []
+            current = ""
+            for word in msg.split():
+                test = (current + " " + word).strip() if current else word
+                if font.size(test)[0] <= max_w:
+                    current = test
+                else:
+                    if current:
+                        parts.append(current)
+                    current = word
+            if current:
+                parts.append(current)
+            for line in reversed(parts):
+                h = font.size(line)[1]
+                blit_text(surface, font, line, (PAD, y - h), INK)
+                y -= h + 2
+            break  # Show only the most recent message
+
+    def _draw_ending_overlay(self, surface, content) -> None:
+        """Draw the ending overlay when the age closes."""
+        epilogue = self._epilogue
+        PAD = 40
+        w, h = self._w, self._h
+
+        # Semi-transparent overlay
+        overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+        overlay.fill((245, 240, 230, 200))
+        surface.blit(overlay, (0, 0))
+
+        # Border
+        pygame.draw.rect(surface, INK, (0, 0, w, h), 3)
+
+        y = TAB_H + 20
+        f_title = _font(TYPE_TITLE, bold=True)
+        ending_name = epilogue.ending_key
+        title_rect = blit_text(surface, f_title, ending_name, (PAD, y), INK)
+        y = title_rect.bottom + 10
+
+        # Four axis scores
+        f_axis = _font(TYPE_SUBTITLE, bold=True)
+        for axis_name in ("capital", "standing", "blood", "world"):
+            score = epilogue.axes[axis_name]
+            label = f"{axis_name.title()}: {score:.2f}"
+            blit_text(surface, f_axis, label, (PAD, y), INK)
+            y += f_axis.get_height() + 6
+
+        # Divider
+        y += 10
+        pygame.draw.line(surface, INK, (PAD, y), (w - PAD, y))
+        y += 20
+
+        # Epilogue paragraphs
+        f_body = _font(TYPE_BODY)
+        line_h = f_body.get_linesize()
+        max_w = w - 2 * PAD
+        paragraphs = epilogue.text.strip().split("\n\n")
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            wrapped = _wrap(para, f_body, max_w)
+            for line in wrapped:
+                if y + line_h > h - BOTTOM_H - 20:
+                    break
+                blit_text(surface, f_body, line, (PAD, y), INK)
+                y += line_h
+            y += 10  # paragraph gap
+            if y + line_h > h - BOTTOM_H - 20:
+                break
+
+    def _draw_guide(self, surface) -> None:
+        """Persistent guide strip above the bottom bar: a teaching statement
+        (objective, ender, attention, gold, standing) wrapped to fit, beside a
+        single next-step button (group="guide") that a stranger can click."""
+        from gilded.ui.actions import next_step
+        g, name = self.game, self.house
+        y = self._h - BOTTOM_H
+        body = _font(TYPE_BODY)
+        label, action, hint = next_step(g, name)
+        btn = pygame.Rect(self._w - 560, y + 8, 156, 40)
+        if btn.x < PAD:
+            return
+        # Fit the label into the button; trim from the right if too wide.
+        while body.size(label)[0] > 138:
+            label = label[:-6].rstrip(" ,.:") + "…"
+        pygame.draw.rect(surface, GUIDE_BG, btn)
+        pygame.draw.rect(surface, GUIDE_EDGE, btn, 2)
+        blit_text(surface, body, label,
+                  (btn.x + 10, btn.centery - body.size(label)[1] // 2),
+                  BUTTON_TEXT)
+        self.regions.add(Region(rect=btn,
+                                action=action,
+                                hint=hint,
+                                group="guide",
+                                state=RegionState.ENABLED))
+    def _guide_text_height(self) -> int:
+        """Height of the wrapped guide statement block above the bottom bar."""
+        body = _font(TYPE_BODY)
+        max_w = self._w - 2 * PAD
+        if max_w < 200:
+            return 0
+        lines = _wrap(guide_statement(), body, max_w)
+        line_h = body.get_height() + 4
+        return line_h * len(lines) + 12
 
     def _draw_bottom_bar(self, surface) -> None:
         y = self._h - BOTTOM_H
         pygame.draw.rect(surface, TAB_BG, (0, y, self._w, BOTTOM_H))
         attn = self.game.attention.get(self.house, 0)
         font = _font(TYPE_TEXT, bold=True)
-        label = font.render(f"Attention: {attn}", True, ATTN_COLOR)
-        surface.blit(label, (PAD, y + (BOTTOM_H - label.get_height()) / 2))
-        nlabel = font.render(
-            f"Narrate: {'on' if self.narrate_on else 'off'}", True, TAB_TEXT)
-        nrect = pygame.Rect(self._w - 170 - nlabel.get_width() - 36,
-                            y + 10, nlabel.get_width() + 20, BOTTOM_H - 20)
+        attn_label = f"Attention: {attn}"
+        blit_text(surface, font, attn_label,
+                  (PAD, y + (BOTTOM_H - font.size(attn_label)[1]) / 2),
+                  ATTN_COLOR)
+        from gilded.save import quicksave_path
+        save_x = PAD + max(font.size(attn_label)[0], 118) + 14
+        for action_key, btn_label in (("quicksave", "Save"),
+                                      ("quickload", "Open")):
+            disabled = action_key == "quickload" and not os.path.exists(quicksave_path())
+            bwidth = font.size(btn_label)[0] + 20
+            rect = pygame.Rect(save_x, y + 10, bwidth, BOTTOM_H - 20)
+            hint = ("Write the century down so it can be picked up again."
+                    if action_key == "quicksave"
+                    else "Pick the written-down century up again.")
+            if disabled:
+                # nothing written down yet: the door is there but shut
+                self.regions.add(Region(
+                    rect=rect,
+                    action={action_key: True},
+                    hint=hint,
+                    group="chrome",
+                    state=RegionState.DISABLED,
+                    reason="There is nothing to open yet — put a century down first."))
+            else:
+                self.regions.add(Region(rect=rect,
+                                        action={action_key: True},
+                                        hint=hint,
+                                        group="chrome"))
+            pygame.draw.rect(surface,
+                           DISABLED_FILL if disabled else EXEC_BG, rect)
+            blit_text(surface, font, btn_label,
+                      (rect.centerx - font.size(btn_label)[0] // 2,
+                       rect.centery - font.size(btn_label)[1] // 2),
+                      DISABLED_TEXT if disabled else TAB_TEXT)
+            save_x += bwidth + 8
+        # C9.3: the door to the slot screen, in play (once the century has moved)
+        if self.game.turn >= 3:
+            bwidth = font.size("Saves")[0] + 20
+            rect = pygame.Rect(save_x, y + 10, bwidth, BOTTOM_H - 20)
+            self.regions.add(Region(
+                rect=rect,
+                action={"menu": "saves"},
+                hint="Choose a slot to keep a century in, or take one out.",
+                group="chrome"))
+            pygame.draw.rect(surface, EXEC_BG, rect)
+            blit_text(surface, font, "Saves",
+                      (rect.centerx - font.size("Saves")[0] // 2,
+                       rect.centery - font.size("Saves")[1] // 2),
+                      TAB_TEXT)
+        narrate_label = f"Narrate: {'on' if self.narrate_on else 'off'}"
+        nlabel_w, nlabel_h = font.size(narrate_label)
+        nrect = pygame.Rect(self._w - 170 - nlabel_w - 36,
+                            y + 10, nlabel_w + 20, BOTTOM_H - 20)
         self._narrate_rect = nrect
         self.regions.add(Region(rect=nrect,
                                 action={"toggle_narrate": True},
                                 hint="Turn the narrator's prose on or off.",
                                 group="chrome"))
         pygame.draw.rect(surface, EXEC_BG, nrect)
-        surface.blit(nlabel, (nrect.centerx - nlabel.get_width() / 2,
-                              nrect.centery - nlabel.get_height() / 2))
+        blit_text(surface, font, narrate_label,
+                  (nrect.centerx - nlabel_w / 2,
+                   nrect.centery - nlabel_h / 2), TAB_TEXT)
         rect = pygame.Rect(self._w - 170, y + 10, 154, BOTTOM_H - 20)
         self._end_turn_rect = rect
         self.regions.add(Region(rect=rect,
@@ -1048,9 +1372,9 @@ class BroadsheetView:
                                 hint="Close the session and let the world move.",
                                 group="chrome"))
         pygame.draw.rect(surface, ENDTURN_BG, rect)
-        et = font.render("End Turn", True, BUTTON_TEXT)
-        surface.blit(et, (rect.centerx - et.get_width() / 2,
-                          rect.centery - et.get_height() / 2))
+        blit_text(surface, font, "End Turn",
+                  (rect.centerx - font.size("End Turn")[0] / 2,
+                   rect.centery - font.size("End Turn")[1] / 2), BUTTON_TEXT)
 
     # --- the Council briefing ------------------------------------------------
 
@@ -1090,64 +1414,248 @@ class BroadsheetView:
         body = _font(TYPE_TEXT)
         width = content.width - 2 * PAD
 
-        surface.blit(head.render("Since last session", True, INK), (PAD, y))
+        blit_text(surface, head, "Since last session", (PAD, y), INK)
         y += head.get_height() + 4
         for line in self._delta_lines(d, board):
-            surface.blit(body.render(line, True, INK), (PAD + 10, y))
+            blit_text(surface, body, line, (PAD + 10, y), INK)
             y += body.get_height() + 2
         y += 8
 
         report = compose(self.game, self.house)
         events = report.gazette[:2] + report.ledger[:2] + report.letters[:1]
         if events:
-            surface.blit(head.render("What the papers say", True, INK), (PAD, y))
+            blit_text(surface, head, "What the papers say", (PAD, y), INK)
             y += head.get_height() + 4
             for ev in events:
                 for line in _wrap(ev, body, width - 10):
                     if y > content.bottom - 170:
                         break
-                    surface.blit(body.render(line, True, INK), (PAD + 10, y))
+                    blit_text(surface, body, line, (PAD + 10, y), INK)
                     y += body.get_height() + 2
                 y += 4
         y += 8
+        self._draw_ladder_and_agenda(surface, content, y)
 
-        surface.blit(head.render("The Agenda", True, INK), (PAD, y))
-        y += head.get_height() + 6
-        self._draw_petition_cards(surface, content, y)
+    # --- the public ladder + the docket's agenda (House's ambition banner) --
+
+    def _draw_ladder_and_agenda(self, surface, content: pygame.Rect,
+                                y: int, bottom: int = None) -> int:
+        """spec §2: the Briefing's ladder and Agenda re-homed to the House
+        spine — the ladder stays public, the docket's decisions are the
+        agenda cards (its old tab dies; its content lives here and at the
+        Atlas desk strip)."""
+        head = _font(TYPE_SUBTITLE, bold=True)
+        body = _font(TYPE_TEXT)
+        bottom = bottom if bottom is not None else content.bottom
+        rows = self.game.ladder()
+        self._ladder_rows = rows
+        if y > bottom - 120:
+            return y
+        body_h = body.get_height()
+        width = content.width - 2 * PAD
+        petitions = self.game.docket_by_house.get(self.house, [])
+        # The agenda is the spine's action content: reserve its room first so
+        # it always draws (its cycle_exec registers), then give the public
+        # ladder only the space that remains above it.  On a tall column the
+        # ladder keeps all four rows; on a short one it yields rows (and its
+        # why-line) so the docket's decisions stay visible.
+        if petitions:
+            card_h = (6 + _font(TYPE_CAPTION, bold=True).get_height() + 2
+                      + len(_wrap(petitions[0].text, body, width - 20))
+                      * (body_h + 1) + 2 + 20 + 4)
+        else:
+            card_h = 0
+        # Two section headers + n ladder rows + why-line (only if >=2 rows)
+        # + 4px gap + card_h must fit before bottom-10.
+        space = (bottom - 10) - y
+        ladder_rows = 0
+        for n in range(4, 0, -1):
+            need = (2 * (head.get_height() + 4)
+                    + n * body_h + (body_h if n >= 2 else 0)
+                    + 4 + card_h)
+            if need <= space:
+                ladder_rows = n
+                break
+        if ladder_rows > 0:
+            blit_text(surface, head, "The Ladder", (PAD, y), INK)
+            y += head.get_height() + 4
+            for row in rows[:ladder_rows]:
+                who = row.house + (" (you)" if row.house == self.house else "")
+                line = f"{row.rank}. {who}  {row.composite:.0f}"
+                blit_text(surface, body, line, (PAD + 10, y),
+                          INK if row.rank == 1 else FADED)
+                y += body_h
+            if ladder_rows >= 2:
+                top = rows[0]
+                axis = max(top.axes.values(), key=lambda a: a.value)
+                if axis.causes:
+                    why_line = f"{top.house} leads on {axis.causes[0].label}."
+                    blit_text(surface, body, why_line, (PAD + 10, y), FADED)
+                    y += body_h
+            y += 4
+
+        blit_text(surface, head, "The Agenda", (PAD, y), INK)
+        y += head.get_height() + 4
+        y = self._draw_petition_cards(surface, content, y, bottom)
+        return y
+
+
+    def _draw_ruler_history(self, surface, content: pygame.Rect,
+                            y: int = None, bottom: int = None) -> int:
+        """C7w4: the ruler's last three memory lines, drawn on the House tab
+        under the ladder + agenda spine.  Each line is the entry's own text
+        (verbatim), so the gate's render-capture finds the first words of
+        every entry that actually reached the screen.  Fits the band, uses
+        the smallest named scale step (TYPE_CAPTION=12)."""
+        bottom = bottom if bottom is not None else content.bottom
+        body = _font(TYPE_CAPTION)
+        width = content.width - 2 * PAD
+        realm = self.game.realms.get(self.house)
+        ruler = realm.ruler if realm is not None else None
+        entries = list(getattr(ruler, "history", []) or [])
+        entries = [e for e in entries if e["turn"] <= self.game.turn]
+        if not entries:
+            return y if y is not None else content.y
+        last = entries[-3:]
+        start = y if y is not None else content.y
+        line_h = body.get_height()
+        if start > bottom - line_h:
+            return start
+        yy = start
+        for e in last:
+            if yy > bottom - line_h:
+                break
+            line = str(e["text"])
+            max_w = width - 20
+            while len(line) > 1 and body.render(line, True, FADED).get_width() > max_w:
+                line = line[:-1].rstrip()
+            if line != str(e["text"]):
+                line = line.rstrip() + "…"
+            blit_text(surface, body, line, (PAD + 10, yy), FADED)
+            yy += line_h + 1
+        return yy
+
 
     # --- shared petition renderer (Docket + Agenda) --------------------------
 
     def _draw_petition_cards(self, surface, content: pygame.Rect,
-                             y: int) -> None:
-        petitions = self.game.docket_by_house.get(self.house, [])
+                             y: int, bottom: int = None) -> int:
+        bottom = bottom if bottom is not None else content.bottom
+        from gilded.docket import DOMAIN_PRIORITY
+        petitions = sorted(
+            self.game.docket_by_house.get(self.house, []),
+            key=lambda p: (DOMAIN_PRIORITY.get(p.domain, 9), p.pid))
         body = _font(TYPE_TEXT)
-        small = _font(TYPE_BODY, bold=True)
+        small = _font(TYPE_CAPTION, bold=True)
         width = content.width - 2 * PAD
-        for p in petitions:
+        def _heights(p, force_compact=False):
             lines = _wrap(p.text, body, width - 20)
-            card_h = 30 + len(lines) * (body.get_height() + 2) + 44
-            if y + card_h > content.bottom - 10:
+            # Header + wrapped text + wrapped button rows (height 20 each) +
+            # padding.  The button row wraps inside the column width so the
+            # options never spill into the right column (dials / intrigue).
+            avail = width - 20
+            bw_list = [small.render(opt.text, True, BUTTON_TEXT).get_width()
+                       + 20 for opt in p.options]
+            ex_pre = self._chosen_executor(p.pid)
+            ex_name_pre = ("executor: default" if ex_pre is None
+                           else f"executor: {ex_pre.name}")
+            ew = small.render(ex_name_pre, True, BUTTON_TEXT).get_width() + 20
+            n_btn_rows, cur = 1, 0
+            for bw in bw_list + [ew]:
+                if cur and cur + 8 + bw > avail:
+                    n_btn_rows += 1
+                    cur = bw
+                else:
+                    cur += 8 + bw
+            n_opt_rows, cur = 1, 0
+            for bw in bw_list:
+                if cur and cur + 8 + bw > avail:
+                    n_opt_rows += 1
+                    cur = bw
+                else:
+                    cur += 8 + bw
+            # Button rows advance by 24px when wrapping (see the draw pass
+            # below) — the estimate must match or the last row lands past
+            # the limit and draws over the bottom bar.
+            full_h = (6 + small.get_height() + 2
+                      + len(lines) * (body.get_height() + 1)
+                      + 2 + (n_btn_rows - 1) * 24 + 20 + 4)
+            compact_h = (6 + small.get_height() + 2
+                         + 2 + (n_btn_rows - 1) * 24 + 20 + 4)
+            return (lines, bw_list, ex_pre, ex_name_pre, ew,
+                    full_h, compact_h, force_compact)
+
+        def _fits(h, yy, limit):
+            card_h = h[6] if h[7] else h[5]
+            compact = h[7]
+            if not compact and yy + card_h > limit:
+                compact_h = h[6]
+                if yy + compact_h > limit:
+                    return None
+                card_h, compact = compact_h, True
+            if yy + card_h > limit:
+                return None
+            return card_h, compact
+
+        # The caller may pass a higher bottom (the House spine stops 40px
+        # above the column's foot so the bottom bar keeps its rows).  The
+        # compact pass must honour the same limit or its buttons land on
+        # the Attention / Save / Open strip.
+        limit = min(bottom, content.bottom) - 10
+        layouts = []
+        dropped = False
+        yy = y
+        for p in petitions:
+            h = _heights(p)
+            res = _fits(h, yy, limit)
+            if res is None:
+                dropped = True
                 break
+            card_h, compact = res
+            layouts.append((p, h, card_h, compact))
+            yy += card_h + 6
+        if dropped:
+            # A chain petition is the desk's most urgent paper: never let one
+            # fall off the band. Retry the whole stack in the compact form
+            # (header + option buttons only) so the rule regions stay
+            # pressable.
+            layouts = []
+            yy = y
+            for p in petitions:
+                h = _heights(p, force_compact=True)
+                res = _fits(h, yy, limit)
+                if res is None:
+                    break
+                card_h, compact = res
+                layouts.append((p, h, card_h, compact))
+                yy += card_h + 6
+        for p, (lines, bw_list, ex_pre, ex_name_pre, ew,
+                _full_h, _compact_h, _fc), card_h, compact in layouts:
             card = pygame.Rect(PAD, y, width, card_h)
             pygame.draw.rect(surface, CARD_BG, card)
             pygame.draw.rect(surface, CARD_EDGE, card, 1)
-            hy = y + 8
-            surface.blit(small.render(f"[{p.domain}] {p.kind}", True, FADED),
-                         (PAD + 10, hy))
-            hy += small.get_height() + 4
-            for line in lines:
-                surface.blit(body.render(line, True, INK), (PAD + 10, hy))
-                hy += body.get_height() + 2
+            hy = y + 6
+            blit_text(surface, small, f"[{p.domain}] {p.kind}", (PAD + 10, hy), FADED)
+            hy += small.get_height() + 2
+            if not compact:
+                for line in lines:
+                    blit_text(surface, body, line, (PAD + 10, hy), INK)
+                    hy += body.get_height() + 1
             bx = PAD + 10
+            by = hy + 2
+            max_x = PAD + width - 10
             for opt in p.options:
                 blabel = small.render(opt.text, True, BUTTON_TEXT)
                 bw = blabel.get_width() + 20
-                brect = pygame.Rect(bx, hy + 4, bw, 26)
+                if bx + bw > max_x:
+                    bx = PAD + 10
+                    by += 24
+                brect = pygame.Rect(bx, by, bw, 20)
                 pygame.draw.rect(surface, BUTTON_BG, brect)
                 pygame.draw.rect(surface, BUTTON_EDGE, brect, 1)
-                surface.blit(blabel, (brect.x + 10, brect.y + 5))
-                ex = self._chosen_executor(p.pid)
-                exec_id = None if ex is None else ex.id
+                blit_text(surface, small, opt.text, (brect.x + 10, brect.y + 5),
+                         BUTTON_TEXT)
+                exec_id = None if ex_pre is None else ex_pre.id
                 self._option_hits.append(
                     (brect, ("rule", p.pid, opt.key, exec_id)))
                 self.regions.add(Region(rect=brect,
@@ -1155,30 +1663,37 @@ class BroadsheetView:
                                         hint=opt.text,
                                         group=f"petition:{p.pid}"))
                 bx += bw + 8
-            ex = self._chosen_executor(p.pid)
-            ex_name = ("executor: default" if ex is None
-                       else f"executor: {ex.name}")
-            elabel = small.render(ex_name, True, BUTTON_TEXT)
-            erect = pygame.Rect(bx, hy + 4, elabel.get_width() + 20, 26)
+            ex = ex_pre
+            ex_name = ex_name_pre
+            if bx + ew > max_x:
+                bx = PAD + 10
+                by += 24
+            erect = pygame.Rect(bx, by, ew, 20)
             pygame.draw.rect(surface, EXEC_BG, erect)
             pygame.draw.rect(surface, BUTTON_EDGE, erect, 1)
-            surface.blit(elabel, (erect.x + 10, erect.y + 5))
+            blit_text(surface, small, ex_name, (erect.x + 10, erect.y + 5),
+                      BUTTON_TEXT)
             self._exec_hits.append((erect, p.pid))
             self.regions.add(Region(rect=erect,
                                     action={"cycle_exec": p.pid},
                                     hint="Choose who carries out this ruling.",
                                     group=f"petition:{p.pid}"))
-            y += card_h + 10
+            y += card_h + 6
+        return y
 
-    def _draw_paper(self, surface, content: pygame.Rect) -> None:
+    def _draw_paper(self, surface, content: pygame.Rect,
+                    section: str = None) -> None:
+        # Paper sections are the desk/archive axis, not the spine: the spine
+        # alone has no paper section, so fall back to the desk default.
+        section = section or self.paper_section or "Gazette"
         report = compose(self.game, self.house)
-        if self.narrate_on and self.active_tab == "Gazette":
+        if self.narrate_on and section == "Gazette":
             report = self.narrator.render(report, self.game.director, self.game)
         items = {"Gazette": report.gazette, "Ledger": report.ledger,
-                 "Letters": report.letters}[self.active_tab]
+                 "Letters": report.letters}[section]
         head_font = _font(TYPE_TITLE, bold=True)
         head = head_font.render(
-            f"THE {self.active_tab.upper()} - {report.year}", True, INK)
+            f"THE {section.upper()} - {report.year}", True, INK)
         surface.blit(head, (PAD, content.y + 6))
         # Horizontal rule under the head, in the gap before body text
         rule_y = content.y + 6 + head.get_height() + 4
@@ -1196,7 +1711,7 @@ class BroadsheetView:
         result = flow_columns(items, body, body_rect, line_gap=4)
 
         for (text, x, y, _ci) in result.placements:
-            surface.blit(body.render(text, True, INK), (x, y))
+            blit_text(surface, body, text, (x, y), INK)
 
         # Continuation marker when overflow > 0
         if result.overflow > 0:
@@ -1267,7 +1782,7 @@ class BroadsheetView:
             f_h = _font(tbl.size, bold=True)
             for i, col in enumerate(tbl.cols):
                 txt = f_h.render(col.header, True, INK)
-                text_rect = tbl_layout.text_rects[0][i]
+                text_rect = tbl_layout.header_text_rects[i]
                 surface.blit(txt, text_rect)
 
             # Draw rule
@@ -1320,7 +1835,7 @@ class BroadsheetView:
             f_h = _font(h_tbl.size, bold=True)
             for i, col in enumerate(h_tbl.cols):
                 txt = f_h.render(col.header, True, INK)
-                text_rect = h_tbl_layout.text_rects[0][i]
+                text_rect = h_tbl_layout.header_text_rects[i]
                 surface.blit(txt, text_rect)
 
             pygame.draw.line(surface, INK,
@@ -1366,7 +1881,7 @@ class BroadsheetView:
             f_h = _font(s_tbl.size, bold=True)
             for i, col in enumerate(s_tbl.cols):
                 txt = f_h.render(col.header, True, INK)
-                text_rect = s_tbl_layout.text_rects[0][i]
+                text_rect = s_tbl_layout.header_text_rects[i]
                 surface.blit(txt, text_rect)
 
             pygame.draw.line(surface, INK,
@@ -1427,7 +1942,8 @@ class BroadsheetView:
         y = content.y + 6 + title.get_height() + 10
         self._draw_petition_cards(surface, content, y)
 
-    def _draw_policies(self, surface, content) -> None:
+    def _draw_policies(self, surface, content, y: int = None,
+                        bottom: int = None) -> int:
         from gilded import policy
         from gilded.society import labor
         from gilded.directives import (DIRECTIVE_KEYS, DIRECTIVE_CONVICTION,
@@ -1450,19 +1966,23 @@ class BroadsheetView:
         small = _font(TYPE_BODY)
         x = content.x + PAD
         w = content.width - 2 * PAD
-        y = content.y + PAD
-        surface.blit(title.render("Standing Policy", True, INK), (x, y))
+        if y is None:
+            y = content.y + PAD
+        if bottom is not None and y > bottom - 120:
+            return y
+        blit_text(surface, title, "Standing Policy", (x, y), INK)
         y += title.get_height() + 12
         track_w = w - 240
         for key in DIRECTIVE_KEYS:
+            if bottom is not None and y > bottom - 24:
+                break
             left, right = POLES[key]
             stance = directives.stances.get(key, 0)
             # label row
-            surface.blit(label.render(f"{left}", True, FADED), (x, y))
-            rlabel = label.render(right, True, FADED)
-            surface.blit(rlabel, (x + track_w - rlabel.get_width(), y))
+            blit_text(surface, label, f"{left}", (x, y), FADED)
+            blit_text(surface, label, right, (x + track_w - label.size(right)[0], y), FADED)
             sign = f"(+{stance})" if stance > 0 else f"({stance})"
-            surface.blit(label.render(sign, True, INK), (x + track_w + 16, y))
+            blit_text(surface, label, sign, (x + track_w + 16, y), INK)
             y += label.get_height() + 6
             # track + marker
             track_y = y + 8
@@ -1499,7 +2019,7 @@ class BroadsheetView:
                 line = (f"relations {eff.relations_drift:+.1f}/turn · trade +"
                         f"{eff.trade_income:.1f} · legitimacy "
                         f"{eff.legitimacy_mod:+.1f}")
-            surface.blit(small.render(line, True, INK), (x, y))
+            blit_text(surface, small, line, (x, y), INK)
             y += small.get_height() + 4
             # friction flag
             seat = realm.court.positions.get(DOMAIN_SEAT[key])
@@ -1510,23 +2030,217 @@ class BroadsheetView:
                     flag = (f"! {seat.name} leans "
                             f"{left if conviction < 0 else right} — straining "
                             f"{turns}/4")
-                    surface.blit(small.render(flag, True, FADED), (x, y))
+                    blit_text(surface, small, flag, (x, y), FADED)
                     y += small.get_height() + 4
             y += 16
+        return y
 
     def _draw_atlas(self, surface, rect: pygame.Rect = None) -> None:
         if rect is None:
             hud_h = _hud_height()
             rect = pygame.Rect(0, TAB_H + hud_h, self._w,
                                self._h - TAB_H - hud_h - BOTTOM_H)
-        self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid)
+        self._atlas_polys = draw_atlas(surface, self.game, rect, self.selected_pid,
+                                       accent_log=self._accent_log,
+                                       tier=self.atlas_tier)
         self.regions.add(Region(rect=rect,
                                 action={"select_province": None},
                                 hint="Click a province to inspect it.",
                                 group="atlas"))
+        # After the map backdrop region so the strip wins the hit-test.
+        self._draw_atlas_zoom(surface, rect)
         if self.selected_pid is not None:
             self._draw_panel(surface,
                              province_panel_lines(self.game, self.selected_pid))
+        # Draw action rows on the right side panel
+        self._draw_atlas_actions(surface, rect)
+
+    def _draw_atlas_zoom(self, surface, rect: pygame.Rect) -> None:
+        """C8.1: three tier controls in the atlas's top-right corner
+        (the war toggle sits at right - 204, so the zoom strip keeps clear of
+        it). Pressing one sets view.atlas_tier; the next draw paints that tier."""
+        from gilded.ui.atlas_view import ATLAS_TIERS
+        font = _font(TYPE_CAPTION)
+        labels = {"continent": "Continent", "region": "Region", "parish": "Parish"}
+        w = 84
+        h = font.get_height() + 8
+        gap = 4
+        # Below the tier legend (top-left) — the legend's own width bounds the
+        # strip's start, so it never sits on a province centroid or the right-
+        # column action buttons.
+        # Fixed, tier-independent anchor: the strip must sit in the same
+        # place on every redraw (legends differ in row count per tier), so
+        # a centre press from an earlier draw still lands after a redraw.
+        # A constant height below the legend's max possible bottom keeps it
+        # inside the content band (y >= 160 at 1280x900).
+        from gilded.ui.atlas_view import ATLAS_TIERS as _tiers
+        from gilded.ui.atlas_view import legend_rect_for
+        worst_bottom = 0
+        for _t in _tiers:
+            worst_bottom = max(worst_bottom,
+                               legend_rect_for(self.game, rect, _t).bottom)
+        x0 = 4
+        y0 = rect.top + 4 + (worst_bottom - (rect.top + 4)) + 6
+        for i, tier in enumerate(ATLAS_TIERS):
+            r = pygame.Rect(x0 + i * (w + gap), y0, w, h)
+            on = (self.atlas_tier == tier)
+            fill = CARD_BG if on else PANEL_BG
+            pygame.draw.rect(surface, fill, r)
+            pygame.draw.rect(surface, INK if on else FADED, r, 2 if on else 1)
+            tw, th = font.size(labels[tier])
+            blit_text(surface, font, labels[tier],
+                      (r.centerx - tw // 2, r.centery - th // 2),
+                      INK if on else FADED)
+            self.regions.add(Region(rect=r,
+                                    action={"zoom": tier},
+                                    hint=f"Zoom to the {labels[tier]} tier.",
+                                    group="atlas_zoom"))
+
+    def _draw_atlas_actions(self, surface, rect: pygame.Rect) -> None:
+        """Draw interactive rows for acquire_minor, build_rail, tour_province on the atlas tab."""
+        from gilded.world import MINOR_OWNER
+        from gilded.docket import RAIL_COST
+        from gilded.ui.actions import ACTIONS
+        BUTTON_H = 26
+        game = self.game
+        house = self.house
+        atlas = game.atlas
+        house_obj = game.houses[house]
+
+        def _draw_btn(surf, text, btn_rect, enabled):
+            if enabled:
+                bg, edge = BUTTON_BG, BUTTON_EDGE
+            else:
+                bg, edge = DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE
+            pygame.draw.rect(surf, bg, btn_rect)
+            pygame.draw.rect(surf, edge, btn_rect, 2)
+            blit_text(surf, _font(TYPE_TEXT), text,
+                      (btn_rect.x + 8, btn_rect.y + 4), BUTTON_TEXT)
+
+        panel_x = rect.right - 260
+        panel_w = 250
+        # Start below the War toggle button (top+8, 30 px tall) so the panel
+        # title never collides with it.
+        y = rect.top + 46
+
+        body = _font(TYPE_TEXT)
+        title = _font(TYPE_CAPTION, bold=True)
+
+        # Title
+        blit_text(surface, title, "PEACE TIME ACTIONS", (panel_x + 4, y), INK)
+        y += title.get_height() + 6
+
+        # Separator
+        pygame.draw.line(surface, INK, (panel_x, y), (panel_x + panel_w, y))
+        y += 8
+
+        # --- Acquire Minor section ---
+        blit_text(surface, body, "Acquire Minor:", (panel_x + 4, y), INK)
+        y += body.get_height() + 2
+
+        # Find bordering minors
+        owned = {p.pid for p in atlas.provinces.values() if p.owner == house}
+        bordering_minors = []
+        for pid, prov in atlas.provinces.items():
+            if prov.owner == MINOR_OWNER and prov.neighbors & owned:
+                bordering_minors.append(pid)
+        bordering_minors.sort(key=lambda pid: atlas.provinces[pid].name)
+
+        for pid in bordering_minors:
+            if y + BUTTON_H > rect.bottom:
+                break
+            prov = atlas.provinces[pid]
+            richness = sum(prov.endowments.values())
+            cost = 300.0 * prov.development + 100.0 * richness
+            action_dict = {"acquire_minor": pid}
+            act = ACTIONS.get("acquire_minor")
+            ok, reason = act.eligible(game, house, action_dict) if act else (False, "Unknown action")
+
+            btn_label = f"{prov.name} ({cost:.0f}g)"
+            btn_rect = pygame.Rect(panel_x + 4, y, panel_w - 8, BUTTON_H)
+            _draw_btn(surface, btn_label, btn_rect, ok)
+
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+            self.regions.add(Region(
+                rect=btn_rect,
+                action=action_dict,
+                hint=btn_label if ok else reason,
+                reason=reason if not ok else None,
+                state=state,
+                group="atlas_actions",
+            ))
+            y += BUTTON_H + 2
+
+        y += 4
+
+        # --- Build Rail section ---
+        blit_text(surface, body, "Build Rail:", (panel_x + 4, y), INK)
+        y += body.get_height() + 2
+
+        # Find rail-less links between owned provinces
+        rail_links = []
+        for link in atlas.links.values():
+            if not link.rail and link.a in owned and link.b in owned:
+                pa = atlas.provinces[link.a].name
+                pb = atlas.provinces[link.b].name
+                rail_links.append((link.a, link.b, pa, pb))
+        rail_links.sort(key=lambda t: t[2] + t[3])
+
+        for a, b, pa, pb in rail_links:
+            if y + BUTTON_H > rect.bottom:
+                break
+            action_dict = {"build_rail": True, "build_rail_a": a, "build_rail_b": b}
+            act = ACTIONS.get("build_rail")
+            ok, reason = act.eligible(game, house, action_dict) if act else (False, "Unknown action")
+
+            btn_label = f"{pa}-{pb} ({RAIL_COST:.0f}g)"
+            btn_rect = pygame.Rect(panel_x + 4, y, panel_w - 8, BUTTON_H)
+            _draw_btn(surface, btn_label, btn_rect, ok)
+
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+            self.regions.add(Region(
+                rect=btn_rect,
+                action=action_dict,
+                hint=btn_label if ok else reason,
+                reason=reason if not ok else None,
+                state=state,
+                group="atlas_actions",
+            ))
+            y += BUTTON_H + 2
+
+        y += 4
+
+        # --- Tour Province section ---
+        blit_text(surface, body, "Tour Province:", (panel_x + 4, y), INK)
+        y += body.get_height() + 2
+
+        # Find owned provinces
+        owned_provinces = [(pid, atlas.provinces[pid])
+                           for pid in owned]
+        owned_provinces.sort(key=lambda t: t[1].name)
+
+        for pid, prov in owned_provinces:
+            if y + BUTTON_H > rect.bottom:
+                break
+            action_dict = {"tour_province": pid}
+            act = ACTIONS.get("tour_province")
+            ok, reason = act.eligible(game, house, action_dict) if act else (False, "Unknown action")
+
+            unrest_str = f"unrest={prov.unrest:.1f}"
+            btn_label = f"{prov.name} ({unrest_str})"
+            btn_rect = pygame.Rect(panel_x + 4, y, panel_w - 8, BUTTON_H)
+            _draw_btn(surface, btn_label, btn_rect, ok)
+
+            state = RegionState.ENABLED if ok else RegionState.DISABLED
+            self.regions.add(Region(
+                rect=btn_rect,
+                action=action_dict,
+                hint=btn_label if ok else reason,
+                reason=reason if not ok else None,
+                state=state,
+                group="atlas_actions",
+            ))
+            y += BUTTON_H + 2
 
     def _draw_panel(self, surface, lines: List[str]) -> None:
         font = _font(TYPE_TEXT)
@@ -1540,7 +2254,7 @@ class BroadsheetView:
         y = rect.y + PAD
         for i, line in enumerate(lines):
             f = _font(TYPE_TEXT, bold=True) if i == 0 else font
-            surface.blit(f.render(line, True, TAB_TEXT), (rect.x + PAD, y))
+            blit_text(surface, f, line, (rect.x + PAD, y), TAB_TEXT)
             y += font.get_height() + 2
 
     def powers_lines(self) -> List[str]:
@@ -1556,10 +2270,12 @@ class BroadsheetView:
         return lines
 
     def _draw_powers(self, surface, content) -> None:
-        """Draw the Powers tab: model -> layout -> draw."""
+        """Draw the Powers spine: model -> layout -> draw.  The selected
+        rival/Order (self._powers_selected) is highlighted and its dossier
+        opens on the inner page."""
         g, name = self.game, self.house
         lines = powers_report(g, name)
-        model = powers_model(lines, selected=None)
+        model = powers_model(lines, selected=self._powers_selected)
         layout = powers_layout(model, content)
 
         title_rect = layout["title"]
@@ -1568,8 +2284,7 @@ class BroadsheetView:
 
         # Title
         f_title = _font(TYPE_HEADING, bold=True)
-        title_surf = f_title.render("THE POWERS", True, INK)
-        surface.blit(title_surf, (title_rect.left, title_rect.top))
+        blit_text(surface, f_title, "THE POWERS", (title_rect.left, title_rect.top), INK)
 
         # Table
         tbl = model.table
@@ -1580,9 +2295,8 @@ class BroadsheetView:
         for i, col in enumerate(tbl.cols):
             if i < len(tbl_layout.header_rects):
                 h_rect = tbl_layout.header_rects[i]
-                txt = f_h.render(col.header, True, INK)
-                text_rect = tbl_layout.text_rects[0][i] if i < len(tbl_layout.text_rects[0]) else h_rect
-                surface.blit(txt, text_rect)
+                text_rect = tbl_layout.header_text_rects[i]
+                blit_text(surface, f_h, col.header, text_rect.topleft, INK)
 
         # Draw rule
         pygame.draw.line(surface, INK,
@@ -1601,19 +2315,17 @@ class BroadsheetView:
                     continue
                 cell_rect = tbl_layout.cell_rects[ri][ci]
                 text_rect = tbl_layout.text_rects[ri][ci]
-                txt = f_b.render(cell, True, INK)
-                surface.blit(txt, text_rect)
+                blit_text(surface, f_b, cell, text_rect.topleft, INK)
 
         # Overflow warning
         if model.overflow_name is not None:
-            warn = f_b.render(f"⚠ {model.overflow_name}", True, TONES.get("warn", INK))
-            surface.blit(warn, (tbl_rect.left, tbl_rect.bottom + 4))
+            blit_text(surface, f_b, f"⚠ {model.overflow_name}",
+                      (tbl_rect.left, tbl_rect.bottom + 4), TONES.get("warn", INK))
 
         # Empty roster message
         if not lines:
             empty_text = model.texts.get("empty", "(no rival House stands against you)")
-            empty_surf = f_b.render(empty_text, True, INK)
-            surface.blit(empty_surf, (detail_rect.left + 8, detail_rect.top + 4))
+            blit_text(surface, f_b, empty_text, (detail_rect.left + 8, detail_rect.top + 4), INK)
 
         # Informant buttons
         self._informant_hits.clear()
@@ -1622,13 +2334,12 @@ class BroadsheetView:
         for ri in model.informant_rows:
             house = model.row_houses[ri]
             btn_label = f"Place informant: {house}"
-            btn_surf = f_b.render(btn_label, True, INK)
+            btn_w, btn_h = f_b.size(btn_label)
             btn_x = btn_rect.left + 8
-            btn_h = btn_surf.get_height() + 4
-            btn_r = pygame.Rect(btn_x, btn_y, btn_surf.get_width() + 12, btn_h)
+            btn_r = pygame.Rect(btn_x, btn_y, btn_w + 12, btn_h + 4)
             pygame.draw.rect(surface, CARD_BG, btn_r)
             pygame.draw.rect(surface, CARD_EDGE, btn_r, 1)
-            surface.blit(btn_surf, (btn_r.left + 6, btn_r.top + 2))
+            blit_text(surface, f_b, btn_label, (btn_r.left + 6, btn_r.top + 2), INK)
             self._informant_hits.append((btn_r, {"place_informant": house}))
             self.regions.add(Region(rect=btn_r,
                                     action={"place_informant": house},
@@ -1835,7 +2546,7 @@ class BroadsheetView:
         for i, col in enumerate(tbl.cols):
             if i < len(tbl_layout.header_rects):
                 h_rect = tbl_layout.header_rects[i]
-                text_rect = tbl_layout.text_rects[0][i] if i < len(tbl_layout.text_rects[0]) else h_rect
+                text_rect = tbl_layout.header_text_rects[i]
                 txt = f_h.render(col.header, True, INK)
                 surface.blit(txt, text_rect)
 
@@ -2233,16 +2944,327 @@ class BroadsheetView:
         """Build text lines for the House tab from the peerage read-model."""
         from gilded.peerage import report as peerage_report
         rpt = peerage_report(self.game, self.house)
-        return _house_tab_lines(rpt)
+        lines = _house_tab_lines(rpt)
+        lines.extend(self._ambition_banner_lines())
+        lines.extend(self._court_want_lines())
+        return lines
+
+    def _ambition_banner_lines(self) -> List[str]:
+        """C2: the House's stake - the banner's family, target, clock."""
+        lines: List[str] = []
+        st = self.game.ambitions.status(self.house)
+        if st["family"] is None:
+            lines.append("")
+            lines.append("AMBITION: (none set - use Set Ambition below)")
+            return lines
+        lines.append("")
+        target = f" against House {st['target']}" if st["target"] else ""
+        lines.append(f"AMBITION: {st['family']}{target}  [{st['clock']}]")
+        lines.append(f"  {st['why']}")
+        if st["fulfilled"] is not None:
+            lines.append("  " + ("FULFILLED" if st["fulfilled"]
+                                 else "fell short"))
+        return lines
+
+    def _court_want_lines(self) -> List[str]:
+        """C2: the court's private wants - one card per adult member."""
+        lines: List[str] = []
+        cards = self.game.ambitions.cards(self.house)
+        if not cards:
+            return lines
+        lines.append("COURT WANTS")
+        for c in cards:
+            traits = ", ".join(c["traits"]) if c["traits"] else "no mark"
+            lines.append(f"  {c['name']} ({c['age']}, {traits}): "
+                         f"{c['stance']} - {c['want_text']}")
+        return lines
 
     def _draw_house(self, surface, content: pygame.Rect) -> None:
         from gilded.peerage import report as peerage_report
         from gilded.ui.court_actions import _get_appointment_pool
         rpt = peerage_report(self.game, self.house)
-        draw_house_tab(surface, content, rpt, self)
+        y = draw_house_tab(surface, content, rpt, self)
+        # C6C: two-column layout — the spine text (ladder + agenda + intrigue)
+        # in the left column, the interactive controls (policies dials) in the
+        # right column at band top. Both share the content bottom, so
+        # everything ends <= content.bottom (the 45px spill healed; the
+        # set_stance dials register inside the band).
+        left = pygame.Rect(content.x, y + 2, 400, content.bottom - (y + 2))
+        right = pygame.Rect(content.x + 414, content.y + 40,
+                            content.width - 414,
+                            content.bottom - (content.y + 40))
+        # spec §2: the Briefing's ladder + agenda re-homed here (the House
+        # spine is their home now); the agenda cards are the docket's
+        # decisions. The left column carries only the spine text so it stays
+        # short enough to fit the band.
+        # C7w4: the ruler's three memory lines sit under the spine (no
+        # heading, so the agenda keeps its rule regions).  Reserve their
+        # room in the spine's budget so the ladder yields rows instead of
+        # the memory lines spilling past the band bottom.
+        # Reserve the memory lines only while the spine keeps its 120px
+        # minimum; on a short band the spine gets the full budget and the
+        # memory lines simply yield (the spine's own budget makes the ladder
+        # yield rows first).
+        full_bottom = content.bottom - 40
+        mem_reserve = 3 * (_font(TYPE_CAPTION).get_height() + 1)
+        spine_bottom = (full_bottom - mem_reserve
+                        if left.y + 120 <= full_bottom - mem_reserve
+                        else full_bottom)
+        y_spine = self._draw_ladder_and_agenda(surface, left, left.y,
+                                               bottom=spine_bottom)
+        self._draw_ruler_history(surface, left, y=y_spine,
+                                 bottom=content.bottom - 40)
+        # spec §2: the dissolved Policies tab is re-homed onto the House
+        # spine — the five standing directive dials (set_stance) draw on the
+        # Overview page (right column at band top), not a separate tab.
+        y_right = self._draw_policies(surface, right, right.y,
+                                      bottom=content.bottom - 40)
+        # The intrigue section (plot visibility) stacks under the policies
+        # dials in the right column so the left column never overflows the band.
+        self._draw_intrigue(surface, right, y_right,
+                            bottom=content.bottom - 40)
+        # C2: the Set Ambition button, then the family picker when open
+        self._draw_ambition_controls(surface, content)
+        if self._ambition_picker:
+            self._draw_ambition_picker(surface, content)
         # If court picker is open, draw candidates
         if self._court_picker is not None:
             self._draw_court_picker(surface, content, rpt)
+        # If scheme picker is open, draw it
+        if self._scheme_picker is not None:
+            self._draw_scheme_picker(surface, content)
+ 
+    def _draw_ambition_controls(self, surface, content: pygame.Rect) -> None:
+        """C2: the Set Ambition button under the court section."""
+        from gilded.ui.widgets import INK, Region, RegionState, TONES
+        from gilded.ui.house_tab import _draw_button
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        game = self.game
+        house = self.house
+        st = game.ambitions.status(house)
+        sy = content.bottom - 10
+        btn_w = 140
+        btn_h = body.get_height() + 4
+        bx = content.width - PAD - btn_w
+        if sy - 60 <= content.bottom - 10:
+            label = f"Ambition: {st['family']}" if st["family"] else "Set Ambition"
+            btn_rect = _draw_button(surface, label, bx, sy - 20, btn_w, btn_h, True)
+            self.regions.add(Region(
+                rect=btn_rect,
+                action={"open_ambition_picker": True},
+                hint="Set the House's stake - the goal the court backs or opposes",
+                group="ambition_picker",
+            ))
+
+    def _draw_ambition_picker(self, surface, content: pygame.Rect) -> None:
+        """C2: the family picker overlay - click a family to set the stake."""
+        from gilded.agenda import FAMILIES
+        from gilded.ui.widgets import INK, Region, TONES
+        from gilded.ui.house_tab import _draw_button
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        btn_h = body.get_height() + 6
+        x = PAD
+        y = content.y + 8
+        for family in FAMILIES:
+            btn = pygame.Rect(x, y, 150, btn_h)
+            _draw_button(surface, family, x, y, 150, btn_h, True)
+            self.regions.add(Region(
+                rect=btn,
+                action={"set_ambition": {"family": family}},
+                hint=f"Set the House's ambition to {family}",
+                group="ambition_picker",
+            ))
+            y += btn_h + 2
+            if y > content.bottom - 40:
+                break
+        _draw_button(surface, "Cancel", x, content.bottom - 40,
+                     150, btn_h, True)
+        self.regions.add(Region(
+            rect=pygame.Rect(PAD + 168, content.bottom - 40, 150, btn_h),
+            action={"close_ambition_picker": True},
+            hint="Cancel - spends nothing",
+            group="ambition_picker",
+        ))
+
+    def _draw_intrigue(self, surface, content: pygame.Rect,
+                        y: int = None, bottom: int = None) -> int:
+        """Draw intrigue section: plots affecting the played House.
+
+        Starts at *y* (or the bottom of *content* when omitted) and returns
+        the y after the section so callers can chain below it.
+        """
+        from gilded.ui.widgets import INK, Region, RegionState, TONES
+        from gilded.ui.house_tab import _draw_button
+        from gilded.ui.actions import _open_scheme_picker_eligible, _start_scheme_eligible
+        # C6C two-column: the section is passed the right-column rect, so
+        # x offsets are relative to content.x (same as _draw_policies).
+        PAD = content.x + 12
+        body = _font(TYPE_TEXT)
+        game = self.game
+        house = self.house
+        realm = game.realms[house]
+        our_ids = {c.id for c in realm.characters}
+        # Find plots: against us (target is ours) and by us (agent is ours)
+        schemes = getattr(game, 'scheme_mgr', None)
+        if y is None:
+            y = content.bottom - 20
+        if not schemes:
+            return y
+        lines = []
+        for s in schemes.schemes:
+            target_is_ours = s.target.id in our_ids
+            agent_is_ours = s.agent.id in our_ids
+            if target_is_ours:
+                lines.append(f"⚠ {s.agent.name} plots a {s.scheme_type} against {s.target.name}")
+            elif agent_is_ours:
+                lines.append(f"→ {s.agent.name} schemes against {s.target.name} ({s.scheme_type})")
+        # Draw section — button is unconditional (conduct), lines are conditional (sight).
+        # C6: flow the section DOWN from y (vertical chaining) so it never draws
+        # above the previous section's end — the old upward anchor overwrote the
+        # ladder/succession rows.
+        header_h = body.get_height() + 4
+        btn_h = body.get_height() + 8
+        line_h = body.get_height() + 2
+        sy = y + 4
+        # Header
+        blit_text(surface, body, "INTRIGUE", (PAD, sy), TONES.get("bad", INK))
+        sy += header_h
+        for line in lines:
+            color = TONES.get("warn", INK) if line.startswith("⚠") else INK
+            blit_text(surface, body, line, (PAD, sy), color)
+            sy += line_h
+        # Button to open scheme picker — always drawn (conduct, not sight)
+        btn_w = 160
+        if True:
+            ok, reason = _open_scheme_picker_eligible(game, house, {})
+            btn_rect = _draw_button(surface, "Start Scheme", PAD, sy, btn_w, btn_h, ok)
+            if ok:
+                self.regions.add(Region(
+                    rect=btn_rect,
+                    action={"open_scheme_picker": True},
+                    hint="Open the intrigue picker",
+                    group="intrigue",
+                ))
+            else:
+                self.regions.add(Region(
+                    rect=btn_rect,
+                    action={"open_scheme_picker": True},
+                    state=RegionState.DISABLED,
+                    reason=reason,
+                    hint="Open the intrigue picker",
+                    group="intrigue",
+                ))
+            sy += btn_h + 6
+        return sy
+
+    def _draw_house_page_header(self, surface, content: pygame.Rect,
+                                title: str) -> None:
+        """Header strip for a House/Powers inner page (the dissolved tab's
+        content re-homed).  Page-switch buttons let the player move between
+        the spine's inner pages."""
+        from gilded.ui.widgets import font as _font, TYPE_TITLE, TYPE_TEXT, INK
+        from gilded.ui import palette
+        INK2 = palette.rgb(palette.INK2)
+        pages = (self.powers_pages if self.active_tab == "Powers"
+                 else self.house_pages)
+        cur = (self.powers_page if self.active_tab == "Powers"
+               else self.house_page)
+        head_font = _font(TYPE_TITLE, bold=True)
+        blit_text(surface, head_font, title, (PAD, content.y + 6), INK)
+        y = content.y + 30
+        body = _font(TYPE_TEXT)
+        x = PAD
+        for p in pages:
+            label = body.render(p, True, INK if p == cur else INK2)
+            rect = pygame.Rect(x, y, label.get_width() + 16, body.get_height() + 8)
+            if p == cur:
+                pygame.draw.rect(surface, palette.rgb(palette.SAGE), rect)
+            blit_text(surface, body, p, (rect.x + 8, rect.y + 4),
+                      INK if p == cur else INK2)
+            self.regions.add(Region(
+                rect=rect,
+                action={"set_spine_page": p},
+                hint=f"Open the {p} page.",
+                group=f"page:{self.active_tab}",
+            ))
+            x += rect.w + 10
+        content.y += 44
+
+    def _draw_powers_dossier(self, surface, content: pygame.Rect) -> None:
+        """Powers inner page: the dossier for the selected rival/Order.
+        Declaring war is a verb inside the dossier (the War tab dissolved)."""
+        from gilded.ui.house_tab import _draw_button
+        from gilded.ui.widgets import font as _font, TYPE_TEXT, INK
+        if self._powers_selected is None:
+            # No selection yet — show the roster so a row can be picked.
+            self._draw_powers(surface, content)
+            return
+        # Draw the full Powers table (with the selected row highlighted),
+        # then the dossier body for the selected power in the detail area
+        # below the table (clear of the table title and rows).
+        layout = powers_layout(powers_model(
+            powers_report(self.game, self.house),
+            selected=self._powers_selected), content)
+        detail_rect = layout["detail"]
+        lines = self.powers_lines()
+        font = _font(TYPE_TEXT)
+        x = detail_rect.left + 8
+        y = detail_rect.top + 2
+        head_rect = blit_text(surface, _font(TYPE_HEADING, bold=True),
+                              f"DOSSIER - {self._powers_selected}",
+                              (x, y), INK)
+        y = head_rect.bottom + 4
+        for line in lines:
+            if line.startswith(self._powers_selected) or line.startswith(f"House {self._powers_selected}"):
+                blit_text(surface, font, line, (x, y), INK)
+                y += font.get_height() + 6
+                break
+        btn_rect = layout["buttons"]
+        war = _draw_button(
+            surface, "Declare War", btn_rect.right - 140, btn_rect.top,
+            140, font.get_height() + 8, True)
+        self.regions.add(Region(
+            rect=war,
+            action={"declare_war": self._powers_selected},
+            hint=f"Declare war on {self._powers_selected}.",
+            group="war",
+        ))
+
+    def _war_drawer_rect(self, content: pygame.Rect) -> pygame.Rect:
+        # Right-column drawer: sits in the actions column (x >= content.right -
+        # 260), clear of every province centroid (all at x < content.right -
+        # 420 at every supported window size).
+        return pygame.Rect(content.right - 260, content.y, 250, content.h)
+
+    def _draw_war(self, surface, content: pygame.Rect) -> None:
+        from gilded.ui.war_tab import draw_war_tab
+        draw_war_tab(surface, self.game, self.house,
+                     content.x, content.y, content.w, content.h,
+                     self.regions,
+                     font_text=None)
+        if self._garrison_picker is not None:
+            self._draw_garrison_picker(surface, content)
+
+    def _draw_war_toggle(self, surface, content: pygame.Rect) -> None:
+        # Desk-strip toggle: top-right when closed (the atlas's centroid-free
+        # zone, measured C4 diagnosis: all centroids at x < right - 164);
+        # just left of the drawer when open so it stays reachable.
+        from gilded.ui.house_tab import _draw_button
+        label = "Close war" if self.war_drawer else "War"
+        if self.war_drawer:
+            btn_x = content.right - 260 - 160
+        else:
+            btn_x = content.right - 150
+        btn = _draw_button(surface, label, btn_x,
+                           content.y + 8, 150, 30, True)
+        self.regions.add(Region(
+            rect=btn,
+            action={"toggle_war_drawer": True},
+            hint="Toggle the War drawer (right column).",
+            group="war",
+        ))
 
     def _draw_court_picker(self, surface, content, report):
         """Draw the appointment picker for a vacant court seat using Regions."""
@@ -2257,7 +3279,7 @@ class BroadsheetView:
         btn_h = body.get_height() + 8
         btn_w = 200
 
-        surface.blit(body.render(f"Select appointee for {pos_name}:", True, INK), (PAD, y))
+        blit_text(surface, body, f"Select appointee for {pos_name}:", (PAD, y), INK)
         y += body.get_height() + 8
 
         # Back button
@@ -2289,14 +3311,169 @@ class BroadsheetView:
 
     # --- clicking ------------------------------------------------------------
 
+    def _draw_garrison_picker(self, surface, content: pygame.Rect) -> None:
+        """Draw the garrison picker: one row per owned province with population to spare."""
+        from gilded.ui.widgets import font as _font, TYPE_TEXT, INK, CARD_BG, BUTTON_BG, BUTTON_EDGE, BUTTON_TEXT, DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE
+        from gilded.ui.house_tab import _draw_button
+        from gilded.fronts import REGIMENT_POP_COST
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        y = content.y + 100
+        btn_h = body.get_height() + 8
+        btn_w = content.w - 2 * PAD
+
+        # Background overlay
+        overlay_h = content.bottom - y - 20
+        if overlay_h > 0:
+            surface.fill(CARD_BG, (content.x, y, content.w, overlay_h))
+
+        blit_text(surface, body, "Select province to raise regiments from:", (content.x + PAD, y), INK)
+        y += body.get_height() + 8
+
+        # Back button
+        back_rect = _draw_button(surface, "Cancel", content.x + PAD, y, btn_w, btn_h, True)
+        self.regions.add(Region(
+            rect=back_rect,
+            action={"close_garrison_picker": True},
+            hint="Cancel garrison adjustment",
+            group="picker",
+        ))
+        self._garrison_picker_hits.append((back_rect, {"close_garrison_picker": True}))
+        y += btn_h + 8
+
+        # Province rows
+        provinces = self.game.provinces_of(self.house)
+        for prov in provinces:
+            if y + btn_h > content.bottom:
+                break
+            pop_available = prov.population // REGIMENT_POP_COST
+            enabled = pop_available > 0
+            label = f"{prov.name} (pop {prov.population}, {pop_available} regiment{'s' if pop_available != 1 else ''})"
+            if not enabled:
+                label += f" — insufficient population (need {REGIMENT_POP_COST})"
+
+            if enabled:
+                btn_rect = _draw_button(surface, label, content.x + PAD, y, btn_w, btn_h, True)
+                action = {"adjust_garrison": {"province_pid": prov.pid, "count": 1}}
+            else:
+                btn_rect = pygame.Rect(content.x + PAD, y, btn_w, btn_h)
+                pygame.draw.rect(surface, DISABLED_BUTTON_BG, btn_rect)
+                pygame.draw.rect(surface, DISABLED_BUTTON_EDGE, btn_rect, 1)
+                txt = body.render(label, True, DISABLED_BUTTON_EDGE)
+                surface.blit(txt, (btn_rect.x + 4, btn_rect.y + 4))
+                action = None
+
+            if action is not None:
+                self._garrison_picker_hits.append((btn_rect, action))
+                self.regions.add(Region(
+                    rect=btn_rect,
+                    action=action,
+                    state=RegionState.ENABLED,
+                    hint=label,
+                    group="picker",
+                ))
+            else:
+                self.regions.add(Region(
+                    rect=btn_rect,
+                    action=action or {"adjust_garrison": {"province_pid": prov.pid, "count": 1}},
+                    state=RegionState.DISABLED,
+                    reason=f"Insufficient population (need {REGIMENT_POP_COST})",
+                    hint=label,
+                    group="picker",
+                ))
+            y += btn_h + 4
+
+    def _draw_scheme_picker(self, surface, content: pygame.Rect) -> None:
+        """Draw the scheme picker overlay with target+kind buttons."""
+        from gilded.ui.widgets import INK, Region, RegionState, TONES
+        from gilded.ui.house_tab import _draw_button
+        from gilded.ui.actions import _start_scheme_eligible
+        PAD = 12
+        body = _font(TYPE_TEXT)
+        btn_h = body.get_height() + 8
+        btn_w = 280
+        y = content.y + 120
+        blit_text(surface, body, "INTRIGUE — Select target and scheme type:", (PAD, y), INK)
+        y += body.get_height() + 10
+        # Collect potential targets (living characters not in played House's court)
+        game = self.game
+        house = self.house
+        realm = game.realms[house]
+        our_ids = {c.id for c in realm.characters}
+        targets = []
+        for h in game.houses:
+            if h == house:
+                continue
+            other_realm = game.realms[h]
+            for c in other_realm.characters:
+                if c.is_alive and c not in targets:
+                    targets.append((c, h))
+        if not targets:
+            targets = []
+        for c, target_house in targets[:6]:
+            if y + btn_h > content.bottom:
+                break
+            for scheme_type in ("coup", "assassination"):
+                if y + btn_h > content.bottom:
+                    return
+                label = f"{c.name} — {scheme_type}"
+                ok, reason = _start_scheme_eligible(game, house, {
+                    "target_id": c.id, "scheme_type": scheme_type
+                })
+                btn_rect = _draw_button(surface, label, PAD, y, btn_w, btn_h, ok)
+                if ok:
+                    self.regions.add(Region(
+                        rect=btn_rect,
+                        action={"start_scheme": True, "target_id": c.id,
+                                "scheme_type": scheme_type},
+                        hint=label,
+                        group="scheme_picker",
+                    ))
+                else:
+                    self.regions.add(Region(
+                        rect=btn_rect,
+                        action={"start_scheme": True, "target_id": c.id,
+                                "scheme_type": scheme_type},
+                        state=RegionState.DISABLED,
+                        reason=reason,
+                        hint=label,
+                        group="scheme_picker",
+                    ))
+                y += btn_h + 2
+        # Close button
+        if y + btn_h <= content.bottom:
+            close_rect = _draw_button(surface, "Cancel", PAD, y, btn_w, btn_h, True)
+            self.regions.add(Region(
+                rect=close_rect,
+                action={"close_scheme_picker": True},
+                hint="Cancel — spends nothing",
+                group="scheme_picker",
+            ))
+
     def handle_click(self, pos: Tuple[int, int]) -> Optional[dict]:
         region = self.regions.at(pos)
         if region is not None:
             if region.state is RegionState.DISABLED:
                 return None
             action = region.action
+            if "toggle_war_drawer" in action:
+                self.war_drawer = not self.war_drawer
+                return None
+            if "zoom" in action:
+                self.atlas_tier = action["zoom"]
+                return {"zoom": action["zoom"]}
             if "tab" in action:
+                self.last_transition = {"kind": "tab", "steps": 6}
                 self.active_tab = action["tab"]
+            if "end_turn" in action:
+                self.last_transition = {"kind": "end_turn", "steps": 6}
+            if "set_spine_page" in action:
+                page = action["set_spine_page"]
+                if self.active_tab == "Powers":
+                    self.powers_page = page
+                else:
+                    self.house_page = page
+                return {"set_spine_page": page}
             if "cycle_exec" in action:
                 pid = action["cycle_exec"]
                 cands = self._candidates(pid)
@@ -2323,6 +3500,15 @@ class BroadsheetView:
             if "open_heir_picker" in action:
                 self._heir_picker = True
                 return {"open_heir_picker": True}
+            if "open_ambition_picker" in action:
+                self._ambition_picker = True
+                return None
+            if "close_ambition_picker" in action:
+                self._ambition_picker = False
+                return None
+            if "set_ambition" in action:
+                self._ambition_picker = False
+                return {"set_ambition": action["set_ambition"]}
             if "close_heir_picker" in action:
                 self._heir_picker = None
             if "designate_heir" in action:
@@ -2337,28 +3523,56 @@ class BroadsheetView:
             if "close_director_picker" in action:
                 self._director_picker = None
                 self._director_picker_hits.clear()
-            if "buy_shares" in action and "char_id" not in action:
+            if "buy_shares" in action:
                 eid = action["buy_shares"]
-                self._share_picker = {"direction": "buy", "eid": eid}
-                self._share_picker_hits.clear()
-                return {"open_share_picker": eid}
-            if "sell_shares" in action and "char_id" not in action:
+                if isinstance(eid, int):
+                    self._share_picker = {"direction": "buy", "eid": eid}
+                    self._share_picker_hits.clear()
+                    return {"open_share_picker": eid}
+            if "sell_shares" in action:
                 eid = action["sell_shares"]
-                self._share_picker = {"direction": "sell", "eid": eid}
-                self._share_picker_hits.clear()
-                return {"open_share_picker": eid}
+                if isinstance(eid, int):
+                    self._share_picker = {"direction": "sell", "eid": eid}
+                    self._share_picker_hits.clear()
+                    return {"open_share_picker": eid}
             if "close_found_picker" in action:
                 self._found_picker = None
                 self._found_picker_hits.clear()
             if "close_share_picker" in action:
                 self._share_picker = None
                 self._share_picker_hits.clear()
+            if "open_garrison_picker" in action:
+                self._garrison_picker = True
+                self._garrison_picker_hits.clear()
+                return None
+            if "close_garrison_picker" in action:
+                self._garrison_picker = None
+                self._garrison_picker_hits.clear()
+                return None
+            if "open_scheme_picker" in action:
+                self._scheme_picker = True
+                self._scheme_picker_hits.clear()
+                return action
+            if "close_scheme_picker" in action:
+                self._scheme_picker = None
+                self._scheme_picker_hits.clear()
+                return None
+            if "start_scheme" in action:
+                from gilded.ui.actions import ACTIONS
+                act = ACTIONS.get("start_scheme")
+                if act is not None:
+                    ok, _ = act.eligible(self.game, self.house, action)
+                    if ok:
+                        act.dispatch(self.game, self.house, self, action)
+                return action
             return action
         for name, rect in self._tab_rects.items():
             if rect.collidepoint(pos):
+                self.last_transition = {"kind": "tab", "steps": 6}
                 self.active_tab = name
                 return {"tab": name}
         if self._end_turn_rect is not None and self._end_turn_rect.collidepoint(pos):
+            self.last_transition = {"kind": "end_turn", "steps": 6}
             return {"end_turn": True}
         if self._narrate_rect is not None and self._narrate_rect.collidepoint(pos):
             return {"toggle_narrate": True}
@@ -2388,7 +3602,14 @@ class BroadsheetView:
                         self._share_picker = None
                         self._share_picker_hits.clear()
                     return action
-        if self.active_tab == "Enterprises":
+        if self._scheme_picker is not None:
+            for rect, action in self._scheme_picker_hits:
+                if rect.collidepoint(pos):
+                    if "close_scheme_picker" in action:
+                        self._scheme_picker = None
+                        self._scheme_picker_hits.clear()
+                    return action
+        if self.active_tab == "House" and self.house_page == "Governance":
             for rect, act in self._enterprise_hits:
                 if rect.collidepoint(pos):
                     return act.get("action", act)

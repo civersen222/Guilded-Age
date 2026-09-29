@@ -281,7 +281,11 @@ def _force_strike(game, province):
 
 def test_coal_strike_raises_coal_price_versus_control():
     control, struck = _game(), _game()
-    coalp = _find_province(struck, "coalfield")
+    # Strike the province of an actual colliery: at seed 7 the first
+    # coalfield province (27) hosts no enterprise, so striking it shuts
+    # down nothing and coal prices never diverge.
+    colliery = next(e for e in struck.enterprises if e.kind == "colliery")
+    coalp = struck.atlas.provinces[colliery.province]
     for _ in range(4):
         _force_strike(struck, coalp)
         control.end_turn()

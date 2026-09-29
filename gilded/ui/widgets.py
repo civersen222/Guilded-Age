@@ -7,6 +7,7 @@ other gilded.ui modules.
 from __future__ import annotations
 
 import math
+import os
 import re
 from dataclasses import dataclass
 from typing import Sequence
@@ -22,7 +23,7 @@ INK = (28, 24, 20)
 FADED = (96, 88, 78)
 PAPER_BG = (238, 232, 218)
 CARD_BG = (248, 244, 234)
-CARD_EDGE = (120, 108, 92)
+CARD_EDGE = (132, 135, 111)  # DIM
 
 # ────────────────────────────────────────────────────────────────────────────
 # Screen palette — colours shared across all rendered screens
@@ -31,7 +32,7 @@ CARD_EDGE = (120, 108, 92)
 BLACK = (0, 0, 0)
 PANEL_BG = (18, 16, 14)
 TAB_BG = (54, 48, 42)
-TAB_ACTIVE = (206, 176, 108)
+TAB_ACTIVE = (168, 132, 44)  # GOLD
 TAB_TEXT = (232, 226, 210)
 HUD_BG = (44, 40, 34)
 HUD_INK = (232, 226, 210)
@@ -40,15 +41,15 @@ BUTTON_EDGE = (30, 46, 30)
 BUTTON_TEXT = (238, 240, 232)
 DISABLED_BUTTON_BG = (30, 30, 30)
 DISABLED_BUTTON_EDGE = (35, 35, 35)
-EXEC_BG = (78, 66, 96)
-ENDTURN_BG = (140, 60, 52)
+EXEC_BG = (68, 81, 63)  # INK2
+ENDTURN_BG = (142, 41, 23)  # VERMILLION_DARK
 ATTN_COLOR = (150, 110, 40)
 SKIM_HIGHLIGHT = (240, 220, 210)
 PICKER_BACK_BG = (70, 70, 50)
 PICKER_ROW_BG = (60, 60, 60)
 DISABLED_FILL = (60, 60, 50)
 DISABLED_EDGE = (100, 80, 60)
-DISABLED_TEXT = (140, 120, 100)
+DISABLED_TEXT = (210, 180, 135)
 PICKER_SUBTITLE = (160, 160, 140)
 PICKER_ROW_ALT_BG = (60, 60, 40)
 OFFERABLE_BG = (50, 50, 35)
@@ -58,11 +59,17 @@ HOUSE_COLORS = [(122, 74, 58), (58, 90, 122), (74, 106, 74), (140, 120, 60),
 MINOR_COLOR = (90, 90, 90)
 OCEAN_COLOR = (26, 35, 51)
 FRONT_COLOR = (208, 64, 64)
+GUIDE_BG = (31, 45, 38)  # INK
+GUIDE_EDGE = (150, 122, 60)
 BORDER_COLOR = (12, 12, 12)
 NAME_COLOR = (232, 226, 210)
 GLYPH_COLOR = (250, 240, 200)
 RAIL_COLOR = (198, 164, 84)
 SELECT_COLOR = (245, 245, 235)
+MASK_CLEAR = (0, 0, 0, 0)
+MASK_FULL = (255, 255, 255, 255)
+MASK_WHITE = (255, 255, 255)
+MASK_BLACK = (0, 0, 0)
 
 # ────────────────────────────────────────────────────────────────────────────
 # Typographic constants (Wave 5)
@@ -129,6 +136,30 @@ class RegionSet:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Text-row ledger (C6.5): one (Rect, str) per text line drawn this pass.
+# Rebuilt every draw; tabs append through blit_text().
+# ────────────────────────────────────────────────────────────────────────────
+
+_text_rows: list[tuple[pygame.Rect, str]] = []
+
+
+def blit_text(surface, f: pygame.font.Font, text: str, pos,
+              color) -> pygame.Rect:
+    """Render + blit one line of text and record its rect for text_rows."""
+    img = f.render(text, True, color)
+    rect = img.get_rect(topleft=pos)
+    surface.blit(img, rect)
+    _text_rows.append((rect, text))
+    return rect
+
+
+def take_text_rows() -> list[tuple[pygame.Rect, str]]:
+    rows = list(_text_rows)
+    _text_rows.clear()
+    return rows
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # TONES – colour meaning
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -136,7 +167,7 @@ TONES: dict[str, tuple[int, int, int]] = {
     "good": (34, 120, 68),
     "bad": (180, 50, 40),
     "warn": (200, 150, 30),
-    "neutral": (97, 97, 106),
+    "neutral": (132, 135, 111),  # DIM
     "dead": (160, 160, 165),
 }
 
@@ -162,13 +193,24 @@ TYPE_SIZES = (TYPE_CAPTION, TYPE_BODY, TYPE_TEXT, TYPE_SUBTITLE, TYPE_HEADING, T
 _font_cache: dict[tuple[int, bool], pygame.font.Font] = {}
 
 
+def _font_path(role: str) -> str:
+    from gilded.ui import registry
+    path = registry.FONTS[role]
+    if not os.path.isabs(path):
+        path = os.path.join(os.path.dirname(__file__), "..", "..", path)
+    return path
+
+
 def font(size: int, bold: bool = False) -> pygame.font.Font:
-    """Cached SysFont("georgia,serif"), lazily calling pygame.font.init()."""
+    """Cached Banknote font from registry.FONTS (Bodoni display, EB
+    Garamond body), lazily calling pygame.font.init()."""
     key = (size, bold)
     if key not in _font_cache:
         if not pygame.font.get_init():
             pygame.font.init()
-        _font_cache[key] = pygame.font.SysFont("georgia,serif", size, bold)
+        role = "display" if size >= TYPE_HEADING else "body"
+        _font_cache[key] = pygame.font.Font(_font_path(role), size)
+        _font_cache[key].set_bold(bold)
     return _font_cache[key]
 
 
@@ -188,22 +230,18 @@ def _word_groups(words: list[str], f: pygame.font.Font, width: int) -> list[list
     current: list[str] = []
     for word in words:
         test = current + [word]
-        surf = f.render(" ".join(test), False, (0, 0, 0))
-        if surf.get_width() <= width:
+        w = f.size(" ".join(test))[0]
+        if w <= width:
             current.append(word)
         else:
             if current:
                 groups.append(current)
-            # single word wider than width → it still goes in on its own line
-            if surf.get_width() <= width:
-                current = [word]
+                current = []
+            if f.size(word)[0] > width:
+                # single word wider than width → it still goes in on its own line
+                groups.append([word])
             else:
-                groups.append(current)
                 current = [word]
-                # force-break the long word if needed
-                if f.render(word, False, (0, 0, 0)).get_width() > width:
-                    groups.append([word])
-                    current = []
     if current:
         groups.append(current)
     return groups
@@ -382,6 +420,7 @@ class TableLayout:
     row_rects: list[pygame.Rect]
     cell_rects: list[list[pygame.Rect]]
     text_rects: list[list[pygame.Rect]]
+    header_text_rects: list[pygame.Rect]
 
 
 class Table:
@@ -405,7 +444,7 @@ class Table:
         body_h = f_body.get_linesize()
         row_count = len(self.data)
         gap = 2
-        rule_h = 1 if self.row_rule else 0
+        rule_h = 1 if self.row_rule else 1
         return header_h + rule_h + gap + row_count * (body_h + gap)
 
     def _resolve_align(self, col_idx: int) -> str:
@@ -447,41 +486,44 @@ class Table:
             cell_rects: list[list[pygame.Rect]] = []
             text_rects: list[list[pygame.Rect]] = []
         else:
-            row_h = available_data_h // row_count
-            row_gap = 2
+            row_h = (available_data_h - (row_count - 1) * gap) // row_count
             row_rects = []
-            y = data_top
-            for i in range(row_count):
-                h = row_h
-                if i == row_count - 1:
-                    h = data_bottom - y
-                row_rects.append(pygame.Rect(rect.left, y, rect.width, h))
-                y += h + row_gap
-
-            # cell rects & text rects
             cell_rects = []
             text_rects = []
-            for row_idx, row_rect in enumerate(row_rects):
-                row = self.data[row_idx] if row_idx < len(self.data) else []
+            for row_idx in range(row_count):
+                row_top = data_top + row_idx * (row_h + gap)
+                row_rect = pygame.Rect(rect.left, row_top, rect.width, row_h)
+                row_rects.append(row_rect)
+                row_data = self.data[row_idx] if row_idx < len(self.data) else []
                 weights = [c.width for c in self.cols]
                 row_cells = _weighted_columns(row_rect, weights, gap=0)
                 cell_rects.append(list(row_cells))
                 row_text_rects: list[pygame.Rect] = []
                 for col_idx in range(len(self.cols)):
-                    cell = row[col_idx] if col_idx < len(row) else ""
-                    align = self._resolve_align(col_idx)
-                    text_rect = _place_text(
-                        cell, f_body, row_cells[col_idx], align, body_h
-                    )
-                    row_text_rects.append(text_rect)
+                    if col_idx < len(row_cells):
+                        align = self._resolve_align(col_idx)
+                        cell_rect = row_cells[col_idx]
+                        cell_text = row_data[col_idx] if col_idx < len(row_data) else ""
+                        text_rect = _place_text(cell_text, f_body, cell_rect, align, body_h)
+                        row_text_rects.append(text_rect)
+                    else:
+                        row_text_rects.append(row_cells[col_idx].copy())
                 text_rects.append(row_text_rects)
 
+        header_text_rects = []
+        for col_idx in range(len(self.cols)):
+            align = self._resolve_align(col_idx)
+            h_rect = header_rects[col_idx]
+            header_text = self.cols[col_idx].header
+            text_rect = _place_text(header_text, f_header, h_rect, align, header_h)
+            header_text_rects.append(text_rect)
         return TableLayout(
             header_rects=header_rects,
             rule_y=rule_y,
             row_rects=row_rects,
             cell_rects=cell_rects,
             text_rects=text_rects,
+            header_text_rects=header_text_rects,
         )
 
     def draw(self, surface: pygame.Surface, rect: pygame.Rect) -> TableLayout:
@@ -492,10 +534,9 @@ class Table:
         # draw headers
         for i, col in enumerate(self.cols):
             hr = lay.header_rects[i]
-            text = f_header.render(col.header, True, INK)
             x = hr.left + 4
-            y = hr.centery - text.get_height() // 2
-            surface.blit(text, (x, y))
+            _, th = f_header.size(col.header)
+            blit_text(surface, f_header, col.header, (x, hr.centery - th // 2), INK)
 
         # draw rule
         if self.row_rule:
@@ -506,9 +547,10 @@ class Table:
             row = self.data[row_idx] if row_idx < len(self.data) else []
             for col_idx in range(len(self.cols)):
                 cell = row[col_idx] if col_idx < len(row) else ""
+                if not cell.strip():
+                    continue
                 tr = lay.text_rects[row_idx][col_idx]
-                text = f_body.render(cell, True, INK)
-                surface.blit(text, (tr.x, tr.y))
+                blit_text(surface, f_body, cell, (tr.x, tr.y), INK)
 
         return lay
 
@@ -522,9 +564,7 @@ def _place_text(
 ) -> pygame.Rect:
     if not text.strip():
         return pygame.Rect(cell.x + 4, cell.centery - line_h // 2, 0, line_h)
-    surf = f.render(text, True, (0, 0, 0))
-    tw = surf.get_width()
-    th = surf.get_height()
+    tw, th = f.size(text)
     inset = 4
     y = cell.centery - th // 2
     if align == "right":
@@ -609,23 +649,16 @@ class Meter:
 
     def layout(self, rect: pygame.Rect) -> MeterLayout:
         f = font(self.size)
-        label_surf = f.render(self.label, True, INK)
-        value_surf = f.render(self.value_text(), True, INK)
-        arrow_surf = None
-        if self.delta is not None:
-            arrow_surf = f.render(self.arrow(), True, TONES.get(self.delta_tone(), INK))
-
-        label_w = label_surf.get_width()
-        label_h = label_surf.get_height()
-        value_w = value_surf.get_width()
-        value_h = value_surf.get_height()
-        arrow_w = arrow_surf.get_width() if arrow_surf else 0
-        arrow_h = arrow_surf.get_height() if arrow_surf else 0
+        label_w, label_h = f.size(self.label)
+        value_w, value_h = f.size(self.value_text())
+        arrow_w, arrow_h = (f.size(self.arrow())
+                            if self.delta is not None else (0, 0))
+        has_arrow = self.delta is not None
 
         gap = 6
         # horizontal: label | bar | arrow | value
         # arrow sits inline between bar and value when present
-        arrow_reserve = (arrow_w + gap) if arrow_surf else 0
+        arrow_reserve = (arrow_w + gap) if has_arrow else 0
         right_reserve = arrow_reserve + value_w
         available = rect.width - label_w - gap - right_reserve
         if available < 0:
@@ -643,7 +676,7 @@ class Meter:
         label_rect = pygame.Rect(rect.left, rect.top, label_w, label_h)
 
         arrow_rect: pygame.Rect | None = None
-        if arrow_surf:
+        if has_arrow:
             # place arrow inline between bar and value
             ax = bar_rect.right + gap
             ay = bar_top + (bar_h - arrow_h) // 2
@@ -676,8 +709,7 @@ class Meter:
         f = font(self.size)
 
         # label
-        label_surf = f.render(self.label, True, INK)
-        surface.blit(label_surf, lay.label_rect.topleft)
+        blit_text(surface, f, self.label, lay.label_rect.topleft, INK)
 
         # bar outline
         pygame.draw.rect(surface, CARD_EDGE, lay.bar_rect, 1)
@@ -688,14 +720,13 @@ class Meter:
             pygame.draw.rect(surface, tone_color, lay.fill_rect)
 
         # value
-        value_surf = f.render(self.value_text(), True, INK)
-        surface.blit(value_surf, lay.value_rect.topleft)
+        blit_text(surface, f, self.value_text(), lay.value_rect.topleft, INK)
 
         # arrow
         if lay.arrow_rect is not None:
             arrow_color = TONES.get(self.delta_tone(), INK)
-            arrow_surf = f.render(self.arrow(), True, arrow_color)
-            surface.blit(arrow_surf, lay.arrow_rect.topleft)
+            blit_text(surface, f, self.arrow(), lay.arrow_rect.topleft,
+                      arrow_color)
 
         return lay
 
@@ -728,18 +759,17 @@ class Chip:
 
     def size(self) -> tuple[int, int]:
         f = font(self.pt)
-        surf = f.render(self.text, True, (0, 0, 0))
-        return (surf.get_width() + _CHIP_PAD_X * 2, surf.get_height() + _CHIP_PAD_Y * 2)
+        tw, th = f.size(self.text)
+        return (tw + _CHIP_PAD_X * 2, th + _CHIP_PAD_Y * 2)
 
     def draw(self, surface: pygame.Surface, pos: tuple[int, int]) -> pygame.Rect:
         s = self.size()
         rect = pygame.Rect(pos[0], pos[1], s[0], s[1])
         pygame.draw.rect(surface, self.bg(), rect, border_radius=6)
         f = font(self.pt)
-        text_surf = f.render(self.text, True, self.ink())
         tx = rect.left + _CHIP_PAD_X
-        ty = rect.centery - text_surf.get_height() // 2
-        surface.blit(text_surf, (tx, ty))
+        ty = rect.centery - f.size(self.text)[1] // 2
+        blit_text(surface, f, self.text, (tx, ty), self.ink())
         return rect
 
 
@@ -788,8 +818,7 @@ class Panel:
         # draw title
         if self.title:
             f = font(self.size, bold=True)
-            title_surf = f.render(self.title, True, INK)
             tx = self.rect.left + _PANEL_PAD + _PANEL_BORDER
             ty = self.rect.top + _PANEL_PAD + _PANEL_BORDER
-            surface.blit(title_surf, (tx, ty))
+            blit_text(surface, f, self.title, (tx, ty), INK)
         return self.inner()

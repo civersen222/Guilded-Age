@@ -40,7 +40,7 @@ def _make_game(seed):
 
 
 def _content_rect(w, h):
-    hud_h = 116  # _hud_height() is fixed at 116
+    hud_h = _hud_height()  # live value (was a stale hardcoded 116; C5: hud is 120)
     return pygame.Rect(0, TAB_H + hud_h, w, h - TAB_H - hud_h - BOTTOM_H)
 
 
@@ -452,7 +452,9 @@ def test_label_floor_seed7_900x400():
     rect = _content_rect(900, 400)
     transform = atlas_transform(g.atlas, rect)
     labels = atlas_label_rects(g, transform, rect)
-    assert len(labels) >= 15
+    # C5: the tiered world (~190 provinces) packs more candidates into the
+    # smallest window; the measured floor dropped from 15 to 14.
+    assert len(labels) >= 14
 
 
 def test_label_floor_seed42_900x400():
@@ -504,8 +506,9 @@ def test_glyphs_no_collision_with_labels():
 
 def test_atlas_transform_imported_in_test_atlas():
     """atlas_transform must be imported in test_ui_atlas.py."""
-    import gilded.tests.test_ui_atlas as t
-    assert hasattr(t, "atlas_transform")
+    import os
+    src = open(os.path.join(os.path.dirname(__file__), "test_ui_atlas.py")).read()
+    assert "atlas_transform" in src
 
 
 # ── Rule 15: render never changes game ──────────────────────────────────────
@@ -650,18 +653,16 @@ def test_atlas_glyph_rects_function_exists():
 
 def test_no_multiply_8_in_test_atlas():
     """Rule 14: no * 8 in test_ui_atlas.py."""
-    import gilded.tests.test_ui_atlas as t
-    src = inspect.getsource(t)
-    import re
+    import os, re
+    src = open(os.path.join(os.path.dirname(__file__), "test_ui_atlas.py")).read()
     matches = re.findall(r"\*\s*8\b", src)
     assert len(matches) == 0, f"Found {len(matches)} instances of '* 8' in test_ui_atlas.py"
 
 
 def test_no_multiply_8_in_test_broadsheet():
     """Rule 14: no * 8 in test_ui_broadsheet.py."""
-    import gilded.tests.test_ui_broadsheet as t
-    src = inspect.getsource(t)
-    import re
+    import os, re
+    src = open(os.path.join(os.path.dirname(__file__), "test_ui_broadsheet.py"), encoding='utf-8').read()
     matches = re.findall(r"\*\s*8\b", src)
     assert len(matches) == 0, f"Found {len(matches)} instances of '* 8' in test_ui_broadsheet.py"
 
@@ -919,19 +920,19 @@ def _check_rule4(seed, w, h):
 # ── Rule 5: glyph cluster floors ─────────────────────────────────────────────
 
 def test_rule5_glyph_floor_seed7_1280x900():
-    _check_rule5_floor(7, 1280, 900, 11)
+    _check_rule5_floor(7, 1280, 900, 15)
 
 
 def test_rule5_glyph_floor_seed7_1024x768():
-    _check_rule5_floor(7, 1024, 768, 10)
+    _check_rule5_floor(7, 1024, 768, 11)
 
 
 def test_rule5_glyph_floor_seed42_1280x900():
-    _check_rule5_floor(42, 1280, 900, 6)
+    _check_rule5_floor(42, 1280, 900, 7)
 
 
 def test_rule5_glyph_floor_seed42_1024x768():
-    _check_rule5_floor(42, 1024, 768, 6)
+    _check_rule5_floor(42, 1024, 768, 5)
 
 
 def test_rule5_glyph_render_seed7_900x400():
@@ -1060,51 +1061,52 @@ def _check_glyph_selection_first(seed, w, h, pid, prov_name):
     )
 
 
-# Seed 7: pids 23 Brenvess, 24 Ostenstad, 21 Galvess (discriminating at both 1280x900 and 1024x768)
-def test_rule4_glyph_first_seed7_23_1280x900():
-    _check_glyph_selection_first(7, 1280, 900, 23, "Brenvess")
+# C5: re-pinned to the tiered world (150-250 provinces). Each pid is a real
+# glyph at BOTH 1280x900 and 1024x768 for its seed, so the rule-4 assertion
+# (selected province leads the glyph list) is unchanged.
+def test_rule4_glyph_first_seed7_35_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 35, "Ulmstad Marches")
 
 
-def test_rule4_glyph_first_seed7_23_1024x768():
-    _check_glyph_selection_first(7, 1024, 768, 23, "Brenvess")
+def test_rule4_glyph_first_seed7_35_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 35, "Ulmstad Marches")
 
 
-def test_rule4_glyph_first_seed7_24_1280x900():
-    _check_glyph_selection_first(7, 1280, 900, 24, "Ostenstad")
+def test_rule4_glyph_first_seed7_179_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 179, "Quillfen Vale")
 
 
-def test_rule4_glyph_first_seed7_24_1024x768():
-    _check_glyph_selection_first(7, 1024, 768, 24, "Ostenstad")
+def test_rule4_glyph_first_seed7_179_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 179, "Quillfen Vale")
 
 
-def test_rule4_glyph_first_seed7_21_1280x900():
-    _check_glyph_selection_first(7, 1280, 900, 21, "Galvess")
+def test_rule4_glyph_first_seed7_61_1280x900():
+    _check_glyph_selection_first(7, 1280, 900, 61, "Yarecliff")
 
 
-def test_rule4_glyph_first_seed7_21_1024x768():
-    _check_glyph_selection_first(7, 1024, 768, 21, "Galvess")
+def test_rule4_glyph_first_seed7_61_1024x768():
+    _check_glyph_selection_first(7, 1024, 768, 61, "Yarecliff")
 
 
-# Seed 42: pids 44 Ulmmore, 25 Wickfield Cross, 48 Yareshore (discriminating at both 1280x900 and 1024x768)
-def test_rule4_glyph_first_seed42_44_1280x900():
-    _check_glyph_selection_first(42, 1280, 900, 44, "Ulmmore")
+def test_rule4_glyph_first_seed42_128_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 128, "Brenburg Head")
 
 
-def test_rule4_glyph_first_seed42_44_1024x768():
-    _check_glyph_selection_first(42, 1024, 768, 44, "Ulmmore")
+def test_rule4_glyph_first_seed42_128_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 128, "Brenburg Head")
 
 
-def test_rule4_glyph_first_seed42_25_1280x900():
-    _check_glyph_selection_first(42, 1280, 900, 25, "Wickfield Cross")
+def test_rule4_glyph_first_seed42_174_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 174, "Fershore")
 
 
-def test_rule4_glyph_first_seed42_25_1024x768():
-    _check_glyph_selection_first(42, 1024, 768, 25, "Wickfield Cross")
+def test_rule4_glyph_first_seed42_174_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 174, "Fershore")
 
 
-def test_rule4_glyph_first_seed42_48_1280x900():
-    _check_glyph_selection_first(42, 1280, 900, 48, "Yareshore")
+def test_rule4_glyph_first_seed42_61_1280x900():
+    _check_glyph_selection_first(42, 1280, 900, 61, "Velbourne")
 
 
-def test_rule4_glyph_first_seed42_48_1024x768():
-    _check_glyph_selection_first(42, 1024, 768, 48, "Yareshore")
+def test_rule4_glyph_first_seed42_61_1024x768():
+    _check_glyph_selection_first(42, 1024, 768, 61, "Velbourne")

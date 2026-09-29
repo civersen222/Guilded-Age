@@ -19,6 +19,7 @@ TIDE_BASE_RISE = 0.25          # per turn: ~25 points over a 100-turn century
 ATROCITY_TIDE = 0.15           # tide points per unit of atrocity weight
 ATROCITY_WEIGHTS = {
     "accident": 1.0,
+    "war": 1.0,
     "cover_up": 2.0,
     "martyrdom": 4.0,
     "assassination": 6.0,

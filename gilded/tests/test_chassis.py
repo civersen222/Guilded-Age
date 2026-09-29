@@ -290,11 +290,12 @@ def test_input_cost_deducted_from_consumer_enterprise_dividend():
     from gilded.market import CONSUMES
 
     g = GildedGame(seed=42)
-    consumer_ent = None
-    for ent in g.enterprises:
-        if ent.kind in CONSUMES:
-            consumer_ent = ent
-            break
+    consumers = [e for e in g.enterprises if e.kind in CONSUMES]
+    # The AI expands each house's first consumer enterprise during the turn
+    # (eid 1 and 9 are mid-construction by dividend time, so their input
+    # cost is 0); pick a consumer that is measured to still be operating
+    # after the turn.
+    consumer_ent = consumers[1]
     assert consumer_ent is not None
 
     house = consumer_ent.house
@@ -410,32 +411,30 @@ def test_a_strike_where_there_is_no_colliery_pays_no_colliery(monkeypatch):
 
 
 def test_a_colliery_still_loses_output_when_its_own_province_strikes(monkeypatch):
-    """Guard: STRIKE_OUTPUT_MULT must still cut output for a local strike."""
+    """Guard: STRIKE_OUTPUT_MULT must still cut output for a local strike.
+
+    The old form pinned a seed-42 world where a colliery happened to sit in a
+    province that had a non-striking movement at turn 11.  We now build that
+    movement explicitly so the test measures the mechanism (STRIKE_OUTPUT_MULT
+    reduces dividends) rather than one generated world."""
     from copy import deepcopy
+    from gilded.society.labor import Movement
     import gilded.market as market
 
     g = GildedGame(seed=42)
-    # Run enough turns for a colliery province to have a movement
-    # (seed 42: Ravnbourne Colliery gets one at turn 11)
     for _ in range(11):
         g.end_turn()
 
-    # Find a colliery whose province has a movement
     collieries = [e for e in g.enterprises if e.kind == "colliery"]
     assert len(collieries) >= 1, "need at least one colliery"
-
-    target_ent = None
-    for ent in collieries:
-        prov = g.atlas.provinces.get(ent.province)
-        if prov and getattr(prov, "movement", None) is not None:
-            if prov.movement.state != "striking":
-                target_ent = ent
-                break
-
-    assert target_ent is not None, \
-        "fixture: no colliery sits in a province with a non-striking movement"
-
+    target_ent = collieries[0]
     prov = g.atlas.provinces.get(target_ent.province)
+    assert prov is not None
+
+    # Install a movement in "union" state (below strike threshold)
+    prov.movement = Movement(province_pid=prov.pid)
+    prov.movement.state = "union"
+    prov.movement.militancy = 30.0  # below STRIKE_THRESHOLD (50)
 
     # Deepcopy into two branches
     calm = deepcopy(g)

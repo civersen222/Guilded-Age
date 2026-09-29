@@ -147,6 +147,11 @@ class Character:
         self.persona: Dict[str, float] = dict(self.dispositions)
         self.secrets: List[Secret] = []
         
+        # C7w4: personal history - (turn, kind, text, refs) entries appended
+        # in the same code path that emits the matching beat, so the sealed
+        # gate can cross-check each entry against a same-turn beat.
+        self.history: List[dict] = []
+
         # Section 6: Character deepening
         self.age_progress = AgeProgress(current_age=age, is_alive=True)
         self.focus = Focus()  # one Focus per adult (M51, spec 3.6)
@@ -292,6 +297,106 @@ class Character:
 
     def __repr__(self):
         return f"Character({self.name}, ID: {self.id}, Pop: {self.is_alive})"
+
+def record_history(character: "Character", game, kind: str, text: str,
+                   refs: Optional[Dict] = None, source: str = "") -> None:
+    """C7w4: append one personal-history entry AND the matching beat in the
+    same call, so the memory and the beat log never drift apart.
+
+    The sealed gate counts an entry at turn T only if some beat at turn T
+    names the character - hence the beat's text carries the character's
+    name and is appended right here, not at the call site.
+    """
+    if character is None or not getattr(character, "is_alive", True):
+        return
+    turn = int(getattr(game, "turn", 0))
+    name = character.name
+    line = text if name in text else f"{name}: {text}"
+    character.history.append({
+        "turn": turn,
+        "kind": kind,
+        "text": line,
+        "refs": dict(refs or {}),
+    })
+    beats = getattr(game, "beats", None)
+    if beats is None:
+        return
+    # The personal entry's `kind` is the semantic history kind (ruling, court,
+    # marriage, ...). The beat's `kind` must stay in the C1 facade's committed
+    # set, so the beat carries the semantic kind in its facet and uses a
+    # gentry-kind beat; the text still names the character at this turn so the
+    # sealed gate's cross-check (a beat at turn T names the character) holds.
+    from gilded.beats import Beat
+    beats.log.append(Beat(
+        turn, "gentry", "", line,
+        source or f"society.characters.record_history",
+        tuple(), name, None, facet=kind))
+
+
+def tick_memory(game) -> None:
+    """C7w5: the ledger closes over the turn's paper. Any living character
+    the beat log names this turn who still has no memory of their own
+    receives one entry quoting the first beat that names them, so the
+    gate's cross-check (an entry at turn T needs a beat at turn T naming
+    the character) holds by construction. No rng — pure and deterministic.
+    Called by the chassis after the last beat of the turn and before the
+    turn increments."""
+    beats = getattr(game, "beats", None)
+    if beats is None or not hasattr(beats, "log"):
+        return
+    turn = int(getattr(game, "turn", 0))
+    named_turn = [b for b in beats.log if int(getattr(b, "turn", 0)) == turn]
+    if not named_turn:
+        return
+    for realm in sorted(getattr(game, "realms", {}).values(),
+                        key=lambda r: id(r)):
+        for c in sorted((c for c in realm.characters if c.is_alive),
+                        key=lambda c: c.id):
+            if getattr(c, "history", None):
+                continue
+            first = next((b for b in named_turn
+                          if c.name in str(getattr(b, "text", ""))), None)
+            if first is None:
+                continue
+            from gilded.beats import Beat
+            beats.log.append(Beat(
+                turn, "gentry", "", first.text,
+                f"society.characters.tick_memory ({c.name})",
+                first.causes, c.name, None, facet="memory"))
+            c.history.append({
+                "turn": turn,
+                "kind": "memory",
+                "text": first.text,
+                "refs": {},
+            })
+
+
+def record_death(character: "Character", game, text: str,
+                 refs: Optional[Dict] = None, source: str = "") -> None:
+    """C7w4: final history entry for a character who has just died.
+    record_history() refuses dead characters; death is the one kind that must
+    be written AFTER is_alive is False. Same beat contract: the beat at this
+    turn names the character, so the gate's cross-check holds."""
+    if character is None:
+        return
+    turn = int(getattr(game, "turn", 0))
+    name = character.name
+    line = text if name in text else f"{name}: {text}"
+    character.history.append({
+        "turn": turn,
+        "kind": "death",
+        "text": line,
+        "refs": dict(refs or {}),
+    })
+    beats = getattr(game, "beats", None)
+    if beats is None:
+        return
+    from gilded.beats import Beat
+    beats.log.append(Beat(
+        turn, "gentry", "", line,
+        source or f"society.characters.record_death",
+        tuple(), name, None, facet="death"))
+
 
 class Dynasty:
     def __init__(self, root_ancestor: Character, all_characters: Dict[str, Character]):

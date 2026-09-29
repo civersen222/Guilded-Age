@@ -137,6 +137,27 @@ def test_wrap_returns_lines():
         assert f.size(line)[0] <= 100
 
 
+def test_wrap_reads_back_word_for_word():
+    """Every line of a wrapped paragraph is emitted exactly once — no doubling."""
+    _init()
+    f = widgets.font(14)
+    text = ("The Gazette opens onto a broadsheet of figures and every line of "
+            "prose must reach the reader exactly as it was written, each word "
+            "once, in order, nothing repeated and nothing dropped.")
+    lines = widgets.wrap(text, f, 100)
+    assert len(lines) >= 3, "paragraph must actually wrap across several lines"
+    assert " ".join(lines) == text, "wrapped lines must read back as the paragraph"
+
+
+def test_wrap_survives_forty_eight_identical_words():
+    """Deduplication would eat real words here; the fix must keep all 48."""
+    _init()
+    f = widgets.font(14)
+    text = " ".join(["ruin"] * 48)
+    lines = widgets.wrap(text, f, 100)
+    assert " ".join(lines).split() == ["ruin"] * 48
+
+
 # ── Table ────────────────────────────────────────────────────────────────────
 
 def test_table_header_width_ratios():

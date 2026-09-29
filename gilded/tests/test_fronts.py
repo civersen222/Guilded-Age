@@ -7,7 +7,7 @@ from gilded.chassis import GildedGame
 from gilded.fronts import (Front, War, WarGoal, allocate, appoint, declare_war,
                            raise_regiments, resolve_front, supply, tick_wars)
 
-SEED = 42
+SEED = 26  # C5 wave-1 world: seed 42's houses no longer touch; seed 26 keeps a symmetric contested border (equal supply both sides)
 
 
 class MidpointRng(random.Random):
@@ -72,6 +72,10 @@ def test_steel_capacity_gates_the_muster():
     g = _game()
     a, _ = _adjacent_pair(g)
     prov = g.provinces_of(a)[0]
+    # Steel gating requires an ironworks enterprise
+    from gilded.enterprises import Enterprise
+    g.enterprises = [Enterprise(eid=1, kind="ironworks", name="Test Ironworks",
+                                house=a, province=prov.pid, tier=1)]
     g.capacity = {a: {"coal": 0.0, "steel": 3.0, "freight": 0.0}}
     raised = raise_regiments(g, a, prov.pid, 5)
     assert raised == 3.0 // 2 == 1  # REGIMENT_STEEL_COST = 2

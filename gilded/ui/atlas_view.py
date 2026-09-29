@@ -15,18 +15,57 @@ from collections import namedtuple
 import pygame
 
 from gilded.world import MINOR_OWNER
+from gilded.ui import palette
+
+# C8 art pass: every atlas hue is one of the 13 pinned inks (C4). RIVER stays
+# reserved (never drawn). Houses are told apart by border weight + the capital
+# glyph, not by new hues.
+NEUTRAL_RAIL = palette.rgb(palette.SLATE)
 
 # Re-export palette names from widgets.py so existing imports continue to work.
 from gilded.ui.widgets import (
     HOUSE_COLORS, MINOR_COLOR, OCEAN_COLOR, FRONT_COLOR,
     BORDER_COLOR, NAME_COLOR, GLYPH_COLOR, RAIL_COLOR, SELECT_COLOR,
-    PANEL_BG,
+    PANEL_BG, MASK_CLEAR, MASK_FULL, MASK_WHITE, MASK_BLACK,
+    blit_text,
     font as _font,
     TYPE_CAPTION, TYPE_BODY,
 )
 
+# The public OCEAN/MINOR/FRONT/BORDER/SELECT/RAIL/NAME/GLYPH names stay the
+# widget-era values (re-exported above; C1..C7 tests pin them). The atlas
+# itself is drawn in the 13 pinned inks (C8.5) via the *_DC drawing constants:
+# sea on the slate, minors in the dim ink, fronts in the consequence mark,
+# borders in the ink, rails in INK2, labels in ink on a CARD plate, glyphs
+# in wheat. RIVER stays reserved (never drawn). Houses are told apart by
+# border weight + the capital glyph, not new hues.
+OCEAN_DC = palette.rgb(palette.SLATE)
+MINOR_DC = palette.rgb(palette.DIM)
+FRONT_DC = palette.rgb(palette.VERMILLION)
+BORDER_DC = palette.rgb(palette.INK)
+SELECT_DC = palette.rgb(palette.PAPER)
+RAIL_DC = palette.rgb(palette.INK2)
+NAME_DC = palette.rgb(palette.INK)
+GLYPH_DC = palette.rgb(palette.WHEAT)
+REGIMENT_COLOR = palette.rgb(palette.INK2)     # parish-tier regiment marks
+
+# Owner fills: five light pinned inks, cycled by house index (fills repeat —
+# border weight + capital glyph tell the houses apart, not new hues).
+_FILLS = (
+    palette.rgb(palette.SAGE),
+    palette.rgb(palette.WHEAT),
+    palette.rgb(palette.CARD),
+    palette.rgb(palette.FIELD),
+    palette.rgb(palette.PAPER),
+    palette.rgb(palette.SLATE),
+    palette.rgb(palette.INK2),
+)
+
 _ENDOWMENT_GLYPH = {"coalfield": "C", "iron": "I", "timber": "T",
                     "farmland": "F", "harbor": "H"}
+
+
+
 
 # --- transform ----------------------------------------------------------------
 
@@ -71,9 +110,29 @@ def atlas_transform(atlas, rect: pygame.Rect) -> AtlasTransform:
 LegendRow = namedtuple("LegendRow", ["kind", "label", "color", "glyph"])
 
 
-def atlas_legend_rows(game) -> List[LegendRow]:
-    """One legend entry per colour/glyph that appears on the map."""
+ATLAS_TIERS = ("continent", "region", "parish")
+
+
+def atlas_legend_rows(game, tier: str = "region") -> List[LegendRow]:
+    """One legend entry per colour/glyph that appears on the map at `tier`."""
     rows: List[LegendRow] = []
+    if tier == "continent":
+        for name in sorted(game.houses):
+            rows.append(LegendRow(kind="house", label=name, color=_owner_color(game, name), glyph=""))
+        rows.append(LegendRow(kind="unclaimed", label="unclaimed", color=MINOR_COLOR, glyph=""))
+        rows.append(LegendRow(kind="capital", label="capital", color=GLYPH_COLOR, glyph="*"))
+        return rows
+    if tier == "parish":
+        for name in sorted(game.houses):
+            rows.append(LegendRow(kind="house", label=name, color=_owner_color(game, name), glyph=""))
+        rows.append(LegendRow(kind="unclaimed", label="unclaimed", color=MINOR_COLOR, glyph=""))
+        rows.append(LegendRow(kind="city", label="city", color=NAME_COLOR, glyph="o"))
+        rows.append(LegendRow(kind="regiment", label="regiment", color=REGIMENT_COLOR, glyph="+"))
+        rows.append(LegendRow(kind="strike", label="strike", color=FRONT_COLOR, glyph="!"))
+        rows.append(LegendRow(kind="rail", label="railway", color=RAIL_COLOR, glyph=""))
+        rows.append(LegendRow(kind="front", label="war front", color=FRONT_COLOR, glyph=""))
+        return rows
+    # region: today's map (endowments, rails, fronts, labels)
     for name in sorted(game.houses):
         rows.append(LegendRow(kind="house", label=name, color=_owner_color(game, name), glyph=""))
     rows.append(LegendRow(kind="unclaimed", label="unclaimed", color=MINOR_COLOR, glyph=""))
@@ -82,6 +141,28 @@ def atlas_legend_rows(game) -> List[LegendRow]:
     rows.append(LegendRow(kind="rail", label="railway", color=RAIL_COLOR, glyph=""))
     rows.append(LegendRow(kind="front", label="war front", color=FRONT_COLOR, glyph=""))
     return rows
+
+
+def legend_rect_for(game, rect: pygame.Rect, tier: str = "region") -> pygame.Rect:
+    """The legend's rect (same math as _draw_legend) without drawing."""
+    rows = atlas_legend_rows(game, tier)
+    font = _font(TYPE_CAPTION)
+    row_h = font.get_height() + 4
+    mid = (len(rows) + 1) // 2
+    col1 = rows[:mid]
+    col2 = rows[mid:]
+    max_w = 0
+    for row in col1 + col2:
+        if row.kind == "endowment" or row.glyph:
+            txt = f"{row.glyph} {row.label}"
+        else:
+            txt = row.label
+        w, _ = font.size(txt)
+        max_w = max(max_w, w)
+    col_w = max_w + 20
+    legend_w = col_w * 2 + 8
+    legend_h = len(col1) * row_h + 8
+    return pygame.Rect(rect.left + 4, rect.top + 4, legend_w, legend_h)
 
 
 # --- label / glyph layout ----------------------------------------------------
@@ -108,9 +189,8 @@ def atlas_label_rects(game, transform, rect: pygame.Rect,
     for pid in pids:
         prov = game.atlas.provinces[pid]
         cx, cy = transform.apply(prov.center)
-        label = name_font.render(prov.name, True, NAME_COLOR)
-        lr = pygame.Rect(cx - label.get_width() // 2, cy - label.get_height() // 2,
-                         label.get_width(), label.get_height())
+        tw, th = name_font.size(prov.name)
+        lr = pygame.Rect(cx - tw // 2, cy - th // 2, tw, th)
         # Must be inside content rect
         if not (rect.left <= lr.left and lr.right <= rect.right and
                 rect.top <= lr.top and lr.bottom <= rect.bottom):
@@ -150,12 +230,11 @@ def atlas_glyph_rects(game, transform, rect: pygame.Rect,
         if not prov.endowments:
             continue
         cx, cy = transform.apply(prov.center)
-        # Stack glyphs below center
+        # Stack each endowment glyph below center, one rect per glyph
         y_offset = 2
         for endowment in sorted(prov.endowments.keys()):
-            g = glyph_font.render(_ENDOWMENT_GLYPH[endowment], True, GLYPH_COLOR)
-            gr = pygame.Rect(cx - g.get_width() // 2, cy + y_offset,
-                             g.get_width(), g.get_height())
+            gw, gh = glyph_font.size(_ENDOWMENT_GLYPH[endowment])
+            gr = pygame.Rect(cx - gw // 2, cy + y_offset, gw, gh)
             # Must be inside content rect
             if not (rect.left <= gr.left and gr.right <= rect.right and
                     rect.top <= gr.top and gr.bottom <= rect.bottom):
@@ -169,7 +248,7 @@ def atlas_glyph_rects(game, transform, rect: pygame.Rect,
             if not collide:
                 drawn.append((pid, gr))
                 all_rects.append(gr)
-            y_offset += g.get_height()
+            y_offset += gh
     return drawn
 
 
@@ -206,16 +285,30 @@ def _boundary_loop(cells: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
         start = next(iter(edges))
         loop: List[Tuple[int, int]] = [start]
         cur = start
+        prev = None
         while True:
             outs = edges.get(cur)
             if outs is None or len(outs) == 0:
                 break
-            nxt = outs.pop()
+            if len(outs) == 2:
+                # T-junction: one outgoing edge continues the boundary (its
+                # destination still has outgoing edges), the other is the
+                # dead-end stem of the notch. Take the live one.
+                live = [q for q in outs
+                        if len(edges.get(q, ())) > 0]
+                if len(live) == 1:
+                    nxt = live[0]
+                else:
+                    nxt = outs[0]
+            else:
+                nxt = outs[0]
+            outs.remove(nxt)
             if len(outs) == 0:
                 del edges[cur]
             loop.append(nxt)
             if nxt == start:
                 break
+            prev = cur
             cur = nxt
             # Safety valve
             if len(loop) > 10000:
@@ -228,6 +321,12 @@ def _boundary_loop(cells: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
 def _drop_collinear(pts: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
     if len(pts) < 3:
         return pts
+    # The walk re-appends the start vertex to close the loop.  Drop the
+    # duplicate first: with it present the seam vertex is degenerate at
+    # both ends (a==b at index 0, b==c at the last index) and gets
+    # deleted, taking a corner with it.
+    if pts[0] == pts[-1]:
+        pts = pts[:-1]
     out: List[Tuple[int, int]] = []
     n = len(pts)
     for i in range(n):
@@ -283,10 +382,10 @@ def pick_province(atlas, polygons: Dict[int, List[Tuple[int, int]]],
 
 def _owner_color(game, owner: str) -> Tuple[int, int, int]:
     if owner == MINOR_OWNER:
-        return MINOR_COLOR
+        return MINOR_DC
     order = sorted(game.houses)
     idx = order.index(owner) if owner in order else 0
-    return HOUSE_COLORS[idx % len(HOUSE_COLORS)]
+    return _FILLS[idx % len(_FILLS)]
 
 
 def _dashed_line(surface, color, start, end, dash: int = 8, gap: int = 6,
@@ -309,9 +408,10 @@ def _dashed_line(surface, color, start, end, dash: int = 8, gap: int = 6,
         d += step
 
 
-def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
-    """Draw the legend in the top-left of the content rect. Returns its rect."""
-    rows = atlas_legend_rows(game)
+def _draw_legend(surface, game, rect: pygame.Rect,
+                 tier: str = "region") -> pygame.Rect:
+    """Draw the tier's legend in the top-left of the content rect. Returns its rect."""
+    rows = atlas_legend_rows(game, tier)
     font = _font(TYPE_CAPTION)
     row_h = font.get_height() + 4
     # Two columns layout
@@ -321,14 +421,14 @@ def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
     # Measure max label width per column
     max_w = 0
     for row in col1:
-        if row.kind == "endowment":
+        if row.glyph:
             txt = f"{row.glyph} {row.label}"
         else:
             txt = row.label
         w, _ = font.size(txt)
         max_w = max(max_w, w)
     for row in col2:
-        if row.kind == "endowment":
+        if row.glyph:
             txt = f"{row.glyph} {row.label}"
         else:
             txt = row.label
@@ -348,7 +448,7 @@ def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
     surface.blit(bg, legend_rect.topleft)
     # Draw rows
     def _draw_col(col_rows, col_x):
-        y = col_x + 4  # use col_x as x offset, compute y
+        base = lx + col_x
         for i, row in enumerate(col_rows):
             ry = ly + 4 + i * row_h
             if row.kind == "endowment":
@@ -356,20 +456,104 @@ def _draw_legend(surface, game, rect: pygame.Rect) -> pygame.Rect:
             elif row.kind in ("rail", "front"):
                 txt = row.label
                 pygame.draw.line(surface, row.color,
-                                 (lx + 4, ry + row_h // 2),
-                                 (lx + 20, ry + row_h // 2), 3)
+                                 (base + 4, ry + row_h // 2),
+                                 (base + 20, ry + row_h // 2), 3)
             else:
                 txt = row.label
                 pygame.draw.rect(surface, row.color,
-                                 (lx + 4, ry + 2, 14, row_h - 4))
-            t = font.render(txt, True, NAME_COLOR)
-            surface.blit(t, (lx + 24, ry + 1))
+                                 (base + 4, ry + 2, 14, row_h - 4))
+            blit_text(surface, font, txt, (base + 24, ry + 1), NAME_DC)
     _draw_col(col1, 0)
+    _draw_col(col2, col_w)
     return legend_rect
 
 
-def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = None) -> Dict[int, List[Tuple[int, int]]]:
-    """Paint the whole map onto surface within rect; returns the polygons it used."""
+def _capital_pids(game):
+    """The set of capital province pids across all houses."""
+    caps = set()
+    for h in game.houses:
+        cap = getattr(game.houses[h], "capital", None)
+        if cap is not None and cap in game.atlas.provinces:
+            caps.add(cap)
+    return caps
+
+
+def _draw_hatch(surface, poly, step: int, color):
+    """Diagonal hatch lines inside a polygon's bounding box (clipped to the poly)."""
+    xs = [p[0] for p in poly]
+    ys = [p[1] for p in poly]
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+    w = max(1, int(x1 - x0))
+    h = max(1, int(y1 - y0))
+    diag = pygame.Surface((w, h), pygame.SRCALPHA)
+    d = 0.0
+    while d < w + h:
+        pygame.draw.line(diag, color + (190,), (d - h, 0), (d, h), 1)
+        d += step
+    surf = pygame.Surface((w, h))
+    surf.fill(MASK_WHITE)
+    surf.blit(diag, (0, 0))
+    mask = pygame.Surface((w, h), pygame.SRCALPHA)
+    mask.fill(MASK_CLEAR)
+    pygame.draw.polygon(mask, MASK_FULL,
+                        [(int(x - x0), int(y - y0)) for (x, y) in poly])
+    surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    surface.blit(surf, (int(x0), int(y0)))
+
+
+def _draw_dots(surface, poly, step: int, color):
+    """Dot grid inside a polygon's bounding box (clipped to the poly)."""
+    xs = [p[0] for p in poly]
+    ys = [p[1] for p in poly]
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+    w = max(1, int(x1 - x0))
+    h = max(1, int(y1 - y0))
+    mask = pygame.Surface((w, h), pygame.SRCALPHA)
+    mask.fill(MASK_CLEAR)
+    pygame.draw.polygon(mask, MASK_FULL,
+                        [(int(x - x0), int(y - y0)) for (x, y) in poly])
+    dots = pygame.Surface((w, h), pygame.SRCALPHA)
+    yy = 0
+    while yy < h:
+        xx = 0
+        while xx < w:
+            pygame.draw.circle(dots, color + (200,), (xx, yy), 1)
+            xx += step
+        yy += step
+    surf = pygame.Surface((w, h))
+    surf.fill(MASK_WHITE)
+    surf.blit(dots, (0, 0))
+    surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    surface.blit(surf, (int(x0), int(y0)))
+
+
+def _draw_star(surface, c, r: int, color):
+    import math
+    pts = []
+    for i in range(10):
+        ang = math.pi / 5 * i - math.pi / 2
+        rad = r if i % 2 == 0 else max(2, r // 2)
+        pts.append((c[0] + rad * math.cos(ang), c[1] + rad * math.sin(ang)))
+    pygame.draw.polygon(surface, color, pts)
+
+
+def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = None,
+                accent_log=None, tier: str = "region") -> Dict[int, List[Tuple[int, int]]]:
+    """Paint the whole map onto surface within rect; returns the polygons it used.
+
+    accent_log, when given, is appended with the accent marks the pass
+    actually draws: ("vermillion", is_player) for live war fronts and
+    ("gold", is_player) for the player's own railway lines.  registry.ACCENTS
+    counts what is drawn here — it never guesses.
+
+    tier is one of ATLAS_TIERS ("continent" | "region" | "parish"):
+      continent = houses and their capitals (fills + capital glyph, no labels)
+      region    = today's map (endowments, rails, fronts, labels) — the default
+      parish    = the province level: cities by population, regiments, strikes,
+                  rails and fronts.
+    """
+    if tier not in ATLAS_TIERS:
+        tier = "region"
     transform = atlas_transform(game.atlas, rect)
     polys = province_polygons(game.atlas, transform)
 
@@ -378,56 +562,123 @@ def draw_atlas(surface, game, rect: pygame.Rect, selected_pid: Optional[int] = N
     surface.set_clip(rect)
 
     try:
-        surface.fill(OCEAN_COLOR, rect)
+        surface.fill(OCEAN_DC, rect)
 
+        caps = _capital_pids(game)
         for pid, prov in game.atlas.provinces.items():
             poly = polys[pid]
             if len(poly) >= 3:
                 pygame.draw.polygon(surface, _owner_color(game, prov.owner), poly)
-                border = SELECT_COLOR if pid == selected_pid else BORDER_COLOR
+                border = SELECT_DC if pid == selected_pid else BORDER_DC
                 pygame.draw.polygon(surface, border, poly,
                                     3 if pid == selected_pid else 1)
+                if tier == "continent":
+                    # Diagonal INK2 hatch: the far overview reads as engraved.
+                    _draw_hatch(surface, poly, 9, palette.rgb(palette.INK2))
+                elif tier == "parish":
+                    # A tight wheat dot grid sits on the fine-grained level.
+                    _draw_dots(surface, poly, 6, GLYPH_DC)
+
+        # tier furniture
+        if tier == "continent":
+            for pid in caps:
+                _draw_star(surface, transform.apply(
+                    game.atlas.provinces[pid].center), 9, GLYPH_DC)
+        elif tier == "parish":
+            plus_font = _font(TYPE_CAPTION)
+            excl_font = _font(TYPE_BODY)
+            for pid, prov in game.atlas.provinces.items():
+                c = transform.apply(prov.center)
+                # city sized by population
+                pygame.draw.circle(surface, NAME_DC, c,
+                                   max(2, min(9, prov.population // 40)))
+                # regiments where armies stand
+                if prov.garrison > 0:
+                    blit_text(surface, plus_font, "+", (c[0] + 7, c[1] - 10),
+                              REGIMENT_COLOR)
+                # strike marks where labour is out
+                mv = getattr(prov, "movement", None)
+                if mv is not None and getattr(mv, "state", "union") == "striking":
+                    if accent_log is not None:
+                        accent_log.append(("vermillion", False))
+                    blit_text(surface, excl_font, "!", (c[0] - 5, c[1] - 14),
+                              FRONT_DC)
 
         # rail links as gold dashes between province centres
+        # Accent law: gold marks are the player's only. A railway is a
+        # gold mark only when BOTH ends are the player's own provinces;
+        # every other line is drawn in a neutral slate.
+        player_house = next((h for h in game.houses
+                             if game.houses[h].is_player), None)
         for (a, b), link in game.atlas.links.items():
             if getattr(link, "rail", False):
                 ca = game.atlas.provinces[a].center
                 cb = game.atlas.provinces[b].center
-                _dashed_line(surface, RAIL_COLOR,
+                pa = game.atlas.provinces[a].owner
+                pb = game.atlas.provinces[b].owner
+                is_player = (player_house is not None
+                             and pa == player_house and pb == player_house)
+                if is_player:
+                    accent_log.append(("gold", True))
+                _dashed_line(surface, RAIL_DC if is_player else NEUTRAL_RAIL,
                              transform.apply(ca),
                              transform.apply(cb))
 
-        # live war fronts as red lines along contested borders
+        # live war fronts as vermillion lines along contested borders.
+        # Accent law: a FRONT is one consequence mark (<= 5), not one per
+        # border segment — so the mark is logged once per front and the
+        # lines themselves are drawn in the palette's vermillion.
         for war in game.wars:
             for front in getattr(war, "fronts", []):
-                for (ap, dp) in getattr(front, "border", []):
-                    if ap in game.atlas.provinces and dp in game.atlas.provinces:
-                        ca = game.atlas.provinces[ap].center
-                        cd = game.atlas.provinces[dp].center
-                        pygame.draw.line(surface, FRONT_COLOR,
-                                         transform.apply(ca),
-                                         transform.apply(cd), 3)
+                segments = [(ap, dp) for (ap, dp) in getattr(front, "border", [])
+                            if ap in game.atlas.provinces
+                            and dp in game.atlas.provinces]
+                if not segments:
+                    continue
+                if accent_log is not None:
+                    accent_log.append(("vermillion", False))
+                for (ap, dp) in segments:
+                    ca = game.atlas.provinces[ap].center
+                    cd = game.atlas.provinces[dp].center
+                    pygame.draw.line(surface, FRONT_DC,
+                                     transform.apply(ca),
+                                     transform.apply(cd), 3)
 
-        # province labels
-        labels = atlas_label_rects(game, transform, rect, selected_pid)
-        font = _font(TYPE_CAPTION)
-        for pid, lr in labels:
-            prov = game.atlas.provinces[pid]
-            t = font.render(prov.name, True, NAME_COLOR)
-            surface.blit(t, lr.topleft)
+        # tier caption (real text so the tier word is on the screen)
+        cap_font = _font(TYPE_BODY)
+        cap_txt = tier.upper()
+        cw, ch = cap_font.size(cap_txt)
+        # Bottom-left corner: ocean in every tier, clear of the legend
+        # (top-left), the zoom strip, and the war toggle (top-right).
+        cap_rect = pygame.Rect(rect.left + 4, rect.bottom - ch - 10,
+                               cw + 12, ch + 6)
+        plate = pygame.Surface((cap_rect.w, cap_rect.h))
+        plate.set_alpha(200)
+        plate.fill(PANEL_BG)
+        surface.blit(plate, cap_rect.topleft)
+        blit_text(surface, cap_font, cap_txt, cap_rect.midtop, NAME_DC)
 
-        # endowment glyphs
-        glyphs = atlas_glyph_rects(game, transform, rect, selected_pid)
-        glyph_font = _font(TYPE_CAPTION)
-        for pid, gr in glyphs:
-            prov = game.atlas.provinces[pid]
-            for end in prov.endowments:
+        # province labels: the region (today) and parish tiers keep them;
+        # the continent tier is houses + capitals only.
+        if tier != "continent":
+            labels = atlas_label_rects(game, transform, rect, selected_pid)
+            font = _font(TYPE_CAPTION)
+            for pid, lr in labels:
+                prov = game.atlas.provinces[pid]
+                blit_text(surface, font, prov.name, lr.topleft, NAME_DC)
+
+        # endowment glyphs (the region tier's selected-province furniture)
+        if tier == "region" and selected_pid is not None:
+            grs = atlas_glyph_rects(game, transform, rect, selected_pid)
+            glyph_font = _font(TYPE_BODY)
+            rects = [gr for pid, gr in grs if pid == selected_pid]
+            ends = sorted(game.atlas.provinces[selected_pid].endowments.keys())
+            for end, gr in zip(ends, rects):
                 char = _ENDOWMENT_GLYPH.get(end, "?")
-                t = glyph_font.render(char, True, GLYPH_COLOR)
-                surface.blit(t, gr.topleft)
+                blit_text(surface, glyph_font, char, gr.topleft, GLYPH_DC)
 
         # legend
-        _draw_legend(surface, game, rect)
+        _draw_legend(surface, game, rect, tier=tier)
 
     finally:
         surface.set_clip(old_clip)

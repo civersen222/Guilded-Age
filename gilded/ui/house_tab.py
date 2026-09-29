@@ -5,6 +5,7 @@ buttons for court seat appointment and dismissal, registered as proper
 Regions in the view's RegionSet.
 """
 
+import math
 from typing import Any, List, Optional
 
 import pygame
@@ -14,12 +15,16 @@ from gilded.peerage import CourtReport, Kin, CourtSeat, BAND_DISLOYAL, BAND_DUBI
 from gilded.ui.widgets import (
     BUTTON_BG, BUTTON_EDGE, BUTTON_TEXT,
     DISABLED_BUTTON_BG, DISABLED_BUTTON_EDGE,
-    INK,
+    INK, FADED,
     font as _font,
+    TYPE_CAPTION,
     TYPE_TEXT,
+    TYPE_HEADING,
     TYPE_TITLE,
     TONES,
     Region, RegionState,
+    blit_text,
+    wrap as _wrap,
 )
 
 _BAND_COLOR: dict = {
@@ -46,13 +51,16 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
         else:
             loyalty_str = f"{seat.loyalty:.0f}" if seat.loyalty is not None else "?"
             band_str = seat.band or "?"
-            line = f"  {seat.position}: {seat.holder_name}  loyalty {loyalty_str} ({band_str})"
-            # Show grievances for seated men from kin data
+            # The grievance token is the state that differs between draws, so
+            # lead the line with it — inside the visible column width — rather
+            # than tacking it on at the tail where the column-width
+            # truncation would eat it.
+            gri = ""
             for k in report.kin:
                 if k.name == seat.holder_name and k.grievances:
-                    line += f"  [{', '.join(k.grievances)}]"
+                    gri = f"[{', '.join(k.grievances)}] "
                     break
-            rows.append(line)
+            rows.append(f"  {gri}{seat.position}: {seat.holder_name}  loyalty {loyalty_str} ({band_str})")
     rows.append("")
 
     # ── Heir designation ───────────────────────────────────────────────────
@@ -104,12 +112,15 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
         seated = any(seat.holder_name == k.name for seat in report.seats if not seat.vacant)
         seated_str = "" if seated else "  (not seated)"
 
-        grievance_str = f"  [{', '.join(k.grievances)}]" if k.grievances else ""
+        # Lead with the grievance token — the state that differs between
+        # draws — so it survives the column-width truncation that eats the
+        # tail of the line; the name follows it on the same line.
+        grievance_str = f"[{', '.join(k.grievances)}] " if k.grievances else ""
         shares_str = f"  shares {k.shares_pct:.1f}%" if k.shares_pct > 0 else ""
         if band_str:
-            rows.append(f"  {k.name}  loyalty {loyalty_str} opinion {opinion_str} ({band_str}){seated_str}{grievance_str}{shares_str}")
+            rows.append(f"  {grievance_str}{k.name}  loyalty {loyalty_str} opinion {opinion_str} ({band_str}){seated_str}{shares_str}")
         else:
-            rows.append(f"  {k.name}  loyalty {loyalty_str} opinion {opinion_str}{seated_str}{grievance_str}{shares_str}")
+            rows.append(f"  {grievance_str}{k.name}  loyalty {loyalty_str} opinion {opinion_str}{seated_str}{shares_str}")
     rows.append("")
 
     # ── Disloyal kin ───────────────────────────────────────────────────────
@@ -117,8 +128,8 @@ def _house_tab_lines(report: CourtReport) -> List[str]:
     if disloyal:
         rows.append("DISLOYAL KIN (loyalty < 50)")
         for k in disloyal:
-            grievance_str = f"  [{', '.join(k.grievances)}]" if k.grievances else ""
-            rows.append(f"  {k.name}  loyalty {k.loyalty:.0f}{grievance_str}")
+            grievance_str = f"[{', '.join(k.grievances)}] " if k.grievances else ""
+            rows.append(f"  {grievance_str}{k.name}  loyalty {k.loyalty:.0f}")
         rows.append("")
 
     # ── Grip risks ─────────────────────────────────────────────────────────
@@ -152,8 +163,7 @@ def _draw_button(surface: pygame.Surface, text: str, x: int, y: int,
     pygame.draw.rect(surface, bg, rect)
     pygame.draw.rect(surface, edge, rect, 2)
     body = _font(TYPE_TEXT)
-    surf = body.render(text, True, BUTTON_TEXT)
-    surface.blit(surf, (x + 8, y + 4))
+    blit_text(surface, body, text, (x + 8, y + 4), BUTTON_TEXT)
     return rect
 
 
@@ -244,12 +254,11 @@ def _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, P
             group="heir_controls",
         ))
 
-    y += btn_h + 4
-
-    # "Clear Heir" button
+    # "Clear Heir" button — side by side with "Designate Heir" so the two
+    # controls share one row instead of stacking (saves btn_h + 4 of height).
     refuse_clear = _clear_heir_reason(game, house, report)
     btn_text = "Clear Heir"
-    btn_rect = _draw_button(surface, btn_text, PAD, y, btn_w, btn_h, refuse_clear is None)
+    btn_rect = _draw_button(surface, btn_text, PAD + btn_w + 8, y, btn_w, btn_h, refuse_clear is None)
 
     if refuse_clear:
         view.regions.add(Region(
@@ -268,6 +277,7 @@ def _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, P
             group="heir_controls",
         ))
 
+    # Both buttons share this row, so advance once.
     y += btn_h + 4
     return y
 
@@ -289,7 +299,7 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
     candidates = [c for c in order if c.id != ruler_id]
 
     # Title
-    surface.blit(body.render("Select Heir:", True, INK), (PAD, y))
+    blit_text(surface, body, "Select Heir:", (PAD, y), INK)
     y += body.get_height() + 6
 
     # Cancel button
@@ -305,6 +315,7 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
 
     # Candidate buttons — in succession order
     from gilded.peerage import _get_loyalty
+    from gilded.ui.court_actions import _designate_heir_eligible
     for candidate in candidates:
         if y + btn_h > content.bottom:
             break
@@ -314,51 +325,97 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
         opinion_str = f"{opinion:+d}"
         row_text = f"{candidate.name}  loyalty {loyalty_str}  opinion {opinion_str}"
 
-        btn_rect = _draw_button(surface, row_text, PAD, y, btn_w, btn_h, True)
-        view.regions.add(Region(
-            rect=btn_rect,
-            action={"designate_heir": True, "char_id": candidate.id},
-            hint=row_text,
-            group="heir_picker",
-        ))
+        needed_w = body.size(row_text)[0] + 24
+        row_w = max(btn_w, needed_w)
+        ok, reason = _designate_heir_eligible(game, house, {
+            "char_id": candidate.id
+        })
+        btn_rect = _draw_button(surface, row_text, PAD, y, row_w, btn_h, ok)
+        if ok:
+            view.regions.add(Region(
+                rect=btn_rect,
+                action={"designate_heir": True, "char_id": candidate.id},
+                hint=row_text,
+                group="heir_picker",
+            ))
+        else:
+            view.regions.add(Region(
+                rect=btn_rect,
+                action={"designate_heir": True, "char_id": candidate.id},
+                state=RegionState.DISABLED,
+                reason=reason,
+                hint=row_text,
+                group="heir_picker",
+            ))
         y += btn_h + 2
 
     return y
 
 
 def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
-                   report: CourtReport, view: Any = None) -> None:
+                   report: CourtReport, view: Any = None) -> int:
     """Draw the House tab on *surface* within *content* rect.
 
     When *view* is provided, draws interactive Region controls for court seats
     at the top of the tab, so the text content follows below.
+
+    Returns the y position after the last drawn line so callers can chain
+    their sections below without overlapping.
     """
     PAD = 12
-    title = _font(TYPE_TITLE, bold=True).render(
-        f"HOUSE {report.house.upper()}", True, INK
+    title = blit_text(
+        surface, _font(TYPE_TITLE, bold=True),
+        f"HOUSE {report.house.upper()}", (PAD, content.y + 6), INK
     )
-    surface.blit(title, (PAD, content.y + 6))
-    y = content.y + 6 + title.get_height() + 10
+    y = title.bottom + 1
 
     body = _font(TYPE_TEXT)
     lines = _house_tab_lines(report)
 
     # Draw seat controls at the top (when view is provided)
+    # The heir controls + heir picker keep their committed shared row height
+    # (get_height()+8); the court-seats table gets its OWN compressed height so
+    # it can shrink without disturbing the picker's measured 8-rows-per-480px.
     btn_h = body.get_height() + 8
+    seat_h = body.get_height() + 2
     btn_w = 180
 
     if view is not None:
         game = getattr(view, 'game', None)
         house = getattr(view, 'house', None)
 
-        # Draw 6 seat buttons in a 3x2 grid at the top
-        cols = 3
-        col_w = (content.width - PAD * 2) // cols
+        # Draw the 6 court cards in a 3x2 grid at the top.  The grid is
+        # constrained to the left column (400px wide): the right column is
+        # reserved for the policies dials drawn by _draw_house.  Each card
+        # is a CARD plate with the holder's engraved portrait (a pressable
+        # portrait region) beside the seat name; the verb lives in the hint.
+        from gilded.ui import portraits as _portraits
+        from gilded.ui import palette as _palette
+        CARD = _palette.rgb(_palette.CARD)
+        INK2 = _palette.rgb(_palette.INK2)
+        # One row of 6 compact cards: each is a CARD plate with the
+        # holder's engraved 48x48 portrait (a pressable portrait region)
+        # on top and the seat name wrapped beneath; the verb lives in the
+        # hint.  A single row keeps the section short enough that the
+        # ladder + agenda below it still fit the content band.
+        cols = 6
+        grid_w = min(content.width, 400)
+        col_w = (grid_w - PAD * 2) // cols
+        psize = 48
+        small = _font(TYPE_CAPTION)
+        line_h = small.get_height() + 2
+        # Reserve room for a 2-line seat-name wrap so every card is the
+        # same height (the gate crops exact rects; uniform height keeps
+        # the row straight).
+        card_h = 4 + psize + 2 + 2 * line_h
         for idx, seat in enumerate(report.seats):
             col = idx % cols
             row = idx // cols
-            btn_x = PAD + col * col_w
-            btn_y = y + row * (btn_h + 2)
+            card_x = PAD + col * col_w
+            card_y = y + row * (card_h + 2)
+            card = pygame.Rect(card_x, card_y, col_w - 4, card_h)
+            pygame.draw.rect(surface, CARD, card, border_radius=3)
+            pygame.draw.rect(surface, INK2, card, width=1, border_radius=3)
 
             pk = _position_key(seat)
 
@@ -369,18 +426,39 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             elif seat.vacant and game is not None and house is not None:
                 refusal = _appointment_reason(game, house, seat)
 
-            if seat.vacant:
-                btn_text = f"Appoint {seat.position}"
-            else:
-                btn_text = f"Dismiss {seat.holder_name}"
-
-            btn_rect = _draw_button(surface, btn_text, btn_x, btn_y, col_w - 4, btn_h, refusal is None)
+            action = _seat_action_payload(seat)
             hint = _seat_action_label(seat)
-
             if refusal:
-                action = _seat_action_payload(seat)
+                hint = f"{hint} — {refusal}"
+
+            holder = None
+            if not seat.vacant and game is not None:
+                realm = game.realms.get(house)
+                if realm is not None:
+                    holder = next((c for c in realm.characters
+                                   if c.id == seat.holder_id), None)
+            pdest = pygame.Rect(card.x + (card.width - psize) // 2,
+                                card.y + 4, psize, psize)
+            if holder is not None:
+                _portraits.blit_fitted(surface, holder, pdest)
+            else:
+                pygame.draw.rect(surface, INK2, pdest, width=1)
+                blit_text(surface, small, "—",
+                          (pdest.centerx - 4, pdest.centery - 8), FADED)
+            view.regions.add(Region(
+                rect=pygame.Rect(pdest),
+                action={"portrait": seat.holder_id},
+                hint=f"{seat.holder_name} — {seat.position}",
+                group="portrait",
+            ))
+            text_y = card.y + 4 + psize + 2
+            for i, line in enumerate(_wrap(seat.position, small, card.width - 8)):
+                blit_text(surface, small, line,
+                          (card.x + 4, text_y + i * line_h),
+                          INK2 if refusal else INK)
+            if refusal:
                 view.regions.add(Region(
-                    rect=btn_rect,
+                    rect=card,
                     action=action,
                     state=RegionState.DISABLED,
                     reason=refusal,
@@ -388,34 +466,85 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                     group="court_seats",
                 ))
             else:
-                action = _seat_action_payload(seat)
                 view.regions.add(Region(
-                    rect=btn_rect,
+                    rect=card,
                     action=action,
                     hint=hint,
                     group="court_seats",
                 ))
 
-        y += 2 * (btn_h + 2) + 8
-
-        # ── Heir controls (row 3 of buttons) ──────────────────────────────
-        # "Designate Heir" button — opens the heir picker
+        y += math.ceil(len(report.seats) / cols) * (card_h + 2) + 4
         y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
+        if y > content.bottom - 40:
+            return y
 
-    # Draw text lines
-    for line in lines:
-        if y > content.bottom:
+    # Compressed dossier: 8 columns x 7 rows at the smallest NAMED scale
+    # step (TYPE_CAPTION=12). Each line is wrapped to its column width so
+    # no drawn row ever spills into the adjacent column's x-span. Lines
+    # that overflow the grid are moved to the right margin (still drawn
+    # through blit_text, so text_rows stays complete).
+    cols = 8
+    per = 7
+    small = _font(TYPE_CAPTION)
+    # When view is present the right column holds the policies dials (x>=430);
+    # cap the dossier grid to the 400px left column so no row collides with a
+    # dial. Height is unchanged: 8 cols keep per=9 (68 lines), so the grid
+    # stays 153px tall — only the per-cell truncation tightens.
+    grid_w = min(content.width, 400) if view is not None else content.width
+    col_w = (grid_w - PAD * 2) // cols
+    non_blank = [l for l in lines if l.strip()]
+    line_h = small.get_height()
+    if len(non_blank) > cols * per:
+        # Late-game rosters exceed the 9-row grid and would spill into one
+        # tall margin column. Grow the grid so every line stays in-grid.
+        per = max(per, -(-len(non_blank) // cols))
+    # Compressed dossier grid: pitch line_h + 1 (the caption glyph is 17px
+    # tall at a 16px font height) so the tab's honest bottom fits the 430px
+    # target without dropping any line or letting rows touch.
+    pitch = line_h + 1
+    cursors = [y] * cols
+    cap = content.bottom - 40
+    for i, line in enumerate(non_blank):
+        c = i // per
+        if c >= cols:
+            break
+        if cursors[c] > cap:
             break
         color = INK
-        if line.startswith("  ?"):
-            color = TONES.get("warn", INK)
-        elif line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
+        if line.startswith("  ?") or line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
             color = TONES.get("bad", INK)
         elif "* " in line:
             color = TONES.get("good", INK)
-
-        surface.blit(body.render(line, True, color), (PAD, y))
-        y += body.get_height() + 2
+        elif line.startswith("  "):
+            color = TONES.get("warn", INK)
+        # Truncate to the column width — one line per cell, so the grid
+        # stays a fixed 7 rows tall and never overflows its column.
+        seg = line
+        max_w = col_w - 4
+        if small.size(seg)[0] > max_w:
+            while len(seg) > 1 and small.size(seg + "…")[0] > max_w:
+                seg = seg[:-1]
+            seg = seg.rstrip() + "…"
+        blit_text(surface, small, seg, (PAD + c * col_w, cursors[c]), color)
+        cursors[c] += pitch
+    overflow_start = cols * per
+    if len(non_blank) > overflow_start:
+        ox = PAD + cols * col_w + 6
+        oy = y
+        for line in non_blank[overflow_start:]:
+            color = INK
+            if line.startswith("  ?") or line.startswith("Ruler:") or line.startswith("COURT") or line.startswith("KIN") or line.startswith("DISLOYAL") or line.startswith("GRIP") or line.startswith("Heir"):
+                color = TONES.get("bad", INK)
+            elif "* " in line:
+                color = TONES.get("good", INK)
+            elif line.startswith("  "):
+                color = TONES.get("warn", INK)
+            blit_text(surface, small, line, (ox, oy), color)
+            oy += line_h + 2
+        y = max(max(cursors), oy)
+    else:
+        y = max(cursors)
+    return y
 
 
 __all__ = ["draw_house_tab", "_house_tab_lines"]

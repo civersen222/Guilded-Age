@@ -33,10 +33,10 @@ def _widgets_dir() -> pathlib.Path:
 
 
 def _find_font_func_in_tree() -> str:
-    """Find the name of the function in widgets.py that reaches pygame.font.SysFont.
+    """Find the name of the function in widgets.py that reaches pygame.font.Font.
 
-    Resolves by property: the function whose body (directly or via a helper)
-    contains a call to pygame.font.SysFont.  Survives renames.
+    Resolves by property: the function whose body contains a call to
+    pygame.font.Font (the Banknote TTF cache).  Survives renames.
     """
     widgets_file = pathlib.Path(widgets.__file__).resolve()
     tree = ast.parse(widgets_file.read_text(encoding="utf-8"))
@@ -46,10 +46,10 @@ def _find_font_func_in_tree() -> str:
             for child in ast.walk(node):
                 if isinstance(child, ast.Call):
                     func = child.func
-                    if isinstance(func, ast.Attribute) and func.attr == "SysFont":
+                    if isinstance(func, ast.Attribute) and func.attr == "Font":
                         return node.name
 
-    raise AssertionError("No function in widgets.py calls pygame.font.SysFont")
+    raise AssertionError("No function in widgets.py calls pygame.font.Font")
 
 
 def _find_scale_tuple_in_tree() -> str:

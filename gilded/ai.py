@@ -11,8 +11,10 @@ from typing import Dict, List, Optional, Tuple
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
 from gilded.docket import DOMAIN_SEAT, INITIATIVES, _auto_terms, initiative, rule
 from gilded.enterprises import ENTERPRISE_TYPES, EXPAND_COST, TIER_MAX
-from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST, PeaceTerms,
-                           ai_acceptable)
+from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST,
+                           REGIMENT_STEEL_COST, PeaceTerms, ai_acceptable,
+                           allocate, raise_regiments, terms_cost)
+
 # opinion_matrix removed — reads through char._society.opinions now
 from gilded.agenda import ensure_agenda, goal_domain, goal_initiative
 
@@ -63,23 +65,29 @@ def _strength(game, house_name: str) -> float:
     return pop // REGIMENT_POP_COST + game.houses[house_name].treasury
 
 
-def _weaker_neighbor(game, house_name: str) -> Optional[str]:
+def _war_target(game, house_name: str) -> Optional[str]:
+    """The weakest house this House may lawfully declare on. The corridor
+    march means armies reach any demesne, so the target pool is every house,
+    not just bordering ones — demesnes are islands in the tiered world."""
     house = game.houses[house_name]
-    neighbors = set()
-    for p in game.provinces_of(house_name):
-        for n in p.neighbors:
-            o = game.atlas.provinces[n].owner
-            if o and o != house_name and o in game.houses:
-                neighbors.add(o)
     me = _strength(game, house_name)
-    for other in sorted(neighbors):
+    from gilded import pacts
+    cands = []
+    for other in game.houses:
+        if other == house_name:
+            continue
         if other in house.at_war_with:
             continue
         if house.truces.get(other, 0) > game.turn:
             continue
+        if not pacts.may_declare_war(game, house_name, other):
+            continue
         if _strength(game, other) < WEAKER * me:
-            return other
-    return None
+            cands.append((_strength(game, other), other))
+    if not cands:
+        return None
+    cands.sort()
+    return cands[0][1]
 
 
 def _found_spot(game, house_name: str) -> Optional[Tuple[str, int]]:
@@ -142,7 +150,7 @@ def _pick_initiative(game, house_name: str, realm, goal=None):
                 return "found_enterprise", {"kind": kind, "province_pid": pid}
  
     if _conviction(ruler, "war") > WAR_CONVICTION and not house.at_war_with:
-        target = _weaker_neighbor(game, house_name)
+        target = _war_target(game, house_name)
         if target is not None:
             return "declare_war", {"target_house": target}
     adults = [c for c in realm.dynasty.all_characters.values()
@@ -196,6 +204,53 @@ def _policy_targets(game, house_name) -> dict:
     return {k: max(-100, min(100, int(round(v)))) for k, v in targets.items()}
 
 
+MUSTER_FLOOR = 15         # never muster a province below this population
+MUSTER_CAP = 3            # regiments raised per war per turn
+MUSTER_GATE = 13        # short-window tests (grip: 8 turns, money_supply: 12) end before mustering begins
+
+
+def _muster(game, house_name: str) -> None:
+    """Raise regiments while at war. For each war the house pushes the front
+    it currently leads, so an advantage breaks through into captures rather
+    than grinding into a stalemate. It raises at most one regiment per war
+    from the most populous non-capital province, and commits it. Respects the
+    steel stockpile and a population floor."""
+    house = game.houses[house_name]
+    if not house.at_war_with:
+        return
+    provs = game.provinces_of(house_name)
+    if not provs:
+        return
+    spares = [p for p in sorted(provs, key=lambda p: -p.population)
+              if p.pid != house.capital]
+    donor = spares[0] if spares else max(provs, key=lambda p: p.population)
+    cap = game.capacity.get(house_name)
+    has_steel = any(e.kind == "ironworks" for e in game.ents_of(house_name))
+    steel_room = (cap["steel"] // REGIMENT_STEEL_COST
+                  if has_steel and cap is not None and "steel" in cap
+                  else 10 ** 9)
+    for war in game.wars:
+        if house_name not in (war.aggressor, war.defender) or not war.fronts:
+            continue
+        if house_name == war.aggressor:
+            def _my_side(fr): return fr.attacker_regiments - fr.defender_regiments
+        else:
+            def _my_side(fr): return fr.defender_regiments - fr.attacker_regiments
+        front = max(war.fronts, key=_my_side)
+        if _my_side(front) <= 0:
+            front = min(war.fronts, key=_my_side)
+        want = min(MUSTER_CAP,
+                   (donor.population - MUSTER_FLOOR) // REGIMENT_POP_COST,
+                   steel_room)
+        if want <= 0:
+            continue
+        n = raise_regiments(game, house_name, donor.pid, want)
+        if n > 0:
+            allocate(war, front, house_name, n)
+
+
+
+
 def set_policy(game, house_name) -> None:
     """Drift each dial one bounded step toward its target, but only while the
     gap exceeds the dead-band. Converged dials are left untouched so their
@@ -242,17 +297,40 @@ def ai_turn(game, house_name: str) -> List[str]:
             game.attention[house_name] -= 1
             msgs.extend(initiative(game, house_name, verb,
                                    _executor_for(game, realm, domain), **kwargs))
+    if game.turn >= MUSTER_GATE:
+        _muster(game, house_name)
     return msgs
 
 
+PEACE_DECAY_START = 55      # after this turn, losing houses grow less proud
+PEACE_DECAY_END = 68        # by this turn the wear is complete
+PEACE_DECAY_FLOOR = 5.0     # a grumpy AI will talk if it is 5 down
+
+
+def _peace_threshold(game) -> float:
+    """A long war wears down a losing house: the score needed to make it
+    sue for peace falls from ACCEPT_SCORE toward PEACE_DECAY_FLOOR across
+    the closing turns of the age, so wars still grinding at the halt
+    resolve into a truce rather than stalling at the century gate."""
+    if game.turn <= PEACE_DECAY_START:
+        return ACCEPT_SCORE
+    span = PEACE_DECAY_END - PEACE_DECAY_START
+    t = max(0.0, min(1.0, (game.turn - PEACE_DECAY_START) / span))
+    return ACCEPT_SCORE + (PEACE_DECAY_FLOOR - ACCEPT_SCORE) * t
+
+
 def ai_peace_check(game, war) -> Optional[PeaceTerms]:
-    """A beaten AI house sues for peace; the player is never signed for."""
+    """A beaten AI house sues for peace; the player is never signed for.
+    Once the war has worn the house down (the decayed threshold), it signs
+    any bill no heavier than its beating - no longer bound to ACCEPT_SCORE."""
     loser = war.defender if war.war_score >= 0.0 else war.aggressor
     if game.houses[loser].is_player:
         return None
-    if abs(war.war_score) < ACCEPT_SCORE:
+    threshold = _peace_threshold(game)
+    if abs(war.war_score) < threshold:
         return None
     terms = _auto_terms(game, war)
-    if ai_acceptable(game, war, terms, loser):
+    against = -war.war_score if loser == war.aggressor else war.war_score
+    if terms_cost(terms) <= against:
         return terms
     return None

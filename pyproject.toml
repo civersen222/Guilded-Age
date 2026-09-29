@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gilded-machine"
+version = "0.9.0"
+description = "CivKings: The Gilded Machine — a headless-capable pygame strategy game"
+requires-python = ">=3.9"
+dependencies = [
+    "pygame-ce>=2.1",
+    "numpy",
+]
+
+[project.scripts]
+gilded = "gilded.__main__:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["gilded*"]
+
+[tool.setuptools.package-data]
+gilded = ["assets/**/*"]

@@ -9,7 +9,9 @@ domain; matters with no seat fester and resolve themselves badly.
 The docket never imports the chassis - it only receives the game object
 (anything with atlas/houses/realms/enterprises/rng/... attributes)."""
 
+import hashlib
 import random
+from functools import partial
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
@@ -21,16 +23,16 @@ from gilded.enterprises import (
 from gilded.directives import DIRECTIVE_CONVICTION, friction
 from gilded.fronts import (ENTRENCH_MAX, PeaceTerms, WarGoal, ai_acceptable,
                            allocate, declare_war, negotiate_peace,
-                           raise_regiments)
+                           raise_regiments, REGIMENT_POP_COST, REGIMENT_STEEL_COST)
 from gilded.society.court import Court, CourtPosition
-from gilded.society.characters import modify_opinion
+from gilded.society.characters import modify_opinion, record_history
 from gilded.society.dispositions import apply_drift
 from gilded.society.labor import buy_off_leader, cover_up, martyr_leader
 from gilded.society.realm import DIRECTOR_SALARY_PCT
 from gilded.society.shares import initial_ledger, transfer_shares
 
 FESTER_TURNS = 2                  # unattended + no seat -> auto-resolution after this
-MAX_PETITIONS = 6                 # per house per turn
+MAX_PETITIONS = 10                # per house per turn
 BETROTHAL_CHANCE = 0.25
 HEIR_DEMAND_CHANCE = 0.2
 RAIL_COST = 250.0
@@ -57,7 +59,7 @@ DOMAIN_SEAT = {
 SEAT_DOMAIN = {seat: domain for domain, seat in DOMAIN_SEAT.items()}
 
 DOMAIN_PRIORITY = {               # lower = more urgent when the docket overflows
-    "war": 0, "labor": 1, "family": 2, "capital": 3,
+    "chain": 0, "war": 0, "labor": 1, "family": 2, "capital": 3,
     "press": 4, "diplomacy": 5, "expansion": 6,
 }
 
@@ -97,6 +99,12 @@ def _next_pid(game) -> int:
     return game._docket_pid
 
 
+def _gen_seed(game, kind: str, house: str) -> int:
+    """Deterministic seed for a per-call sub-stream (seed, turn, house, kind)."""
+    seed_str = f"{getattr(game, 'seed', 0)}|{game.turn}|{house}|{kind}"
+    return int(hashlib.sha256(seed_str.encode()).hexdigest()[:8], 16)
+
+
 def _ents_of(game, house_name: str) -> List:
     return [e for e in game.enterprises if e.house == house_name]
 
@@ -112,7 +120,29 @@ def _house_provinces(game, house_name: str) -> List:
     return [p for p in game.atlas.provinces.values() if p.owner == house_name]
 
 
-# --- generators --------------------------------------------------------------
+def _capital_grant(ctx, *, ent, director, realm, cost, eff) -> List[str]:
+    # Stale guard: the venture may have reached TIER_MAX by another road
+    # (initiative or an earlier petition) between request and ruling.
+    # A House cannot be billed for a tier that does not exist.
+    if ent.tier >= TIER_MAX or ent.target_tier >= TIER_MAX:
+        return [f"{ent.name} has already reached the top tier; request withdrawn"]
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < cost:
+        return [f"The treasury cannot meet {director.name}'s request ({cost:.0f} gold)"]
+    house.debit(ctx.game.turn, "expansion", cost)
+    _turns = EXPAND_TURNS[ent.tier + 1]
+    if eff.build_speed_mod > 0:
+        _turns = max(1, int(round(_turns / eff.build_speed_mod)))
+    ent.under_construction = _turns
+    ent.target_tier = ent.tier + 1
+    modify_opinion(director, realm.ruler, int(10 * ctx.scale), "expansion capital")
+    return [f"{ent.name} breaks ground on tier {ent.tier + 1} ({cost:.0f} gold)"]
+
+
+def _capital_refuse(ctx, *, director, realm) -> List[str]:
+    modify_opinion(director, realm.ruler, -int(8 * ctx.scale), "refused capital")
+    return [f"{director.name} is sent away empty-handed"]
+
 
 def _gen_capital_request(game, house_name, realm, rng) -> Optional[Petition]:
     """A Director with an enterprise below top tier begs expansion capital."""
@@ -129,37 +159,29 @@ def _gen_capital_request(game, house_name, realm, rng) -> Optional[Petition]:
     _eff = policy.effects(game, house_name)
     cost = EXPAND_COST[ent.tier + 1] * _eff.expand_cost_mod
 
-    def _grant(ctx) -> List[str]:
-        # Stale guard: the venture may have reached TIER_MAX by another road
-        # (initiative or an earlier petition) between request and ruling.
-        # A House cannot be billed for a tier that does not exist.
-        if ent.tier >= TIER_MAX or ent.target_tier >= TIER_MAX:
-            return [f"{ent.name} has already reached the top tier; request withdrawn"]
-        house = ctx.game.houses[ctx.house]
-        if house.treasury < cost:
-            return [f"The treasury cannot meet {director.name}'s request ({cost:.0f} gold)"]
-        house.debit(ctx.game.turn, "expansion", cost)
-        _turns = EXPAND_TURNS[ent.tier + 1]
-        if _eff.build_speed_mod > 0:
-            _turns = max(1, int(round(_turns / _eff.build_speed_mod)))
-        ent.under_construction = _turns
-        ent.target_tier = ent.tier + 1
-        modify_opinion(director, realm.ruler, int(10 * ctx.scale), "expansion capital")
-        return [f"{ent.name} breaks ground on tier {ent.tier + 1} ({cost:.0f} gold)"]
-
-    def _refuse(ctx) -> List[str]:
-        modify_opinion(director, realm.ruler, -int(8 * ctx.scale), "refused capital")
-        return [f"{director.name} is sent away empty-handed"]
-
     return Petition(
         pid=_next_pid(game), kind="capital_request", domain="capital",
         house=house_name,
         text=f"{director.name} begs capital to expand {ent.name} (tier {ent.tier}, {cost:.0f} gold)",
         actors={"director": director, "enterprise": ent},
         options=[
-            PetitionOption("grant", f"Fund the expansion ({cost:.0f} gold)", 60, _grant),
-            PetitionOption("refuse", "The House's gold stays in the vault", -40, _refuse),
+            PetitionOption("grant", f"Fund the expansion ({cost:.0f} gold)", 60,
+                           partial(_capital_grant, ent=ent, director=director,
+                                   realm=realm, cost=cost, eff=_eff)),
+            PetitionOption("refuse", "The House's gold stays in the vault", -40,
+                           partial(_capital_refuse, director=director, realm=realm)),
         ])
+
+
+def _seat_appoint(ctx, *, seat, cand, realm) -> List[str]:
+    for pos, ch in realm.court.positions.items():
+        if ch is not None and ch.id == cand.id:
+            realm.court.positions[pos] = None
+    realm.court.positions[seat] = None
+    realm.court.appoint(seat, cand, getattr(ctx.game, "turn", 0))
+    record_history(cand, ctx.game, "court", f"{cand.name} is sworn in as {seat.value}")
+    modify_opinion(cand, realm.ruler, int(15 * ctx.scale), "given a seat")
+    return [f"{cand.name} is sworn in as {seat.value}"]
 
 
 def _gen_seat_vacancies(game, house_name, realm, rng) -> List[Petition]:
@@ -178,25 +200,39 @@ def _gen_seat_vacancies(game, house_name, realm, rng) -> List[Petition]:
             continue
         options = []
         for i, cand in enumerate(pool[:3]):
-            def _appoint(ctx, seat=seat, cand=cand) -> List[str]:
-                for pos, ch in realm.court.positions.items():
-                    if ch is not None and ch.id == cand.id:
-                        realm.court.positions[pos] = None
-                realm.court.positions[seat] = None
-                realm.court.appoint(seat, cand, getattr(ctx.game, "turn", 0))
-                modify_opinion(cand, realm.ruler, int(15 * ctx.scale), "given a seat")
-                return [f"{cand.name} is sworn in as {seat.value}"]
             options.append(PetitionOption(
                 f"appoint_{i + 1}",
                 f"Appoint {cand.name} ({stat} {cand.get_effective_stat(stat)})",
-                0, _appoint))
+                0, partial(_seat_appoint, seat=seat, cand=cand, realm=realm)))
+        candidate_names = ", ".join(c.name for c in pool[:3])
         pets.append(Petition(
             pid=_next_pid(game), kind="seat_vacancy",
             domain=SEAT_DOMAIN[seat], house=house_name,
-            text=f"The seat of {seat.value} stands empty",
+            text=f"The seat of {seat.value} stands empty: {candidate_names} are available",
             actors={"candidates": pool[:3]},
             options=options))
     return pets
+
+
+def _strike_concede(ctx, *, province, ents_here) -> List[str]:
+    for e in ents_here:
+        e.extraction_dial = max(0.0, e.extraction_dial - 20.0 * ctx.scale)
+    province.unrest = max(0.0, province.unrest - 10.0 * ctx.scale)
+    return [f"The dials at {province.name} are wound back; the union concedes"]
+
+
+def _strike_buy_off(ctx, *, actor, mv, province) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < BUYOFF_COST:
+        return [f"The treasury cannot spare {BUYOFF_COST:.0f} gold for {actor.name}"]
+    house.debit(ctx.game.turn, "strike buyoff", BUYOFF_COST)
+    return buy_off_leader(mv, province)
+
+
+def _strike_break(ctx, *, mv, province, realm) -> List[str]:
+    owned = _house_provinces(ctx.game, ctx.house)
+    tide = getattr(ctx.game, "tide", None)
+    return martyr_leader(mv, province, owned, realm, ctx.rng, tide)
 
 
 def _gen_union_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
@@ -210,39 +246,55 @@ def _gen_union_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
     mv = province.movement
     ents_here = [e for e in _ents_of(game, house_name) if e.province == province.pid]
 
-    def _concede(ctx) -> List[str]:
+    # Ensure we have a character to name — prefer the movement leader,
+    # otherwise pick a character from the striking province's enterprises
+    actor = mv.leader
+    if actor is None:
+        by_id = {c.id: c for c in realm.characters}
         for e in ents_here:
-            e.extraction_dial = max(0.0, e.extraction_dial - 20.0 * ctx.scale)
-        province.unrest = max(0.0, province.unrest - 10.0 * ctx.scale)
-        return [f"The dials at {province.name} are wound back; the union claims victory"]
+            director_id = getattr(e, "director_id", None)
+            if director_id:
+                director = by_id.get(director_id)
+                if director and director.is_alive:
+                    actor = director
+                    break
+    if actor is None:
+        return None
 
-    def _buy_off(ctx) -> List[str]:
-        house = ctx.game.houses[ctx.house]
-        if house.treasury < BUYOFF_COST:
-            return [f"The House cannot raise the {BUYOFF_COST:.0f} gold to buy peace"]
-        house.debit(ctx.game.turn, "strike buyoff", BUYOFF_COST)
-        return buy_off_leader(mv, province)
-
-    def _break(ctx) -> List[str]:
-        out = martyr_leader(mv, province, _house_provinces(ctx.game, ctx.house),
-                            realm, ctx.rng, getattr(ctx.game, "tide", None))
-        return out or [f"The {province.name} strike is broken by force"]
-
-    leader_name = mv.leader.name if mv.leader is not None else "the strike committee"
     return Petition(
         pid=_next_pid(game), kind="union_ultimatum", domain="labor",
         house=house_name,
-        text=f"{leader_name} of {province.name} demands relief - the works stand silent",
-        actors={"movement": mv, "province": province},
+        text=f"{actor.name} leads the strike at {province.name}: concede, pay, or break it",
+        actors={"actor": actor},
         options=[
-            PetitionOption("concede", "Cut the extraction dials", -60, _concede),
-            PetitionOption("buy_off", f"Buy off the leadership ({BUYOFF_COST:.0f} gold)", 0, _buy_off),
-            PetitionOption("break", "Break the strike", 80, _break),
+            PetitionOption("concede", "Concede to the demands", -40,
+                           partial(_strike_concede, province=province, ents_here=ents_here)),
+            PetitionOption("buy_off", f"Buy off {actor.name} ({BUYOFF_COST:.0f} gold)", 0,
+                           partial(_strike_buy_off, actor=actor, mv=mv, province=province)),
+            PetitionOption("break", "Break the strike", 40,
+                           partial(_strike_break, mv=mv, province=province, realm=realm)),
         ])
 
 
+def _betrothal_accept(ctx, *, other, our_person, their_person) -> List[str]:
+    msg = ctx.game.marriages.wed_match(
+        ctx.house, other, our_person, their_person,
+        ctx.game.realms, ctx.game.houses,
+        _ents_by_house(ctx.game), ctx.rng, ctx.game)
+    if msg is None:
+        return [f"The match with {other} falls through at the altar"]
+    return [msg]
+
+
+def _betrothal_decline(ctx, *, other, their_person) -> List[str]:
+    a, b = ctx.game.houses[ctx.house], ctx.game.houses[other]
+    a.relations[other] = a.relations.get(other, 0) - int(5 * ctx.scale)
+    b.relations[ctx.house] = b.relations.get(ctx.house, 0) - int(5 * ctx.scale)
+    return [f"{other}'s envoy is sent home; {their_person.name} is refused"]
+
+
 def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
-    """Another House proposes a match, with the usual merger terms."""
+    """Another House proposes a match, naming the two people who would wed."""
     if rng.random() >= BETROTHAL_CHANCE:
         return None
     house = game.houses[house_name]
@@ -254,27 +306,77 @@ def _gen_betrothal_offer(game, house_name, realm, rng) -> Optional[Petition]:
         return None
     other = rng.choice(sorted(suitors))
 
-    def _accept(ctx) -> List[str]:
-        msg = ctx.game.marriages.arrange_match_between(
-            ctx.house, other, ctx.game.realms, ctx.game.houses,
-            _ents_by_house(ctx.game), ctx.rng)
-        return [msg] if msg else [f"The match with {other} falls through at the altar"]
+    # Name the proposed pair for the petition text using a sub-stream
+    other_realm = game.realms.get(other)
+    if other_realm is None:
+        return None
+    our_candidates = game.marriages._eligible(realm)
+    their_candidates = game.marriages._eligible(other_realm)
+    if not our_candidates or not their_candidates:
+        return None
 
-    def _decline(ctx) -> List[str]:
-        a, b = ctx.game.houses[ctx.house], ctx.game.houses[other]
-        a.relations[other] = a.relations.get(other, 0) - int(5 * ctx.scale)
-        b.relations[ctx.house] = b.relations.get(ctx.house, 0) - int(5 * ctx.scale)
-        return [f"{other}'s envoy is sent home without a bride"]
+    sub = random.Random(_gen_seed(game, "betrothal_offer", house_name))
+    our_pick = sub.choice(our_candidates)
+    want_gender = "Female" if our_pick.gender == "Male" else "Male"
+    their_opposite = [c for c in their_candidates if c.gender == want_gender]
+    if their_opposite:
+        their_pick = sub.choice(their_opposite)
+    else:
+        their_pick = sub.choice(their_candidates)
+
+    actors = {
+        "other_house": other,
+        "our_person": our_pick,
+        "their_person": their_pick,
+    }
+
+    our_person = actors["our_person"]
+    their_person = actors["their_person"]
 
     return Petition(
         pid=_next_pid(game), kind="betrothal_offer", domain="diplomacy",
         house=house_name,
-        text=f"House {other} proposes a marriage between the houses",
-        actors={"other_house": other},
+        text=f"House {other} proposes a marriage: {our_person.name} ({our_person.age}) marries {their_person.name} ({their_person.age})",
+        actors=actors,
         options=[
-            PetitionOption("accept", "Accept the match", -30, _accept),
-            PetitionOption("decline", "Decline politely", 30, _decline),
+            PetitionOption("accept", "Accept the match", -30,
+                           partial(_betrothal_accept, other=other,
+                                   our_person=our_person,
+                                   their_person=their_person)),
+            PetitionOption("decline", f"Refuse {their_person.name}", 30,
+                           partial(_betrothal_decline, other=other,
+                                   their_person=their_person)),
         ])
+
+
+def _heir_grant_seat(ctx, *, heir, realm) -> List[str]:
+    for seat, holder in realm.court.positions.items():
+        if holder is None or not holder.is_alive:
+            realm.court.positions[seat] = None
+            realm.court.appoint(seat, heir, getattr(ctx.game, "turn", 0))
+            record_history(heir, ctx.game, "court", f"{heir.name} takes the seat of {seat.value}")
+            modify_opinion(heir, realm.ruler, int(20 * ctx.scale), "given a seat")
+            return [f"{heir.name} takes the seat of {seat.value}"]
+    modify_opinion(heir, realm.ruler, -int(5 * ctx.scale), "empty promise")
+    return [f"There is no seat to give {heir.name}; the promise rings hollow"]
+
+
+def _heir_allowance(ctx, *, heir, realm) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < HEIR_ALLOWANCE:
+        return [f"The treasury cannot spare {heir.name}'s allowance"]
+    house.debit(ctx.game.turn, "heir allowance", HEIR_ALLOWANCE)
+    modify_opinion(heir, realm.ruler, int(10 * ctx.scale), "an allowance")
+    return [f"{heir.name} receives {HEIR_ALLOWANCE:.0f} gold per year"]
+
+
+def _heir_refuse(ctx, *, heir, realm) -> List[str]:
+    modify_opinion(heir, realm.ruler, -int(12 * ctx.scale), "refused their due")
+    d = apply_drift(heir, "ambitious_content", 5.0, "denied their due")
+    out = [f"{heir.name} is refused, and does not forget it"]
+    if d:
+        out.append(d)
+    return out
 
 
 def _gen_heir_demand(game, house_name, realm, rng) -> Optional[Petition]:
@@ -287,42 +389,41 @@ def _gen_heir_demand(game, house_name, realm, rng) -> Optional[Petition]:
         return None
     heir = max(heirs, key=lambda c: c.age)
 
-    def _grant_seat(ctx) -> List[str]:
-        for seat, holder in realm.court.positions.items():
-            if holder is None or not holder.is_alive:
-                realm.court.positions[seat] = None
-                realm.court.appoint(seat, heir, getattr(ctx.game, "turn", 0))
-                modify_opinion(heir, realm.ruler, int(20 * ctx.scale), "given a seat")
-                return [f"{heir.name} takes the seat of {seat.value}"]
-        modify_opinion(heir, realm.ruler, -int(5 * ctx.scale), "empty promise")
-        return [f"There is no seat to give {heir.name}; the promise rings hollow"]
-
-    def _allowance(ctx) -> List[str]:
-        house = ctx.game.houses[ctx.house]
-        if house.treasury < HEIR_ALLOWANCE:
-            return [f"The treasury cannot spare {heir.name}'s allowance"]
-        house.debit(ctx.game.turn, "heir allowance", HEIR_ALLOWANCE)
-        modify_opinion(heir, realm.ruler, int(10 * ctx.scale), "an allowance")
-        return [f"{heir.name} is granted an allowance of {HEIR_ALLOWANCE:.0f} gold"]
-
-    def _refuse(ctx) -> List[str]:
-        modify_opinion(heir, realm.ruler, -int(12 * ctx.scale), "refused their due")
-        d = apply_drift(heir, "ambitious_content", 5.0, "denied their due")
-        out = [f"{heir.name} is refused, and does not forget it"]
-        if d:
-            out.append(d)
-        return out
-
     return Petition(
         pid=_next_pid(game), kind="heir_demand", domain="family",
         house=house_name,
         text=f"{heir.name} demands a seat at the table or capital of their own",
         actors={"heir": heir},
         options=[
-            PetitionOption("grant_seat", "Give them a vacant seat", -20, _grant_seat),
-            PetitionOption("allowance", f"Grant an allowance ({HEIR_ALLOWANCE:.0f} gold)", 0, _allowance),
-            PetitionOption("refuse", "They will wait their turn", 40, _refuse),
+            PetitionOption("grant_seat", "Give them a vacant seat", -20,
+                           partial(_heir_grant_seat, heir=heir, realm=realm)),
+            PetitionOption("allowance", f"Grant an allowance ({HEIR_ALLOWANCE:.0f} gold)", 0,
+                           partial(_heir_allowance, heir=heir, realm=realm)),
+            PetitionOption("refuse", "They will wait their turn", 40,
+                           partial(_heir_refuse, heir=heir, realm=realm)),
         ])
+
+
+def _disaster_cover(ctx, *, realm, province) -> List[str]:
+    return cover_up(realm.ruler, province, getattr(ctx.game, "tide", None))
+
+
+def _disaster_compensate(ctx, *, province) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < COMPENSATE_COST:
+        return ["The widows' fund is promised money the House does not have"]
+    house.debit(ctx.game.turn, "compensation", COMPENSATE_COST)
+    province.unrest = max(0.0, province.unrest - 8.0 * ctx.scale)
+    return [f"The families of {province.name} are compensated ({COMPENSATE_COST:.0f} gold)"]
+
+
+def _disaster_prosecute(ctx, *, director, realm, ent, province) -> List[str]:
+    if director is None or not director.is_alive:
+        return [f"The inquiry into {ent.name} finds no one left to blame"]
+    ent.director_id = ""
+    modify_opinion(director, realm.ruler, -int(30 * ctx.scale), "prosecuted")
+    province.unrest = max(0.0, province.unrest - 5.0 * ctx.scale)
+    return [f"{director.name} is prosecuted for the disaster at {ent.name}"]
 
 
 def _gen_disaster_inquiry(game, house_name, realm, rng) -> Optional[Petition]:
@@ -335,36 +436,139 @@ def _gen_disaster_inquiry(game, house_name, realm, rng) -> Optional[Petition]:
     ent, province = accidents[0]
     by_id = {c.id: c for c in realm.characters}
     director = by_id.get(ent.director_id)
-
-    def _cover(ctx) -> List[str]:
-        return cover_up(realm.ruler, province, getattr(ctx.game, "tide", None))
-
-    def _compensate(ctx) -> List[str]:
-        house = ctx.game.houses[ctx.house]
-        if house.treasury < COMPENSATE_COST:
-            return ["The widows' fund is promised money the House does not have"]
-        house.debit(ctx.game.turn, "compensation", COMPENSATE_COST)
-        province.unrest = max(0.0, province.unrest - 8.0 * ctx.scale)
-        return [f"The families of {province.name} are compensated ({COMPENSATE_COST:.0f} gold)"]
-
-    def _prosecute(ctx) -> List[str]:
-        if director is None or not director.is_alive:
-            return [f"The inquiry into {ent.name} finds no one left to blame"]
-        ent.director_id = ""
-        modify_opinion(director, realm.ruler, -int(30 * ctx.scale), "prosecuted")
-        province.unrest = max(0.0, province.unrest - 5.0 * ctx.scale)
-        return [f"{director.name} is prosecuted for the disaster at {ent.name}"]
+    if director is None or not director.is_alive:
+        return None
 
     return Petition(
         pid=_next_pid(game), kind="disaster_inquiry", domain="press",
         house=house_name,
-        text=f"The papers demand answers for the disaster at {ent.name}",
-        actors={"enterprise": ent, "province": province, "director": director},
+        text=f"{director.name} answers for the disaster at {ent.name}",
+        actors={"director": director, "enterprise": ent},
         options=[
-            PetitionOption("cover_up", "Suppress the story", 50, _cover),
-            PetitionOption("compensate", f"Compensate the families ({COMPENSATE_COST:.0f} gold)", -50, _compensate),
-            PetitionOption("prosecute", "Prosecute the Director", 0, _prosecute),
+            PetitionOption("cover_up", "Suppress the story", 50,
+                           partial(_disaster_cover, realm=realm, province=province)),
+            PetitionOption("compensate", f"Pay the widows ({COMPENSATE_COST:.0f} gold)", 0,
+                           partial(_disaster_compensate, province=province)),
+            PetitionOption("prosecute", "Make an example of them", -30,
+                           partial(_disaster_prosecute, director=director, realm=realm,
+                                   ent=ent, province=province)),
         ])
+
+
+def _stress_grant_leave(ctx, *, char, realm) -> List[str]:
+    char.stress = max(0, char.stress - 80)
+    modify_opinion(char, realm.ruler, 10, "leave granted")
+    return [f"{char.name} is granted leave of absence (stress: {char.stress})"]
+
+
+def _stress_dismiss(ctx, *, char, realm) -> List[str]:
+    modify_opinion(char, realm.ruler, -15, "dismissed")
+    # Remove from court if seated
+    for seat, holder in list(realm.court.positions.items()):
+        if holder and holder.id == char.id:
+            if hasattr(holder, "set_court_position"):
+                holder.set_court_position("")
+            realm.court.positions[seat] = None
+            break
+    return [f"{char.name} is dismissed from court — relations worsen"]
+
+
+def _gen_stress_crisis(game, house_name, realm, rng) -> Optional[Petition]:
+    """A character under high stress (Overwhelmed or Breaking Point) asks for leave."""
+    if game.turn < 15:
+        return None
+    sub = random.Random(_gen_seed(game, "stress_crisis", house_name))
+    if sub.random() < 0.95:
+        return None
+    stressed = []
+    for c in realm.characters:
+        if not c.is_alive or c.id == realm.ruler.id:
+            continue
+        level = c.get_stress_level()
+        if level in ("Overwhelmed", "Breaking Point"):
+            stressed.append((c, level))
+    if not stressed:
+        return None
+    stressed.sort(key=lambda x: x[0].stress, reverse=True)
+    char, level = stressed[0]
+
+    return Petition(
+        pid=_next_pid(game), kind="stress_crisis", domain="family",
+        house=house_name,
+        text=f"{char.name} is {level} (stress {char.stress}) and requests leave",
+        actors={"person": char},
+        options=[
+            PetitionOption("grant_leave", f"Grant {char.name} leave", 10,
+                           partial(_stress_grant_leave, char=char, realm=realm)),
+            PetitionOption("dismiss", "Dismiss from court", -15,
+                           partial(_stress_dismiss, char=char, realm=realm)),
+        ])
+
+
+def _courtier_appease(ctx, *, char, realm) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    cost = 25.0
+    if house.treasury < cost:
+        return [f"The treasury cannot spare {cost:.0f} gold to appease {char.name}"]
+    house.debit(ctx.game.turn, "courtier appeasement", cost)
+    modify_opinion(char, realm.ruler, 25, "appeased")
+    return [f"{char.name} is appeased with {cost:.0f} gold (opinion improved)"]
+
+
+def _courtier_rebuke(ctx, *, char, realm) -> List[str]:
+    modify_opinion(char, realm.ruler, -10, "rebuked")
+    char.add_stress(15)
+    return [f"{char.name} is rebuked publicly — opinion worsens, stress rises"]
+
+
+def _gen_courtier_grievance(game, house_name, realm, rng) -> Optional[Petition]:
+    """A courtier with deeply negative opinion makes demands."""
+    if game.turn < 15:
+        return None
+    sub = random.Random(_gen_seed(game, "courtier_grievance", house_name))
+    if sub.random() < 0.95:
+        return None
+    society = game.society
+    ruler = realm.ruler
+    grievances = []
+    for c in realm.characters:
+        if not c.is_alive or c.id == ruler.id:
+            continue
+        opinion = society.opinions.get((c.id, ruler.id), 0)
+        if opinion <= -40:
+            grievances.append((c, opinion))
+    if not grievances:
+        return None
+    grievances.sort(key=lambda x: x[1])
+    char, opinion = grievances[0]
+
+
+
+    return Petition(
+        pid=_next_pid(game), kind="courtier_grievance", domain="press",
+        house=house_name,
+        text=f"{char.name} (opinion {opinion}) demands redress at court",
+        actors={"person": char},
+        options=[
+            PetitionOption("appease", f"Appease {char.name} ({75:.0f} gold)", 15,
+                           partial(_courtier_appease, char=char, realm=realm)),
+            PetitionOption("rebuke", "Rebuke publicly", -10,
+                           partial(_courtier_rebuke, char=char, realm=realm)),
+        ])
+
+
+def _rail_fund(ctx, *, link, pa, pb) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < RAIL_COST:
+        return [f"The {pa}-{pb} line stays on the drawing board ({RAIL_COST:.0f} gold short)"]
+    house.debit(ctx.game.turn, "railway", RAIL_COST)
+    link.rail = True
+    return [f"Iron roads: the {pa}-{pb} line opens ({RAIL_COST:.0f} gold)"]
+
+
+def _rail_defer(ctx, *, engineer, realm) -> List[str]:
+    modify_opinion(engineer, realm.ruler, -int(5 * ctx.scale), "shelved proposal")
+    return [f"{engineer.name}'s rail survey is filed away"]
 
 
 def _gen_rail_proposal(game, house_name, realm, rng) -> Optional[Petition]:
@@ -384,26 +588,16 @@ def _gen_rail_proposal(game, house_name, realm, rng) -> Optional[Petition]:
     pa = game.atlas.provinces[link.a].name
     pb = game.atlas.provinces[link.b].name
 
-    def _fund(ctx) -> List[str]:
-        house = ctx.game.houses[ctx.house]
-        if house.treasury < RAIL_COST:
-            return [f"The {pa}-{pb} line stays on the drawing board ({RAIL_COST:.0f} gold short)"]
-        house.debit(ctx.game.turn, "railway", RAIL_COST)
-        link.rail = True
-        return [f"Iron roads: the {pa}-{pb} line opens ({RAIL_COST:.0f} gold)"]
-
-    def _defer(ctx) -> List[str]:
-        modify_opinion(engineer, realm.ruler, -int(5 * ctx.scale), "shelved proposal")
-        return [f"{engineer.name}'s rail survey is filed away"]
-
     return Petition(
         pid=_next_pid(game), kind="rail_proposal", domain="expansion",
         house=house_name,
         text=f"{engineer.name} proposes a rail link: {pa} to {pb} ({RAIL_COST:.0f} gold)",
         actors={"engineer": engineer, "link": link},
         options=[
-            PetitionOption("fund", "Lay the track", 50, _fund),
-            PetitionOption("defer", "The survey can wait", -50, _defer),
+            PetitionOption("fund", "Lay the track", 50,
+                           partial(_rail_fund, link=link, pa=pa, pb=pb)),
+            PetitionOption("defer", "The survey can wait", -50,
+                           partial(_rail_defer, engineer=engineer, realm=realm)),
         ])
 
 
@@ -439,6 +633,36 @@ def _try_peace(game, house_name: str, war) -> List[str]:
     return [f"House {other}'s envoys will not yield - the war goes on"]
 
 
+def _war_reinforce(ctx, *, war, front) -> List[str]:
+    if front is None:
+        return ["There is no front left to reinforce"]
+    owned = _house_provinces(ctx.game, ctx.house)
+    if not owned:
+        return ["The House has no province left to muster from"]
+    src = max(owned, key=lambda p: (p.population, -p.pid))
+    raised = raise_regiments(ctx.game, ctx.house, src.pid,
+                             REINFORCE_REGIMENTS)
+    if raised <= 0:
+        return [f"{src.name} can spare no men for the front"]
+    allocate(war, front, ctx.house, raised)
+    return [f"{raised} fresh regiments march to front {front.fid}"]
+
+
+def _war_hold(ctx, *, war, front) -> List[str]:
+    if front is not None:
+        if ctx.house == war.aggressor:
+            front.entrenchment_a = min(ENTRENCH_MAX,
+                                       front.entrenchment_a + 1)
+        else:
+            front.entrenchment_d = min(ENTRENCH_MAX,
+                                       front.entrenchment_d + 1)
+    return ["The order is to hold; the lines deepen"]
+
+
+def _war_seek_terms(ctx, *, war) -> List[str]:
+    return _try_peace(ctx.game, ctx.house, war)
+
+
 def _gen_war_council(game, house_name, realm, rng) -> Optional[Petition]:
     """The Marshal convenes when a front is in motion or the score swings."""
     for war in _wars_of(game, house_name):
@@ -453,44 +677,334 @@ def _gen_war_council(game, house_name, realm, rng) -> Optional[Petition]:
         other = war.defender if house_name == war.aggressor else war.aggressor
         front = hot[0] if hot else (war.fronts[0] if war.fronts else None)
 
-        def _reinforce(ctx, war=war, front=front) -> List[str]:
-            if front is None:
-                return ["There is no front left to reinforce"]
-            owned = _house_provinces(ctx.game, ctx.house)
-            if not owned:
-                return ["The House has no province left to muster from"]
-            src = max(owned, key=lambda p: (p.population, -p.pid))
-            raised = raise_regiments(ctx.game, ctx.house, src.pid,
-                                     REINFORCE_REGIMENTS)
-            if raised <= 0:
-                return [f"{src.name} can spare no men for the front"]
-            allocate(war, front, ctx.house, raised)
-            return [f"{raised} fresh regiments march to front {front.fid}"]
-
-        def _hold(ctx, war=war, front=front) -> List[str]:
-            if front is not None:
-                if ctx.house == war.aggressor:
-                    front.entrenchment_a = min(ENTRENCH_MAX,
-                                               front.entrenchment_a + 1)
-                else:
-                    front.entrenchment_d = min(ENTRENCH_MAX,
-                                               front.entrenchment_d + 1)
-            return ["The order is to hold; the lines deepen"]
-
-        def _seek_terms(ctx, war=war) -> List[str]:
-            return _try_peace(ctx.game, ctx.house, war)
+        # Find a marshal character to name in the petition
+        marshal = realm.court.positions.get(CourtPosition.MARSHAL)
+        if marshal is None or not marshal.is_alive:
+            # Fall back to any military-capable character
+            marshal = None
+            for c in realm.characters:
+                if c.is_alive and c.get_effective_stat("military") > 0:
+                    marshal = c
+                    break
+        if marshal is None:
+            return None
 
         return Petition(
             pid=_next_pid(game), kind="war_council", domain="war",
             house=house_name,
-            text=f"The Marshal convenes the war council on the war with House {other}",
-            actors={"war": war},
+            text=f"{marshal.name} convenes the war council on the war with House {other}",
+            actors={"marshal": marshal, "war": war},
             options=[
-                PetitionOption("reinforce", "Reinforce the front", 60, _reinforce),
-                PetitionOption("hold", "Hold the line", 0, _hold),
-                PetitionOption("seek_terms", "Seek terms", -60, _seek_terms),
+                PetitionOption("reinforce", "Reinforce the front", 60,
+                               partial(_war_reinforce, war=war, front=front)),
+                PetitionOption("hold", "Hold the line", 0,
+                               partial(_war_hold, war=war, front=front)),
+                PetitionOption("seek_terms", "Seek terms", -60,
+                               partial(_war_seek_terms, war=war)),
             ])
     return None
+
+
+def _lease_accept(ctx, *, prov, rival_name, cost) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < cost:
+        return [f"The treasury cannot spare {cost:.0f} gold for the tax farm lease"]
+    house.debit(ctx.game.turn, "tax farm lease", cost)
+    rival = ctx.game.houses.get(rival_name)
+    if rival:
+        rival.credit(ctx.game.turn, "tax farm lease", cost)
+    return [f"Tax farm on {prov.name} leased to {rival_name} for {cost} gold"]
+
+
+def _lease_reject(ctx, *, prov) -> List[str]:
+    return [f"Tax farm offer on {prov.name} declined"]
+
+
+def _gen_tax_farm_lease(game, house_name, realm, rng) -> Optional[Petition]:
+    """A merchant offers to buy the right to collect a tax."""
+    sub = random.Random(_gen_seed(game, "tax_farm_lease", house_name))
+    if sub.random() < 0.95:
+        return None
+    treasurer = realm.court.positions.get(CourtPosition.BOARD_CHAIRMAN)
+    if treasurer is None or not treasurer.is_alive:
+        return None
+    provinces = [p for p in game.atlas.provinces.values() if p.owner == house_name]
+    if not provinces:
+        return None
+    prov = provinces[sub.randint(0, len(provinces) - 1)]
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
+    cost = 50 + sub.randint(0, 100)
+
+    return Petition(
+        pid=_next_pid(game), kind="tax_farm_lease", domain="finance",
+        house=house_name,
+        text=f"{treasurer.name} presents an offer to lease tax collection on {prov.name} for {cost} gold.",
+        actors={"treasurer": treasurer, "province": prov},
+        options=[
+            PetitionOption("accept_lease", "Accept the lease", 10,
+                           partial(_lease_accept, prov=prov, rival_name=rival_name,
+                                   cost=cost)),
+            PetitionOption("reject_lease", "Decline the offer", -5,
+                           partial(_lease_reject, prov=prov)),
+        ])
+
+
+def _concession_grant(ctx, *, rival_name, revenue) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    c = revenue * 0.5
+    if house.treasury < c:
+        return [f"The treasury cannot spare {c:.0f} gold for the trade concession"]
+    house.debit(ctx.game.turn, "trade concession", c)
+    rival = ctx.game.houses.get(rival_name)
+    if rival:
+        rival.credit(ctx.game.turn, "trade concession", c)
+    return [f"Trade concession granted to {rival_name} for {c:.0f} gold"]
+
+
+def _concession_deny(ctx, *, rival_name) -> List[str]:
+    return [f"Trade concession denied to {rival_name}"]
+
+
+def _gen_trade_concession(game, house_name, realm, rng) -> Optional[Petition]:
+    """A foreign merchant house seeks trading rights."""
+    sub = random.Random(_gen_seed(game, "trade_concession", house_name))
+    if sub.random() < 0.95:
+        return None
+    treasurer = realm.court.positions.get(CourtPosition.BOARD_CHAIRMAN)
+    if treasurer is None or not treasurer.is_alive:
+        return None
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
+    revenue = 20 + sub.randint(0, 30)
+
+    return Petition(
+        pid=_next_pid(game), kind="trade_concession", domain="finance",
+        house=house_name,
+        text=f"{treasurer.name} reports that {rival_name} seeks trading rights for {revenue} gold annually.",
+        actors={"treasurer": treasurer, "foreign_house": rival_name},
+        options=[
+            PetitionOption("grant_concession", "Grant trading rights", 10,
+                           partial(_concession_grant, rival_name=rival_name,
+                                   revenue=revenue)),
+            PetitionOption("deny_concession", "Deny the request", -5,
+                           partial(_concession_deny, rival_name=rival_name)),
+        ])
+
+
+def _grant_approve(ctx, *, rival_name, cost) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < cost:
+        return [f"The treasury cannot spare {cost:.0f} gold for the military grant"]
+    house.debit(ctx.game.turn, "military grant", cost)
+    rival = ctx.game.houses.get(rival_name)
+    if rival:
+        rival.credit(ctx.game.turn, "military grant", cost)
+    return [f"Military grant of {cost} gold approved for {rival_name}"]
+
+
+def _grant_deny(ctx) -> List[str]:
+    return [f"Military grant denied by the ruler"]
+
+
+def _gen_military_grant(game, house_name, realm, rng) -> Optional[Petition]:
+    """The marshal requests funds for military preparations."""
+    sub = random.Random(_gen_seed(game, "military_grant", house_name))
+    if sub.random() < 0.95:
+        return None
+    marshal = realm.court.positions.get(CourtPosition.MARSHAL)
+    if marshal is None or not marshal.is_alive:
+        return None
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
+    cost = 25 + sub.randint(0, 50)
+
+    return Petition(
+        pid=_next_pid(game), kind="military_grant", domain="war",
+        house=house_name,
+        text=f"{marshal.name} requests {cost} gold for fortifications and supplies.",
+        actors={"marshal": marshal},
+        options=[
+            PetitionOption("approve_grant", "Approve the grant", 10,
+                           partial(_grant_approve, rival_name=rival_name,
+                                   cost=cost)),
+            PetitionOption("deny_grant", "Deny the request", -5, _grant_deny),
+        ])
+
+
+def _summit_attend(ctx, *, rival_name, cost) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < cost:
+        return [f"The treasury cannot spare {cost:.0f} gold for the diplomatic summit"]
+    house.debit(ctx.game.turn, "diplomatic summit", cost)
+    rival = ctx.game.houses.get(rival_name)
+    if rival:
+        rival.credit(ctx.game.turn, "diplomatic summit", cost)
+    return [f"Diplomatic summit with {rival_name} attended at cost of {cost} gold"]
+
+
+def _summit_proxy(ctx) -> List[str]:
+    return [f"A proxy was sent to represent the House at the summit"]
+
+
+def _summit_decline(ctx, *, rival_name) -> List[str]:
+    return [f"Summit invitation from {rival_name} declined"]
+
+
+def _gen_diplomatic_summit(game, house_name, realm, rng) -> Optional[Petition]:
+    """A foreign power invites the ruler to a diplomatic summit."""
+    sub = random.Random(_gen_seed(game, "diplomatic_summit", house_name))
+    if sub.random() < 0.95:
+        return None
+    chancellor = realm.court.positions.get(CourtPosition.FOREIGN_SECRETARY)
+    if chancellor is None or not chancellor.is_alive:
+        return None
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name and not h.defunct]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
+    cost = 20 + sub.randint(0, 30)
+
+    return Petition(
+        pid=_next_pid(game), kind="diplomatic_summit", domain="diplomacy",
+        house=house_name,
+        text=f"{chancellor.name} reports an invitation from {rival_name} for a diplomatic summit.",
+        actors={"chancellor": chancellor, "foreign_house": rival_name},
+        options=[
+            PetitionOption("attend_summit", "Attend in person", 15,
+                           partial(_summit_attend, rival_name=rival_name,
+                                   cost=cost)),
+            PetitionOption("send_proxy", "Send a proxy", 5, _summit_proxy),
+            PetitionOption("decline_summit", "Decline the invitation", -10,
+                           partial(_summit_decline, rival_name=rival_name)),
+        ])
+
+
+def _press_comply(ctx, *, rival_name, cost, topic) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < cost:
+        return [f"The treasury cannot spare {cost:.0f} gold for press compliance"]
+    house.debit(ctx.game.turn, "press compliance", cost)
+    rival = ctx.game.houses.get(rival_name)
+    if rival:
+        rival.credit(ctx.game.turn, "press compliance", cost)
+    return [f"Complied with press demands on {topic} at cost of {cost} gold for {rival_name}"]
+
+
+def _press_ignore(ctx, *, topic) -> List[str]:
+    return [f"Press demands on {topic} ignored"]
+
+
+def _gen_press_ultimatum(game, house_name, realm, rng) -> Optional[Petition]:
+    """The local press demands action on a matter of public concern."""
+    sub = random.Random(_gen_seed(game, "press_ultimatum", house_name))
+    if sub.random() < 0.95:
+        return None
+    chancellor = realm.court.positions.get(CourtPosition.MASTER_OF_PRESS)
+    if chancellor is None or not chancellor.is_alive:
+        return None
+    topics = ["press freedom", "public order", "tax reform", "military spending"]
+    topic = topics[sub.randint(0, len(topics) - 1)]
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
+    cost = 25 + sub.randint(0, 50)
+
+    return Petition(
+        pid=_next_pid(game), kind="press_ultimatum", domain="diplomacy",
+        house=house_name,
+        text=f"{chancellor.name} warns that the press is demanding action on {topic}.",
+        actors={"chancellor": chancellor},
+        options=[
+            PetitionOption("comply", "Comply with demands", 10,
+                           partial(_press_comply, rival_name=rival_name,
+                                   cost=cost, topic=topic)),
+            PetitionOption("ignore", "Ignore the press", -5,
+                           partial(_press_ignore, topic=topic)),
+        ])
+
+
+def _reform_endorse(ctx, *, rival_name, cost, reform) -> List[str]:
+    house = ctx.game.houses[ctx.house]
+    if house.treasury < cost:
+        return [f"The treasury cannot spare {cost:.0f} gold for reform endorsement"]
+    house.debit(ctx.game.turn, "reform endorsement", cost)
+    rival = ctx.game.houses.get(rival_name)
+    if rival:
+        rival.credit(ctx.game.turn, "reform endorsement", cost)
+    return [f"Endorsed {reform} at cost of {cost} gold for {rival_name}"]
+
+
+def _reform_suppress(ctx, *, reform) -> List[str]:
+    return [f"{reform} movement suppressed"]
+
+
+def _gen_reform_petition(game, house_name, realm, rng) -> Optional[Petition]:
+    """A reform movement seeks changes to the social order."""
+    sub = random.Random(_gen_seed(game, "reform_petition", house_name))
+    if sub.random() < 0.95:
+        return None
+    chancellor = realm.court.positions.get(CourtPosition.MASTER_OF_PRESS)
+    if chancellor is None or not chancellor.is_alive:
+        return None
+    reforms = ["education reform", "labor rights", "property reform", "religious freedom"]
+    reform = reforms[sub.randint(0, len(reforms) - 1)]
+    if isinstance(game.houses, dict):
+        house_names = [n for n in game.houses if n != house_name]
+    else:
+        house_names = [h.name for h in game.houses if h.name != house_name]
+    if not house_names:
+        return None
+    rival_name = house_names[sub.randint(0, len(house_names) - 1)]
+    cost = 25 + sub.randint(0, 50)
+
+    return Petition(
+        pid=_next_pid(game), kind="reform_petition", domain="society",
+        house=house_name,
+        text=f"{chancellor.name} presents a petition for {reform}.",
+        actors={"chancellor": chancellor},
+        options=[
+            PetitionOption("endorse_reform", "Endorse the reform", 10,
+                           partial(_reform_endorse, rival_name=rival_name,
+                                   cost=cost, reform=reform)),
+            PetitionOption("suppress_reform", "Suppress the movement", -10,
+                           partial(_reform_suppress, reform=reform)),
+        ])
+
+
+# Mapping from new-generator functions -> kind string (used by generate_petitions)
+_GEN_KINDS: Dict[Callable, str] = {
+    _gen_stress_crisis: "stress_crisis",
+    _gen_courtier_grievance: "courtier_grievance",
+    _gen_tax_farm_lease: "tax_farm_lease",
+    _gen_trade_concession: "trade_concession",
+    _gen_military_grant: "military_grant",
+    _gen_diplomatic_summit: "diplomatic_summit",
+    _gen_press_ultimatum: "press_ultimatum",
+    _gen_reform_petition: "reform_petition",
+}
 
 
 def generate_petitions(game, house_name: str) -> List[Petition]:
@@ -501,10 +1015,21 @@ def generate_petitions(game, house_name: str) -> List[Petition]:
     rng = game.rng
     pets: List[Petition] = []
     pets.extend(_gen_seat_vacancies(game, house_name, realm, rng))
+    # Original seven keep drawing from game.rng exactly as they always have
     for gen in (_gen_war_council, _gen_union_ultimatum, _gen_heir_demand,
                 _gen_capital_request, _gen_disaster_inquiry,
                 _gen_betrothal_offer, _gen_rail_proposal):
         p = gen(game, house_name, realm, rng)
+        if p is not None:
+            pets.append(p)
+    # New generators use a deterministic per-call sub-stream
+    for gen in (_gen_stress_crisis, _gen_courtier_grievance,
+                _gen_tax_farm_lease, _gen_trade_concession,
+                _gen_military_grant, _gen_diplomatic_summit,
+                _gen_press_ultimatum, _gen_reform_petition):
+        kind = _GEN_KINDS[gen]
+        sub_rng = random.Random(_gen_seed(game, kind, house_name))
+        p = gen(game, house_name, realm, sub_rng)
         if p is not None:
             pets.append(p)
     pets.sort(key=lambda p: (DOMAIN_PRIORITY.get(p.domain, 9), p.pid))
@@ -557,6 +1082,17 @@ def rule(game, petition, option_key, executor) -> List[str]:
     msgs.extend(_conviction_grind(executor, petition.domain, option.stance_bias))
     ctx = RulingContext(game, petition.house, executor, game.rng, scale)
     msgs.extend(option.apply(ctx))
+    from gilded.society.characters import Character, record_history
+    what = f"{option.text or petition.kind} on the {petition.kind.replace('_', ' ')}"
+    record_history(executor, game, "ruling", f"{executor.name} rules {what}",
+                   {"petition": petition.pid, "option": option.key})
+    petitioner = next((c for c in (petition.actors or {}).values()
+                       if isinstance(c, Character) and c is not executor
+                       and c.is_alive), None)
+    if petitioner is not None:
+        record_history(petitioner, game, "ruling",
+                       f"{petitioner.name}'s {petition.kind.replace('_', ' ')} is ruled",
+                       {"petition": petition.pid, "option": option.key})
     return msgs
 
 
@@ -570,6 +1106,18 @@ def resolve_unattended(game, house_name: str, petitions) -> List[str]:
         return msgs
     directives = getattr(game, "directives", {}).get(house_name)
     for p in petitions:
+        # Chain petitions are the player's to rule: a seated minister must not
+        # pre-empt the house's own decision on a chain's branch. If the
+        # player never rules it, it festers like any other unattended paper
+        # and resolves at the ugliest setting.
+        seat = None
+        if p.domain == "chain":
+            # Chain petitions are the player's to rule: a seated minister must
+            # not pre-empt the house's decision, and the docket's own fester
+            # rule must not apply a branch the chain is still choosing. Let it
+            # fester; the chain's own resolve_pending picks the ugliest branch.
+            p.turns_waiting += 1
+            continue
         seat = DOMAIN_SEAT.get(p.domain)
         holder = realm.court.positions.get(seat) if seat is not None else None
         if holder is not None and holder.is_alive:
@@ -588,6 +1136,11 @@ def resolve_unattended(game, house_name: str, petitions) -> List[str]:
                 ctx = RulingContext(game, house_name, realm.ruler, game.rng, 0.5)
                 msgs.append(f"Left to fester, the {p.kind.replace('_', ' ')} resolves itself")
                 msgs.extend(option.apply(ctx))
+                from gilded.society.characters import record_history
+                record_history(realm.ruler, game, "ruling",
+                               f"{realm.ruler.name} rules the festering "
+                               f"{p.kind.replace('_', ' ')}",
+                               {"petition": p.pid, "option": option.key})
     return msgs
 
 
@@ -616,10 +1169,22 @@ def director_candidates(game, house, eid) -> List:
 
 
 def _init_propose_marriage(ctx, target_house=None, **kw) -> List[str]:
-    msg = ctx.game.marriages.arrange_match_between(
-        ctx.house, target_house, ctx.game.realms, ctx.game.houses,
-        _ents_by_house(ctx.game), ctx.rng)
-    return [msg] if msg else [f"House {target_house} declines the proposal"]
+    game = ctx.game
+    h = game.houses.get(ctx.house)
+    t = game.houses.get(target_house)
+    if h and t:
+        if ctx.house in getattr(t, 'at_war_with', set()) or target_house in getattr(h, 'at_war_with', set()):
+            return [f"Cannot propose marriage to House {target_house} while at war"]
+    msg = game.marriages.arrange_match_between(
+        ctx.house, target_house, game.realms, game.houses,
+        _ents_by_house(game), ctx.rng, game)
+    if msg is None:
+        h = game.houses.get(ctx.house)
+        t = game.houses.get(target_house)
+        if h and t and (ctx.house in getattr(t, 'at_war_with', set()) or target_house in getattr(h, 'at_war_with', set())):
+            return [f"Cannot propose marriage to House {target_house} while at war"]
+        return [f"House {target_house} has no eligible candidates for marriage"]
+    return [msg]
 
 
 def _init_found_enterprise(ctx, kind=None, province_pid=None, **kw) -> List[str]:
@@ -685,7 +1250,119 @@ def _init_tour_province(ctx, province_pid=None, **kw) -> List[str]:
 
 
 def _init_adjust_garrison(ctx, **kw) -> List[str]:
-    return ["The Marshal has no active war to garrison against (fronts arrive in G16)"]
+    """Adjust garrison: raise regiments from a province and commit them to a front.
+
+    Accepts optional kwargs:
+      - province_pid: int (province to raise from)
+      - war_id: int (index into game.wars, or we pick the first war the house is in)
+      - front_id: int (front.fid to commit to)
+      - count: int (number of regiments to raise/commit)
+      - side: str ('attacker' | 'defender' — inferred from war if not given)
+
+    If only province_pid and count are given, raises regiments into a uncommitted pool.
+    If only war_id/front_id and count are given, commits from the pool.
+    If all are given, raises and commits in one step.
+    """
+    game = ctx.game
+    house = ctx.house
+    province_pid = kw.get("province_pid")
+    war_id = kw.get("war_id")
+    front_id = kw.get("front_id")
+    count = kw.get("count", 1)
+    count = max(1, int(count))
+
+    wars = _wars_of(game, house)
+
+    # If no wars at all, refuse
+    if not wars:
+        return [f"The {house} House has no active war to garrison"]
+
+    # Ensure we have a uncommitted pool
+    pool_attr = "_raised_regiments"
+    if not hasattr(game, pool_attr):
+        setattr(game, pool_attr, {})
+
+    pool = getattr(game, pool_attr)
+    if house not in pool:
+        pool[house] = 0
+
+    msgs: List[str] = []
+
+    # Raise regiments from a province
+    if province_pid is not None:
+        province = game.atlas.provinces.get(province_pid)
+        if province is None:
+            return [f"No such province {province_pid}"]
+        if province.owner != house:
+            return [f"The {house} House does not own {province.name}"]
+
+        # Check costs before raising — steel gated only once capacity is tallied
+        pop_available = province.population // REGIMENT_POP_COST
+        if pop_available <= 0:
+            return [f"Cannot muster: {province.name} population ({province.population}) is below the cost ({REGIMENT_POP_COST} per regiment)"]
+        cap = game.capacity.get(house)
+        has_steel_economy = any(e.kind == "ironworks" for e in game.ents_of(house))
+        if cap is not None and "steel" in cap and has_steel_economy:
+            steel_val = cap.get("steel", 0)
+            if steel_val == 0:
+                return [f"Cannot muster: House steel capacity ({steel_val}) is below the cost ({REGIMENT_STEEL_COST} per regiment)"]
+            steel_available = int(steel_val // REGIMENT_STEEL_COST)
+            if steel_available <= 0:
+                return [f"Cannot muster: House steel capacity ({steel_val}) is below the cost ({REGIMENT_STEEL_COST} per regiment)"]
+            max_raise = min(pop_available, steel_available)
+        else:
+            max_raise = pop_available
+
+        actual = min(count, max_raise)
+        raised = raise_regiments(game, house, province_pid, actual)
+        pool[house] = pool.get(house, 0) + raised
+        msgs.append(f"Raised {raised} regiment(s) from {province.name} ({REGIMENT_POP_COST * raised} population, {REGIMENT_STEEL_COST * raised} steel)")
+
+    # Commit regiments to a front
+    if war_id is not None and front_id is not None:
+        war = wars[war_id] if war_id < len(wars) else None
+        if war is None:
+            return [f"No such war (index {war_id})"]
+        front = next((f for f in war.fronts if f.fid == front_id), None)
+        if front is None:
+            return [f"No front {front_id} in that war"]
+
+        available = pool.get(house, 0)
+        if available <= 0:
+            return [f"The {house} House has no uncommitted regiments to deploy"]
+
+        commit = min(count, available)
+        pool[house] = available - commit
+        allocate(war, front, house, commit)
+        msgs.append(f"Committed {commit} regiment(s) to front {front.fid}")
+    elif war_id is not None:
+        # Commit to first front of the war
+        war = wars[war_id] if war_id < len(wars) else None
+        if war is None:
+            return [f"No such war (index {war_id})"]
+        if not war.fronts:
+            return [f"That war has no fronts"]
+        front = war.fronts[0]
+        available = pool.get(house, 0)
+        if available <= 0:
+            return [f"The {house} House has no uncommitted regiments to deploy"]
+        commit = min(count, available)
+        pool[house] = available - commit
+        allocate(war, front, house, commit)
+        msgs.append(f"Committed {commit} regiment(s) to front {front.fid}")
+
+    # If nothing was specified, just report current status
+    if not msgs:
+        pool_count = pool.get(house, 0)
+        war_summaries = []
+        for i, war in enumerate(wars):
+            role = "aggressor" if war.aggressor == house else "defender"
+            other = war.defender if war.aggressor == house else war.aggressor
+            war_summaries.append(f"War vs {other} ({role}, {len(war.fronts)} front(s), score {war.war_score:+.1f})")
+        status = f"{house} has {pool_count} uncommitted regiment(s). Active wars: " + "; ".join(war_summaries)
+        msgs.append(status)
+
+    return msgs
 
 
 def _init_declare_war(ctx, target_house=None, goal=None, **kw) -> List[str]:
@@ -697,9 +1374,13 @@ def _init_declare_war(ctx, target_house=None, goal=None, **kw) -> List[str]:
     truce = house.truces.get(target_house, 0)
     if truce > ctx.game.turn:
         return [f"A truce with House {target_house} holds until turn {truce}"]
+    from gilded import pacts
+    if not pacts.may_declare_war(ctx.game, ctx.house, target_house):
+        return [f"A pact of alliance binds the House to House {target_house}"]
     war = declare_war(ctx.game, ctx.house, target_house,
                       goal if goal is not None else WarGoal("humble"))
     out = [f"House {ctx.house} declares war on House {target_house}!"]
+    out.extend(pacts.call_to_arms(ctx.game, war))
     if not war.fronts:
         out.append("No shared border: the war exists only on paper")
     return out
@@ -711,7 +1392,178 @@ def _init_negotiate_peace(ctx, target_house=None, **kw) -> List[str]:
                None)
     if war is None:
         return [f"There is no war with House {target_house} to end"]
+    # Stalemate check: every front has 0 vs 0 regiments and war score is level
+    from gilded.fronts import PeaceTerms
+    if all(f.attacker_regiments == 0 and f.defender_regiments == 0 for f in war.fronts) and abs(war.war_score) < 0.05:
+        return negotiate_peace(ctx.game, war, PeaceTerms())
     return _try_peace(ctx.game, ctx.house, war)
+
+
+def _init_muster(ctx, province_pid=None, war_id=None, front_fid=None, count=1, **kw) -> List[str]:
+    """Muster regiments: raise from a province, optionally commit to a front."""
+    game = ctx.game
+    house = ctx.house
+    count = max(1, int(count))
+
+    # Need a war to muster for
+    wars = _wars_of(game, house)
+    if not wars:
+        return [f"The {house} House has no active war to muster for"]
+
+    # Ensure pool exists
+    pool_attr = "_raised_regiments"
+    if not hasattr(game, pool_attr):
+        setattr(game, pool_attr, {})
+    pool = getattr(game, pool_attr)
+    if house not in pool:
+        pool[house] = 0
+
+    msgs: List[str] = []
+
+    # Raise from province if specified
+    if province_pid is not None:
+        province = game.atlas.provinces.get(province_pid)
+        if province is None:
+            return [f"No such province {province_pid}"]
+        if province.owner != house:
+            return [f"The {house} House does not own {province.name}"]
+        pop_available = province.population // REGIMENT_POP_COST
+        if pop_available <= 0:
+            return [f"Cannot muster: {province.name} population ({province.population}) below cost ({REGIMENT_POP_COST}/regiment)"]
+        cap = game.capacity.get(house)
+        has_steel_economy = any(e.kind == "ironworks" for e in game.ents_of(house))
+        if cap is not None and "steel" in cap and has_steel_economy:
+            steel_val = cap.get("steel", 0)
+            if steel_val == 0:
+                return [f"Cannot muster: House steel capacity ({steel_val}) below cost ({REGIMENT_STEEL_COST}/regiment)"]
+            steel_available = int(steel_val // REGIMENT_STEEL_COST)
+            if steel_available <= 0:
+                return [f"Cannot muster: House steel capacity ({steel_val}) below cost ({REGIMENT_STEEL_COST}/regiment)"]
+            max_raise = min(pop_available, steel_available)
+        else:
+            max_raise = pop_available
+        actual = min(count, max_raise)
+        raised = raise_regiments(game, house, province_pid, actual)
+        pool[house] = pool.get(house, 0) + raised
+        msgs.append(f"Raised {raised} regiment(s) from {province.name}")
+    else:
+        # No province — must have pool to commit from
+        available = pool.get(house, 0)
+        if available <= 0:
+            return [f"The {house} House has no uncommitted regiments (raise from a province first)"]
+
+    # Commit to a front if specified (war_id: house-relative or global index)
+    if front_fid is not None:
+        if war_id is None:
+            war = wars[0]
+        else:
+            war = None
+            if isinstance(war_id, int) and 0 <= war_id < len(wars):
+                war = wars[war_id]
+            elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+                war = game.wars[war_id]
+            if war is None:
+                war = wars[0]
+        front = next((f for f in war.fronts if f.fid == front_fid), None)
+        if front is None:
+            return [f"No matching front found"]
+        available = pool.get(house, 0)
+        if available <= 0:
+            return [f"The {house} House has no uncommitted regiments to deploy"]
+        commit = min(count, available)
+        pool[house] = available - commit
+        allocate(war, front, house, commit)
+        msgs.append(f"Committed {commit} regiment(s) to front {front.fid}")
+
+    return msgs if msgs else [f"The {house} House musters {count} regiment(s)"]
+
+
+def _init_commit(ctx, war_id=None, front_fid=None, count=1, **kw) -> List[str]:
+    """Commit uncommitted regiments to a front."""
+    game = ctx.game
+    house = ctx.house
+    count = max(1, int(count))
+    pool_attr = "_raised_regiments"
+    if not hasattr(game, pool_attr):
+        setattr(game, pool_attr, {})
+    pool = getattr(game, pool_attr)
+    available = pool.get(house, 0)
+    if available <= 0:
+        return [f"The {house} House has no uncommitted regiments to deploy"]
+    wars = _wars_of(game, house)
+    if not wars:
+        return [f"The {house} House has no active war to commit to"]
+    if war_id is None:
+        war = wars[0]
+    else:
+        war = None
+        if isinstance(war_id, int) and 0 <= war_id < len(wars):
+            war = wars[war_id]
+        elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+            war = game.wars[war_id]
+        else:
+            war = next((w for w in wars if w.war_score == war_id), None)
+        if war is None:
+            war = wars[0]
+    if war is None:
+        return [f"No matching war found"]
+    front = next((f for f in war.fronts if f.fid == front_fid), None) if front_fid else (war.fronts[0] if war.fronts else None)
+    if front is None:
+        return [f"No matching front found"]
+    commit = min(count, available)
+    pool[house] = available - commit
+    allocate(war, front, house, commit)
+    return [f"Committed {commit} regiment(s) to front {front.fid}"]
+
+
+def _init_appoint_commander(ctx, war_id=None, front_fid=None, char_id=None, character_id=None, **kw) -> List[str]:
+    """Appoint a character as commander on a front."""
+    game = ctx.game
+    house = ctx.house
+    wars = _wars_of(game, house)
+    if not wars:
+        return [f"The {house} House has no active war to appoint a commander for"]
+    if war_id is not None:
+        war = None
+        if isinstance(war_id, int) and 0 <= war_id < len(wars):
+            war = wars[war_id]
+        elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+            war = game.wars[war_id]
+        else:
+            war = next((w for w in wars if w.war_score == war_id), None)
+        if war is None:
+            return [f"No matching war found"]
+    else:
+        war = wars[0]
+    front = next((f for f in war.fronts if f.fid == front_fid), None) if front_fid else (war.fronts[0] if war.fronts else None)
+    if front is None:
+        return [f"No matching front found"]
+    # Accept both char_id and character_id (legacy compatibility)
+    cid = char_id if char_id is not None else character_id
+    if cid is None:
+        realm = game.realms[house]
+        pool = [ch for ch in realm.characters
+                if ch.is_alive and getattr(ch, 'loyalty', 40.0) >= 40.0 and not getattr(ch, 'has_seat', False)]
+        if not pool:
+            return [f"No eligible commander available"]
+        char = pool[0]
+    else:
+        char = None
+        for r in game.realms.values():
+            for c in r.characters:
+                if c.id == cid:
+                    char = c
+                    break
+            if char is not None:
+                break
+        if char is None:
+            return [f"Character {cid} not found"]
+    # Write to the fields Front actually has: commander_a_id / commander_d_id
+    if war.aggressor == house:
+        front.commander_a_id = char.id
+    else:
+        front.commander_d_id = char.id
+    return [f"{char.name} appointed commander on front {front.fid}"]
 
 
 def _init_acquire_minor(ctx, province_pid=None, **kw) -> List[str]:
@@ -875,6 +1727,9 @@ INITIATIVES = {           # verb -> (domain, handler); each costs 1 attention
     "buy_shares": ("capital", _init_buy_shares),
     "sell_shares": ("capital", _init_sell_shares),
     "appoint_director": ("capital", _init_appoint_director),
+    "muster": ("war", _init_muster),
+    "commit": ("war", _init_commit),
+    "appoint_commander": ("war", _init_appoint_commander),
 }
 
 

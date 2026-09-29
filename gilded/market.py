@@ -220,6 +220,8 @@ class Market:
         commodity = CONSUMES.get(ent.kind)
         if commodity is None:
             return 0.0
+        if ent.under_construction > 0:
+            return 0.0
         return INPUT_COST_PER_UNIT * self.prices.get(commodity, TARGET)
 
     def value(self, ent, game) -> float:

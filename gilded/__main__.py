@@ -12,7 +12,7 @@ import sys
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="gilded",
-                                 description="The Gilded Machine")
+                                 description="CivKings: The Gilded Machine")
     ap.add_argument("--console", metavar="DIR",
                     help="run headless, bridging commands through DIR")
     ap.add_argument("--seed", type=int, default=None)

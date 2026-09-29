@@ -50,8 +50,14 @@ def _wcag_ratio(c1, c2):
     return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
 
 
-def _game_view(seed=42, turns=3):
-    """Return (game, BroadsheetView) on the Enterprises tab."""
+def _game_view(seed=42, turns=3, broke=False):
+    """Return (game, BroadsheetView) on the Enterprises tab.
+
+    broke=True leaves the player penniless: a House with no gold cannot
+    afford anything, at any seed, in any world, so the view is guaranteed
+    to contain both an ENABLED and a DISABLED (affordability-refused)
+    region. The old form searched one generated world for a disabled
+    control — four colour tests were resting on one character's mood."""
     pygame.init()
     g = GildedGame(seed=seed)
     player = next(iter(g.houses))
@@ -61,6 +67,8 @@ def _game_view(seed=42, turns=3):
             ensure_agenda(g, h)
     for _ in range(turns):
         g.end_turn()
+    if broke:
+        g.houses[player].treasury = 0.0
     v = BroadsheetView(g, player)
     v.active_tab = "Enterprises"
     return g, v
@@ -91,13 +99,14 @@ def _sample_region_pixels(view, surf, region):
 
 # ── 1. Colour rules measured by sampled pixels ───────────────────────────────
 
-def test_disabled_button_fill_differs_from_enabled():
+def test_a_penniless_house_sees_its_refused_button_in_a_different_fill():
     """A refused button has a different fill from an offered one (D2).
 
-    Measured by rendering a BroadsheetView and sampling the pixel inside
-    the fill area of an ENABLED region vs a DISABLED region.
+    The penniless fixture GUARANTEES both an ENABLED and a DISABLED region
+    (no gold means every cost is refused), so the comparison no longer
+    depends on a particular generated world.
     """
-    g, v = _game_view()
+    g, v = _game_view(broke=True)
     surf = pygame.Surface((1200, 800))
     v.draw(surf)
 
@@ -119,13 +128,14 @@ def test_disabled_button_fill_differs_from_enabled():
         "state is invisible without reading text")
 
 
-def test_disabled_button_text_contrast_at_least_45():
+def test_a_penniless_house_sees_its_refused_button_text_at_contrast_45():
     """A refused button text reads >= 4.5:1 against its fill (D1).
 
     Measured by sampling the fill and text pixels from a DISABLED region,
-    then computing the WCAG contrast ratio.
+    then computing the WCAG contrast ratio. The penniless fixture
+    guarantees the DISABLED region exists (no gold -> every cost refused).
     """
-    g, v = _game_view()
+    g, v = _game_view(broke=True)
     surf = pygame.Surface((1200, 800))
     v.draw(surf)
 
@@ -407,13 +417,14 @@ def test_trade_cost_unchanged():
 
 # ── I6f: new cases C1–C7 ──────────────────────────────────────────────────────
 
-def test_refused_control_fill_differs_from_offered():
+def test_a_penniless_house_sees_its_refused_control_fill_differs():
     """C1: A refused control and an offered one do not share a fill.
 
     Rendered to a Surface, sampled pixels from ENABLED and DISABLED regions,
-    measured that their fills differ.
+    measured that their fills differ. The penniless fixture guarantees both
+    region states exist.
     """
-    g, v = _game_view()
+    g, v = _game_view(broke=True)
     surf = pygame.Surface((1200, 800))
     v.draw(surf)
 
@@ -448,13 +459,14 @@ def test_every_control_text_contrast_at_least_45():
             f"{ratio:.2f}:1 (fill={fill}, text={text})")
 
 
-def test_refused_control_label_legible():
+def test_a_penniless_house_sees_its_refused_control_label_legible():
     """C3: A refused control's own label is legible.
 
     Specific guard against the original failure: FADED (96,88,78) on
     (60,82,60) at 1.22:1. Samples DISABLED regions and measures contrast.
+    The penniless fixture guarantees the DISABLED region exists.
     """
-    g, v = _game_view()
+    g, v = _game_view(broke=True)
     surf = pygame.Surface((1200, 800))
     v.draw(surf)
 

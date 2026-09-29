@@ -7,6 +7,7 @@ lines.  Neither imports the UI modules that call them.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Callable
 
@@ -59,8 +60,37 @@ def _end_turn_dispatch(game, house, view, action):
     pre = scoreboard(game, house)
     game.end_turn()
     view.prev_board = pre
-    view.active_tab = "Briefing"
+    view.active_tab = "House"
     return []
+
+
+def _quicksave_eligible(game, house, action):
+    if game.game_over is not None:
+        return False, "The game is over."
+    return True, ""
+
+
+def _quicksave_dispatch(game, house, view, action):
+    from gilded.save import save_game, quicksave_path
+    save_game(game, quicksave_path())
+    return ["The century is written down."]
+
+
+def _quickload_eligible(game, house, action):
+    from gilded.save import quicksave_path
+    if not os.path.exists(quicksave_path()):
+        return False, "There is nothing to open — put a century down first."
+    return True, ""
+
+
+def _quickload_dispatch(game, house, view, action):
+    from gilded.save import load_game, quicksave_path
+    loaded = load_game(quicksave_path())
+    view.prev_board = None
+    view.active_tab = "House"
+    view._action_messages.append(
+        f"The century is picked up again at turn {loaded.turn}.")
+    return loaded
 
 
 def _place_informant_eligible(game, house, action):
@@ -76,35 +106,14 @@ def _place_informant_eligible(game, house, action):
 
 def _place_informant_dispatch(game, house, view, action):
     from gilded.docket import initiative
-    target = action["place_informant"]
-    realm = game.realms[house]
-    executor = _executor_for(game, realm, "diplomacy")
-    game.attention[house] -= 1
-    initiative(game, house, "establish_informant", executor, target_house=target)
-    return []
-
-
-# Cache for _executor_for import — lazy to avoid circular deps
-_executor_for = None
-
-def _get_executor_for():
-    global _executor_for
-    if _executor_for is None:
-        from gilded.ai import _executor_for as _ef
-        _executor_for = _ef
-    return _executor_for
-
-
-# Override the above — use the imported function directly
-def _place_informant_dispatch(game, house, view, action):
-    from gilded.docket import initiative
     from gilded.ai import _executor_for
     target = action["place_informant"]
     realm = game.realms[house]
     executor = _executor_for(game, realm, "diplomacy")
     game.attention[house] -= 1
     initiative(game, house, "establish_informant", executor, target_house=target)
-    return []
+    target_name = game.houses[target].name
+    return [f"An informant of yours goes to work at the {target_name} court."]
 
 
 def _set_stance_eligible(game, house, action):
@@ -113,8 +122,55 @@ def _set_stance_eligible(game, house, action):
 
 def _set_stance_dispatch(game, house, view, action):
     key, value = action["set_stance"]
+    old = game.directives[house].stances.get(key, 0)
     game.directives[house].set_stance(key, value)
-    return []
+    new = game.directives[house].stances[key]
+    return [f"Your {key} stance moves from {old} to {new}."]
+
+
+def _set_ambition_eligible(game, house, action):
+    return True, ""
+
+
+def _set_ambition_dispatch(game, house, view, action):
+    """C2: record the House's stake - the goal the court now backs or
+    opposes, and the win the world is measured against."""
+    from gilded.agenda import FAMILIES
+    payload = action["set_ambition"]
+    family = payload.get("family")
+    if family not in FAMILIES:
+        return [f"Unknown family: {family}."]
+    goal = game.set_ambition(house, family, payload.get("target"))
+    lines = [f"Your ambition is set: {family}"
+             + (f" against House {goal.target}" if goal.target else "")
+             + f" - {goal.why}"]
+    stances = {}
+    for w in game.ambitions.wants(house):
+        stances[w["stance"]] = stances.get(w["stance"], 0) + 1
+    lines.append("The court's private wants: "
+                 + ", ".join(f"{n} {label}" for label, n in
+                             sorted(stances.items())))
+    return lines
+
+
+def next_step(game, house):
+    """S17: the one next step a stranger should take. Returns (label, action,
+    hint) — the action dict is the same shape the tabs emit, so clicking the
+    guide button applies a real verb through _apply_action."""
+    from gilded.ai import _executor_for
+    petitions = game.docket_by_house.get(house, [])
+    if petitions:
+        p = petitions[0]
+        ex = _executor_for(game, game.realms[house], p.domain)
+        exec_id = None if ex is None else ex.id
+        opt = p.options[0]
+        label = f"Rule: {p.kind.replace('_', ' ')}"
+        action = {"rule": (p.pid, opt.key, exec_id)}
+        hint = f"Rule on the {p.kind.replace('_', ' ')} petition — {opt.text}."
+        return label, action, hint
+    action = {"end_turn": True}
+    hint = "No petitions waiting — close the turn with End Turn."
+    return "End Turn", action, hint
 
 
 def _rule_eligible(game, house, action):
@@ -147,9 +203,9 @@ def _rule_dispatch(game, house, view, action):
         from gilded.ai import _executor_for
         executor = _executor_for(game, realm, petition.domain)
     game.attention[house] -= 1
-    docket_rule(game, petition, option_key, executor)
+    lines = docket_rule(game, petition, option_key, executor)
     game.docket_by_house[house].remove(petition)
-    return []
+    return list(lines)
 
 
 def _expand_enterprise_eligible(game, house, action):
@@ -603,6 +659,405 @@ def _noop_dispatch(game, house, view, action):
     return []
 
 
+# ── war & diplomacy verbs ───────────────────────────────────────────────────
+
+def _declare_war_eligible(game, house, action):
+    target = action.get("declare_war")
+    if not target or target == house:
+        return False, "Select a House to declare war on"
+    if target not in game.houses:
+        return False, f"There is no House {target} to declare against"
+    h = game.houses[house]
+    if target in h.at_war_with:
+        return False, f"The House is already at war with House {target}"
+    truce = h.truces.get(target, 0)
+    if truce > game.turn:
+        return False, f"A truce with House {target} holds until turn {truce}"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _declare_war_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    target = action["declare_war"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    result = initiative(game, house, "declare_war", executor, target_house=target)
+    return result or []
+
+
+def _negotiate_peace_eligible(game, house, action):
+    target = action.get("negotiate_peace")
+    if not target:
+        return False, "Select a House to negotiate peace with"
+    war = next((w for w in getattr(game, "wars", [])
+                if {w.aggressor, w.defender} == {house, target}), None)
+    if war is None:
+        return False, f"There is no war with House {target} to end"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _negotiate_peace_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    target = action["negotiate_peace"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "diplomacy")
+    game.attention[house] -= 1
+    result = initiative(game, house, "negotiate_peace", executor, target_house=target)
+    return result or []
+
+
+def _acquire_minor_eligible(game, house, action):
+    from gilded.world import MINOR_OWNER
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    province_pid = action.get("acquire_minor")
+    if province_pid is None:
+        return False, "Select a province to acquire"
+    province = game.atlas.provinces.get(province_pid)
+    if province is None:
+        return False, "No such province"
+    if province.owner != MINOR_OWNER:
+        return False, f"{province.name} already flies a Great House's colors"
+    owned = {p.pid for p in game.atlas.provinces.values() if p.owner == house}
+    if not (province.neighbors & owned):
+        return False, f"{province.name} shares no border with the House's lands"
+    from gilded.docket import RAIL_COST
+    richness = sum(province.endowments.values())
+    cost = 300.0 * province.development + 100.0 * richness
+    house_obj = game.houses[house]
+    if house_obj.treasury < cost:
+        return False, f"{province.name} would cost {cost:.0f} gold; the vault says no"
+    return True, ""
+
+
+def _acquire_minor_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "expansion")
+    game.attention[house] -= 1
+    result = initiative(game, house, "acquire_minor", executor, province_pid=action["acquire_minor"])
+    return result or []
+
+
+def _build_rail_eligible(game, house, action):
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    a = action.get("build_rail_a")
+    b = action.get("build_rail_b")
+    if a is None or b is None:
+        return False, "Select a link to build rail on"
+    link = game.atlas.link(a, b)
+    if link is None or link.rail:
+        return False, "No track to lay there"
+    from gilded.docket import RAIL_COST
+    house_obj = game.houses[house]
+    if house_obj.treasury < RAIL_COST:
+        return False, f"The line wants {RAIL_COST:.0f} gold the House lacks"
+    return True, ""
+
+
+def _build_rail_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "expansion")
+    game.attention[house] -= 1
+    result = initiative(game, house, "build_rail", executor, a=action["build_rail_a"], b=action["build_rail_b"])
+    return result or []
+
+
+def _tour_province_eligible(game, house, action):
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    province_pid = action.get("tour_province")
+    if province_pid is None:
+        return False, "Select a province to tour"
+    province = game.atlas.provinces.get(province_pid)
+    if province is None:
+        return False, "No such province"
+    if province.owner != house:
+        return False, f"The {house} House does not own {province.name}"
+    return True, ""
+
+
+def _tour_province_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "family")
+    game.attention[house] -= 1
+    result = initiative(game, house, "tour_province", executor, province_pid=action["tour_province"])
+    return result or []
+
+
+# ── start scheme helpers ────────────────────────────────────────────────────
+
+def _start_scheme_eligible(game, house, action):
+    target_id = action.get("target_id")
+    scheme_type = action.get("scheme_type")
+    if scheme_type not in ("coup", "assassination"):
+        return False, "Invalid scheme type."
+    if target_id is None:
+        return False, "No target selected."
+    target = None
+    for h in game.houses:
+        realm = game.realms[h]
+        for c in realm.characters:
+            if c.id == target_id and c.is_alive:
+                target = c
+                break
+        if target:
+            break
+    if target is None:
+        return False, "Target is not available."
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _start_scheme_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    target_id = action.get("target_id")
+    scheme_type = action.get("scheme_type")
+    realm = game.realms[house]
+    target = None
+    target_house = None
+    for h in game.houses:
+        r = game.realms[h]
+        for c in r.characters:
+            if c.id == target_id and c.is_alive:
+                target = c
+                target_house = h
+                break
+        if target:
+            break
+    if target is None:
+        return ["Target is not available."]
+    executor = _executor_for(game, realm, "press")
+    game.attention[house] -= 1
+    result = initiative(game, house, "start_scheme", executor,
+                        target=target, scheme_type=scheme_type,
+                        target_house=target_house)
+    return result or []
+
+
+def _open_scheme_picker_eligible(game, house, action):
+    return True, ""
+
+
+def _open_scheme_picker_dispatch(game, house, view, action):
+    if view is not None:
+        view._scheme_picker = True
+    return []
+
+
+def _close_scheme_picker_eligible(game, house, action):
+    return True, ""
+
+
+def _close_scheme_picker_dispatch(game, house, view, action):
+    if view is not None:
+        view._scheme_picker = None
+    return []
+
+
+def _adjust_garrison_eligible(game, house, action):
+    wars = [w for w in getattr(game, "wars", [])
+            if house in (w.aggressor, w.defender)]
+    if not wars:
+        return False, f"The {house} House has no active war to garrison"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _adjust_garrison_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    payload = action.get("adjust_garrison")
+    if isinstance(payload, dict):
+        province_pid = payload.get("province_pid")
+        count = payload.get("count", 1)
+        result = initiative(game, house, "adjust_garrison", executor,
+                            province_pid=province_pid, count=count)
+    else:
+        result = initiative(game, house, "adjust_garrison", executor)
+    return result or []
+
+
+def _propose_marriage_eligible(game, house, action):
+    target = action.get("propose_marriage")
+    if not target or target == house:
+        return False, "Select a House to propose marriage to"
+    if target not in game.houses:
+        return False, f"No such House {target}"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _propose_marriage_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    target = action["propose_marriage"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "diplomacy")
+    game.attention[house] -= 1
+    result = initiative(game, house, "propose_marriage", executor, target_house=target)
+    return result or []
+
+
+def _muster_eligible(game, house, action):
+    province_pid = action.get("muster")
+    if province_pid is None:
+        return False, "Select a province to muster from"
+    province = game.atlas.provinces.get(province_pid)
+    if province is None:
+        return False, "No such province"
+    if province.owner != house:
+        return False, f"The {house} House does not own {province.name}"
+    # Check if the house has any wars to muster for
+    wars = [w for w in getattr(game, "wars", [])
+            if house in (w.aggressor, w.defender)]
+    if not wars:
+        return False, f"The {house} House is at peace and has no fronts to garrison"
+    # Check costs — steel is gated only once capacity is tallied (after turn 0)
+    from gilded.fronts import REGIMENT_POP_COST, REGIMENT_STEEL_COST
+    pop_available = province.population // REGIMENT_POP_COST
+    cap = game.capacity.get(house)
+    if pop_available <= 0:
+        return False, f"Cannot muster: {province.name} population ({province.population}) below cost ({REGIMENT_POP_COST} per regiment)"
+    has_steel_economy = any(e.kind == "ironworks" for e in game.ents_of(house))
+    if cap is not None and "steel" in cap and has_steel_economy:
+        steel_val = cap.get("steel", 0)
+        if steel_val == 0:
+            return False, f"Cannot muster: House steel capacity ({steel_val}) below cost ({REGIMENT_STEEL_COST} per regiment)"
+        steel_available = int(steel_val // REGIMENT_STEEL_COST)
+        if steel_available <= 0:
+            return False, f"Cannot muster: House steel capacity ({steel_val}) below cost ({REGIMENT_STEEL_COST} per regiment)"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _muster_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    province_pid = action["muster"]
+    war_id = action.get("war_id")
+    front_fid = action.get("front_fid")
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    result = initiative(game, house, "muster", executor, province_pid=province_pid, war_id=war_id, front_fid=front_fid, count=1)
+    return result or []
+
+
+def _commit_eligible(game, house, action):
+    c = action.get("commit", {})
+    if not isinstance(c, dict):
+        return False, "Select a war and front to commit to"
+    war_id = c.get("war_id")
+    front_fid = c.get("front_fid")
+    if war_id is None or front_fid is None:
+        return False, "Select a war and front to commit to"
+    wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+    war = None
+    if war_id is not None:
+        if isinstance(war_id, int) and 0 <= war_id < len(wars):
+            war = wars[war_id]
+        elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+            war = game.wars[war_id]
+        else:
+            war = next((w for w in wars if w.war_score == war_id), None)
+    else:
+        war = wars[0] if wars else None
+    if war is None:
+        return False, "No such war"
+    front = next((f for f in war.fronts if f.fid == front_fid), None)
+    if front is None:
+        return False, "No such front"
+    # Check for uncommitted regiments
+    pool = getattr(game, "_raised_regiments", {})
+    if pool.get(house, 0) <= 0:
+        return False, f"The {house} House has no uncommitted regiments to deploy"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _commit_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    c = action["commit"]
+    war_id = c.get("war_id", 0)
+    front_fid = c["front_fid"]
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    result = initiative(game, house, "commit", executor, war_id=war_id, front_fid=front_fid, count=1)
+    return result or []
+
+
+def _appoint_commander_eligible(game, house, action):
+    c = action.get("appoint_commander", {})
+    war_id = c.get("war_id") if isinstance(c, dict) else None
+    front_fid = c.get("front_fid") if isinstance(c, dict) else None
+    char_id = c.get("char_id") if isinstance(c, dict) else None
+    if war_id is None or front_fid is None:
+        return False, "Select a war and front"
+    wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+    if isinstance(war_id, int) and 0 <= war_id < len(wars):
+        war = wars[war_id]
+    elif isinstance(war_id, int) and 0 <= war_id < len(game.wars) and game.wars[war_id] in wars:
+        war = game.wars[war_id]
+    else:
+        return False, "No such war"
+    front = next((f for f in war.fronts if f.fid == front_fid), None)
+    if front is None:
+        return False, "No such front"
+    # Check character belongs to this house and is alive (or auto-pick if char_id is None)
+    realm = game.realms[house]
+    if char_id is not None:
+        ch = next((c for c in realm.characters if c.id == char_id and c.is_alive), None)
+        if ch is None:
+            return False, "No such living character"
+    else:
+        pool = [c for c in realm.characters if c.is_alive and getattr(c, 'loyalty', 40.0) >= 40.0 and not getattr(c, 'has_seat', False)]
+        if not pool:
+            return False, "No eligible commander available"
+    if _no_attention(game, house):
+        return False, _attention_reason()
+    return True, ""
+
+
+def _appoint_commander_dispatch(game, house, view, action):
+    from gilded.docket import initiative
+    from gilded.ai import _executor_for
+    c = action["appoint_commander"]
+    war_id = c["war_id"]
+    front_fid = c["front_fid"]
+    char_id = c.get("char_id")
+    realm = game.realms[house]
+    executor = _executor_for(game, realm, "war")
+    game.attention[house] -= 1
+    result = initiative(game, house, "appoint_commander", executor,
+                        war_id=war_id, front_fid=front_fid, char_id=char_id)
+    return result or []
+
+
 # ── registry ─────────────────────────────────────────────────────────────────
 
 # ── share trade helpers (I4d2b1) ──────────────────────────────────────────────
@@ -725,6 +1180,16 @@ ACTIONS: dict[str, PlayerAction] = {
         attention_cost=0, gold_cost=0,
         eligible=_end_turn_eligible, dispatch=_end_turn_dispatch,
     ),
+    "quicksave": PlayerAction(
+        key="quicksave", label="Save", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_quicksave_eligible, dispatch=_quicksave_dispatch,
+    ),
+    "quickload": PlayerAction(
+        key="quickload", label="Open", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_quickload_eligible, dispatch=_quickload_dispatch,
+    ),
     "place_informant": PlayerAction(
         key="place_informant", label="Place Informant", domain="diplomacy",
         attention_cost=1, gold_cost=0,
@@ -734,6 +1199,11 @@ ACTIONS: dict[str, PlayerAction] = {
         key="set_stance", label="Set Stance", domain="policies",
         attention_cost=0, gold_cost=0,
         eligible=_set_stance_eligible, dispatch=_set_stance_dispatch,
+    ),
+    "set_ambition": PlayerAction(
+        key="set_ambition", label="Set Ambition", domain="statecraft",
+        attention_cost=0, gold_cost=0,
+        eligible=_set_ambition_eligible, dispatch=_set_ambition_dispatch,
     ),
     "rule": PlayerAction(
         key="rule", label="Rule Petition", domain="statecraft",
@@ -812,12 +1282,27 @@ ACTIONS: dict[str, PlayerAction] = {
         attention_cost=0, gold_cost=0,
         eligible=_noop_eligible, dispatch=_noop_dispatch,
     ),
+    "set_spine_page": PlayerAction(
+        key="set_spine_page", label="Open Inner Page", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_noop_eligible, dispatch=_noop_dispatch,
+    ),
+    "open_ambition_picker": PlayerAction(
+        key="open_ambition_picker", label="Open Ambition Picker", domain="house",
+        attention_cost=0, gold_cost=0,
+        eligible=_noop_eligible, dispatch=_noop_dispatch,
+    ),
     "cycle_exec": PlayerAction(
         key="cycle_exec", label="Choose Executor", domain="view",
         attention_cost=0, gold_cost=0,
         eligible=_noop_eligible, dispatch=_noop_dispatch,
     ),
-    # court verbs (House tab)
+    "portrait": PlayerAction(
+        key="portrait", label="Court Portrait", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_noop_eligible, dispatch=_noop_dispatch,
+    ),
+     # court verbs (House tab)
     "dismiss_seat": PlayerAction(
         key="dismiss_seat", label="Dismiss from Court", domain="house",
         attention_cost=0, gold_cost=0,
@@ -857,5 +1342,72 @@ ACTIONS: dict[str, PlayerAction] = {
         key="close_heir_picker", label="Close Heir Picker", domain="view",
         attention_cost=0, gold_cost=0,
         eligible=_close_heir_picker_eligible, dispatch=_close_heir_picker_dispatch,
+    ),
+    # war & diplomacy
+    "declare_war": PlayerAction(
+        key="declare_war", label="Declare War", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_declare_war_eligible, dispatch=_declare_war_dispatch,
+    ),
+    "negotiate_peace": PlayerAction(
+        key="negotiate_peace", label="Negotiate Peace", domain="diplomacy",
+        attention_cost=1, gold_cost=0,
+        eligible=_negotiate_peace_eligible, dispatch=_negotiate_peace_dispatch,
+    ),
+    "propose_marriage": PlayerAction(
+        key="propose_marriage", label="Propose Marriage", domain="diplomacy",
+        attention_cost=1, gold_cost=0,
+        eligible=_propose_marriage_eligible, dispatch=_propose_marriage_dispatch,
+    ),
+    "muster": PlayerAction(
+        key="muster", label="Raise Regiments", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_muster_eligible, dispatch=_muster_dispatch,
+    ),
+    "commit": PlayerAction(
+        key="commit", label="Commit Regiments", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_commit_eligible, dispatch=_commit_dispatch,
+    ),
+    "appoint_commander": PlayerAction(
+        key="appoint_commander", label="Appoint Commander", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_appoint_commander_eligible, dispatch=_appoint_commander_dispatch,
+    ),
+    "adjust_garrison": PlayerAction(
+        key="adjust_garrison", label="Adjust Garrison", domain="war",
+        attention_cost=1, gold_cost=0,
+        eligible=_adjust_garrison_eligible, dispatch=_adjust_garrison_dispatch,
+    ),
+    "acquire_minor": PlayerAction(
+        key="acquire_minor", label="Acquire Minor Province", domain="expansion",
+        attention_cost=1, gold_cost=0,
+        eligible=_acquire_minor_eligible, dispatch=_acquire_minor_dispatch,
+    ),
+    "build_rail": PlayerAction(
+        key="build_rail", label="Build Railway", domain="expansion",
+        attention_cost=1, gold_cost=0,
+        eligible=_build_rail_eligible, dispatch=_build_rail_dispatch,
+    ),
+    "tour_province": PlayerAction(
+        key="tour_province", label="Tour Province", domain="family",
+        attention_cost=1, gold_cost=0,
+        eligible=_tour_province_eligible, dispatch=_tour_province_dispatch,
+    ),
+    # intrigue verbs
+    "start_scheme": PlayerAction(
+        key="start_scheme", label="Start Scheme", domain="press",
+        attention_cost=1, gold_cost=0,
+        eligible=_start_scheme_eligible, dispatch=_start_scheme_dispatch,
+    ),
+    "open_scheme_picker": PlayerAction(
+        key="open_scheme_picker", label="Open Scheme Picker", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_open_scheme_picker_eligible, dispatch=_open_scheme_picker_dispatch,
+    ),
+    "close_scheme_picker": PlayerAction(
+        key="close_scheme_picker", label="Close Scheme Picker", domain="view",
+        attention_cost=0, gold_cost=0,
+        eligible=_close_scheme_picker_eligible, dispatch=_close_scheme_picker_dispatch,
     ),
 }

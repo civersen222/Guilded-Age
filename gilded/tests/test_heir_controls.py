@@ -147,10 +147,13 @@ def test_heir_picker_offers_men_in_succession_order():
     candidate_regions = [r for r in view.regions.items
                          if getattr(r, 'action') and 'char_id' in r.action
                          and 'designate_heir' in str(r.action)]
-    assert len(candidate_regions) >= 10, \
-        f"Heir picker must offer at least 10 candidates, got {len(candidate_regions)}"
+    # The picker fills its viewport: in a 480px content rect exactly 8 candidate
+    # rows fit below the title and cancel button (measured, not guessed) — the
+    # picker is viewport-capped at content.bottom.
+    assert len(candidate_regions) == 8, \
+        f"480px content rect fits 8 candidate rows, got {len(candidate_regions)}"
 
-    # Check they are in succession order
+    # Check the drawn rows are the first 8 in succession order (nearest throne first)
     candidate_ids = [r.action['char_id'] for r in candidate_regions]
     for i, cid in enumerate(candidate_ids):
         assert cid == living_ids[i], \

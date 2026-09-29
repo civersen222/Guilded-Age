@@ -260,19 +260,33 @@ def test_informant_rows_empty_when_none():
 
 
 def test_overflow_at_40_rows():
-    """Rule 6: at 40 rows, overflow_count==8, overflow_name is set."""
+    """Rule 6: at 40 rows, overflow_count==13, overflow_name is set.
+
+    C5 world: variable TTF row height (24px vs the old fixed 20px) puts
+    the table's measured capacity at 27 rows, so 40 - 27 = 13 overflow.
+    """
     lines = _lines(40)
     model = powers_model(lines)
-    assert model.overflow_count == 8
+    assert model.overflow_count == 13
     assert model.overflow_name is not None
     # overflow_name must be the first row that didn't fit
     expected_name = model.row_houses[len(lines) - model.overflow_count]
     assert model.overflow_name == expected_name
 
 
-def test_no_overflow_at_30_rows():
-    """Rule 6: at 30 rows, no overflow."""
+def test_overflow_at_30_rows():
+    """Rule 6: at 30 rows, 3 overflow (measured capacity is 27 under the
+    C5 variable TTF row height; the old fixed-metric capacity of 30 no
+    longer holds)."""
     lines = _lines(30)
+    model = powers_model(lines)
+    assert model.overflow_count == 3
+    assert model.overflow_name == "House27"
+
+
+def test_no_overflow_at_27_rows():
+    """Rule 6: at 27 rows (the measured capacity), no overflow."""
+    lines = _lines(27)
     model = powers_model(lines)
     assert model.overflow_count == 0
     assert model.overflow_name is None

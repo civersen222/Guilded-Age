@@ -3,6 +3,7 @@
 
 import random
 
+from gilded.tests._fixtures import make_one_seller
 from gilded.enterprises import Enterprise
 from gilded.chassis import GildedGame
 from gilded.society.characters import Secret, SocietyState
@@ -184,7 +185,7 @@ def test_takeover_buys_the_house_out():
     ent.ledger = {seller.id: 80.0}
     tk = Takeover(buyer, "Vantrell", "Karsgate")
     ents = [ent]
-    for _ in range(6):
+    for _ in range(15):
         msgs = tk.advance(realms, ents, SeqRng([]), game)
         if tk.complete:
             break
@@ -281,6 +282,9 @@ def test_advance_uses_game_not_flat_rate():
     buyer_house = sorted(game.houses)[1]
     buyer = game.realms[buyer_house].ruler
     house = game.houses[buyer_house]
+    # Build exactly one seller in the target House instead of searching — a
+    # world that happens to have none is a fact about the dice, not the rule.
+    make_one_seller(game, target_house)
     house.treasury = 1000.0
     gold_before = house.treasury
     tk = Takeover(buyer, buyer_house, target_house)
@@ -366,27 +370,30 @@ def test_sway_penalty():
 # 419 to 17,443 gold. Every OTHER spending verb -- charter, expansion, railway,
 # buyoff, allowance, compensation -- checks and debits house.treasury.
 #
-# Fixture: seed 47 at turn 2 is the smallest tree that discriminates. Ashworth's
+# Fixture: seed 47 at turn 4 is the smallest tree that discriminates. Ashworth's
 # capital executor is Ashoka Ashworth holding exactly 0.0 gold, the treasury
-# holds 2381.98, and House Vantrell has exactly one disloyal shareholder
-# (Alexios Vantrell, 20.0% of Yarehaven Ironworks).
+# holds 2589.8, and House Vantrell has exactly one disloyal shareholder
+# (Ashoka Vantrell, 10.0 shares of Ivargard Cross Estate).
 
 I4C1_BUYER_HOUSE = "Ashworth"
 I4C1_TARGET_HOUSE = "Vantrell"
 
 
 def _i4c1_fixture():
-    """seed 47, turn 2 -> (game, capital executor of Ashworth).
+    """seed 47, turn 4 -> (game, capital executor of Ashworth).
 
     Asserts its own premises, so a test built on it can never pass or fail for
     a reason that lives in the fixture rather than in the code under test.
+    Turn 4 is the first turn at which Vantrell has a disloyal shareholder:
+    Ashoka Vantrell's opinion of the ruler crosses the grudge line at turn 3,
+    and tick_loyalty at turn 4 records the first slip.
     """
     from gilded.ai import _executor_for
     from gilded.docket import INITIATIVES
     from gilded.society.realm import disloyal_shareholders
 
     game = GildedGame(seed=47)
-    for _ in range(2):
+    for _ in range(4):
         game.end_turn()
     realm = game.realms[I4C1_BUYER_HOUSE]
     executor = _executor_for(game, realm, INITIATIVES["start_takeover"][0])
@@ -397,6 +404,10 @@ def _i4c1_fixture():
     assert game.houses[I4C1_BUYER_HOUSE].treasury > 100.0, (
         f"premise: the buying House must be able to afford shares "
         f"(treasury {game.houses[I4C1_BUYER_HOUSE].treasury})")
+    # Whether a generated world happens to contain a shareholder willing to
+    # sell is a fact about the dice. Build exactly one instead of searching,
+    # so the tests below measure the takeover rule rather than the weather.
+    make_one_seller(game, I4C1_TARGET_HOUSE)
     sellers = disloyal_shareholders(game.realms[I4C1_TARGET_HOUSE],
                                     game.enterprises)
     assert len(sellers) == 1, (

@@ -53,66 +53,91 @@ def _rich_state():
     return state
 
 
-def _collect_emitted_keys(view):
-    """Walk every tab, draw to a headless surface, collect all emitted action keys."""
+def _collect_emitted_keys(view, app=None):
+    """Collect every action key the current spine/pages emit at 1200x800."""
     collected = set()
     surf = pygame.Surface((1200, 800))
+    pages = {"House": [None, "Ledger", "Governance"], "Powers": [None], "Atlas": [None]}
     for tab_name in TABS:
-        view.active_tab = tab_name
-        view.draw(surf)
+        for page in pages[tab_name]:
+            view.house_page = page
+            view.active_tab = tab_name
+            view.draw(surf)
 
-        # Special case: House tab — collect court regions and open the appointment picker
-        if tab_name == "House":
-            for region in view.regions._regions:
-                if region.group == "court_seats" and region.action:
-                    for k in region.action:
-                        if k != "char_id":
-                            collected.add(k)
-            # Open the appointment picker if there is a vacant seat
-            court_regions = [r for r in view.regions._regions if r.group == "court_seats"]
-            if court_regions:
-                collected.add("open_appointment_picker")
-                _open_appointment_picker(view, surf)
+            # House spine, Overview page — collect court regions and open
+            # the appointment picker
+            if tab_name == "House" and page is None:
                 for region in view.regions._regions:
-                    if region.group == "picker" and region.action:
+                    if region.group == "court_seats" and region.action:
                         for k in region.action:
                             if k != "char_id":
                                 collected.add(k)
-            continue
+                # Open the appointment picker if there is a vacant seat
+                court_regions = [r for r in view.regions._regions
+                                 if r.group == "court_seats"]
+                vacant = [r for r in court_regions
+                          if r.action and "open_appointment_picker" in r.action]
+                if vacant:
+                    collected.add("open_appointment_picker")
+                    view._court_picker = vacant[0].action["open_appointment_picker"]
+                    view.draw(surf)
+                    for region in view.regions._regions:
+                        if region.group == "picker" and region.action:
+                            for k in region.action:
+                                if k != "char_id":
+                                    collected.add(k)
+                    view._court_picker = None
+                _collect_standard(view, collected)
+                continue
 
-        # Special case: Enterprises tab — collect both picker-open and picker-closed hits
-        if tab_name == "Enterprises":
-            # First collect from enterprise/appoint hits (picker closed)
-            for rect, payload in view._enterprise_hits:
-                if isinstance(payload, dict):
-                    action = payload.get("action", payload)
-                    for k in action:
-                        if k != "char_id":
-                            collected.add(k)
-            for rect, payload in view._appoint_hits:
-                if isinstance(payload, dict):
-                    action = payload.get("action", payload)
-                    for k in action:
-                        if k != "char_id":
-                            collected.add(k)
-
-            # Open the director picker and collect its hits
-            if view._appoint_hits:
-                collected.add("open_director_picker")  # emitted by the click we simulate below
-                _open_director_picker(view, surf)
-                for rect, payload in view._director_picker_hits:
+            # Governance inner page — enterprise verbs, both picker-closed
+            # and director-picker-open
+            if tab_name == "House" and page == "Governance":
+                for rect, payload in view._enterprise_hits:
                     if isinstance(payload, dict):
-                        for k in payload:
+                        action = payload.get("action", payload)
+                        for k in action:
                             if k != "char_id":
                                 collected.add(k)
-            continue
+                for rect, payload in view._appoint_hits:
+                    if isinstance(payload, dict):
+                        action = payload.get("action", payload)
+                        for k in action:
+                            if k != "char_id":
+                                collected.add(k)
+                if view._appoint_hits:
+                    collected.add("open_director_picker")
+                    # Open the first director picker
+                    eid = view._appoint_hits[0][1].get("appoint_director")
+                    view._director_picker = eid
+                    view.draw(surf)
+                    for rect, payload in view._director_picker_hits:
+                        if isinstance(payload, dict):
+                            for k in payload:
+                                if k != "char_id":
+                                    collected.add(k)
+                    view._director_picker = None
+                _collect_standard(view, collected)
+                continue
 
-        _collect_standard(view, collected)
+            # Atlas spine — collect atlas action keys from regions
+            if tab_name == "Atlas":
+                for region in view.regions._regions:
+                    if region.group == "atlas_actions" and region.action:
+                        for k in region.action:
+                            if k.startswith("build_rail_"):
+                                collected.add("build_rail")
+                            else:
+                                collected.add(k)
+                _collect_standard(view, collected)
+                continue
+
+            _collect_standard(view, collected)
     return collected
 
 
 def _collect_standard(view, collected):
-    """Collect keys from standard hit structures for the current tab."""
+    """Collect keys from all regions and hit structures for the current page."""
     for name in view._tab_rects:
         collected.add("tab")
     for rect, payload in view._option_hits:
@@ -133,24 +158,27 @@ def _collect_standard(view, collected):
     for rect, payload in view._informant_hits:
         if isinstance(payload, dict):
             for k in payload:
-                collected.add(k)
+                if k != "char_id":
+                    collected.add(k)
     for rect, payload in view._director_picker_hits:
         if isinstance(payload, dict):
             for k in payload:
                 if k != "char_id":
                     collected.add(k)
     for region in view.regions._regions:
-        if region.group == "court_seats" and region.action:
+        if region.action:
             for k in region.action:
-                if k != "char_id":
+                if k == "char_id":
+                    continue
+                if k in ("toggle_war_drawer", "zoom"):
+                    # view-internal control (toggles the war drawer rect / sets
+                    # view.atlas_tier), not a registered PlayerAction — handled
+                    # directly in the view.
+                    continue
+                if k in ("build_rail_a", "build_rail_b"):
+                    collected.add("build_rail")
+                else:
                     collected.add(k)
-    for region in view.regions._regions:
-        if region.group == "picker" and region.action:
-            for k in region.action:
-                if k != "char_id":
-                    collected.add(k)
-    for rect, key in view._dial_hits:
-        collected.add("set_stance")
     if view._end_turn_rect is not None:
         collected.add("end_turn")
     if view._narrate_rect is not None:
@@ -193,13 +221,20 @@ def test_every_drawn_key_is_registered():
     state = _rich_state()
     drawn = _collect_emitted_keys(state.view)
 
+    # C5 wave 2 moved the war verbs (declare_war, propose_marriage) behind the
+    # collapsed war drawer, so they are no longer drawn by default; the drawer
+    # toggle itself is a view-internal control, not a registered action.
     assert drawn == {
-        "appoint_director", "appoint_to_seat", "close_appointment_picker",
-        "close_director_picker", "defend_buyout",
-        "dismiss_seat", "end_turn", "expand_enterprise",
-        "open_appointment_picker", "open_director_picker",
-        "place_informant", "rule", "select_province", "set_stance",
-        "tab", "toggle_narrate",
+        "acquire_minor", "appoint_director", "appoint_to_seat", "attack_takeover",
+        "build_rail", "buy_shares", "clear_heir", "close_appointment_picker",
+        "cycle_exec", "defend_buyout",
+        "dismiss_seat", "end_turn", "expand_enterprise", "found_enterprise",
+        "open_ambition_picker", "open_appointment_picker",
+        "open_director_picker", "open_heir_picker", "open_scheme_picker",
+        "place_informant", "quicksave", "quickload",
+        "rule", "sell_shares", "select_province", "set_spine_page",
+        "set_stance", "tab", "toggle_narrate", "tour_province",
+        "portrait",
     }, f"the drawn set moved: {sorted(drawn)}"
 
     unhandled = sorted(drawn - set(act.ACTIONS))
@@ -299,6 +334,8 @@ def _build_action_for_key(key, game, house, view=None):
         return None
     elif key == "set_stance":
         return {"set_stance": ("cooperation", 0)}
+    elif key == "set_ambition":
+        return {"set_ambition": {"family": "Consolidation"}}
     elif key == "rule":
         petitions = game.docket_by_house.get(house, [])
         if petitions:
@@ -429,8 +466,21 @@ def _build_action_for_key(key, game, house, view=None):
         return {"close_found_picker": True}
     elif key == "tab":
         return {"tab": TABS[0]}
+    elif key == "quicksave":
+        return {"quicksave": True}
+    elif key == "quickload":
+        from gilded.save import quicksave_path
+        path = quicksave_path()
+        if not os.path.exists(path):
+            from gilded.save import save_game
+            save_game(game, path)
+        return {"quickload": True}
     elif key == "select_province":
         return {"select_province": 0}
+    elif key == "open_ambition_picker":
+        return {"open_ambition_picker": True}
+    elif key == "set_spine_page":
+        return {"set_spine_page": "Ledger"}
     elif key == "dismiss_seat":
         from gilded.society.court import CourtPosition
         realm = game.realms[house]
@@ -504,6 +554,128 @@ def _build_action_for_key(key, game, house, view=None):
         return {"close_heir_picker": True}
     elif key == "open_heir_picker":
         return {"open_heir_picker": True}
+    elif key == "declare_war":
+        targets = [h for h in game.houses if h != house]
+        if targets:
+            return {"declare_war": targets[0]}
+        return None
+    elif key == "negotiate_peace":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if wars:
+            target = wars[0].defender if wars[0].aggressor == house else wars[0].aggressor
+            return {"negotiate_peace": target}
+        return None
+    elif key == "propose_marriage":
+        targets = [h for h in game.houses if h != house]
+        if targets:
+            return {"propose_marriage": targets[0]}
+        return None
+    elif key == "muster":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        # Ensure there's an active war — create one if needed (must share a border)
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+        procs = [p for p in game.atlas.provinces.values() if p.owner == house]
+        if procs:
+            return {"muster": procs[0].pid}
+        return None
+    elif key == "commit":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        # Ensure there's an active war with fronts (must share a border)
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+            wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if wars and wars[0].fronts:
+            f = wars[0].fronts[0]
+            # Ensure uncommitted regiments exist
+            pool = getattr(game, "_raised_regiments", {})
+            if pool.get(house, 0) <= 0:
+                pool[house] = pool.get(house, 0) + 1
+                game._raised_regiments = pool
+            return {"commit": {"war_id": 0, "front_fid": f.fid}}
+        return None
+    elif key == "appoint_commander":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        # Ensure there's an active war with fronts (must share a border)
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+            wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if wars and wars[0].fronts:
+            f = wars[0].fronts[0]
+            realm = game.realms.get(house)
+            chars = [c for c in realm.characters if c.is_alive] if realm else []
+            if chars:
+                war_idx = wars.index(wars[0])
+                return {"appoint_commander": {"war_id": war_idx, "front_fid": f.fid, "char_id": chars[0].id}}
+        return None
+    elif key == "adjust_garrison":
+        from gilded.fronts import declare_war, WarGoal, _contested_pairs
+        # Ensure there's an active war
+        wars = [w for w in getattr(game, "wars", []) if house in (w.aggressor, w.defender)]
+        if not wars:
+            for target in game.houses:
+                if target != house and _contested_pairs(game, house, target):
+                    declare_war(game, house, target, WarGoal(kind="seize"))
+                    break
+        return {"adjust_garrison": True}
+    elif key == "acquire_minor":
+        from gilded.world import MINOR_OWNER
+        atlas = game.atlas
+        house_provinces = [pid for pid, p in atlas.provinces.items() if p.owner == house]
+        for hp in house_provinces:
+            for n in atlas.provinces[hp].neighbors:
+                if atlas.provinces[n].owner == MINOR_OWNER:
+                    return {"acquire_minor": n}
+        return None
+    elif key == "build_rail":
+        atlas = game.atlas
+        for link in atlas.links.values():
+            if not link.rail:
+                return {"build_rail": True, "build_rail_a": link.a, "build_rail_b": link.b}
+        return None
+    elif key == "tour_province":
+        atlas = game.atlas
+        owned = [pid for pid, p in atlas.provinces.items() if p.owner == house]
+        if owned:
+            return {"tour_province": owned[0]}
+        return None
+    elif key == "open_scheme_picker":
+        return {"open_scheme_picker": True}
+    elif key == "close_scheme_picker":
+        return {"close_scheme_picker": True}
+    elif key == "start_scheme":
+        # Find a target character from another house
+        for h in game.houses:
+            if h == house:
+                continue
+            realm = game.realms[h]
+            for c in realm.characters:
+                if c.is_alive:
+                    return {"start_scheme": True, "target_id": c.id, "scheme_type": "coup"}
+        return None
+    elif key == "portrait":
+        # view-local: the court card's engraved portrait region; always
+        # eligible (the click already blitted it), dispatch is a no-op.
+        return {"portrait": "0000009a"}
     return None
 
 
@@ -517,14 +689,17 @@ def test_dispatchability(key):
     g, h = state.game, state.house
     view = state.view
 
+    # The C5 wave-1 atlas left seed 42 with no house border for the player, so
+    # war verbs (commit / negotiate_peace / appoint_commander) cannot be
+    # constructed there. When the primary seed yields nothing constructible —
+    # or a constructible-but-ineligible action — sweep the seed range for one
+    # where the action builds AND is eligible (war verbs find seed 47).
     action = _build_action_for_key(key, g, h, view)
     if action is None:
-        pytest.fail(f"No fixture builder for key '{key}'. Every key in "
-                    f"ACTIONS must be constructible here — add a branch to "
-                    f"_build_action_for_key.")
+        ok, reason = False, "not constructible at primary seed"
+    else:
+        ok, reason = entry.eligible(g, h, action)
 
-    # Assert eligible premise
-    ok, reason = entry.eligible(g, h, action)
     if not ok:
         # Try alternative seeds to find a state where eligible is True
         found = False
@@ -553,6 +728,13 @@ def test_dispatchability(key):
 
     # Dispatch and assert result type
     result = entry.dispatch(g, h, view, action)
+    if key == "quickload":
+        # quickload is the one dispatch that returns the restored game,
+        # not a list of lines: _apply_action swaps state.game for it.
+        from gilded.chassis import GildedGame
+        assert isinstance(result, GildedGame), \
+            f"dispatch for 'quickload' returned {type(result)}, expected GildedGame"
+        return
     assert isinstance(result, list), f"dispatch for '{key}' returned {type(result)}, expected list"
     assert all(isinstance(line, str) for line in result), \
         f"dispatch for '{key}' returned non-str elements: {[type(l) for l in result]}"
@@ -567,6 +749,17 @@ def test_eligible_contract(key):
     state = app.new_app_state(seed=42)
     g, h = state.game, state.house
     action = _build_action_for_key(key, g, h, state.view)
+    # The C5 wave-1 atlas left seed 42 with no house border for the player, so
+    # war verbs cannot be constructed there; sweep the seed range for one that
+    # can (war verbs find seed 47).
+    if action is None:
+        for seed in range(42, 62):
+            state2 = app.new_app_state(seed=seed)
+            g2, h2 = state2.game, state2.house
+            action2 = _build_action_for_key(key, g2, h2, state2.view)
+            if action2 is not None:
+                state, g, h, action = state2, g2, h2, action2
+                break
     if action is None:
         pytest.fail(f"No fixture builder for key '{key}'. Every key in "
                     f"ACTIONS must be constructible here — add a branch to "
@@ -596,7 +789,7 @@ def test_end_turn_advances_turn_and_resets_tab():
     app._apply_action(state, {"end_turn": True})
 
     assert g.turn == turn_before + 1, "turn must advance by exactly 1"
-    assert view.active_tab == "Briefing", "active_tab must reset to Briefing"
+    assert view.active_tab == "House", "active_tab must reset to House"
     assert view.prev_board is not None, "prev_board must be set"
 
 
@@ -730,6 +923,59 @@ def test_set_stance_updates_directives():
     assert hasattr(dirs, 'stances'), "directives must have stances attr"
     assert dirs.stances.get("cooperation") == 50, \
         f"cooperation stance must be 50, got {dirs.stances.get('cooperation')}"
+
+
+def test_rule_says_what_it_ruled():
+    """rule: the dispatch returns the docket's own narration, not silence."""
+    state = app.new_app_state(seed=42)
+    g, h = state.game, state.house
+    p = g.docket_by_house.get(h, [None])[0]
+    assert p is not None and p.options, "seed 42 turn 1 needs a petition"
+    action = {"rule": (p.pid, p.options[0].key, None)}
+    entry = act.ACTIONS["rule"]
+    ok, reason = entry.eligible(g, h, action)
+    assert ok, f"rule not eligible: {reason}"
+    lines = entry.dispatch(g, h, state.view, action)
+    assert lines, "rule must return narration, not []"
+    assert all(isinstance(x, str) and x.strip() for x in lines), \
+        f"narration must be non-empty strings, got {lines}"
+
+
+def test_set_stance_says_which_stance_moved():
+    """set_stance: the line the dispatch returns names the stance key."""
+    state = app.new_app_state(seed=42)
+    g, h = state.game, state.house
+    entry = act.ACTIONS["set_stance"]
+    lines = entry.dispatch(g, h, state.view, {"set_stance": ("war", -40)})
+    assert lines, "set_stance must return a line, not []"
+    assert "war" in lines[0].lower(), f"line must name the stance key: {lines}"
+    assert "-40" in lines[0], f"line must say where the stance landed: {lines}"
+
+
+def test_place_informant_says_who_went_where():
+    """place_informant: the line the dispatch returns names the target house."""
+    state = app.new_app_state(seed=42)
+    g, h = state.game, state.house
+    target = next(hh for hh in g.houses if hh != h)
+    entry = act.ACTIONS["place_informant"]
+    att_before = g.attention[h]
+    lines = entry.dispatch(g, h, state.view, {"place_informant": target})
+    assert lines, "place_informant must return a line, not []"
+    assert g.houses[target].name in lines[0], \
+        f"line must name the target house: {lines}"
+    assert g.attention[h] == att_before - 1
+
+
+def test_refused_action_tells_the_player_why():
+    """A refused click puts the eligible() reason onto view._action_messages."""
+    state = app.new_app_state(seed=42)
+    g, h = state.game, state.house
+    ok, reason = act.ACTIONS["buy_shares"].eligible(g, h, {"buy_shares": None})
+    assert not ok and str(reason).strip(), "premise: a refused action with a reason"
+    state.view._action_messages.clear()
+    app._apply_action(state, {"buy_shares": None})
+    assert reason in state.view._action_messages, \
+        f"the reason '{reason}' must land on _action_messages verbatim"
 
 
 # ── I4b — the buyout button: drawn, priced honestly, and it moves the shares ──
@@ -1065,7 +1311,7 @@ def test_D1_existing_charter_not_offered():
     Measured against enterprises the PLAYER owns. Seed 42 turn 0, house Vantrell:
     owned enterprises are estate@13 (Quillvess) and mill@18 (Ulmdale).
     Removing the uniqueness filter would cause estate@13 and mill@18 to reappear."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.tests._fixtures import _enterprises_view
     from gilded.ui.actions import _get_available_charters
     
     g, v = _enterprises_view(seed=42, turns=0)
@@ -1089,7 +1335,7 @@ def test_D3_header_shows_charter_count():
     
     Substitutes a wrapper for _font to capture every string passed to .render().
     Restores the real _font in a finally block."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.tests._fixtures import _enterprises_view
     from gilded.ui import broadsheet
     from gilded.ui.actions import _get_available_charters
     import sys
@@ -1135,7 +1381,7 @@ def test_D4_row_label_names_province_title_price():
     
     The label is f"{province_name} {title} — {cost:.0f} gold".
     Refused rows included. Collects drawn strings via _font wrapper."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    from gilded.tests._fixtures import _enterprises_view
     from gilded.ui import broadsheet
     from gilded.ui.actions import _get_available_charters
     from gilded.enterprises import KIND_TITLES
@@ -1183,16 +1429,16 @@ def test_D4_row_label_names_province_title_price():
 def test_D7_no_charters_refuses_button():
     """D-7: A house with no charters left is still offered the button — and the state IS reachable.
     
-    Seed 42 turn 0, house Vantrell: 9 charters available.
-    Appending 9 Enterprise objects empties the list, then the button refuses."""
-    from gilded.tests.test_ui_broadsheet import _enterprises_view
+    Seed 42 turn 0: 10 charters available at the C5 wave-1 scale.
+    Appending 10 Enterprise objects empties the list, then the button refuses."""
+    from gilded.tests._fixtures import _enterprises_view
     from gilded.ui.actions import _get_available_charters
     from gilded.enterprises import Enterprise, KIND_TITLES
     
     g, v = _enterprises_view(seed=42, turns=0)
     charters = _get_available_charters(g, v.house)
     n = len(charters)
-    assert n == 9, f"premise: expected 9 charters, got {n}"
+    assert n == 10, f"premise: expected 10 charters, got {n}"
     
     # Fill every available charter with a dummy enterprise
     for kind, pid, pname, cost in charters:
@@ -1296,8 +1542,12 @@ def test_decided_sell_moves_stock_and_gold():
         f"ruler had {before_ruler:.2f}, now {after_ruler:.2f} — expected -10.00")
     assert after_buyer_stock == pytest.approx(before_buyer_stock + 10.00, rel=1e-9), (
         f"buyer had {before_buyer_stock:.2f}, now {after_buyer_stock:.2f} — expected +10.00")
-    assert after_buyer_gold == pytest.approx(before_buyer_gold - 14.76, rel=1e-2), (
-        f"buyer gold had {before_buyer_gold:.2f}, now {after_buyer_gold:.2f} — expected -14.76")
+    # the buy verb debits the buyer's gold by share_price(ent) * moved pct,
+    # measured on the pre-trade market — compute the same price here.
+    from gilded.society.schemes import share_price
+    expected_cost = share_price(ent, game) * 10.0
+    assert after_buyer_gold == pytest.approx(before_buyer_gold - expected_cost, abs=0.01), (
+        f"buyer gold had {before_buyer_gold:.2f}, now {after_buyer_gold:.2f} — expected -{expected_cost:.2f}")
 
 
 def test_oversized_buy_is_refused_with_the_ladders_own_reason():

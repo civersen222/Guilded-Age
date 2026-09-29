@@ -422,9 +422,32 @@ def test_r10_notices_preserved(monkeypatch):
 # R13: overflow marker — + N more in FADED when content doesn't fit
 # ────────────────────────────────────────────────────────────────────────────
 
-def test_r13_overflow_marker_800x600():
-    """At 800x600 with enough turns, the page overflows and shows +8 more."""
-    g = _game(seed=42, turns=20)
+def _controlled_model():
+    """A LedgerModel of 25 identical flow rows and no history — content that
+    overflows a 600-tall page but fits a 900-tall page. Nothing here comes
+    from world generation, so the assertions are stable under dice jitter."""
+    return LedgerModel(
+        turn=5,
+        treasury=1000.0,
+        rows=tuple(LedgerRow(f"Item {i}", 10.0) for i in range(25)),
+        income=400.0,
+        outlay=0.0,
+        net=400.0,
+        history=(),
+        summary=(),
+        notices=(),
+    )
+
+
+def test_r13_small_page_overflows_with_marker(monkeypatch):
+    """On an 800x600 page the 25-row model overflows and shows exactly one
+    '+ N more' marker, counting the rows that did not fit. The count is
+    world-independent, so it holds at every N."""
+    g = _game(seed=42, turns=1)
+    monkeypatch.setattr("gilded.ui.broadsheet.compose",
+                        lambda *a, **k: type("R", (), {"ledger": None})())
+    monkeypatch.setattr("gilded.ui.broadsheet.ledger_model",
+                        lambda house, turn, notices=(): _controlled_model())
     s = pygame.display.set_mode((800, 600))
     hud_h = _hud_height()
     content = pygame.Rect(0, TAB_H + hud_h, 800, 600 - TAB_H - hud_h - BOTTOM_H)
@@ -453,32 +476,56 @@ def test_r13_overflow_marker_800x600():
     with patch("gilded.ui.broadsheet._font", recording_font):
         v._draw_ledger(s, content)
 
-    # The overflow marker should be "+ 8 more"
+    # Exactly one overflow marker, and it counts rows that did not fit.
     marker = [t for t in rendered_texts if t.startswith("+ ") and t.endswith(" more")]
     assert len(marker) == 1, f"Expected one overflow marker, got: {marker}"
-    assert marker[0] == "+ 8 more", f"Expected '+ 8 more', got '{marker[0]}'"
+    count = int(marker[0][2:-5])
+    assert count > 0, f"Overflowing page must report hidden rows, got '{marker[0]}'"
+    # Every drawn row plus the marker: the model's rows are 25, so the
+    # hidden count plus the drawn rows must account for all 40.
+    drawn = sum(1 for t in rendered_texts if t.startswith("Item ") and t != "Item")
+    assert count + drawn == 25, f"marker says {count} hidden, {drawn} drawn, total should be 25"
 
 
-def test_r13_no_overflow_marker_1280x900():
-    """At 1280x900 the page fits, so no overflow marker should be drawn."""
-    g = _game(seed=42, turns=20)
+def test_r13_large_page_fits_without_marker(monkeypatch):
+    """The same 25-row model on a 1280x900 page fits: every row is drawn
+    and no '+ N more' marker is rendered. World-independent by construction."""
+    g = _game(seed=42, turns=1)
+    monkeypatch.setattr("gilded.ui.broadsheet.compose",
+                        lambda *a, **k: type("R", (), {"ledger": None})())
+    monkeypatch.setattr("gilded.ui.broadsheet.ledger_model",
+                        lambda house, turn, notices=(): _controlled_model())
     s = pygame.display.set_mode((1280, 900))
     hud_h = _hud_height()
     content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
     house = list(g.houses.keys())[0]
     v = BroadsheetView(g, house)
     s.fill(PAPER_BG)
-    v._draw_ledger(s, content)
 
-    buf = pygame.image.tobytes(s, "RGB")
-    pw = 1280
-    # Scan the last 20 pixels of content area — should be PAPER_BG (no marker)
-    for y in range(max(content.top, content.bottom - 20), content.bottom):
-        for x in range(PAD, PAD + 200):
-            idx = (y * pw + x) * 3
-            r, g_val, b = buf[idx:idx+3]
-            if (r, g_val, b) != PAPER_BG:
-                pytest.fail(f"Non-bg pixel at ({x},{y}) — no overflow marker expected at 1280x900")
+    rendered_texts: list[str] = []
+    orig_font = _font
+
+    class _FontRecorder:
+        def __init__(self, f):
+            self._f = f
+        def render(self, text, aa, color):
+            rendered_texts.append(text)
+            return self._f.render(text, aa, color)
+        def get_height(self):
+            return self._f.get_height()
+        def get_size(self, text):
+            return self._f.get_size(text)
+
+    def recording_font(size: int, bold: bool = False):
+        return _FontRecorder(orig_font(size, bold))
+
+    with patch("gilded.ui.broadsheet._font", recording_font):
+        v._draw_ledger(s, content)
+
+    marker = [t for t in rendered_texts if t.startswith("+ ") and t.endswith(" more")]
+    assert marker == [], f"Page fits at 1280x900 — no marker expected, got: {marker}"
+    drawn = sum(1 for t in rendered_texts if t.startswith("Item "))
+    assert drawn == 25, f"All 25 rows should fit at 1280x900, drew {drawn}"
 
 
 def test_r9_overflow_marker_within_content():

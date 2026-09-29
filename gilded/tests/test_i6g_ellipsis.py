@@ -49,8 +49,9 @@ def test_overwide_word_truncates_panel_width():
     assert regions, "No regions found"
 
     # Pick a region with a non-overlapping rect for hovering.
-    # The last region (End Turn button) has a unique rect position.
-    orig = regions[-1]
+    # Name End Turn by its action, not by position: the bottom bar now
+    # carries Save and Open controls, so regions[-1] is no longer it.
+    orig = next(r for r in regions if r.action == {"end_turn": True})
 
     # A single word with no spaces — long enough to exceed TOOLTIP_MAX_WIDTH
     long_word = "a" * 96

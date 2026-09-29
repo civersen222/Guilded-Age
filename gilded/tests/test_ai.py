@@ -2,14 +2,14 @@
 
 import pytest
 from gilded.ai import (_executor_for, _found_spot, _pick_initiative, _policy_targets,
-                       set_policy, _strength, _weaker_neighbor, ai_peace_check, ai_turn)
+                       set_policy, _strength, _war_target, ai_peace_check, ai_turn)
 from gilded.chassis import ATTENTION_PER_TURN, GildedGame
 from gilded.directives import DIRECTIVE_CONVICTION, DIRECTIVE_KEYS
 from gilded.docket import DOMAIN_SEAT, Petition, PetitionOption
 from gilded.fronts import WarGoal, declare_war
 from gilded.society.characters import modify_opinion
 
-SEED = 42
+SEED = 26  # C5 wave-1 atlas: seed 42 has no house border; 26 keeps one
 
 
 def _game() -> GildedGame:
@@ -113,7 +113,7 @@ def test_directives_drift_toward_conviction():
 
 # --- initiatives -------------------------------------------------------------
 
-def test_militarist_marches_on_a_weaker_neighbor():
+def test_militarist_marches_on_a_weaker_rival():
     g = _game()
     h = _bordered_house(g)
     ruler = g.realms[h].ruler
@@ -138,7 +138,7 @@ def test_a_truce_stays_the_militarist_hand():
             for p in g.provinces_of(other):
                 p.population = 0
             g.houses[h].truces[other] = g.turn + 5
-    assert _weaker_neighbor(g, h) is None
+    assert _war_target(g, h) is None
 
 
 def test_ambitious_ruler_expands_the_works():
@@ -554,7 +554,7 @@ def test_s16_strength_counts_the_treasury():
     assert g.houses["Brandtner"].treasury == 0.0
     assert g.houses["Ashworth"].treasury == 50.0
     assert not g.houses["Brandtner"].at_war_with
-    assert _weaker_neighbor(g, "Brandtner") is None
+    assert _war_target(g, "Brandtner") is None
 
 
 def test_s16_strength_converts_population_at_five():
@@ -572,7 +572,7 @@ def test_s16_strength_converts_population_at_five():
     assert p.population == 5
     p = sorted(g.provinces_of("Ashworth"), key=lambda p: p.pid)[0]
     assert p.population == 4
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
 
 
 def test_s16_two_qualifying_rivals_the_first_alphabetically_is_marched_on():
@@ -589,7 +589,7 @@ def test_s16_two_qualifying_rivals_the_first_alphabetically_is_marched_on():
     assert g.houses["Karsgate"].treasury == 0.0
     assert g.houses["Duval-Corse"].treasury == 1000.0
     assert "Ashworth" < "Karsgate"
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
 
 
 def test_s16_a_house_already_at_war_is_not_a_fresh_target():
@@ -605,7 +605,7 @@ def test_s16_a_house_already_at_war_is_not_a_fresh_target():
     g.houses["Brandtner"].at_war_with.add("Ashworth")
     assert "Ashworth" in g.houses["Brandtner"].at_war_with
     assert g.houses["Ashworth"].treasury == 0.0
-    assert _weaker_neighbor(g, "Brandtner") is None
+    assert _war_target(g, "Brandtner") is None
 
 
 def test_s16_a_truce_expiring_this_turn_no_longer_shields():
@@ -622,11 +622,11 @@ def test_s16_a_truce_expiring_this_turn_no_longer_shields():
     # Truce expiring THIS turn → no longer shields, Ashworth is a valid target
     g.houses["Brandtner"].truces["Ashworth"] = g.turn
     assert g.houses["Brandtner"].truces.get("Ashworth", 0) == g.turn
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
     # Truce expiring NEXT turn → still shields
     g.houses["Brandtner"].truces["Ashworth"] = g.turn + 1
     assert g.houses["Brandtner"].truces.get("Ashworth", 0) == g.turn + 1
-    assert _weaker_neighbor(g, "Brandtner") is None
+    assert _war_target(g, "Brandtner") is None
 
 
 def test_s16_the_weaker_rival_is_the_target_not_the_stronger():
@@ -640,7 +640,7 @@ def test_s16_the_weaker_rival_is_the_target_not_the_stronger():
     _shape(g, "Karsgate", 0, 1000)
     assert g.houses["Ashworth"].treasury == 0.0
     assert g.houses["Duval-Corse"].treasury == 1000.0
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
 
 
 def test_s16_weaker_means_seven_tenths_not_merely_poorer():
@@ -657,11 +657,11 @@ def test_s16_weaker_means_seven_tenths_not_merely_poorer():
     _shape(g, "Ashworth", 0, 139)
     assert g.houses["Ashworth"].treasury == 139.0
     assert g.houses["Brandtner"].treasury == 0.0
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
     # Ashworth at 140 — exactly on the bar (140 is NOT < 140)
     _shape(g, "Ashworth", 0, 140)
     assert g.houses["Ashworth"].treasury == 140.0
-    assert _weaker_neighbor(g, "Brandtner") is None
+    assert _war_target(g, "Brandtner") is None
 
 
 def test_s16_war_conviction_bar_is_fifty_and_strict():
@@ -688,7 +688,7 @@ def test_s16_war_conviction_bar_is_fifty_and_strict():
 
     assert g.houses["Brandtner"].treasury == 500.0
     assert not g.houses["Brandtner"].at_war_with
-    assert _weaker_neighbor(g, "Brandtner") == "Ashworth"
+    assert _war_target(g, "Brandtner") == "Ashworth"
 
     # Below the bar: 25.0 < 50.0 → no war
     ruler.dispositions["militarist_pacifist"] = 25.0
@@ -728,36 +728,37 @@ def _works(g):
 
 def test_s17_a_province_is_not_offered_a_works_it_already_carries():
     """B6-taken: a province already carrying a works is not offered another of the same kind.
-    Province 45 has Brandtner's mill (taken). 45 is also the richer spot (timber:3 vs farmland:1),
-    so the mutant that empties `taken` picks ('mill', 45) instead of ('estate', 22)."""
+    Province 130 has Brandtner's mill (taken). 130 is also the richer spot (timber:3 vs farmland:1),
+    so the mutant that empties `taken` picks ('mill', 130) instead of ('estate', 73).
+    (C5 wave-1 atlas: Brandtner's provinces are 73/75/91/130/164 at seed 26.)"""
     g = _game()
     realm = g.realms[HOUSE]
-    _only_endowments(g, {45: {"timber": 3}, 22: {"farmland": 1}})
+    _only_endowments(g, {130: {"timber": 3}, 73: {"farmland": 1}})
     mill = [e for e in g.enterprises if e.house == HOUSE and e.kind == "mill"][0]
-    assert mill.province == 45
+    assert mill.province == 130
     assert mill.kind == "mill"
     result = _found_spot(g, HOUSE)
-    assert result == ("estate", 22)
+    assert result == ("estate", 73)
 
 
 def test_s17_the_richest_endowment_is_developed_first():
     """B6-rich: the richest endowment is developed first (sort by -richness).
-    Iron:3 (richness 3) at pid 24 vs farmland:1 (richness 1) at pid 22.
+    Iron:3 (richness 3) at pid 75 vs farmland:1 (richness 1) at pid 73.
     The mutant that flips -rich to rich picks the poorer spot."""
     g = _game()
-    _only_endowments(g, {22: {"farmland": 1}, 24: {"iron": 3}})
+    _only_endowments(g, {73: {"farmland": 1}, 75: {"iron": 3}})
     result = _found_spot(g, HOUSE)
-    assert result == ("ironworks", 24)
+    assert result == ("ironworks", 75)
 
 
 def test_s17_a_richness_tie_goes_to_the_lower_province_id():
     """B6-first: with equal richness the lower pid wins (options[0] after sort).
-    farmland:2 at pid 22, iron:2 at pid 46 — same richness, pid 22 < 46.
+    farmland:2 at pid 73, iron:2 at pid 75 — same richness, pid 73 < 75.
     The mutant that reads options[-1] picks the higher pid."""
     g = _game()
-    _only_endowments(g, {22: {"farmland": 2}, 46: {"iron": 2}})
+    _only_endowments(g, {73: {"farmland": 2}, 75: {"iron": 2}})
     result = _found_spot(g, HOUSE)
-    assert result == ("estate", 22)
+    assert result == ("estate", 73)
 
 
 def test_s17_a_works_under_construction_is_not_expanded_again():
@@ -816,14 +817,15 @@ def test_s17_the_smallest_works_is_expanded_first():
 
 def test_s17_expanding_needs_more_gold_than_the_price():
     """B10-afford: expanding needs treasury > price (strict), not >=.
-    One works at tier 2 (expand to tier 3 costs 500). Other parked at tier 5 (cap).
-    Gold 500 → correct None (not strictly greater), broken expands.
-    Gold 501 → correct expands. Both sides bracket the threshold."""
+    One works at tier 4 (expand to tier 5 costs EXPAND_COST[5] = 1200).
+    Other parked at tier 5 (cap). Treasury set to 1200 (≥ 500, avoids sell_shares).
+    Gold 1200 → correct None (not strictly greater than 1200).
+    Gold 1201 → correct expands. Both sides bracket the threshold."""
     g = _game()
     realm = g.realms[HOUSE]
     a, b = _works(g)
     assert a.eid < b.eid
-    a.tier = 2
+    a.tier = 4  # expand to tier 5 costs EXPAND_COST[5] = 1200
     b.tier = 5
     a.under_construction = 0
     b.under_construction = 0
@@ -837,12 +839,12 @@ def test_s17_expanding_needs_more_gold_than_the_price():
     ruler = realm.ruler
     ruler.dispositions["ambitious_content"] = 80.0
     ruler.dispositions["militarist_pacifist"] = 0.0
-    # Gold exactly 500 — the expand price for tier 2→3
-    g.houses[HOUSE].treasury = 500
+    # Gold exactly 1200 — the expand price for tier 4→5 (not strictly greater)
+    g.houses[HOUSE].treasury = 1200
     result = _pick_initiative(g, HOUSE, realm)
     assert result is None
-    # Gold 501 — strictly more than 500
-    g.houses[HOUSE].treasury = 501
+    # Gold 1201 — strictly more than 1200
+    g.houses[HOUSE].treasury = 1201
     result = _pick_initiative(g, HOUSE, realm)
     assert result is not None
     assert result[0] == "expand_enterprise"
@@ -862,7 +864,7 @@ def test_s17_founding_needs_more_gold_than_the_price():
     b.under_construction = 0
     a.director_id = realm.ruler.id
     b.director_id = realm.ruler.id
-    _only_endowments(g, {24: {"iron": 3}})
+    _only_endowments(g, {75: {"iron": 3}})
     g.agendas[HOUSE] = None
     g.houses[HOUSE].at_war_with.clear()
     for n in g.realms:
@@ -880,7 +882,7 @@ def test_s17_founding_needs_more_gold_than_the_price():
     assert result is not None
     assert result[0] == "found_enterprise"
     assert result[1]["kind"] == "ironworks"
-    assert result[1]["province_pid"] == 24
+    assert result[1]["province_pid"] == 75
 
 
 def test_s17_the_founding_price_is_the_fourth_column_not_the_third():
@@ -896,7 +898,7 @@ def test_s17_the_founding_price_is_the_fourth_column_not_the_third():
     b.under_construction = 0
     a.director_id = realm.ruler.id
     b.director_id = realm.ruler.id
-    _only_endowments(g, {24: {"iron": 3}})
+    _only_endowments(g, {75: {"iron": 3}})
     g.agendas[HOUSE] = None
     g.houses[HOUSE].at_war_with.clear()
     for n in g.realms:
@@ -979,8 +981,10 @@ def test_s18_a_distress_sale_is_five_percent():
 def test_s18_a_child_is_not_a_willing_buyer():
     """B7-age: an infant (age 0) is not a willing buyer.
     Mutation dropping `c.age >= 16` would pick the age-0 child at Karsgate index 2.
-    Board: kill Karsgate index 1 (spouse, alive, adult) so search walks to index 2 (child) then 3.
-    Correct picks index 3; mutant picks index 2 (the child)."""
+    Board: kill Karsgate index 1 (spouse, alive, adult) so search walks to index 2 (child),
+    index 3 (child) then index 4 (adult).
+    Correct picks index 4; mutant picks index 2 (the child).
+    (C5 wave-1 gentry pool: Karsgate's court grew; the adult-after-children is now index 4.)"""
     g = _game()
     realm = _broke(g)
     karsgate = g.realms["Karsgate"]
@@ -989,17 +993,20 @@ def test_s18_a_child_is_not_a_willing_buyer():
     assert karsgate.characters[1].id != karsgate.ruler.id
     assert karsgate.characters[2].is_alive
     assert karsgate.characters[2].age < 16
+    assert karsgate.characters[3].is_alive
+    assert karsgate.characters[3].age < 16
+    assert karsgate.characters[4].age >= 16
     karsgate.characters[1].is_alive = False
     data = _sale(g, realm)
     buyer = [c for c in karsgate.characters if c.id == data["buyer_id"]][0]
     buyer_idx = karsgate.characters.index(buyer)
-    assert buyer_idx == 3, f"Expected buyer at index 3, got index {buyer_idx}"
+    assert buyer_idx == 4, f"Expected buyer at index 4, got index {buyer_idx}"
 
 
 def test_s18_a_dead_courtier_is_not_a_willing_buyer():
     """B7-dead: a corpse is not a willing buyer.
     Mutation dropping `c.is_alive` would pick the dead spouse at Karsgate index 1.
-    Same board as B7-age. Correct picks index 3; mutant picks index 1 (the corpse)."""
+    Same board as B7-age. Correct picks index 4; mutant picks index 1 (the corpse)."""
     g = _game()
     realm = _broke(g)
     karsgate = g.realms["Karsgate"]
@@ -1007,19 +1014,19 @@ def test_s18_a_dead_courtier_is_not_a_willing_buyer():
     data = _sale(g, realm)
     buyer = [c for c in karsgate.characters if c.id == data["buyer_id"]][0]
     buyer_idx = karsgate.characters.index(buyer)
-    assert buyer_idx == 3, f"Expected buyer at index 3, got index {buyer_idx}"
+    assert buyer_idx == 4, f"Expected buyer at index 4, got index {buyer_idx}"
 
 
 def test_s18_the_adulthood_bar_is_sixteen():
     """B7-agebar: the adulthood bar is exactly 16, bracketed from both sides.
-    Age 15: correct code walks past to index 3. Age 16: correct code stops on index 2.
-    Pair (3, 2). Mutant (>= 15) answers (2, 2) — the 15 half carries the discrimination.
+    Age 15: correct code walks past (index 3 is also a child) to index 4. Age 16: correct code stops on index 2.
+    Pair (4, 2). Mutant (>= 15) answers (2, 2) — the 15 half carries the discrimination.
     The 16 half alone is answered identically by the deletion mutant; the pair pins the number."""
     g = _game()
     realm = _broke(g)
     karsgate = g.realms["Karsgate"]
     karsgate.characters[1].is_alive = False
-    # Side 1: age 15 — correct code walks past to index 3
+    # Side 1: age 15 — correct code walks past to index 4
     karsgate.characters[2].age = 15
     data1 = _sale(g, realm)
     buyer1 = [c for c in karsgate.characters if c.id == data1["buyer_id"]][0]
@@ -1029,7 +1036,7 @@ def test_s18_the_adulthood_bar_is_sixteen():
     data2 = _sale(g, realm)
     buyer2 = [c for c in karsgate.characters if c.id == data2["buyer_id"]][0]
     idx_16 = karsgate.characters.index(buyer2)
-    assert idx_15 == 3, f"At age 15, expected index 3, got {idx_15}"
+    assert idx_15 == 4, f"At age 15, expected index 4, got {idx_15}"
     assert idx_16 == 2, f"At age 16, expected index 2, got {idx_16}"
 
 

@@ -1,4 +1,5 @@
 from gilded.chassis import GildedGame
+import pytest
 
 
 def test_game_has_stage2_state():
@@ -15,8 +16,10 @@ from gilded.agenda import (Goal, FAMILIES, ensure_agenda, select_goal,
                            _strongest_rival, _stat, _strength, _bordering,
                            _marriageable, _target_for, _score_family,
                            _worst_province, _why, _found_spot)
+import gilded.agenda as _agenda_mod
 from gilded.enterprises import ENTERPRISE_TYPES, TIER_MAX
 from gilded.society.schemes import Takeover
+from gilded.society.realm import disloyal_shareholders
 
 
 def _ai_house(g):
@@ -140,23 +143,26 @@ def test_goal_initiative_dynasty_skips_when_already_tied():
     g = GildedGame(seed=5)
     while g.turn < 13:
         g.end_turn()
-    a, b = "Ferrenholt", "Mordaine"
-    goal = Goal("Dynasty", b, g.turn, 10, "wed")
-    proposed = goal_initiative(g, a, goal)          # no tie yet
-    assert proposed is not None
-    assert proposed[0] == "propose_marriage"
+    a = "Ferrenholt"
+    # Build the precondition instead of hoping the world contains it: pick a
+    # House Ferrenholt is NOT yet bound to, tie them by hand, and check the
+    # gate. (The old form pinned Ferrenholt/Karsgate off one generated world.)
+    tied = [r for r in g.houses if r != a
+            and (a, r) in g.marriages.marriages]
+    untied = [r for r in g.houses if r != a and r not in tied]
+    assert untied, "no untied House to build the fixture against"
+    b = untied[0]
     g.marriages.marriages.append(("x", a, "y", b))  # now they are bound
+    goal = Goal("Dynasty", b, g.turn, 10, "wed")
     assert goal_initiative(g, a, goal) is None       # gate: never re-propose
 
 
 def test_goal_initiative_conquest_acts_only_on_declared_target():
     """Conquest initiative declares war on its declared target — unconditional."""
-    g = GildedGame(seed=5)
-    while g.turn < 13:
-        g.end_turn()
-    h = "Ferrenholt"
+    g = _bordered_game()
+    h = "Ashworth"
     tgt = _weakest_neighbor(g, h)
-    assert tgt == "Karsgate"
+    assert tgt == "Brandtner"
     out = goal_initiative(g, h, Goal("Conquest", tgt, g.turn, 10, "war"))
     assert out is not None
     verb, kw = out
@@ -179,15 +185,35 @@ def _fixture_game():
     """Return a game at seed 5, advanced to turn 13, plus Ferrenholt house.
 
     At this state every target helper returns a STRICTLY unique value-winner:
-      _weakest_neighbor -> Karsgate
-      _richest_rival    -> Duval-Corse  (3 enterprises, all others 2)
-      _best_relations   -> Brandtner    (28, next best Ashworth 26)
-      _strongest_rival  -> Vantrell     (2809.4, next Duval-Corse 1606.3)
+      _weakest_neighbor -> Karsgate (rebalanced costs changed treasury trajectories)
+      _richest_rival    -> Vantrell  (most enterprises or highest value)
+      _best_relations   -> Vantrell    (highest relations)
+      _strongest_rival  -> Vantrell     (highest power)
       _bordering        -> [Ashworth, Karsgate]
     """
     g = GildedGame(seed=5)
     while g.turn < 13:
         g.end_turn()
+    return g
+
+
+def _bordered_game():
+    """Game at seed 26, turn 13, with a known two-neighbor border state.
+
+    The C5 wave-1 atlas left most Houses with no direct border (seed 5's
+    Ferrenholt borders nobody), but seed 26's Ashworth borders Brandtner.
+    Re-assigning two provinces (a known-state construction, no rng) makes
+    Ashworth border [Brandtner, Karsgate]:
+      prov 75 (Brandtner's, adjacent to Ashworth) -> Karsgate
+      prov 69 (empty, adjacent to Ashworth)       -> Brandtner
+    Brandtner (treasury ~794) is strictly weaker than Karsgate (~4141), so
+    _weakest_neighbor is value-decided, not a tie-break.
+    """
+    g = GildedGame(seed=26)
+    while g.turn < 13:
+        g.end_turn()
+    g.atlas.provinces[75].owner = "Karsgate"
+    g.atlas.provinces[69].owner = "Brandtner"
     return g
 
 
@@ -245,10 +271,10 @@ def test_r2_strength_formula():
 
 def test_r3_bordering_sorted_ascending():
     """_bordering returns Houses in ascending name order."""
-    g = _fixture_game()
-    h = "Ferrenholt"
+    g = _bordered_game()
+    h = "Ashworth"
     result = _bordering(g, h)
-    assert result == ["Ashworth", "Karsgate"]
+    assert result == ["Brandtner", "Karsgate"]
     assert result == sorted(result)
 
 
@@ -256,22 +282,38 @@ def test_r3_bordering_sorted_ascending():
 
 def test_r4_truce_at_turn_not_blocking():
     """Truce recorded at exactly g.turn has expired — target is eligible."""
-    g = _fixture_game()
-    h = "Ferrenholt"
+    g = _bordered_game()
+    h = "Ashworth"
     # Set truce with Karsgate expiring exactly at current turn
     g.houses[h].truces["Karsgate"] = g.turn
-    # Karsgate should still be eligible (truce expired)
-    assert _weakest_neighbor(g, h) == "Karsgate"
+    # Karsgate truce expired — but Brandtner is the weakest neighbor
+    assert _weakest_neighbor(g, h) == "Brandtner"
 
 
 def test_r4_truce_after_turn_blocking():
-    """Truce expiring one turn after current — target is blocked."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    # Set truce with Karsgate expiring one turn in the future
-    g.houses[h].truces["Karsgate"] = g.turn + 1
-    # Karsgate blocked, weakest neighbor must be Ashworth (the only other borderer)
-    assert _weakest_neighbor(g, h) == "Ashworth"
+    """Truce expiring one turn after current — target is blocked.
+
+    Stage 6b: the picker now weighs every House (the corridor march reaches
+    any demesne), so the test shapes the world so Brandtner is the weakest
+    House but truced, and Karsgate the weakest available. Without the
+    truce guard the picker would still return Brandtner."""
+    g = _bordered_game()
+    h = "Ashworth"
+    # Set truce with Brandtner expiring one turn in the future
+    g.houses[h].truces["Brandtner"] = g.turn + 1
+    for other in sorted(g.houses):
+        if other == h:
+            continue
+        g.houses[other].treasury = 100000.0
+        for p in g.provinces_of(other):
+            p.population = 0
+    # Brandtner weakest (strength 1) but blocked; Karsgate next (strength 50)
+    g.houses["Brandtner"].treasury = 1.0
+    g.houses["Karsgate"].treasury = 50.0
+    assert _weakest_neighbor(g, h) == "Karsgate"
+    # drop the truce and the weakest House wins even though it is not a borderer
+    g.houses[h].truces["Brandtner"] = g.turn
+    assert _weakest_neighbor(g, h) == "Brandtner"
 
 
 # --- R5: marriageable kin at age >= 16, living, not ruler ------------------
@@ -353,91 +395,159 @@ def test_r5_marriageable_not_at_17():
 
 # --- R6: _richest_rival picks MOST enterprises, never self -----------------
 
+_SEEDS = (5, 7, 11, 42, 61)
+
+
+def _game_at(seed, turn):
+    g = GildedGame(seed=seed)
+    while g.turn < turn:
+        g.end_turn()
+    return g
+
+
 def test_r6_richest_rival_is_most_enterprises():
-    """_richest_rival names the rival with the MOST enterprises, not self."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    assert _richest_rival(g, h) == "Duval-Corse"  # has 3, all others 2
-    # Verify it's not self even if self had the most
-    # Duval-Corse has 3, Ferrenholt has 2 — Duval-Corse wins regardless
+    """_richest_rival names the most-ventured rival WITHIN its preferred
+    group (rivals with a willing seller first), and never the House itself.
+
+    The old form pinned a House NAME off one generated world, so it went
+    red whenever generation shifted. This asserts the ranking property
+    the function implements, at every seed."""
+    for seed in _SEEDS:
+        g = _game_at(seed, 13)
+        for h in g.houses:
+            result = _richest_rival(g, h)
+            if result is None:
+                continue
+            assert result != h, f"named itself at seed {seed}, house {h}"
+            counts = {r: len([e for e in g.enterprises if e.house == r])
+                      for r in g.houses if r != h}
+            def has_seller(r):
+                realm = g.realms.get(r)
+                return bool(realm and disloyal_shareholders(realm, g.enterprises))
+            if has_seller(result):
+                # A seller exists among rivals: the pick must be the
+                # most-ventured of the SELLERS - count is secondary to the door.
+                assert counts[result] == max(counts[r] for r in counts if has_seller(r)), \
+                    (f"at seed {seed}, house {h}: named {result} ({counts[result]}) "
+                     f"but a selling rival holds more")
+            else:
+                assert counts[result] == max(counts.values()), \
+                    (f"at seed {seed}, house {h}: named {result} with "
+                     f"{counts[result]}, but a rival holds {max(counts.values())}")
 
 
 def test_r6_richest_rival_never_self():
-    """_richest_rival never names our own House, even when we hold the most enterprises.
-
-    Uses seed 5, turn 15, Mordaine — Mordaine holds 4 enterprises vs 3 for
-    Duval-Corse, so counting self would return Mordaine.
-    Kills the mutation that drops the `e.house != house_name` self-exclusion."""
-    g = GildedGame(seed=5)
-    while g.turn < 15:
-        g.end_turn()
-    h = "Mordaine"
-    result = _richest_rival(g, h)
-    assert result != h
-    assert result == "Duval-Corse"
+    """_richest_rival never names our own House, even when we hold the most
+    enterprises. The old form pinned a House NAME off one generated world, so
+    it went red whenever generation shifted. This floods the House with
+    synthetic enterprises so that counting self would return the House itself,
+    and asserts the pick is always a rival — kills the mutation that drops the
+    `e.house != house_name` self-exclusion."""
+    from gilded.enterprises import Enterprise
+    for seed in _SEEDS:
+        g = _game_at(seed, 13)
+        h = sorted(g.houses)[0]
+        rivals = [r for r in g.houses if r != h]
+        g.enterprises.extend(
+            Enterprise(eid=9000 + i, kind="estate", name=f"Synth {i}",
+                       house=h, province=0, tier=5) for i in range(9))
+        result = _richest_rival(g, h)
+        assert result in rivals, \
+            (f"at seed {seed}: named {result!r} for house {h}, "
+             f"expected one of {rivals}")
 
 
 # --- R7: _best_relations excludes Houses at war with -----------------------
 
 def test_r7_best_relations_excludes_at_war():
-    """_best_relations never picks a House we are at war with.
+    """_best_relations never picks a House we are at war with, at every seed.
 
     Kills the mutation that drops the war filter from the suitor list.
-    Declares war on Brandtner (best relations) — correct code returns Ashworth."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    # Ferrenholt's relations: Brandtner 28, Ashworth 26, ...
-    # Brandtner is the best — but if we're at war with them, it must be excluded
-    g.houses[h].at_war_with.add("Brandtner")
-    best = _best_relations(g, h)
-    assert best == "Ashworth"
-    assert best not in g.houses[h].at_war_with
+    Builds the precondition: find the natural best-relation rival, declare
+    war on it, and assert the helper skips it in favour of the next best.
+    (The old form pinned a House NAME off one generated world.)"""
+    for seed in _SEEDS:
+        g = _game_at(seed, 13)
+        for h in g.houses:
+            house = g.houses[h]
+            # The best suitor before the filter (the one the bug would return)
+            unfiltered = max((n for n in g.houses if n != h and n in g.realms),
+                             key=lambda n: (house.relations.get(n, 0), n))
+            if unfiltered in house.at_war_with:
+                continue  # already excluded; nothing to prove here
+            house.at_war_with.add(unfiltered)
+            best = _best_relations(g, h)
+            assert best not in house.at_war_with, \
+                f"at seed {seed}, house {h}: picked at-war {best}"
+            house.at_war_with.discard(unfiltered)
 
 
 # --- R8: _strongest_rival names the strongest -----------------------------
 
 def test_r8_strongest_rival_is_strongest():
-    """_strongest_rival names the rival with highest strength."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    assert _strongest_rival(g, h) == "Vantrell"  # strength 2809.4
+    """_strongest_rival names a rival no weaker than any other rival, at
+    every seed — not a House NAME drawn off one generated world."""
+    for seed in _SEEDS:
+        g = _game_at(seed, 13)
+        for h in g.houses:
+            result = _strongest_rival(g, h)
+            if result is None:
+                continue
+            assert result != h, f"named itself at seed {seed}, house {h}"
+            others = {r: _strength(g, r) for r in g.houses if r != h}
+            assert others[result] == max(others.values()), \
+                (f"at seed {seed}, house {h}: named {result} with "
+                 f"{others[result]}, but a rival holds {max(others.values())}")
 
 
 # --- R9: _target_for routes each family to its helper ----------------------
 
+_ROUTES = [
+    ("Conquest", _weakest_neighbor),
+    ("Buyout",   _richest_rival),
+    ("Dynasty",  _best_relations),
+    ("Intrigue", _strongest_rival),
+    ("Glory",    _strongest_rival),
+]
+
+
+def _r9_routing(family, helper):
+    """Assert _target_for(family) IS the helper for that family, every seed.
+
+    The old form asserted a House NAME off one generated world, so it went
+    red whenever generation shifted. This asserts the routing itself, which
+    is the behaviour the function has, and it kills the mutation of wiring
+    a family to the wrong helper."""
+    for seed in _SEEDS:
+        g = _game_at(seed, 13)
+        for h in g.houses:
+            assert _target_for(g, h, family) == helper(g, h), \
+                f"{family} at seed {seed}, house {h}"
+
+
 def test_r9_target_for_conquest():
-    """Conquest -> weakest neighbour."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    assert _target_for(g, h, "Conquest") == "Karsgate"
+    """Conquest -> the weakest neighbouring rival, at every seed."""
+    _r9_routing("Conquest", _weakest_neighbor)
 
 
 def test_r9_target_for_buyout():
-    """Buyout -> richest rival."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    assert _target_for(g, h, "Buyout") == "Duval-Corse"
+    """Buyout -> the richest rival, at every seed."""
+    _r9_routing("Buyout", _richest_rival)
 
 
 def test_r9_target_for_dynasty():
-    """Dynasty -> best relations."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    assert _target_for(g, h, "Dynasty") == "Brandtner"
+    """Dynasty -> the best-relations rival, at every seed."""
+    _r9_routing("Dynasty", _best_relations)
 
 
 def test_r9_target_for_intrigue():
-    """Intrigue -> strongest rival."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    assert _target_for(g, h, "Intrigue") == "Vantrell"
+    """Intrigue -> the strongest rival, at every seed."""
+    _r9_routing("Intrigue", _strongest_rival)
 
 
 def test_r9_target_for_glory():
-    """Glory -> strongest rival."""
-    g = _fixture_game()
-    h = "Ferrenholt"
-    assert _target_for(g, h, "Glory") == "Vantrell"
+    """Glory -> the strongest rival, at every seed."""
+    _r9_routing("Glory", _strongest_rival)
 
 
 def test_r9_target_for_dominion():
@@ -464,25 +574,40 @@ def test_r12_families_tiebreak_conquest_wins_over_dominion():
     """When Conquest and Dominion score equally, Conquest wins because it
     appears first in FAMILIES.  Closes R1 (order) and R2 (positive index).
 
-    Builds a tie at 23.0 for Ferrenholt by tuning dispositions, then asserts
-    both the tie and the winner."""
+    The old form pinned a House NAME off one generated world (a tie at 23.0),
+    so it broke the moment the dice moved.  We now build the tie EXACTLY:
+    compute the world-derived terms for both families and set dispositions so
+    the two scores coincide regardless of the generated world, while every
+    other family is driven far below.  The assertion is about the tiebreak,
+    not about one seed's numbers."""
     g = _fixture_game()
     h = "Ferrenholt"
     realm = g.realms[h]
     ruler = realm.ruler
 
-    # Build the tie: Conquest = Dominion = 23.0, all others far below
-    ruler.dispositions["ambitious_content"] = 0.0
-    ruler.dispositions["bold_craven"] = -500.0
-    ruler.dispositions["labor_capital"] = -500.0
-    ruler.dispositions["patient_impulsive"] = -500.0
-    ruler.dispositions["honest_deceitful"] = 500.0
-    ruler.dispositions["militarist_pacifist"] = 3.0
+    # World-derived (seed-dependent) terms we must compensate for:
+    c_world = 20.0 if _weakest_neighbor(g, h) else -40.0
+    d_world = 10.0 if _found_spot(g, h) else 0.0
+    d_stat = _stat(realm, "industry")
+
+    # Conquest = militarist_pacifist + c_world; pin it to a base of 100.
+    base = 100.0
+    ruler.dispositions["militarist_pacifist"] = base
+    # Dominion = ambitious_content + d_stat + d_world == base + c_world.
+    ruler.dispositions["ambitious_content"] = base + c_world - d_stat - d_world
+    # Drive every other family far below so only Conquest/Dominion compete:
+    #  Glory = ambitious_content + bold_craven, so a very negative bold_craven
+    #  keeps Glory low even though ambitious_content is high.
+    ruler.dispositions["bold_craven"] = -1000.0
+    ruler.dispositions["labor_capital"] = -1000.0
+    ruler.dispositions["patient_impulsive"] = -1000.0
+    ruler.dispositions["honest_deceitful"] = 1000.0
+    ruler.dispositions["paranoid_trusting"] = -1000.0
 
     conquest_score = _score_family(g, h, "Conquest", ruler, realm)
     dominion_score = _score_family(g, h, "Dominion", ruler, realm)
     assert conquest_score == dominion_score, \
-        f"Expected tie at 23.0, got Conquest={conquest_score}, Dominion={dominion_score}"
+        f"Expected an exact tie, got Conquest={conquest_score}, Dominion={dominion_score}"
 
     goal = select_goal(g, h)
     assert goal is not None
@@ -539,28 +664,48 @@ def test_r4_consolidation_domain_is_labor():
 def test_r5_dominion_backed_by_industry():
     """Dominion family uses the court's INDUSTRY stat, not intrigue.
 
-    Uses Brandtner at the base fixture where industry=11, intrigue=13,
+    Uses Duval-Corse at the base fixture where industry=12, intrigue=11,
     and _found_spot returns None (no +10). With ambitious_content=0,
-    Dominion should score 11.0 (industry), not 13.0 (intrigue).
+    Dominion should score 12.0 (industry), not 11.0 (intrigue).
     """
     g = _fixture_game()
-    h = "Brandtner"
+    h = "Duval-Corse"
     realm = g.realms[h]
     ruler = realm.ruler
 
-    # Assert premise: industry != intrigue at Brandtner
+    # Pin the premise explicitly: the fixture court's industry/intrigue
+    # stats are an accident of which chains fired at seed 5 (coping_spiral
+    # and strikebreakers), not a property of the fixture. Set the court
+    # stats this test asserts — industry 12, intrigue 11 — on the Duval-
+    # Corse court directly, so the test pins "Dominion scores industry,
+    # not intrigue" independently of chain content.
+    living = [c for c in realm.court.positions.values()
+              if c and c.is_alive]
+    assert living, "premise: Duval-Corse court has no living courtier"
+    holder = living[0]
+    for c in living:
+        ind_off = c.get_effective_stat("industry") - c.base_stats.get("industry", 0)
+        int_off = c.get_effective_stat("intrigue") - c.base_stats.get("intrigue", 0)
+        target_ind = 12 - ind_off if c is holder else -ind_off
+        target_int = 11 - int_off if c is holder else -int_off
+        c.base_stats["industry"] = target_ind
+        c.base_stats["intrigue"] = target_int
+    assert _stat(realm, "industry") == 12
+    assert _stat(realm, "intrigue") == 11
+
+    # Assert premise: industry != intrigue at Duval-Corse
     industry = _stat(realm, "industry")
     intrigue = _stat(realm, "intrigue")
     assert industry != intrigue, "Fixture premise broken: industry == intrigue"
-    assert industry == 11
-    assert intrigue == 13
+    assert industry == 12
+    assert intrigue == 11
 
     # Assert premise: no found spot (no +10 bonus)
     assert _found_spot(g, h) is None
 
     ruler.dispositions["ambitious_content"] = 0.0
     score = _score_family(g, h, "Dominion", ruler, realm)
-    assert score == 11.0, f"Dominion should score industry (11.0), got {score}"
+    assert score == 12.0, f"Dominion should score industry (12.0), got {score}"
 
 
 # --- R6: Buyout penalty when no rival exists ---------------------------------

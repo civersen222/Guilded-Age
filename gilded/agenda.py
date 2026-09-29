@@ -75,9 +75,16 @@ def _bordering(game, house_name: str) -> List[str]:
 
 
 def _weakest_neighbor(game, house_name: str) -> Optional[str]:
+    """The weakest house this House may lawfully declare on. The corridor
+    march means armies reach any demesne, so the target pool is every house
+    rather than only bordering ones — demesnes are islands in the tiered
+    world, so a bordering-only pool is empty and Conquest goals would never
+    ripen."""
     house = game.houses[house_name]
     cands = []
-    for other in _bordering(game, house_name):
+    for other in sorted(game.houses):
+        if other == house_name:
+            continue
         if other in house.at_war_with:
             continue
         if house.truces.get(other, 0) > game.turn:
@@ -110,14 +117,20 @@ def _marriageable(realm, ruler) -> bool:
 
 
 def _richest_rival(game, house_name: str) -> Optional[str]:
-    """Buyout target: the House with the most enterprises we could buy into."""
+    """Buyout target: the House with the most enterprises we could buy into,
+    preferring a rival that currently has a disloyal shareholder willing to
+    sell - a rich House with nobody to sell from is not a door."""
+    from gilded.society.realm import disloyal_shareholders
     counts = {}
     for e in game.enterprises:
         if e.house != house_name and e.house in game.houses:
             counts[e.house] = counts.get(e.house, 0) + 1
     if not counts:
         return None
-    return sorted(counts, key=lambda h: (-counts[h], h))[0]
+    def has_seller(h: str) -> int:
+        realm = game.realms.get(h)
+        return int(bool(realm and disloyal_shareholders(realm, game.enterprises)))
+    return sorted(counts, key=lambda h: (-has_seller(h), -counts[h], h))[0]
 
 
 def _best_relations(game, house_name: str) -> Optional[str]:
@@ -216,10 +229,19 @@ def select_goal(game, house_name: str) -> Optional[Goal]:
 
 def ensure_agenda(game, house_name: str) -> Optional[Goal]:
     """Return the House's live goal, re-selecting when the commit window has
-    passed or the current target has vanished. The ONLY writer of game.agendas."""
+    passed or the current target has vanished. The ONLY writer of game.agendas.
+
+    A goal is re-evaluated EARLY (before its commit window closes) when its
+    target has vanished or when it is the takeover (Buyout) goal and the
+    targeted House now has live sellers - the door has opened and the House
+    should commit to it rather than sit out the rest of the window idle."""
     cur = game.agendas.get(house_name)
     if cur is not None and game.turn < cur.opened_turn + cur.commit_turns:
-        if cur.target is None or cur.target in game.houses:
+        target_gone = cur.target is not None and cur.target not in game.houses
+        target_shifted = (cur.family == "Buyout"
+                          and _target_for(game, house_name, "Buyout")
+                          != cur.target)
+        if not target_gone and not target_shifted:
             return cur
     goal = select_goal(game, house_name)
     if goal is not None:
@@ -242,9 +264,9 @@ def goal_initiative(game, house_name: str, goal: Goal
     realm = game.realms[house_name]
     fam, target = goal.family, goal.target
     if fam == "Conquest":
-        if (target in game.houses and target not in house.at_war_with
-                and house.truces.get(target, 0) <= game.turn
-                and not house.at_war_with):
+        from gilded import pacts
+        if (target in game.houses and not house.at_war_with
+                and pacts.may_declare_war(game, house_name, target)):
             return "declare_war", {"target_house": target}
         return None
     if fam == "Dominion":

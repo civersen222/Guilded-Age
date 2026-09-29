@@ -13,6 +13,9 @@ TREASURY_LABELS = frozenset({
     "dividends", "trade", "expansion", "strike buyoff", "heir allowance",
     "compensation", "railway", "charter", "province purchase",
     "reparations paid", "reparations received", "share purchase",
+    "tax farm lease", "trade concession", "military grant",
+    "diplomatic summit", "press compliance", "reform endorsement",
+    "courtier appeasement", "ambition",
 })
 
 HOUSE_NAMES = ["Vantrell", "Karsgate", "Mordaine", "Ashworth", "Ferrenholt",

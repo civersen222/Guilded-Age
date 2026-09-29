@@ -23,6 +23,7 @@ from gilded.ui.widgets import (
     column_plan, flow_columns, FlowResult,
     columns, font as _font, wrap as _wrap,
     INK, FADED, PAPER_BG,
+    TYPE_TITLE,
 )
 from gilded.ui.broadsheet import BroadsheetView, PAD, TAB_H, _hud_height, BOTTOM_H
 
@@ -122,12 +123,12 @@ def test_rule3_col_width_at_2560():
     cols = column_plan(_rect(2528), f)
     assert all(c.width <= f.size("x" * 66)[0] for c in cols)
 
-def test_rule3_exact_594_at_18pt():
+def test_rule3_exact_528_at_18pt():
     f = _font18()
     cols = column_plan(_rect(1248), f)
     measure_px = f.size("x" * 66)[0]
-    assert measure_px == 594
-    assert all(c.width == 594 for c in cols)
+    assert measure_px == 528
+    assert all(c.width == 528 for c in cols)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -306,50 +307,63 @@ def test_rule9_placement_inside_rect():
 # Rule 10: column-major fill
 # ────────────────────────────────────────────────────────────────────────────
 
+def _capacity(rect, f, line_gap):
+    """Rows a column holds — the same loop flow_columns uses to derive capacity."""
+    line_h = f.size("x")[1]
+    capacity = 0
+    y = rect.top
+    while y + line_h <= rect.bottom:
+        capacity += 1
+        y += line_h + line_gap
+    return capacity
+
+
 def test_rule10_column_major_fill():
     """Column-major fill: items fill col 0 completely before spilling to col 1.
 
-    With 48 items and 24 capacity per column, col 0 gets items 0-23,
-    col 1 gets items 24-47.  The last item of col 0 is 'Line 23'.
-    A round-robin implementation would interleave items across columns,
-    placing 'Line 23' in column 0 at a different row index.
+    With cap+5 items, col 0 gets the first `cap` items, col 1 the 5 rest.
+    A round-robin implementation would interleave items across columns.
     """
     f = _font18()
     rect = _rect(1248, 600)
-    items = [f"Line {i}" for i in range(48)]
+    cap = _capacity(rect, f, 4)
+    items = [f"Line {i}" for i in range(cap + 5)]
     res = flow_columns(items, f, rect, line_gap=4)
     cols = column_plan(rect, f)
     assert len(cols) == 2
+    assert res.overflow == 0
     # Every item in col 0 must come before every item in col 1 in the
     # original items list.  The last col-0 item is the one with the
     # highest original index among col-0 placements.
     col0_items = [p for p in res.placements if p[3] == 0]
     col1_items = [p for p in res.placements if p[3] == 1]
-    assert len(col0_items) == 24  # column capacity
-    assert len(col1_items) == 24
-    # In column-major order, the last item placed in col 0 is item 23
-    # and the first item in col 1 is item 24.
+    assert len(col0_items) == cap  # column capacity
+    assert len(col1_items) == 5
+    # In column-major order, the last item placed in col 0 is item cap-1
+    # and the first item in col 1 is item cap.
     col0_texts = [p[0] for p in col0_items]
     col1_texts = [p[0] for p in col1_items]
-    assert col0_texts[-1] == "Line 23"
-    assert col1_texts[0] == "Line 24"
+    assert col0_texts[-1] == f"Line {cap - 1}"
+    assert col1_texts[0] == f"Line {cap}"
 
 def test_rule10_second_column_used():
-    """With 48 items, both columns are used, and col 0 is full before col 1 starts."""
+    """With cap+5 items, both columns are used, and col 0 is full before col 1 starts."""
     f = _font18()
     rect = _rect(1248, 600)
-    items = [f"Line {i}" for i in range(48)]
+    cap = _capacity(rect, f, 4)
+    items = [f"Line {i}" for i in range(cap + 5)]
     res = flow_columns(items, f, rect, line_gap=4)
     cols = column_plan(rect, f)
     assert len(cols) == 2
     ci_values = set(p[3] for p in res.placements)
     assert 0 in ci_values
     assert 1 in ci_values
-    # Verify col 0 fills completely before col 1 — items 0-23 in col 0, 24-47 in col 1
+    # Verify col 0 fills completely before col 1 — items 0..cap-1 in col 0,
+    # cap..cap+4 in col 1.
     col0_indices = sorted([int(p[0].split()[-1]) for p in res.placements if p[3] == 0])
     col1_indices = sorted([int(p[0].split()[-1]) for p in res.placements if p[3] == 1])
-    assert col0_indices == list(range(24))
-    assert col1_indices == list(range(24, 48))
+    assert col0_indices == list(range(cap))
+    assert col1_indices == list(range(cap, cap + 5))
 
 def test_rule10_rows_increasing_within_column():
     """Within each column, items appear in original order (item 0 before item 1, etc.).
@@ -515,8 +529,11 @@ def test_rule13_horizontal_rule_draws(monkeypatch):
     hud_h = _hud_height()
     content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
 
-    head_font = _font(30, bold=True)
-    head_h = head_font.size("Ag")[1]
+    head_font = _font(TYPE_TITLE, bold=True)
+    # Measure the head exactly as _draw_paper does: render the real head
+    # string and use get_height() — variable TTFs make size("Ag")[1] off
+    # by a pixel from render(...).get_height() at 30pt bold.
+    head_h = head_font.render("THE GAZETTE - 1066", True, INK).get_height()
 
     g = _game(seed=7, turns=1)
     house = list(g.houses.keys())[0]
@@ -573,8 +590,8 @@ def test_rule6_horizontal_rule_thickness(monkeypatch):
     hud_h = _hud_height()
     content = pygame.Rect(0, TAB_H + hud_h, 1280, 900 - TAB_H - hud_h - BOTTOM_H)
 
-    head_font = _font(30, bold=True)
-    head_h = head_font.size("Ag")[1]
+    head_font = _font(TYPE_TITLE, bold=True)
+    head_h = head_font.render("THE GAZETTE - 1066", True, INK).get_height()
 
     g = _game(seed=7, turns=1)
     house = list(g.houses.keys())[0]

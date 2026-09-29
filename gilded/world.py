@@ -17,9 +17,9 @@ TERRAINS = ("coast", "plains", "highlands", "marsh")
 ENDOWMENT_KINDS = ("coalfield", "iron", "timber", "farmland", "harbor")
 
 # --- generation tunables ---
-GRID_W, GRID_H = 96, 96
-SEED_POINTS = 100
-PROVINCE_MIN, PROVINCE_MAX = 50, 70
+GRID_W, GRID_H = 144, 144
+SEED_POINTS = 360
+PROVINCE_MIN, PROVINCE_MAX = 150, 250
 OCEAN_THRESHOLD = 0.92        # radial falloff + noise beyond this sinks a cell
 OCEAN_NOISE = 0.18            # per-region noise weight in the ocean formula
 REGION_SINK_FRACTION = 0.50   # regions with less land than this sink entirely
@@ -79,6 +79,19 @@ class Link:
     rail: bool = False
 
 
+# Mission C5 wave 1: the minor gentry. 40 surnames - 24 are seated at boot
+# (in the 20-30 band); the rest are a pool for births as the ranks turn over.
+GENTRY_SURNAMES = [
+    "Aldermoor", "Barrow", "Caldwell", "Dunmore", "Ellery", "Fenwick",
+    "Grantham", "Hartley", "Iveson", "Kilburn", "Loxley", "Merriweather",
+    "Northcote", "Oswald", "Pemberton", "Quincey", "Ravenshaw", "Slocombe",
+    "Thornbury", "Underwood", "Vane", "Wexford", "Yardley", "Zander",
+    "Ashcombe", "Bletchley", "Cromwell", "Dacre", "Edgeworth", "Farrow",
+    "Goring", "Hollis", "Ingram", "Jessel", "Kirkham", "Lamplight",
+    "Merrivale", "Nightingale", "Oswestry", "Pembroke",
+]
+
+
 class Atlas:
     """Provinces plus the road/rail graph between them."""
 
@@ -130,17 +143,35 @@ def _try_generate(rng: random.Random) -> Optional[Atlas]:
     noise = [rng.random() for _ in range(SEED_POINTS)]
 
     # Discrete Voronoi with a coastline carve: fringe regions sink coherently.
+    # Cell ownership via bounded rings (R >= grid max makes each cell's full
+    # point set fall inside its ring, so results are identical to the naive
+    # scan but O(cells * SEED_POINTS) becomes O(SEED_POINTS * ring_area)).
     cx, cy = GRID_W / 2.0, GRID_H / 2.0
     max_radius = min(GRID_W, GRID_H) / 2.0
     region_cells: List[List[Tuple[int, int]]] = [[] for _ in range(SEED_POINTS)]
     region_total = [0] * SEED_POINTS
-    for x, y in cells_all:
-        best, best_d = 0, math.inf
-        for i, (px, py) in enumerate(points):
-            d = (px - x) * (px - x) + (py - y) * (py - y)
-            if d < best_d:
-                best, best_d = i, d
+    ring = max(GRID_W, GRID_H)
+    owner = [-1] * (GRID_W * GRID_H)
+    dist = [math.inf] * (GRID_W * GRID_H)
+    for i, (px, py) in enumerate(points):
+        for dy in range(-ring, ring + 1):
+            y = py + dy
+            if y < 0 or y >= GRID_H:
+                continue
+            for dx in range(-ring, ring + 1):
+                x = px + dx
+                if x < 0 or x >= GRID_W:
+                    continue
+                d = (px - x) * (px - x) + (py - y) * (py - y)
+                idx = y * GRID_W + x
+                if d < dist[idx]:
+                    dist[idx] = d
+                    owner[idx] = i
+    for idx, best in enumerate(owner):
+        if best < 0:
+            continue
         region_total[best] += 1
+        x, y = idx % GRID_W, idx // GRID_W
         r = math.hypot(x - cx, y - cy) / max_radius
         if r + OCEAN_NOISE * noise[best] > OCEAN_THRESHOLD:
             continue                                  # ocean cell
@@ -235,7 +266,17 @@ def _try_generate(rng: random.Random) -> Optional[Atlas]:
         if "farmland" in endowments[region]:
             population = int(population * FARMLAND_POP_BONUS)
         cells = region_cells[region]
-        center = (sum(c[0] for c in cells) / len(cells), sum(c[1] for c in cells) / len(cells))
+        cx = sum(c[0] for c in cells) / len(cells)
+        cy = sum(c[1] for c in cells) / len(cells)
+        if not any(ix <= cx < ix + 1 and iy <= cy < iy + 1 for ix, iy in cells):
+            # The mean of an L-shaped region can fall outside its union of
+            # cells; snap to the nearest cell's own centre, which is always
+            # inside that cell. Provinces whose mean already lies inside a
+            # cell keep it, so simulation distances are unchanged.
+            cx, cy = min(cells, key=lambda c: (c[0] - cx) ** 2 + (c[1] - cy) ** 2)
+            center = (cx + 0.5, cy + 0.5)
+        else:
+            center = (cx, cy)
         provinces[pid] = Province(
             pid=pid, name=name, terrain=terrain[region], endowments=endowments[region],
             cells=cells, center=center,

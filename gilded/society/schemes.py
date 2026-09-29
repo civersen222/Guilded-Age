@@ -76,9 +76,11 @@ class SchemeManager:
     def scheming(self, char) -> bool:
         return any(s.agent is char for s in self.schemes)
 
-    def advance_all(self, realms, legitimacy, rng=_random) -> List[str]:
+    def advance_all(self, realms, legitimacy, rng=_random,
+                 game=None) -> List[str]:
         """One turn of every scheme: prune the moot, advance the live,
-        roll discovery, resolve at threshold."""
+        roll discovery, resolve at threshold. game (optional) lets outcomes
+        land on personal history (C7w4)."""
         msgs: List[str] = []
         for s in list(self.schemes):
             trealm = realms.get(s.target_house)
@@ -95,20 +97,23 @@ class SchemeManager:
             if rng.random() < (SCHEME_TYPES[s.scheme_type]["risk"]
                                + defense * DEFENSE_SHIELD):
                 self.schemes.remove(s)
-                msgs.extend(self._discover(realms, legitimacy, s, trealm, rng))
+                msgs.extend(self._discover(realms, legitimacy, s, trealm,
+                                          rng, game))
                 continue
             if s.progress < SCHEME_THRESHOLD:
                 continue
             self.schemes.remove(s)
             if rng.random() < s.success_chance(defense):
-                msgs.extend(self._succeed(s, trealm))
+                msgs.extend(self._succeed(s, trealm, game))
             else:
-                msgs.extend(self._discover(realms, legitimacy, s, trealm, rng))
+                msgs.extend(self._discover(realms, legitimacy, s, trealm,
+                                           rng, game))
         return msgs
 
-    def _succeed(self, s, trealm) -> List[str]:
+    def _succeed(self, s, trealm, game=None) -> List[str]:
         msgs = []
         agent, targ = s.agent, s.target
+        from gilded.society.characters import record_history, record_death
         if s.scheme_type == "coup":
             for pos, ch in trealm.court.positions.items():
                 if ch and ch.id == agent.id:
@@ -121,6 +126,11 @@ class SchemeManager:
             msgs.append(render(Situation("plot_coup",
                                          {"mastermind": agent, "target": targ},
                                          data={"civ": trealm.house_name})))
+            if game is not None:
+                record_history(agent, game, "scheme",
+                               f"{agent.name} takes the throne of "
+                               f"{trealm.house_name}",
+                               source="society.schemes.coup")
             if note and "mental break" in note:
                 msgs.append(render(Situation("mental_break", {"subject": agent})))
         else:
@@ -132,7 +142,8 @@ class SchemeManager:
                                          data={"civ": trealm.house_name})))
         return msgs
 
-    def _discover(self, realms, legitimacy, s, trealm, rng=_random) -> List[str]:
+    def _discover(self, realms, legitimacy, s, trealm, rng=_random,
+                  game=None) -> List[str]:
         """The scheme comes to light: the plotter is marked, the plotter's
         House is shamed, and a Secret of the attempt enters the economy."""
         msgs = []
@@ -142,6 +153,12 @@ class SchemeManager:
                         SECRET_POTENCY)
         secret.holders.add(targ.id)
         agent.secrets.append(secret)
+        if game is not None:
+            from gilded.society.characters import record_history
+            record_history(agent, game, "secret",
+                           f"{agent.name}'s plot against {targ.name} "
+                           f"comes to light",
+                           source="society.schemes.discovered")
         modify_opinion(targ, agent, -40, "uncovered scheme")
         note = agent.add_stress(30)
         if note and "mental break" in note:
@@ -328,7 +345,7 @@ def compromise(agent, target, rng=_random, legitimacy=None,
 
 TAKEOVER_THRESHOLD = 50.0   # average portfolio stake that flips the House
 TAKEOVER_PRICE = 2.0        # gold per 1% of one enterprise
-TAKEOVER_TRANCHE = 15.0     # max pct bought per enterprise, per seller, per turn
+TAKEOVER_TRANCHE = 5.0      # max pct bought per enterprise, per seller, per turn
 TAKEOVER_REFERENCE = 4.2    # median market value at base rate (seed 42, turn 3)
 BAND_LO = 0.25
 BAND_HI = 4.0
@@ -356,6 +373,7 @@ class Takeover:
         self.buyer_house = buyer_house
         self.target_house = target_house
         self.complete = False
+        self.lapsed = False      # target House left nothing to buy: campaign is over
 
     def advance(self, realms, enterprises, rng, game) -> List[str]:
         """One turn of quiet buying: approach every disloyal holder and
@@ -369,11 +387,22 @@ class Takeover:
         buyer_realm = realms.get(self.buyer_house)
         if target_realm is None or buyer_realm is None:
             return []
+        if not self.buyer.is_alive:
+            # The buyer is dead - the campaign dies with them. There is no
+            # heir to the scheme: it lapses and cannot be resurrected.
+            self.lapsed = True
+            return []
         msgs: List[str] = []
         target_ents = [e for e in enterprises if e.house == self.target_house]
+        if not target_ents:
+            # The House's portfolio is gone - there is nothing left to
+            # buy out of it. The campaign is over without ever reaching
+            # the threshold: it lapses.
+            self.lapsed = True
+            return []
         from gilded.houses import House
         house: House = game.houses[self.buyer_house]
-        for seller in disloyal_shareholders(target_realm, enterprises):
+        for seller in disloyal_shareholders(target_realm, enterprises, house_only=False):
             for ent in target_ents:
                 price = share_price(ent, game)
                 want = min(TAKEOVER_TRANCHE, house.treasury / price)
@@ -389,7 +418,17 @@ class Takeover:
         if stake > 0:
             msgs.append(f"{self.buyer.name} quietly holds {stake:.0f}% of "
                         f"House {self.target_house}")
-        if stake > TAKEOVER_THRESHOLD:
+        # The House falls when the buyer and the House's own defectors
+        # together hold past the threshold: the disloyal holders are the
+        # coalition the buyout walks the door in with - the ruler's
+        # dynasty never sells, so the buyer alone can rarely clear the
+        # threshold by purchase alone.
+        coalition = stake + sum(
+            house_stake(target_ents, s.id)
+            for s in disloyal_shareholders(target_realm, enterprises,
+                                           house_only=False)
+            if s.id != self.buyer.id)
+        if stake > 0 and coalition > TAKEOVER_THRESHOLD:
             n = seize_enterprises(enterprises, self.target_house,
                                   self.buyer_house, buyer_realm)
             self.complete = True
