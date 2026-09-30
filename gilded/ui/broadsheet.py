@@ -236,7 +236,9 @@ def hud_model(board, d: Delta) -> HudModel:
     # Texts
     texts["era"] = f"{board.era_title} ·"
     texts["era_sub"] = f" {board.year} ({board.century_pct * 100:.0f}%)"
-    texts["rank"] = f"Rank #{board.rank}"
+    # C10.2a: the player's rank is no longer drawn on the HUD (or anywhere but
+    # the single Powers "Ladder" page). Keep the key so hud_layout is untouched.
+    texts["rank"] = ""
     # intent placeholder — filled by _draw_hud when game object is available
     texts["intent"] = ""
 
@@ -1443,60 +1445,14 @@ class BroadsheetView:
 
     def _draw_ladder_and_agenda(self, surface, content: pygame.Rect,
                                 y: int, bottom: int = None) -> int:
-        """spec §2: the Briefing's ladder and Agenda re-homed to the House
-        spine — the ladder stays public, the docket's decisions are the
-        agenda cards (its old tab dies; its content lives here and at the
-        Atlas desk strip)."""
+        """spec §2: the Agenda re-homed to the House spine.  The public
+        ladder's ONE home is the Powers spine (the "Ladder" page): C10.2a
+        keeps the player's rank off every other screen (the HUD's "Rank #"
+        and the Overview's ladder copy are gone).  The docket's decisions
+        stay as the agenda cards (their old tab dies; the content lives
+        here and at the Atlas desk strip)."""
         head = _font(TYPE_SUBTITLE, bold=True)
-        body = _font(TYPE_TEXT)
         bottom = bottom if bottom is not None else content.bottom
-        rows = self.game.ladder()
-        self._ladder_rows = rows
-        if y > bottom - 120:
-            return y
-        body_h = body.get_height()
-        width = content.width - 2 * PAD
-        petitions = self.game.docket_by_house.get(self.house, [])
-        # The agenda is the spine's action content: reserve its room first so
-        # it always draws (its cycle_exec registers), then give the public
-        # ladder only the space that remains above it.  On a tall column the
-        # ladder keeps all four rows; on a short one it yields rows (and its
-        # why-line) so the docket's decisions stay visible.
-        if petitions:
-            card_h = (6 + _font(TYPE_CAPTION, bold=True).get_height() + 2
-                      + len(_wrap(petitions[0].text, body, width - 20))
-                      * (body_h + 1) + 2 + 20 + 4)
-        else:
-            card_h = 0
-        # Two section headers + n ladder rows + why-line (only if >=2 rows)
-        # + 4px gap + card_h must fit before bottom-10.
-        space = (bottom - 10) - y
-        ladder_rows = 0
-        for n in range(4, 0, -1):
-            need = (2 * (head.get_height() + 4)
-                    + n * body_h + (body_h if n >= 2 else 0)
-                    + 4 + card_h)
-            if need <= space:
-                ladder_rows = n
-                break
-        if ladder_rows > 0:
-            blit_text(surface, head, "The Ladder", (PAD, y), INK)
-            y += head.get_height() + 4
-            for row in rows[:ladder_rows]:
-                who = row.house + (" (you)" if row.house == self.house else "")
-                line = f"{row.rank}. {who}  {row.composite:.0f}"
-                blit_text(surface, body, line, (PAD + 10, y),
-                          INK if row.rank == 1 else FADED)
-                y += body_h
-            if ladder_rows >= 2:
-                top = rows[0]
-                axis = max(top.axes.values(), key=lambda a: a.value)
-                if axis.causes:
-                    why_line = f"{top.house} leads on {axis.causes[0].label}."
-                    blit_text(surface, body, why_line, (PAD + 10, y), FADED)
-                    y += body_h
-            y += 4
-
         blit_text(surface, head, "The Agenda", (PAD, y), INK)
         y += head.get_height() + 4
         y = self._draw_petition_cards(surface, content, y, bottom)
