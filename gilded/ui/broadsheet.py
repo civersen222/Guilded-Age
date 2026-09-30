@@ -1468,6 +1468,26 @@ class BroadsheetView:
         y = self._draw_petition_cards(surface, content, y, bottom)
         return y
 
+    def _draw_ambition_banner(self, surface, content: pygame.Rect,
+                              y: int) -> int:
+        """C10.1b: the player's ambition family has exactly one home -
+        the Court in Session page.  This banner is the banner-only copy
+        drawn on House screens that are NOT the Court page (so the
+        family word appears on exactly one screen: the Court page draws
+        the cards + banner itself, every other House screen draws
+        nothing about it).  No-op when no ambition is set."""
+        game = self.game
+        if not game or not getattr(game, "agendas", None):
+            return y
+        goal = game.agendas.get(self.house)
+        if goal is None:
+            return y
+        body = _font(TYPE_TEXT)
+        blit_text(surface, body,
+                  f"House ambition: {goal.family}", (PAD + 10, y), INK)
+        y += body.get_height() + 2
+        return y
+
 
     def _draw_ruler_history(self, surface, content: pygame.Rect,
                             y: int = None, bottom: int = None) -> int:
