@@ -385,6 +385,10 @@ def _apply_action(state: AppState, action: dict) -> None:
         elif key == "quickload":
             state.game = result
             state.view.game = result
+        elif key == "set_ambition":
+            fam = action["set_ambition"]["family"]
+            state.game.ambitions.set_ambition(state.house, fam)
+            state.view._ambition_picker = False
 
 
 def _play_game_audio(state: AppState) -> None:

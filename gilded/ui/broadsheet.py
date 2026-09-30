@@ -1020,6 +1020,9 @@ class BroadsheetView:
             elif self.house_page == "Governance":
                 self._draw_house_page_header(surface, content, "Governance")
                 self._draw_enterprises(surface, content)
+            elif self.house_page == "Court":
+                self._draw_house_page_header(surface, content, "Court")
+                self._draw_court(surface, content)
             else:
                 self._draw_house(surface, content)
         elif self.active_tab == "Powers":
@@ -3035,7 +3038,11 @@ class BroadsheetView:
             self._draw_scheme_picker(surface, content)
  
     def _draw_ambition_controls(self, surface, content: pygame.Rect) -> None:
-        """C2: the Set Ambition button under the court section."""
+        """C2: the Set Ambition button under the court section.  The button
+        hides while the family picker is open (the picker's seven family
+        regions ARE the control; the picker-open census stays at 21)."""
+        if self._ambition_picker:
+            return
         from gilded.ui.widgets import INK, Region, RegionState, TONES
         from gilded.ui.house_tab import _draw_button
         PAD = 12
