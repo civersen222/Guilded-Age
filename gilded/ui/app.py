@@ -476,6 +476,11 @@ def _boot_play_into(state: AppState) -> None:
     state.house = house
     state.narrator = select_narrator()
     state.view = BroadsheetView(game, house, state.narrator)
+    # C10.1a: the FIRST screen after New Game is the family picker open over
+    # House/Overview — all seven families are live regions there, and pressing
+    # one enters play at turn 1 with the stake set through
+    # game.ambitions.set_ambition (the sim's live stake, resolvable in-window).
+    state.view._ambition_picker = True
     state.start = "game"
     audio.play("ui_press", state.settings)
 
