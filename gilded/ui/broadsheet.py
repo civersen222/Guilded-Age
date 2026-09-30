@@ -892,9 +892,10 @@ class BroadsheetView:
         # tabs' content re-homed as pages.  The Atlas desk strip (Letters)
         # and the End Turn gazette are drawn on the Atlas itself.
         self.house_page = "Overview"
-        self.house_pages = ["Overview", "Policies", "Ledger", "Governance"]
+        self.house_pages = ["Overview", "Policies", "Ledger", "Governance",
+                            "Court"]
         self.powers_page = "Overview"
-        self.powers_pages = ["Overview", "Dossier"]
+        self.powers_pages = ["Overview", "Dossier", "Ladder"]
         self.atlas_desk = False
         # C8.1: the map's tier (continent/region/parish); Region stays the
         # default so C1..C7 draws are unchanged.
