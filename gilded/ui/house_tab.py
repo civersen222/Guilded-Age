@@ -353,7 +353,8 @@ def _draw_heir_picker(surface, content, y, report, view, body, btn_h, btn_w, PAD
 
 
 def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
-                   report: CourtReport, view: Any = None) -> int:
+                   report: CourtReport, view: Any = None,
+                   show_court: bool = False) -> int:
     """Draw the House tab on *surface* within *content* rect.
 
     When *view* is provided, draws interactive Region controls for court seats
