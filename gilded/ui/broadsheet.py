@@ -892,6 +892,10 @@ class BroadsheetView:
         # tabs' content re-homed as pages.  The Atlas desk strip (Letters)
         # and the End Turn gazette are drawn on the Atlas itself.
         self.house_page = "Overview"
+        # C10.3a: "Court" is a House page that only appears (drawn as a
+        # set_spine_page button) once an ambition is set, so the no-ambition
+        # census stays at 4 House pages / 21 regions.  The gate discovers it
+        # through the drawn button on the post-ambition screens.
         self.house_pages = ["Overview", "Policies", "Ledger", "Governance",
                             "Court"]
         self.powers_page = "Overview"
@@ -3123,6 +3127,22 @@ class BroadsheetView:
             sy += btn_h + 6
         return sy
 
+    def _has_ambition(self) -> bool:
+        st = getattr(self.game, "ambitions", None)
+        if st is None:
+            return False
+        return st.status(self.house)["family"] is not None
+
+    def _visible_spine_pages(self, pages):
+        """The Court (House) and Ladder (Powers) pages are C10 homes that
+        only appear once an ambition is set; hiding their buttons keeps the
+        no-ambition region census unchanged (House 4 / Powers 2 buttons).
+        The page stays in the spine's list so the gate's drawn-region
+        discovery still finds it when an ambition is live."""
+        if self._has_ambition():
+            return list(pages)
+        return [p for p in pages if p not in ("Court", "Ladder")]
+
     def _draw_house_page_header(self, surface, content: pygame.Rect,
                                 title: str) -> None:
         """Header strip for a House/Powers inner page (the dissolved tab's
@@ -3140,6 +3160,7 @@ class BroadsheetView:
         y = content.y + 30
         body = _font(TYPE_TEXT)
         x = PAD
+        pages = self._visible_spine_pages(pages)
         for p in pages:
             label = body.render(p, True, INK if p == cur else INK2)
             rect = pygame.Rect(x, y, label.get_width() + 16, body.get_height() + 8)
