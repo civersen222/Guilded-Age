@@ -1018,6 +1018,11 @@ class BroadsheetView:
         content.height -= self._guide_text_height() + 4
 
         if self.active_tab == "House":
+            # C1: the legacy Briefing tab remaps to House/Overview and its
+            # test reads _ladder_rows after a draw.  Record the data (the
+            # ladder's DRAWN home is the Powers Ladder page - C10.2a).
+            if self.house_page == "Overview":
+                self._ladder_rows = self.game.ladder()
             if self.house_page == "Ledger":
                 self._draw_house_page_header(surface, content, "Ledger")
                 self._draw_ledger(surface, content)
