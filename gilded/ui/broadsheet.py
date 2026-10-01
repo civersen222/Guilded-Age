@@ -1036,7 +1036,19 @@ class BroadsheetView:
                 self._draw_house_page_header(surface, content, "Court")
                 self._draw_court(surface, content)
             else:
-                self._draw_house(surface, content)
+                # The family picker is a left-strip overlay (absolute x=12..162).
+                # While it is open, shift the Overview page content right so its
+                # text rows never collide with the picker's family buttons
+                # (C6.5 zero-overlap; the picker's own buttons keep absolute x).
+                if self._ambition_picker:
+                    # the picker strip spans absolute x=12..330 (family
+                    # buttons + Cancel); clear it entirely
+                    page_content = content.copy()
+                    page_content.x += 340
+                    page_content.w -= 340
+                    self._draw_house(surface, page_content)
+                else:
+                    self._draw_house(surface, content)
         elif self.active_tab == "Powers":
             if self.powers_page == "Dossier":
                 self._draw_house_page_header(surface, content, "Dossier")

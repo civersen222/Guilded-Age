@@ -364,9 +364,10 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
     their sections below without overlapping.
     """
     PAD = 12
+    left = content.x + PAD
     title = blit_text(
         surface, _font(TYPE_TITLE, bold=True),
-        f"HOUSE {report.house.upper()}", (PAD, content.y + 6), INK
+        f"HOUSE {report.house.upper()}", (left, content.y + 6), INK
     )
     y = title.bottom + 1
 
@@ -412,7 +413,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
         for idx, seat in enumerate(report.seats):
             col = idx % cols
             row = idx // cols
-            card_x = PAD + col * col_w
+            card_x = left + col * col_w
             card_y = y + row * (card_h + 2)
             card = pygame.Rect(card_x, card_y, col_w - 4, card_h)
             pygame.draw.rect(surface, CARD, card, border_radius=3)
@@ -475,7 +476,7 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
                 ))
 
         y += math.ceil(len(report.seats) / cols) * (card_h + 2) + 4
-        y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, PAD)
+        y = _draw_heir_controls(surface, content, y, report, view, body, btn_h, btn_w, left)
         if y > content.bottom - 40:
             return y
 
@@ -526,11 +527,11 @@ def draw_house_tab(surface: pygame.Surface, content: pygame.Rect,
             while len(seg) > 1 and small.size(seg + "…")[0] > max_w:
                 seg = seg[:-1]
             seg = seg.rstrip() + "…"
-        blit_text(surface, small, seg, (PAD + c * col_w, cursors[c]), color)
+        blit_text(surface, small, seg, (left + c * col_w, cursors[c]), color)
         cursors[c] += pitch
     overflow_start = cols * per
     if len(non_blank) > overflow_start:
-        ox = PAD + cols * col_w + 6
+        ox = left + cols * col_w + 6
         oy = y
         for line in non_blank[overflow_start:]:
             color = INK
