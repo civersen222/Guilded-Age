@@ -1163,6 +1163,33 @@ class BroadsheetView:
                       rect.centery - font.size(name)[1] / 2),
                      INK if name == self.active_tab else TAB_TEXT)
 
+    # ── C10.7: per-family verb text - the picker's seven regions each carry
+    # distinct what/why/wins; wins names a ladder axis.  The what and why are
+    # drawn through the hover tooltip (blit_text), so they reach the text rows.
+    FAMILY_VERBS = {
+        "Conquest": ("March against the realm's strongest rivals",
+                     "Their armies press your standing; only force answers it",
+                     "standing"),
+        "Dominion": ("Seat your line on the realm's councils",
+                     "Every seat bends the Orders' pressure toward you",
+                     "standing"),
+        "Buyout": ("Corner the realm's enterprises",
+                   "Their ventures feed their capital; owning them feeds yours",
+                   "capital"),
+        "Dynasty": ("Marry the realm's great lines into yours",
+                    "Ties multiply your blood and steady the ladder",
+                    "blood"),
+        "Intrigue": ("Out-spy the rival courts",
+                     "Their intentions stay fog until an eye is placed",
+                     "world"),
+        "Glory": ("Fill the treasury past the realm's envy",
+                  "Glory rides the capital axis; a fat treasury fulfils it",
+                  "capital"),
+        "Consolidation": ("Hold your standing steady across the century",
+                          "A stable rank is the quietest win on the ladder",
+                          "standing"),
+    }
+
     # ── C10.3a/3b/4: the Court in Session page ─────────────────────────────
     # The player's court, carded one per living adult.  Each card is the
     # LARGEST region naming that member (action {"member": id}); it overlaps
@@ -1251,14 +1278,15 @@ class BroadsheetView:
                                   card_w - 12, 18)
                 lev_text = f"turn {name}"
                 blit_text(surface, f_small, lev_text, (lev.x, lev.y), INK)
+                lev_what = f"Turn {name} from opposing your {family}."
+                lev_why = (f"{name} opposes your {family} ambition; "
+                           f"ease their line and the court steadies.")
                 self.regions.add(Region(
                     rect=lev,
                     action={"court_lever": card["id"],
-                            "what": f"Turn {name} from opposing your {family}.",
-                            "why": f"{name} opposes your {family} ambition; "
-                                   f"ease their line and the court steadies.",
+                            "what": lev_what, "why": lev_why,
                             "wins": "standing"},
-                    hint=f"Turn {name}: their {family} line softens.",
+                    hint=f"{lev_what} {lev_why} (wins standing)",
                     group="court_lever"))
 
     def _draw_hud(self, surface) -> None:
@@ -3230,12 +3258,14 @@ class BroadsheetView:
         x = PAD
         y = content.y + 8
         for family in FAMILIES:
+            what, why, wins = self.FAMILY_VERBS[family]
             btn = pygame.Rect(x, y, 150, btn_h)
             _draw_button(surface, family, x, y, 150, btn_h, True)
             self.regions.add(Region(
                 rect=btn,
-                action={"set_ambition": {"family": family}},
-                hint=f"Set the House's ambition to {family}",
+                action={"set_ambition": {"family": family},
+                        "what": what, "why": why, "wins": wins},
+                hint=f"{what}. {why} (wins {wins})",
                 group="ambition_picker",
             ))
             y += btn_h + 2

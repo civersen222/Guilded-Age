@@ -267,3 +267,93 @@ def test_c10_6_ending_names_ambition(tmp_path, monkeypatch):
             assert pos, drawn
         else:
             assert neg or "never fulfilled" in drawn.lower(), drawn
+
+
+# ── C10.7: every new verb self-explains (what / why / wins) ──────────────
+
+_AXIS_WORDS = ("capital", "standing", "blood", "world", "ambition")
+
+
+def test_c10_7_verbs_self_explain(tmp_path, monkeypatch):
+    _clean(tmp_path, monkeypatch)
+    s = _relaunch(7, "menu")
+    _press(s, lambda a: a.get("menu") == "new_game")
+    view = s.view
+    view.regions.clear()
+    widgets._text_rows.clear()
+    view.draw(s.screen)
+
+    fam_regions = {}
+    for r in view.regions._regions:
+        if isinstance(r.action, dict):
+            v = r.action.get("set_ambition")
+            if isinstance(v, dict) and v.get("family") in FAMILIES:
+                fam_regions[v["family"]] = r
+    assert set(fam_regions) == set(FAMILIES)
+
+    whats = set()
+    for fam, r in fam_regions.items():
+        a = r.action
+        what, why, wins = a.get("what"), a.get("why"), a.get("wins")
+        assert what and why, f"{fam}: missing what/why"
+        assert any(ax in wins for ax in _AXIS_WORDS), f"{fam}: wins {wins!r}"
+        whats.add(what)
+        # what AND why are DRAWN: hover the centre, redraw, read the rows
+        view.handle_hover(r.rect.center)
+        view.regions.clear()
+        widgets._text_rows.clear()
+        view.draw(s.screen)
+        rows = " ".join(t for _r, t in widgets._text_rows)
+        tip = view.tooltip_text or ""
+        blob = rows + " " + tip
+        assert what in blob, f"{fam}: what not drawn: {blob!r}"
+        assert why in blob, f"{fam}: why not drawn: {blob!r}"
+    assert len(whats) == 7, f"whats not distinct: {whats}"
+
+    # the opposing member's lever carries the same three strings and draws
+    # them through its hover
+    g = s.game
+    player = [h for h in g.houses if g.houses[h].is_player][0]
+    from gilded.ambitions import (FAMILY_DISPOSITION, STANCE_BACKS_AT)
+    fam = FAMILIES[0]
+    _press(s, lambda a: a.get("set_ambition", {}).get("family") == fam
+           if isinstance(a.get("set_ambition"), dict) else False)
+    key, polarity = FAMILY_DISPOSITION[fam]
+    realm = g.realms[player]
+    by_id = {c.id: c for c in realm.characters}
+    wants = g.ambitions.wants(player)
+    opp = [by_id[w["id"]] for w in wants
+           if w.get("stance") == "opposes"]
+    if not opp:
+        # force the first adult onto the opposes side of the family line
+        cards = [w for w in wants if w.get("stance") != "opposes"]
+        victim = by_id[cards[0]["id"]]
+        victim.dispositions[key] = float(
+            -abs(STANCE_BACKS_AT) * 2.0) / polarity
+        wants = g.ambitions.wants(player)
+        opp = [by_id[w["id"]] for w in wants
+               if w.get("stance") == "opposes"]
+    view.active_tab = "House"
+    view.house_page = "Court"
+    view.regions.clear()
+    widgets._text_rows.clear()
+    view.draw(s.screen)
+    lever = None
+    for r in view.regions._regions:
+        if isinstance(r.action, dict) and "court_lever" in r.action:
+            lever = r
+            break
+    assert lever is not None, "no lever drawn for an opposing member"
+    a = lever.action
+    what, why, wins = a.get("what"), a.get("why"), a.get("wins")
+    assert what and why
+    assert any(ax in wins for ax in _AXIS_WORDS)
+    view.handle_hover(lever.rect.center)
+    view.regions.clear()
+    widgets._text_rows.clear()
+    view.draw(s.screen)
+    rows = " ".join(t for _r, t in widgets._text_rows)
+    tip = view.tooltip_text or ""
+    blob = rows + " " + tip
+    assert what in blob, f"lever what not drawn: {blob!r}"
+    assert why in blob, f"lever why not drawn: {blob!r}"
