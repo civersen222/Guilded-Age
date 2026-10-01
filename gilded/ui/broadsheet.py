@@ -1301,8 +1301,19 @@ class BroadsheetView:
         fs = _font(_TEXT_PT)
 
         # Draw meters
+        _spotlight = b.rival_name or (
+            threat_rank(self.game)[0] if threat_rank(self.game) else None)
+        _skip_rival_meters = False
+        if _spotlight is not None:
+            _spot_tier = intel_report(self.game, self.house, _spotlight).tier
+            _skip_rival_meters = _spot_tier < 2
         for key, rect in layout.items():
             if key in model.meters:
+                # C10.2b: the HUD's rival axis meters leak the rival's
+                # axes at low intel tiers - hidden at tier 0/1 (rank
+                # alone), drawn from tier 2 up.
+                if _skip_rival_meters and key.startswith("rival:"):
+                    continue
                 model.meters[key].draw(surface, rect)
             elif key in model.chips:
                 chip = model.chips[key]

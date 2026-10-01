@@ -29,6 +29,7 @@ from gilded.agenda import FAMILIES
 from gilded.ui import widgets
 from gilded.ui.app import new_app_state, _apply_action
 from gilded.ui import broadsheet as bs
+from gilded.society.characters import Secret
 
 
 def _clean(tmp_path, monkeypatch):
@@ -225,6 +226,88 @@ def test_c10_2a_rank_public(tmp_path, monkeypatch):
 
 
 # ── C10.6: the ending names the family and its outcome ───────────────────
+
+def _strip_fog(g, player, h):
+    """Remove every intel source the player holds toward rival h (tier 0)."""
+    g.houses[player].relations[h] = 0
+    g.marriages.marriages = [t for t in g.marriages.marriages
+                             if not ({t[1], t[3]} == {player, h}
+                                     if len(t) >= 4 else False)]
+    g.informants.discard((player, h))
+    realm = g.realms.get(h)
+    if realm is not None and realm.ruler is not None:
+        pids = {c.id for c in g.realms[player].dynasty.all_characters.values()}
+        realm.ruler.secrets = [s for s in realm.ruler.secrets
+                               if not (pids & s.holders)]
+    return 0
+
+
+def _raise_tier3(g, player, h):
+    """Raise h to tier 3 through the sim's own sources."""
+    g.informants.add((player, h))
+    g.marriages.marriages.append((
+        g.realms[player].ruler.id, player, g.realms[h].ruler.id, h))
+    sec = Secret("compromise", g.realms[h].ruler.id, "a hidden vice", 30)
+    sec.holders = {g.realms[player].ruler.id}
+    g.realms[h].ruler.secrets.append(sec)
+    return 3
+
+
+def test_c10_2b_rank_why_through_fog(tmp_path, monkeypatch):
+    _clean(tmp_path, monkeypatch)
+    s = _relaunch(7, "game")
+    g = s.game
+    player = [h for h in g.houses if g.houses[h].is_player][0]
+    from gilded.agenda import ensure_agenda
+    from gilded.intel import report, threat_rank
+    rivals = [h for h in g.houses if h != player]
+    for h in rivals:
+        ensure_agenda(g, h)
+        _strip_fog(g, player, h)
+        assert report(g, player, h).tier == 0
+
+    ladder_screen = None
+    low_census = _census(s)
+    axis_pat = re.compile(r"\b(capital|standing|blood|world)\s+\d+")
+    for name, lines in low_census.items():
+        if any(re.match(r"^1\.\s+House\s+", ln) for ln in lines):
+            ladder_screen = name
+        for ln in lines:
+            first = next((h for h in rivals if h in ln), None)
+            if first is not None:
+                assert not axis_pat.search(ln), f"axis leak at tier 0: {ln}"
+    assert ladder_screen is not None
+
+    ranked = threat_rank(g)
+    t1, t3 = ranked[1], ranked[0]
+    assert report(g, player, t1).tier == 0
+    g.informants.add((player, t1))
+    _raise_tier3(g, player, t3)
+    assert report(g, player, t3).tier == 3
+
+    census = _census(s)
+    lines = census[ladder_screen]
+    vals = {r.house: {k: ax.value for k, ax in r.axes.items()}
+            for r in g.ladder()}
+    t3_lines = [ln for ln in lines if t3 in ln]
+    for axis in ("capital", "standing", "blood", "world"):
+        hits = [ln for ln in t3_lines
+                if re.search(rf"\b{axis}\s+(\d+)", ln)]
+        assert hits, f"axis {axis} missing for tier-3 house {t3}"
+        num = float(re.search(rf"\b{axis}\s+(\d+)", hits[0]).group(1))
+        assert abs(num - vals[t3][axis]) <= 1.0, (hits[0], vals[t3][axis])
+
+    # no tier-0/1 house line may carry an axis number on any screen
+    for name, lns in census.items():
+        for ln in lns:
+            first = next((h for h in rivals if h in ln), None)
+            if first is None:
+                continue
+            tier = report(g, player, first).tier
+            if tier <= 1:
+                assert not axis_pat.search(ln), \
+                    f"axis leak for tier {tier} {first}: {ln}"
+
 
 def _run_to_close(s, fam, treasury):
     g = s.game
