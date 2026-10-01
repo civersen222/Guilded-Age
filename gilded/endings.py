@@ -135,8 +135,50 @@ def judge(game, house_name: str) -> Epilogue:
         key = "The Quiet Throne"
     else:
         key = "The Long Ledger"
-    return Epilogue(key, axes, _epilogue_text(game, house_name, key, axes,
-                                              living, ever, burden, heir))
+    text = _epilogue_text(game, house_name, key, axes,
+                          living, ever, burden, heir)
+    text = _ambition_coda(game, house_name) + text
+    return Epilogue(key, axes, text)
+
+
+def _ambition_coda(game, house_name: str) -> str:
+    """C10.6: the stake's own sentence - the family named with its
+    outcome, read from the sim's resolution (ambitions.status).  The
+    sentence comes FIRST so the ending page draws it before the
+    paragraphs the window cuts off.  No stake set: no sentence."""
+    st = game.ambitions.status(house_name)
+    if st["family"] is None:
+        return ""
+    fam = st["family"]
+    target = f" against House {st['target']}" if st["target"] else ""
+    if st["fulfilled"] is None:
+        return ""
+    if st["fulfilled"]:
+        outcome = f"fulfilled{target}"
+    else:
+        outcome = f"fell short{target}"
+    return (f"Ambition: the {fam} stake {outcome}. "
+            f"{_ambition_note(st['family'], st['fulfilled'])}\n\n")
+
+
+def _ambition_note(family: str, fulfilled: bool) -> str:
+    """A short line on what the family rode on - capital axis for
+    Glory, the line's standing for Dynasty, the mandate for
+    Consolidation - so the outcome reads off the sim, never the
+    capital axis alone."""
+    if family == "Glory":
+        return ("The vaults held the name"
+                if fulfilled else
+                "The vaults were empty; a name needs gold to echo.")
+    if family == "Dynasty":
+        return ("The line holds and the marriage web binds."
+                if fulfilled else
+                "The line did not bind.")
+    if family == "Consolidation":
+        return ("The mills stood quiet." if fulfilled
+                else "The mills never stood quiet.")
+    return ("The age turned their way." if fulfilled
+            else "The age turned away.")
 
 
 def _saga_coda(game) -> str:

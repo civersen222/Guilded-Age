@@ -1041,6 +1041,11 @@ class BroadsheetView:
             if self.powers_page == "Dossier":
                 self._draw_house_page_header(surface, content, "Dossier")
                 self._draw_powers_dossier(surface, content)
+            elif self.powers_page == "Ladder":
+                # C10.2a/2b: the public ladder's ONE drawn home - every
+                # house's rank entry, and the tier-3 rival's four axes.
+                self._draw_house_page_header(surface, content, "Ladder")
+                self._draw_ladder_page(surface, content)
             else:
                 self._draw_powers(surface, content)
         elif self.active_tab == "Atlas":
@@ -1286,11 +1291,10 @@ class BroadsheetView:
         # Draw intent text in row 5
         spotlight = b.rival_name or (
             threat_rank(self.game)[0] if threat_rank(self.game) else None)
-        if spotlight is not None:
-            intent = intel_report(self.game, self.house, spotlight).apparent_intent
-            intent_text = f"Their design: {intent}"
-        else:
-            intent_text = "No clear threat"
+        # C10.5: the HUD no longer names a rival's agenda family ("Their
+        # design: ...") - the family word's ONE home is the Powers spine, so
+        # no HUD line may draw it.  Keep the row but draw no family word.
+        intent_text = "No clear threat" if spotlight is None else "A rival is moving"
         intent_rect = layout["intent"]
         blit_text(surface, fs, intent_text,
                   (intent_rect.left,
@@ -1343,6 +1347,22 @@ class BroadsheetView:
         ending_name = epilogue.ending_key
         title_rect = blit_text(surface, f_title, ending_name, (PAD, y), INK)
         y = title_rect.bottom + 10
+
+        # C10.6: the ambition's own sentence - drawn here, just under the
+        # title, because the paragraph loop below stops at the bottom of
+        # the window and the coda would never reach it.  Read from the
+        # sim (ambitions.status) at draw time; no stake set: nothing.
+        st = self.game.ambitions.status(self.house)
+        if st["family"] is not None and st["fulfilled"] is not None:
+            fam = st["family"]
+            target = f" against House {st['target']}" if st["target"] else ""
+            outcome = ("fulfilled" if st["fulfilled"] else "fell short")
+            f_body = _font(TYPE_BODY)
+            sent = (f"Ambition: the {fam} stake {outcome}{target}.")
+            for line in _wrap(sent, f_body, w - 2 * PAD):
+                blit_text(surface, f_body, line, (PAD, y), INK)
+                y += f_body.get_linesize()
+            y += 10
 
         # Four axis scores
         f_axis = _font(TYPE_SUBTITLE, bold=True)
@@ -2434,6 +2454,46 @@ class BroadsheetView:
                                     group="powers"))
             btn_y += btn_h + 4
 
+    def _draw_ladder_page(self, surface, content: pygame.Rect) -> None:
+        """C10.2a/2b: the public ladder's ONE drawn home.
+
+        Every house's entry is one LINE: "<r>. House <h>" - the rank
+        token first, then the house name (the player's entry carries
+        " (you)").  The four axes are drawn ONLY for a rival the player's
+        intel has raised to tier 3 (game.ladder()'s values, read at draw
+        time); at tier 0/1 a rival's axes are hidden - rank alone.  No
+        other screen may draw a rank or an axis.
+        """
+        from gilded.intel import report as intel_report
+        g, me = self.game, self.house
+        rows = g.ladder()
+        body = _font(TYPE_TEXT)
+        head = _font(TYPE_SUBTITLE, bold=True)
+        y = content.y + 4
+        blit_text(surface, head, "The Ladder", (PAD, y), INK)
+        y += head.get_height() + 4
+        for r in rows:
+            name = f"House {r.house}" + (" (you)" if r.house == me else "")
+            blit_text(surface, body,
+                      f"{r.rank}. {name}", (PAD, y), INK)
+            if r.house != me:
+                tier = intel_report(g, me, r.house).tier
+            else:
+                tier = 3
+            if tier >= 3:
+                vals = {k: ax.value for k, ax in r.axes.items()}
+                blit_text(surface, body,
+                          f"  capital {vals.get('capital', 0.0):.0f}  "
+                          f"standing {vals.get('standing', 0.0):.0f}  "
+                          f"blood {vals.get('blood', 0.0):.0f}  "
+                          f"world {vals.get('world', 0.0):.0f}",
+                          (PAD + 12, y), INK)
+            y += body.get_height() + 2
+        blit_text(surface, body,
+                  "The ladder is public; what you can see into each rival "
+                  "is what your sight earns.",
+                  (PAD, y + 4), INK)
+
     def enterprises_lines(self) -> List[str]:
         """Return the Grip banner lines for the Enterprises tab."""
         g, name = self.game, self.house
@@ -3043,6 +3103,15 @@ class BroadsheetView:
         if st["family"] is None:
             lines.append("")
             lines.append("AMBITION: (none set - use Set Ambition below)")
+            return lines
+        if self.house_page != "Court":
+            # C10.1b: the family word's ONE home is the Court in Session
+            # page; every other House screen shows the stake without the
+            # family (the target and clock stay - they name no family).
+            target = f" against House {st['target']}" if st["target"] else ""
+            lines.append("")
+            lines.append(f"AMBITION: your stake{target}")
+            lines.append("The Court in Session keeps your family and clock.")
             return lines
         lines.append("")
         target = f" against House {st['target']}" if st["target"] else ""
