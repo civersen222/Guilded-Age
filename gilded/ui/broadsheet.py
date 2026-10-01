@@ -1158,6 +1158,104 @@ class BroadsheetView:
                       rect.centery - font.size(name)[1] / 2),
                      INK if name == self.active_tab else TAB_TEXT)
 
+    # ── C10.3a/3b/4: the Court in Session page ─────────────────────────────
+    # The player's court, carded one per living adult.  Each card is the
+    # LARGEST region naming that member (action {"member": id}); it overlaps
+    # the member's stance word (backs / wary / opposes) and their want, both
+    # read live from game.ambitions.wants(house) at draw time - never cached,
+    # so a dispositions swap (C10.3b) shows through on the next draw.  Cards
+    # are laid out by member id, never by stance.  Opposing members (wants()
+    # says "opposes") additionally get a lever region (action key "court_lever")
+    # whose press flips that member's family-line disposition so wants() stops
+    # opposing them.  The ambition family word is drawn ONLY here (C10.1b).
+    def _draw_court(self, surface, content: pygame.Rect) -> None:
+        from gilded.ambitions import (FAMILY_DISPOSITION,
+                                       STANCE_BACKS_AT, STANCE_OPPOSES_AT)
+        game = self.game
+        house = self.house
+        goal = game.agendas.get(house)
+        family = goal.family if goal is not None else None
+        f_title = _font(TYPE_TITLE, bold=True)
+        f_body = _font(TYPE_BODY)
+        f_small = _font(TYPE_TEXT)
+        PAD = 12
+        x = content.x + PAD
+        y = content.y + 6
+
+        # the family word: the ONLY screen that draws it (C10.1b)
+        if family:
+            line = f"House {house} pursues {family}"
+            r = blit_text(surface, f_title, line, (x, y), INK)
+            y = r.bottom + 8
+        else:
+            line = f"House {house}"
+            r = blit_text(surface, f_title, line, (x, y), INK)
+            y = r.bottom + 8
+
+        cards = game.ambitions.wants(house) if family else []
+        # layout: two cards per row, each a wide plate; stance + want inside
+        card_w = (content.w - 3 * PAD) // 2
+        card_h = 92
+        key, polarity = (FAMILY_DISPOSITION[family] if family
+                         else (None, 1))
+        for idx, card in enumerate(cards):
+            col = idx % 2
+            row = idx // 2
+            cx = x + col * (card_w + PAD)
+            cy = y + row * (card_h + 6)
+            rect = pygame.Rect(cx, cy, card_w, card_h)
+            if rect.bottom > content.bottom:
+                break
+            # card plate
+            pygame.draw.rect(surface, CARD_BG, rect, border_radius=4)
+            pygame.draw.rect(surface, CARD_EDGE, rect, 1, border_radius=4)
+            stance = card.get("stance", "wary")
+            name = card.get("name", "?")
+            # want text, minus the leading member name (drawn in full, wrapped)
+            text = card.get("text", "")
+            if text.startswith(name):
+                want = text[len(name):].lstrip()
+            else:
+                want = text
+            # the member's card region (largest region naming them)
+            self.regions.add(Region(
+                rect=rect,
+                action={"member": card["id"], "portrait": card["id"],
+                        "what": f"Meet {name} of House {house}.",
+                        "why": f"Their want bears on your {family} ambition.",
+                        "wins": "standing"},
+                hint=f"{name}: {stance} - {want}",
+                group="court_card"))
+            ty = rect.y + 4
+            # portrait block (draws the stance word so the card overlaps it)
+            blit_text(surface, f_body, name, (rect.x + 6, ty), INK)
+            ty += f_body.get_linesize()
+            # stance word - exactly backs / wary / opposes, read live
+            sr = blit_text(surface, f_body, stance, (rect.x + 6, ty),
+                           INK)
+            ty = sr.bottom + 2
+            # want text in full, wrapped inside the card rect
+            for wl in _wrap(want, f_small, card_w - 12):
+                blit_text(surface, f_small, wl, (rect.x + 6, ty), INK)
+                ty += f_small.get_linesize()
+                if ty > rect.bottom - 4:
+                    break
+            # lever for opposing members only (C10.4)
+            if stance == "opposes" and key is not None:
+                lev = pygame.Rect(rect.x + 6, rect.bottom - 22,
+                                  card_w - 12, 18)
+                lev_text = f"turn {name}"
+                blit_text(surface, f_small, lev_text, (lev.x, lev.y), INK)
+                self.regions.add(Region(
+                    rect=lev,
+                    action={"court_lever": card["id"],
+                            "what": f"Turn {name} from opposing your {family}.",
+                            "why": f"{name} opposes your {family} ambition; "
+                                   f"ease their line and the court steadies.",
+                            "wins": "standing"},
+                    hint=f"Turn {name}: their {family} line softens.",
+                    group="court_lever"))
+
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
         d = delta(self.prev_board, b)
@@ -3041,8 +3139,10 @@ class BroadsheetView:
         btn_h = body.get_height() + 4
         bx = content.width - PAD - btn_w
         if sy - 60 <= content.bottom - 10:
-            label = f"Ambition: {st['family']}" if st["family"] else "Set Ambition"
-            btn_rect = _draw_button(surface, label, bx, sy - 20, btn_w, btn_h, True)
+            # C10.1b: the family word's one home is the Court page - the
+            # Overview button carries no family name (hint only).
+            btn_rect = _draw_button(surface, "Set Ambition", bx, sy - 20,
+                                    btn_w, btn_h, True)
             self.regions.add(Region(
                 rect=btn_rect,
                 action={"open_ambition_picker": True},
