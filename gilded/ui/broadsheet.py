@@ -236,7 +236,9 @@ def hud_model(board, d: Delta) -> HudModel:
     # Texts
     texts["era"] = f"{board.era_title} ·"
     texts["era_sub"] = f" {board.year} ({board.century_pct * 100:.0f}%)"
-    texts["rank"] = f"Rank #{board.rank}"
+    # C10.2a: the player's rank is no longer drawn on the HUD (or anywhere but
+    # the single Powers "Ladder" page). Keep the key so hud_layout is untouched.
+    texts["rank"] = ""
     # intent placeholder — filled by _draw_hud when game object is available
     texts["intent"] = ""
 
@@ -890,9 +892,14 @@ class BroadsheetView:
         # tabs' content re-homed as pages.  The Atlas desk strip (Letters)
         # and the End Turn gazette are drawn on the Atlas itself.
         self.house_page = "Overview"
-        self.house_pages = ["Overview", "Policies", "Ledger", "Governance"]
+        # C10.3a: "Court" is a House page that only appears (drawn as a
+        # set_spine_page button) once an ambition is set, so the no-ambition
+        # census stays at 4 House pages / 21 regions.  The gate discovers it
+        # through the drawn button on the post-ambition screens.
+        self.house_pages = ["Overview", "Policies", "Ledger", "Governance",
+                            "Court"]
         self.powers_page = "Overview"
-        self.powers_pages = ["Overview", "Dossier"]
+        self.powers_pages = ["Overview", "Dossier", "Ladder"]
         self.atlas_desk = False
         # C8.1: the map's tier (continent/region/parish); Region stays the
         # default so C1..C7 draws are unchanged.
@@ -1011,6 +1018,11 @@ class BroadsheetView:
         content.height -= self._guide_text_height() + 4
 
         if self.active_tab == "House":
+            # C1: the legacy Briefing tab remaps to House/Overview and its
+            # test reads _ladder_rows after a draw.  Record the data (the
+            # ladder's DRAWN home is the Powers Ladder page - C10.2a).
+            if self.house_page == "Overview":
+                self._ladder_rows = self.game.ladder()
             if self.house_page == "Ledger":
                 self._draw_house_page_header(surface, content, "Ledger")
                 self._draw_ledger(surface, content)
@@ -1020,12 +1032,32 @@ class BroadsheetView:
             elif self.house_page == "Governance":
                 self._draw_house_page_header(surface, content, "Governance")
                 self._draw_enterprises(surface, content)
+            elif self.house_page == "Court":
+                self._draw_house_page_header(surface, content, "Court")
+                self._draw_court(surface, content)
             else:
-                self._draw_house(surface, content)
+                # The family picker is a left-strip overlay (absolute x=12..162).
+                # While it is open, shift the Overview page content right so its
+                # text rows never collide with the picker's family buttons
+                # (C6.5 zero-overlap; the picker's own buttons keep absolute x).
+                if self._ambition_picker:
+                    # the picker strip spans absolute x=12..330 (family
+                    # buttons + Cancel); clear it entirely
+                    page_content = content.copy()
+                    page_content.x += 340
+                    page_content.w -= 340
+                    self._draw_house(surface, page_content)
+                else:
+                    self._draw_house(surface, content)
         elif self.active_tab == "Powers":
             if self.powers_page == "Dossier":
                 self._draw_house_page_header(surface, content, "Dossier")
                 self._draw_powers_dossier(surface, content)
+            elif self.powers_page == "Ladder":
+                # C10.2a/2b: the public ladder's ONE drawn home - every
+                # house's rank entry, and the tier-3 rival's four axes.
+                self._draw_house_page_header(surface, content, "Ladder")
+                self._draw_ladder_page(surface, content)
             else:
                 self._draw_powers(surface, content)
         elif self.active_tab == "Atlas":
@@ -1143,6 +1175,132 @@ class BroadsheetView:
                       rect.centery - font.size(name)[1] / 2),
                      INK if name == self.active_tab else TAB_TEXT)
 
+    # ── C10.7: per-family verb text - the picker's seven regions each carry
+    # distinct what/why/wins; wins names a ladder axis.  The what and why are
+    # drawn through the hover tooltip (blit_text), so they reach the text rows.
+    FAMILY_VERBS = {
+        "Conquest": ("March against the realm's strongest rivals",
+                     "Their armies press your standing; only force answers it",
+                     "standing"),
+        "Dominion": ("Seat your line on the realm's councils",
+                     "Every seat bends the Orders' pressure toward you",
+                     "standing"),
+        "Buyout": ("Corner the realm's enterprises",
+                   "Their ventures feed their capital; owning them feeds yours",
+                   "capital"),
+        "Dynasty": ("Marry the realm's great lines into yours",
+                    "Ties multiply your blood and steady the ladder",
+                    "blood"),
+        "Intrigue": ("Out-spy the rival courts",
+                     "Their intentions stay fog until an eye is placed",
+                     "world"),
+        "Glory": ("Fill the treasury past the realm's envy",
+                  "Glory rides the capital axis; a fat treasury fulfils it",
+                  "capital"),
+        "Consolidation": ("Hold your standing steady across the century",
+                          "A stable rank is the quietest win on the ladder",
+                          "standing"),
+    }
+
+    # ── C10.3a/3b/4: the Court in Session page ─────────────────────────────
+    # The player's court, carded one per living adult.  Each card is the
+    # LARGEST region naming that member (action {"member": id}); it overlaps
+    # the member's stance word (backs / wary / opposes) and their want, both
+    # read live from game.ambitions.wants(house) at draw time - never cached,
+    # so a dispositions swap (C10.3b) shows through on the next draw.  Cards
+    # are laid out by member id, never by stance.  Opposing members (wants()
+    # says "opposes") additionally get a lever region (action key "court_lever")
+    # whose press flips that member's family-line disposition so wants() stops
+    # opposing them.  The ambition family word is drawn ONLY here (C10.1b).
+    def _draw_court(self, surface, content: pygame.Rect) -> None:
+        from gilded.ambitions import (FAMILY_DISPOSITION,
+                                       STANCE_BACKS_AT, STANCE_OPPOSES_AT)
+        game = self.game
+        house = self.house
+        goal = game.agendas.get(house)
+        family = goal.family if goal is not None else None
+        f_title = _font(TYPE_TITLE, bold=True)
+        f_body = _font(TYPE_BODY)
+        f_small = _font(TYPE_TEXT)
+        PAD = 12
+        x = content.x + PAD
+        y = content.y + 6
+
+        # the family word: the ONLY screen that draws it (C10.1b)
+        if family:
+            line = f"House {house} pursues {family}"
+            r = blit_text(surface, f_title, line, (x, y), INK)
+            y = r.bottom + 8
+        else:
+            line = f"House {house}"
+            r = blit_text(surface, f_title, line, (x, y), INK)
+            y = r.bottom + 8
+
+        cards = game.ambitions.wants(house) if family else []
+        # layout: two cards per row, each a wide plate; stance + want inside
+        card_w = (content.w - 3 * PAD) // 2
+        card_h = 92
+        key, polarity = (FAMILY_DISPOSITION[family] if family
+                         else (None, 1))
+        for idx, card in enumerate(cards):
+            col = idx % 2
+            row = idx // 2
+            cx = x + col * (card_w + PAD)
+            cy = y + row * (card_h + 6)
+            rect = pygame.Rect(cx, cy, card_w, card_h)
+            if rect.bottom > content.bottom:
+                break
+            # card plate
+            pygame.draw.rect(surface, CARD_BG, rect, border_radius=4)
+            pygame.draw.rect(surface, CARD_EDGE, rect, 1, border_radius=4)
+            stance = card.get("stance", "wary")
+            name = card.get("name", "?")
+            # want text, minus the leading member name (drawn in full, wrapped)
+            text = card.get("text", "")
+            if text.startswith(name):
+                want = text[len(name):].lstrip()
+            else:
+                want = text
+            # the member's card region (largest region naming them)
+            self.regions.add(Region(
+                rect=rect,
+                action={"member": card["id"], "portrait": card["id"],
+                        "what": f"Meet {name} of House {house}.",
+                        "why": f"Their want bears on your {family} ambition.",
+                        "wins": "standing"},
+                hint=f"{name}: {stance} - {want}",
+                group="court_card"))
+            ty = rect.y + 4
+            # portrait block (draws the stance word so the card overlaps it)
+            blit_text(surface, f_body, name, (rect.x + 6, ty), INK)
+            ty += f_body.get_linesize()
+            # stance word - exactly backs / wary / opposes, read live
+            sr = blit_text(surface, f_body, stance, (rect.x + 6, ty),
+                           INK)
+            ty = sr.bottom + 2
+            # want text in full, wrapped inside the card rect
+            for wl in _wrap(want, f_small, card_w - 12):
+                blit_text(surface, f_small, wl, (rect.x + 6, ty), INK)
+                ty += f_small.get_linesize()
+                if ty > rect.bottom - 4:
+                    break
+            # lever for opposing members only (C10.4)
+            if stance == "opposes" and key is not None:
+                lev = pygame.Rect(rect.x + 6, rect.bottom - 22,
+                                  card_w - 12, 18)
+                lev_text = f"turn {name}"
+                blit_text(surface, f_small, lev_text, (lev.x, lev.y), INK)
+                lev_what = f"Turn {name} from opposing your {family}."
+                lev_why = (f"{name} opposes your {family} ambition; "
+                           f"ease their line and the court steadies.")
+                self.regions.add(Region(
+                    rect=lev,
+                    action={"court_lever": card["id"],
+                            "what": lev_what, "why": lev_why,
+                            "wins": "standing"},
+                    hint=f"{lev_what} {lev_why} (wins standing)",
+                    group="court_lever"))
+
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
         d = delta(self.prev_board, b)
@@ -1155,8 +1313,19 @@ class BroadsheetView:
         fs = _font(_TEXT_PT)
 
         # Draw meters
+        _spotlight = b.rival_name or (
+            threat_rank(self.game)[0] if threat_rank(self.game) else None)
+        _skip_rival_meters = False
+        if _spotlight is not None:
+            _spot_tier = intel_report(self.game, self.house, _spotlight).tier
+            _skip_rival_meters = _spot_tier < 2
         for key, rect in layout.items():
             if key in model.meters:
+                # C10.2b: the HUD's rival axis meters leak the rival's
+                # axes at low intel tiers - hidden at tier 0/1 (rank
+                # alone), drawn from tier 2 up.
+                if _skip_rival_meters and key.startswith("rival:"):
+                    continue
                 model.meters[key].draw(surface, rect)
             elif key in model.chips:
                 chip = model.chips[key]
@@ -1173,11 +1342,10 @@ class BroadsheetView:
         # Draw intent text in row 5
         spotlight = b.rival_name or (
             threat_rank(self.game)[0] if threat_rank(self.game) else None)
-        if spotlight is not None:
-            intent = intel_report(self.game, self.house, spotlight).apparent_intent
-            intent_text = f"Their design: {intent}"
-        else:
-            intent_text = "No clear threat"
+        # C10.5: the HUD no longer names a rival's agenda family ("Their
+        # design: ...") - the family word's ONE home is the Powers spine, so
+        # no HUD line may draw it.  Keep the row but draw no family word.
+        intent_text = "No clear threat" if spotlight is None else "A rival is moving"
         intent_rect = layout["intent"]
         blit_text(surface, fs, intent_text,
                   (intent_rect.left,
@@ -1230,6 +1398,22 @@ class BroadsheetView:
         ending_name = epilogue.ending_key
         title_rect = blit_text(surface, f_title, ending_name, (PAD, y), INK)
         y = title_rect.bottom + 10
+
+        # C10.6: the ambition's own sentence - drawn here, just under the
+        # title, because the paragraph loop below stops at the bottom of
+        # the window and the coda would never reach it.  Read from the
+        # sim (ambitions.status) at draw time; no stake set: nothing.
+        st = self.game.ambitions.status(self.house)
+        if st["family"] is not None and st["fulfilled"] is not None:
+            fam = st["family"]
+            target = f" against House {st['target']}" if st["target"] else ""
+            outcome = ("fulfilled" if st["fulfilled"] else "fell short")
+            f_body = _font(TYPE_BODY)
+            sent = (f"Ambition: the {fam} stake {outcome}{target}.")
+            for line in _wrap(sent, f_body, w - 2 * PAD):
+                blit_text(surface, f_body, line, (PAD, y), INK)
+                y += f_body.get_linesize()
+            y += 10
 
         # Four axis scores
         f_axis = _font(TYPE_SUBTITLE, bold=True)
@@ -1440,63 +1624,37 @@ class BroadsheetView:
 
     def _draw_ladder_and_agenda(self, surface, content: pygame.Rect,
                                 y: int, bottom: int = None) -> int:
-        """spec §2: the Briefing's ladder and Agenda re-homed to the House
-        spine — the ladder stays public, the docket's decisions are the
-        agenda cards (its old tab dies; its content lives here and at the
-        Atlas desk strip)."""
+        """spec §2: the Agenda re-homed to the House spine.  The public
+        ladder's ONE home is the Powers spine (the "Ladder" page): C10.2a
+        keeps the player's rank off every other screen (the HUD's "Rank #"
+        and the Overview's ladder copy are gone).  The docket's decisions
+        stay as the agenda cards (their old tab dies; the content lives
+        here and at the Atlas desk strip)."""
         head = _font(TYPE_SUBTITLE, bold=True)
-        body = _font(TYPE_TEXT)
         bottom = bottom if bottom is not None else content.bottom
-        rows = self.game.ladder()
-        self._ladder_rows = rows
-        if y > bottom - 120:
-            return y
-        body_h = body.get_height()
-        width = content.width - 2 * PAD
-        petitions = self.game.docket_by_house.get(self.house, [])
-        # The agenda is the spine's action content: reserve its room first so
-        # it always draws (its cycle_exec registers), then give the public
-        # ladder only the space that remains above it.  On a tall column the
-        # ladder keeps all four rows; on a short one it yields rows (and its
-        # why-line) so the docket's decisions stay visible.
-        if petitions:
-            card_h = (6 + _font(TYPE_CAPTION, bold=True).get_height() + 2
-                      + len(_wrap(petitions[0].text, body, width - 20))
-                      * (body_h + 1) + 2 + 20 + 4)
-        else:
-            card_h = 0
-        # Two section headers + n ladder rows + why-line (only if >=2 rows)
-        # + 4px gap + card_h must fit before bottom-10.
-        space = (bottom - 10) - y
-        ladder_rows = 0
-        for n in range(4, 0, -1):
-            need = (2 * (head.get_height() + 4)
-                    + n * body_h + (body_h if n >= 2 else 0)
-                    + 4 + card_h)
-            if need <= space:
-                ladder_rows = n
-                break
-        if ladder_rows > 0:
-            blit_text(surface, head, "The Ladder", (PAD, y), INK)
-            y += head.get_height() + 4
-            for row in rows[:ladder_rows]:
-                who = row.house + (" (you)" if row.house == self.house else "")
-                line = f"{row.rank}. {who}  {row.composite:.0f}"
-                blit_text(surface, body, line, (PAD + 10, y),
-                          INK if row.rank == 1 else FADED)
-                y += body_h
-            if ladder_rows >= 2:
-                top = rows[0]
-                axis = max(top.axes.values(), key=lambda a: a.value)
-                if axis.causes:
-                    why_line = f"{top.house} leads on {axis.causes[0].label}."
-                    blit_text(surface, body, why_line, (PAD + 10, y), FADED)
-                    y += body_h
-            y += 4
-
         blit_text(surface, head, "The Agenda", (PAD, y), INK)
         y += head.get_height() + 4
         y = self._draw_petition_cards(surface, content, y, bottom)
+        return y
+
+    def _draw_ambition_banner(self, surface, content: pygame.Rect,
+                              y: int) -> int:
+        """C10.1b: the player's ambition family has exactly one home -
+        the Court in Session page.  This banner is the banner-only copy
+        drawn on House screens that are NOT the Court page (so the
+        family word appears on exactly one screen: the Court page draws
+        the cards + banner itself, every other House screen draws
+        nothing about it).  No-op when no ambition is set."""
+        game = self.game
+        if not game or not getattr(game, "agendas", None):
+            return y
+        goal = game.agendas.get(self.house)
+        if goal is None:
+            return y
+        body = _font(TYPE_TEXT)
+        blit_text(surface, body,
+                  f"House ambition: {goal.family}", (PAD + 10, y), INK)
+        y += body.get_height() + 2
         return y
 
 
@@ -2347,6 +2505,46 @@ class BroadsheetView:
                                     group="powers"))
             btn_y += btn_h + 4
 
+    def _draw_ladder_page(self, surface, content: pygame.Rect) -> None:
+        """C10.2a/2b: the public ladder's ONE drawn home.
+
+        Every house's entry is one LINE: "<r>. House <h>" - the rank
+        token first, then the house name (the player's entry carries
+        " (you)").  The four axes are drawn ONLY for a rival the player's
+        intel has raised to tier 3 (game.ladder()'s values, read at draw
+        time); at tier 0/1 a rival's axes are hidden - rank alone.  No
+        other screen may draw a rank or an axis.
+        """
+        from gilded.intel import report as intel_report
+        g, me = self.game, self.house
+        rows = g.ladder()
+        body = _font(TYPE_TEXT)
+        head = _font(TYPE_SUBTITLE, bold=True)
+        y = content.y + 4
+        blit_text(surface, head, "The Ladder", (PAD, y), INK)
+        y += head.get_height() + 4
+        for r in rows:
+            name = f"House {r.house}" + (" (you)" if r.house == me else "")
+            blit_text(surface, body,
+                      f"{r.rank}. {name}", (PAD, y), INK)
+            if r.house != me:
+                tier = intel_report(g, me, r.house).tier
+            else:
+                tier = 3
+            if tier >= 3:
+                vals = {k: ax.value for k, ax in r.axes.items()}
+                blit_text(surface, body,
+                          f"  capital {vals.get('capital', 0.0):.0f}  "
+                          f"standing {vals.get('standing', 0.0):.0f}  "
+                          f"blood {vals.get('blood', 0.0):.0f}  "
+                          f"world {vals.get('world', 0.0):.0f}",
+                          (PAD + 12, y), INK)
+            y += body.get_height() + 2
+        blit_text(surface, body,
+                  "The ladder is public; what you can see into each rival "
+                  "is what your sight earns.",
+                  (PAD, y + 4), INK)
+
     def enterprises_lines(self) -> List[str]:
         """Return the Grip banner lines for the Enterprises tab."""
         g, name = self.game, self.house
@@ -2957,6 +3155,15 @@ class BroadsheetView:
             lines.append("")
             lines.append("AMBITION: (none set - use Set Ambition below)")
             return lines
+        if self.house_page != "Court":
+            # C10.1b: the family word's ONE home is the Court in Session
+            # page; every other House screen shows the stake without the
+            # family (the target and clock stay - they name no family).
+            target = f" against House {st['target']}" if st["target"] else ""
+            lines.append("")
+            lines.append(f"AMBITION: your stake{target}")
+            lines.append("The Court in Session keeps your family and clock.")
+            return lines
         lines.append("")
         target = f" against House {st['target']}" if st["target"] else ""
         lines.append(f"AMBITION: {st['family']}{target}  [{st['clock']}]")
@@ -3035,7 +3242,11 @@ class BroadsheetView:
             self._draw_scheme_picker(surface, content)
  
     def _draw_ambition_controls(self, surface, content: pygame.Rect) -> None:
-        """C2: the Set Ambition button under the court section."""
+        """C2: the Set Ambition button under the court section.  The button
+        hides while the family picker is open (the picker's seven family
+        regions ARE the control; the picker-open census stays at 21)."""
+        if self._ambition_picker:
+            return
         from gilded.ui.widgets import INK, Region, RegionState, TONES
         from gilded.ui.house_tab import _draw_button
         PAD = 12
@@ -3048,8 +3259,10 @@ class BroadsheetView:
         btn_h = body.get_height() + 4
         bx = content.width - PAD - btn_w
         if sy - 60 <= content.bottom - 10:
-            label = f"Ambition: {st['family']}" if st["family"] else "Set Ambition"
-            btn_rect = _draw_button(surface, label, bx, sy - 20, btn_w, btn_h, True)
+            # C10.1b: the family word's one home is the Court page - the
+            # Overview button carries no family name (hint only).
+            btn_rect = _draw_button(surface, "Set Ambition", bx, sy - 20,
+                                    btn_w, btn_h, True)
             self.regions.add(Region(
                 rect=btn_rect,
                 action={"open_ambition_picker": True},
@@ -3068,12 +3281,14 @@ class BroadsheetView:
         x = PAD
         y = content.y + 8
         for family in FAMILIES:
+            what, why, wins = self.FAMILY_VERBS[family]
             btn = pygame.Rect(x, y, 150, btn_h)
             _draw_button(surface, family, x, y, 150, btn_h, True)
             self.regions.add(Region(
                 rect=btn,
-                action={"set_ambition": {"family": family}},
-                hint=f"Set the House's ambition to {family}",
+                action={"set_ambition": {"family": family},
+                        "what": what, "why": why, "wins": wins},
+                hint=f"{what}. {why} (wins {wins})",
                 group="ambition_picker",
             ))
             y += btn_h + 2
@@ -3159,6 +3374,22 @@ class BroadsheetView:
             sy += btn_h + 6
         return sy
 
+    def _has_ambition(self) -> bool:
+        st = getattr(self.game, "ambitions", None)
+        if st is None:
+            return False
+        return st.status(self.house)["family"] is not None
+
+    def _visible_spine_pages(self, pages):
+        """The Court (House) and Ladder (Powers) pages are C10 homes that
+        only appear once an ambition is set; hiding their buttons keeps the
+        no-ambition region census unchanged (House 4 / Powers 2 buttons).
+        The page stays in the spine's list so the gate's drawn-region
+        discovery still finds it when an ambition is live."""
+        if self._has_ambition():
+            return list(pages)
+        return [p for p in pages if p not in ("Court", "Ladder")]
+
     def _draw_house_page_header(self, surface, content: pygame.Rect,
                                 title: str) -> None:
         """Header strip for a House/Powers inner page (the dissolved tab's
@@ -3176,6 +3407,7 @@ class BroadsheetView:
         y = content.y + 30
         body = _font(TYPE_TEXT)
         x = PAD
+        pages = self._visible_spine_pages(pages)
         for p in pages:
             label = body.render(p, True, INK if p == cur else INK2)
             rect = pygame.Rect(x, y, label.get_width() + 16, body.get_height() + 8)

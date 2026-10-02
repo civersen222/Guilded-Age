@@ -353,6 +353,9 @@ def _apply_action(state: AppState, action: dict) -> None:
                 state.view._action_messages.append(str(_reason))
             return
         result = _adjust_garrison_dispatch(state.game, state.house, state.view, action)
+    elif key == "court_lever":
+        _apply_court_lever(state, action)
+        result = None
     elif key == "set_dial":
         from gilded.ui import registry
         v = registry.VERBS["set_dial"]
@@ -385,6 +388,37 @@ def _apply_action(state: AppState, action: dict) -> None:
         elif key == "quickload":
             state.game = result
             state.view.game = result
+        elif key == "set_ambition":
+            fam = action["set_ambition"]["family"]
+            state.game.ambitions.set_ambition(state.house, fam)
+            state.view._ambition_picker = False
+
+
+def _apply_court_lever(state: AppState, action: dict) -> None:
+    """C10.4: turn an opposing court member from opposing the family line.
+
+    The lever flips the member's family-line disposition (the one
+    FAMILY_DISPOSITION reads) to the backs side so wants() stops saying
+    "opposes" - a change to the sim's own state, not just the drawn text.
+    """
+    from gilded.ambitions import FAMILY_DISPOSITION, STANCE_BACKS_AT
+    game = state.game
+    house = state.house
+    cid = action.get("court_lever")
+    realm = game.realms.get(house)
+    if realm is None or not cid:
+        return
+    goal = game.agendas.get(house)
+    if goal is None:
+        return
+    key, polarity = FAMILY_DISPOSITION[goal.family]
+    for c in realm.characters:
+        if c.id == cid:
+            # place the member firmly on the backs side of the line
+            c.dispositions[key] = float(STANCE_BACKS_AT) * 2.0 / polarity
+            state.view._action_messages.append(
+                f"Turned {c.name} to your {goal.family} side.")
+            break
 
 
 def _play_game_audio(state: AppState) -> None:
@@ -476,6 +510,11 @@ def _boot_play_into(state: AppState) -> None:
     state.house = house
     state.narrator = select_narrator()
     state.view = BroadsheetView(game, house, state.narrator)
+    # C10.1a: the FIRST screen after New Game is the family picker open over
+    # House/Overview — all seven families are live regions there, and pressing
+    # one enters play at turn 1 with the stake set through
+    # game.ambitions.set_ambition (the sim's live stake, resolvable in-window).
+    state.view._ambition_picker = True
     state.start = "game"
     audio.play("ui_press", state.settings)
 
