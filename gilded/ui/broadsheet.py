@@ -1302,10 +1302,19 @@ class BroadsheetView:
                     group="court_lever"))
         # C11.3a: the rival lever - one line per (rival, member) pair,
         # naming the courted member and the rival house, drawn ONLY on
-        # House/Court (C11.3b)
+        # House/Court (C11.3b). Drawn BELOW the card grid so a lever line
+        # never shares a y with a card's name line (the gate merges lines
+        # whose centres are within 6 px; a merged line would then also
+        # name the members sitting on that row).
         if family:
             import re as _re
             seen = set()
+            # start BELOW the card grid: y is the grid's top; the grid
+            # occupies rows*(card_h + 6).  Add a gap so a lever line's
+            # centre is never within 6 px of the last row's name line
+            # (rect.y + 4) or of any card's want text.
+            rows = (len(cards) + 1) // 2
+            lever_y = y + rows * (card_h + 6) + 14
             for beat in game.beats.log:
                 if beat.source != "ai.courtship":
                     continue
@@ -1323,8 +1332,8 @@ class BroadsheetView:
                     continue
                 seen.add((src, hit.name))
                 lever = (f"{hit.name} has been courted away by House {src}")
-                blit_text(surface, f_small, lever, (x, y), INK)
-                y += f_small.get_linesize() + 4
+                blit_text(surface, f_small, lever, (x, lever_y), INK)
+                lever_y += f_small.get_linesize() + 4
 
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
