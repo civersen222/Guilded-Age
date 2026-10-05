@@ -3453,6 +3453,17 @@ class BroadsheetView:
                 blit_text(surface, font, line, (x, y), INK)
                 y += font.get_height() + 6
                 break
+        # the rival's own read of YOU - a line owned by the selected rival
+        # that tracks its intel on the player, live at draw time
+        rep = intel_report(self.game, self._powers_selected, self.house)
+        if rep.tier >= 2:
+            reads = (f"House {self._powers_selected} reads your ambition "
+                     f"(their intel on you {rep.tier}/3)")
+        else:
+            reads = (f"House {self._powers_selected} cannot read your ambition "
+                     f"(their intel on you {rep.tier}/3)")
+        blit_text(surface, font, reads, (x, y), INK)
+        y += font.get_height() + 6
         btn_rect = layout["buttons"]
         war = _draw_button(
             surface, "Declare War", btn_rect.right - 140, btn_rect.top,
