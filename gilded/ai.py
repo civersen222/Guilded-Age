@@ -290,23 +290,32 @@ def _c11_courtship(game, house_name: str, msgs: List[str]) -> None:
             continue
         if _intel_report(game, house_name, target).tier < 2:
             continue
+        # the target's family line: its agenda goal, else its own stake
+        # (the player's ambition) - the stance wants() reports is measured
+        # against this family
         goal = game.agendas.get(target)
-        t_realm = game.realms.get(target)
-        if goal is None or t_realm is None:
+        family = goal.family if goal is not None else None
+        if family is None:
+            st = game.ambitions.status(target)
+            family = st["family"]
+        if family is None:
             continue
-        key, polarity = FAMILY_DISPOSITION[goal.family]
-        for c in sorted(t_realm.characters, key=lambda c: c.id):
-            if c.age < 16 or not c.is_alive:
+        key, polarity = FAMILY_DISPOSITION[family]
+        for entry in game.ambitions.wants(target):
+            if entry["stance"] != "opposes":
                 continue
-            if float(c.dispositions.get(key, 0.0)) * polarity < -STANCE_BACKS_AT:
-                c.dispositions[key] = float(STANCE_BACKS_AT) * 2.0 / polarity
-                game.beats.append(Beat(
-                    turn=game.turn, kind="signature", house=target,
-                    text=(f"House {house_name} courts {c.name} away from "
-                          f"its {goal.family} side"),
-                    source="ai.courtship", causes=(),
-                    face=c.name, facet="courtship"))
-                break
+            c = next((x for x in game.realms[target].characters
+                      if x.id == entry["id"]), None)
+            if c is None or c.age < 16 or not c.is_alive:
+                continue
+            c.dispositions[key] = float(STANCE_BACKS_AT) * 2.0 / polarity
+            game.beats.append(Beat(
+                turn=game.turn, kind="signature", house=target,
+                text=(f"House {house_name} courts {c.name} away from "
+                      f"its {family} side"),
+                source="ai.courtship", causes=(),
+                face=c.name, facet="courtship"))
+            break
         break
 
 
