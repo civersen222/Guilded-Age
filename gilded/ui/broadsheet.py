@@ -1300,13 +1300,15 @@ class BroadsheetView:
                             "wins": "standing"},
                     hint=f"{lev_what} {lev_why} (wins standing)",
                     group="court_lever"))
-        # C11.3a: the rival lever - one line, naming the courted member and
-        # the rival house, drawn ONLY on House/Court (C11.3b)
+        # C11.3a: the rival lever - one line per (rival, member) pair,
+        # naming the courted member and the rival house, drawn ONLY on
+        # House/Court (C11.3b)
         if family:
-            for beat in reversed(game.beats.log):
+            import re as _re
+            seen = set()
+            for beat in game.beats.log:
                 if beat.source != "ai.courtship":
                     continue
-                import re as _re
                 m = _re.search(
                     r"House (\S+) courts (.+?) away from", beat.text)
                 if m is None:
@@ -1317,12 +1319,12 @@ class BroadsheetView:
                 target = m.group(2)
                 hit = next((c for c in game.realms[house].characters
                             if c.name == target and c.is_alive), None)
-                if hit is None:
+                if hit is None or (src, hit.name) in seen:
                     continue
+                seen.add((src, hit.name))
                 lever = (f"{hit.name} has been courted away by House {src}")
                 blit_text(surface, f_small, lever, (x, y), INK)
                 y += f_small.get_linesize() + 4
-                break
 
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
