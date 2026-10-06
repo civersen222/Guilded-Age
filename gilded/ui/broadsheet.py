@@ -1300,6 +1300,40 @@ class BroadsheetView:
                             "wins": "standing"},
                     hint=f"{lev_what} {lev_why} (wins standing)",
                     group="court_lever"))
+        # C11.3a: the rival lever - one line per (rival, member) pair,
+        # naming the courted member and the rival house, drawn ONLY on
+        # House/Court (C11.3b). Drawn BELOW the card grid so a lever line
+        # never shares a y with a card's name line (the gate merges lines
+        # whose centres are within 6 px; a merged line would then also
+        # name the members sitting on that row).
+        if family:
+            import re as _re
+            seen = set()
+            # start BELOW the card grid: y is the grid's top; the grid
+            # occupies rows*(card_h + 6).  Add a gap so a lever line's
+            # centre is never within 6 px of the last row's name line
+            # (rect.y + 4) or of any card's want text.
+            rows = (len(cards) + 1) // 2
+            lever_y = y + rows * (card_h + 6) + 14
+            for beat in game.beats.log:
+                if beat.source != "ai.courtship":
+                    continue
+                m = _re.search(
+                    r"House (\S+) courts (.+?) away from", beat.text)
+                if m is None:
+                    continue
+                src = m.group(1)
+                if src == house or src not in game.realms:
+                    continue
+                target = m.group(2)
+                hit = next((c for c in game.realms[house].characters
+                            if c.name == target and c.is_alive), None)
+                if hit is None or (src, hit.name) in seen:
+                    continue
+                seen.add((src, hit.name))
+                lever = (f"{hit.name} has been courted away by House {src}")
+                blit_text(surface, f_small, lever, (x, lever_y), INK)
+                lever_y += f_small.get_linesize() + 4
 
     def _draw_hud(self, surface) -> None:
         b = scoreboard(self.game, self.house)
@@ -3453,6 +3487,17 @@ class BroadsheetView:
                 blit_text(surface, font, line, (x, y), INK)
                 y += font.get_height() + 6
                 break
+        # the rival's own read of YOU - a line owned by the selected rival
+        # that tracks its intel on the player, live at draw time
+        rep = intel_report(self.game, self._powers_selected, self.house)
+        if rep.tier >= 2:
+            reads = (f"House {self._powers_selected} reads your ambition "
+                     f"(their intel on you {rep.tier}/3)")
+        else:
+            reads = (f"House {self._powers_selected} cannot read your ambition "
+                     f"(their intel on you {rep.tier}/3)")
+        blit_text(surface, font, reads, (x, y), INK)
+        y += font.get_height() + 6
         btn_rect = layout["buttons"]
         war = _draw_button(
             surface, "Declare War", btn_rect.right - 140, btn_rect.top,

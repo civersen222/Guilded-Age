@@ -17,6 +17,8 @@ from gilded.fronts import (ACCEPT_SCORE, REGIMENT_POP_COST,
 
 # opinion_matrix removed — reads through char._society.opinions now
 from gilded.agenda import ensure_agenda, goal_domain, goal_initiative
+from gilded.beats import Beat
+from gilded.intel import report as _intel_report
 
 DIRECTIVE_INTERVAL = 10        # turns between directive resets
 OPINION_FLOOR = -20            # a minister this sour is not trusted to execute
@@ -267,6 +269,56 @@ def set_policy(game, house_name) -> None:
         directives.set_stance(key, current + step)
 
 
+def _c11_courtship(game, house_name: str, msgs: List[str]) -> None:
+    """C11: a house that READS another at intel tier >= 2 courts one member
+    of it who opposes the courted house's own family line at turn start.
+
+    The tier is gilded.intel.report(game, X, H).tier read LIVE as the turn
+    opens - tier < 2 (informant-only or ties-only) courts nothing, and a
+    non-opposer is never touched.  The courtship is a stance flip (the
+    member's family-line disposition moves to the backs side - wants()
+    stops saying "opposes"), never a removal, and it leaves a Beat in
+    game.beats.log naming the member.  The AI never writes informants,
+    relations, marriages or secrets to raise its own tier.
+    """
+    from gilded.ambitions import (FAMILY_DISPOSITION, STANCE_BACKS_AT)
+    realm = game.realms.get(house_name)
+    if realm is None:
+        return
+    for target in sorted(game.realms):
+        if target == house_name:
+            continue
+        if _intel_report(game, house_name, target).tier < 2:
+            continue
+        # the target's family line: its agenda goal, else its own stake
+        # (the player's ambition) - the stance wants() reports is measured
+        # against this family
+        goal = game.agendas.get(target)
+        family = goal.family if goal is not None else None
+        if family is None:
+            st = game.ambitions.status(target)
+            family = st["family"]
+        if family is None:
+            continue
+        key, polarity = FAMILY_DISPOSITION[family]
+        for entry in game.ambitions.wants(target):
+            if entry["stance"] != "opposes":
+                continue
+            c = next((x for x in game.realms[target].characters
+                      if x.id == entry["id"]), None)
+            if c is None or c.age < 16 or not c.is_alive:
+                continue
+            c.dispositions[key] = float(STANCE_BACKS_AT) * 2.0 / polarity
+            game.beats.append(Beat(
+                turn=game.turn, kind="signature", house=target,
+                text=(f"House {house_name} courts {c.name} away from "
+                      f"its {family} side"),
+                source="ai.courtship", causes=(),
+                face=c.name, facet="courtship"))
+            break
+        break
+
+
 def ai_turn(game, house_name: str) -> List[str]:
     """The AI ruler's morning: directives, the docket, then ambition."""
     realm = game.realms.get(house_name)
@@ -274,6 +326,11 @@ def ai_turn(game, house_name: str) -> List[str]:
         return []
     ruler = realm.ruler
     msgs: List[str] = []
+    # C11: courtship at turn open - a house that reads another at intel
+    # tier >= 2 (gilded.intel.report, read LIVE as the turn opens) courts
+    # one member of that house who opposes its own family line at turn
+    # start.  Tier < 2 courts nothing; non-opposers are untouched.
+    _c11_courtship(game, house_name, msgs)
     goal = ensure_agenda(game, house_name)
     goal_dom = goal_domain(goal) if goal is not None else None
     set_policy(game, house_name)
